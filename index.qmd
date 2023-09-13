@@ -1,0 +1,28 @@
+---
+title: "The Item Response Warehouse"
+---
+
+```{r}
+library(tidyverse)
+
+Sys.setenv(REDIVIS_API_TOKEN = "AAACP+iMkCP41u+XMORLrR49kZJtscgl")
+
+user <- redivis::user("mcfrank")
+dataset <- user$dataset("item_response_warehouse")
+
+metadata <- dataset$query("SELECT * FROM `metadata`")$to_tibble()
+
+ojs_define(data = metadata)
+
+```
+
+
+```{ojs}
+Plot.plot({
+  grid: true,
+  marks: [
+    Plot.dot(transpose(data), {x: "n_items", y: "n_participants"})
+  ]
+})
+```
+
