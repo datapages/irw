@@ -13,7 +13,10 @@ Sys.setenv(REDIVIS_API_TOKEN = "AAACP+iMkCP41u+XMORLrR49kZJtscgl")
 user <- redivis::user("mcfrank")
 dataset <- user$dataset("item_response_warehouse")
 
-metadata <- dataset$query("SELECT * FROM `metadata`")$to_tibble()
+metadata <- dataset$query("SELECT * FROM `metadata`")$to_tibble() |>
+  mutate(dichotomous = ifelse(dichotomous,
+                              "dichotomous",
+                              "polytomous"))
 
 ojs_define(data = metadata)
 
@@ -21,10 +24,14 @@ ojs_define(data = metadata)
 
 
 ```{ojs}
+Plot = import("https://esm.sh/@observablehq/plot") 
+
 Plot.plot({
   y: {grid: true},
+  color: {legend: true},
   marks: [
-    Plot.rectY(transpose(data), Plot.binX({y: "count"}, {x: "rows"})),
+    Plot.rectY(transpose(data), Plot.binX({y: "count"}, 
+    {x: "rows", fill: "dichotomous"})),
     Plot.ruleY([0])
   ]
 })
@@ -32,9 +39,27 @@ Plot.plot({
 
 ```{ojs}
 Plot.plot({
+  x: {type: "log"},
+  y: {type: "log"},
   grid: true,
+  color: {legend: true},
   marks: [
-    Plot.dot(transpose(data), {x: "n_items", y: "n_participants"})
-  ]
+    Plot.dot(transpose(data), {
+      x: "n_items", 
+      y: "n_participants", 
+      stroke: "dichotomous"
+    }),
+    Plot.tip(transpose(data), Plot.pointer({
+      x: "n_items",
+      y: "n_participants",
+      stroke: "dichotomous",
+      title: "dataset_name"
+    })),
+    Plot.linearRegressionY(transpose(data), {
+      x: "n_items", 
+      y: "n_participants", 
+      stroke: "dichotomous"
+    })
+  ] 
 })
 ```
