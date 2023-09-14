@@ -1,8 +1,11 @@
 ---
 title: "The Item Response Warehouse"
+execute:
+  echo: false
 ---
 
 ```{r}
+#| message: false
 library(tidyverse)
 
 Sys.setenv(REDIVIS_API_TOKEN = "AAACP+iMkCP41u+XMORLrR49kZJtscgl")
@@ -19,10 +22,19 @@ ojs_define(data = metadata)
 
 ```{ojs}
 Plot.plot({
+  y: {grid: true},
+  marks: [
+    Plot.rectY(transpose(data), Plot.binX({y: "count"}, {x: "rows"})),
+    Plot.ruleY([0])
+  ]
+})
+```
+
+```{ojs}
+Plot.plot({
   grid: true,
   marks: [
     Plot.dot(transpose(data), {x: "n_items", y: "n_participants"})
   ]
 })
 ```
-
