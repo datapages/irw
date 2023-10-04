@@ -3,60 +3,86 @@ title: "The Item Response Warehouse"
 ---
 
 ```{r}
-#| message: false
 library(tidyverse)
 
-Sys.setenv(REDIVIS_API_TOKEN = "AAACP+iMkCP41u+XMORLrR49kZJtscgl")
+md <- read_csv("data/IRW Data Dictionary - data snapshot.csv")
+md_tidy <- md |>
+  slice(2:n()) |>
+  rename(dataset = `...1`) |>
+  mutate(dataset = str_remove(dataset, ".Rdata$"),
+         partition = if_else(ncat == 2, "dichotomous", "polytomous")) |>
+  select(dataset, partition, n_responses = nresp, n_participants = person.n,
+         n_items = item.n, sparsity = sparse,
+         responses_per_participant = resp.per.person,
+         responses_per_item = resp.per.item)
 
-user <- redivis::user("mcfrank")
-dataset <- user$dataset("item_response_warehouse")
-
-metadata <- dataset$query("SELECT * FROM `metadata`")$to_tibble() |>
-  mutate(dichotomous = ifelse(dichotomous,
-                              "dichotomous",
-                              "polytomous"))
-
-ojs_define(data = metadata)
-
+ojs_define(metadata = md_tidy)
 ```
 
+```{r}
+# Sys.setenv(REDIVIS_API_TOKEN = "AAACP+iMkCP41u+XMORLrR49kZJtscgl")
+# 
+# user <- redivis::user("mcfrank")
+# dataset <- user$dataset("item_response_warehouse")
+# 
+# metadata <- dataset$query("SELECT * FROM `metadata`")$to_tibble() |>
+#   mutate(dichotomous = ifelse(dichotomous,
+#                               "dichotomous",
+#                               "polytomous"))
+# 
+# ojs_define(data = metadata)
+```
 
 ```{ojs}
 Plot = import("https://esm.sh/@observablehq/plot") 
+
+vars = new Map([["Number responses", "n_responses"],
+                ["Number participants", "n_participants"],
+                ["Number items", "n_items"],
+                ["Responses per participant", "responses_per_participant"],
+                ["Responses per item", "responses_per_item"],
+                ["Sparsity", "sparsity"]])
+
+viewof hist_var = Inputs.select(vars, {value: "n_items", label: "Variable"})
 
 Plot.plot({
   y: {grid: true},
   color: {legend: true},
   marks: [
-    Plot.rectY(transpose(data), Plot.binX({y: "count"}, 
-    {x: "rows", fill: "dichotomous"})),
+    Plot.rectY(transpose(metadata), Plot.binX({y: "count"}, 
+    {x: hist_var, fill: "partition"})),
     Plot.ruleY([0])
   ]
 })
+
+
 ```
 
 ```{ojs}
+viewof scatter_x_var = Inputs.select(vars, {value: "n_items", label: "x axis"})
+viewof scatter_y_var = Inputs.select(vars, {value: "n_participants", label: "y axis"})
+
 Plot.plot({
   x: {type: "log"},
   y: {type: "log"},
   grid: true,
   color: {legend: true},
   marks: [
-    Plot.dot(transpose(data), {
-      x: "n_items", 
-      y: "n_participants", 
-      stroke: "dichotomous"
+    Plot.dot(transpose(metadata), {
+      x: scatter_x_var,
+      y: scatter_y_var, 
+      stroke: "partition"
     }),
-    Plot.tip(transpose(data), Plot.pointer({
-      x: "n_items",
-      y: "n_participants",
-      stroke: "dichotomous",
-      title: "dataset_name"
+    Plot.tip(transpose(metadata), Plot.pointer({
+      x: scatter_x_var,
+      y: scatter_y_var,
+      stroke: "partition",
+      title: "dataset"
     })),
-    Plot.linearRegressionY(transpose(data), {
-      x: "n_items", 
-      y: "n_participants", 
-      stroke: "dichotomous"
+    Plot.linearRegressionY(transpose(metadata), {
+      x: scatter_x_var, 
+      y: scatter_y_var, 
+      stroke: "partition"
     })
   ] 
 })
