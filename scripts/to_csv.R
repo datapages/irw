@@ -1,11 +1,12 @@
-library(here)
-library(tidyverse)
+library(dplyr)
+library(readr)
+library(stringr)
 
 files <- dir("irw_public/")
 
 metadata <- files |>
   map_df(function(x) {
-    load(here("irw_public",x))
+    load("irw_public", x)
     dataset_name <- str_replace(x,".Rdata","")
     write_csv(df, here("csvs", paste0(dataset_name, ".csv")))
     
@@ -17,4 +18,4 @@ metadata <- files |>
   })
 
 
-write_csv(metadata, here("csvs","metadata.csv"))
+write_csv(metadata, "csvs/metadata.csv")
