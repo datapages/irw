@@ -1,24 +1,57 @@
 ---
 title: "Data documentation"
+format:
+  html:
+    grid:
+      sidebar-width: 0px
+      body-width: 1200px
+      margin-width: 0px
+callout-icon: false
 ---
 
 
 ```{r}
 library(dplyr)
+library(purrr)
 library(readr)
 library(stringr)
+library(glue)
 
 data_index <- read_csv("data/IRW Data Dictionary - data index.csv",
                        na = character()) |>
-  select(Dataset = Filename, URL, License = `Derived License`, Description,
-         Reference) |>
-  mutate(Dataset = str_remove(Dataset, ".Rdata$"))
+  select(dataset = Filename, url = URL, license = `Derived License`,
+         description = Description, reference = Reference) |>
+  mutate(dataset = str_remove(dataset, ".R.ata$"))
 ```
 
 ```{r}
-#| column: screen-inset
+#| results: asis
 
-data_index |>
-  rmarkdown::paged_table(options = list(rows.print = 50, cols.min.print = 2))
+el <- function(ds) {
+  lic <- if (ds$license != "") glue("({ds$license})") else ""
+  glue(
+  "
+  ::: {{.g-col-4}}
+  
+  ::: {{.callout-note collapse='true'}}
+  ## {ds$dataset}
+  
+  {ds$description} {lic} [[link]]({ds$url})
+  
+  <i>{ds$reference}</i>
+  :::
+  
+  :::
+  "
+  )
+}
+
+els <- transpose(data_index) |> map(el) |> paste(collapse = "\n")
+cat(glue(
+  "
+  ::: {{.grid}}
+  {els}
+  :::
+  "
+))
 ```
-
