@@ -33,10 +33,16 @@ ojs_define(metadata = md_tidy)
 #                               "polytomous"))
 # 
 # ojs_define(data = metadata)
+
+    # hist_color_var ? Plot.rectY(transpose(metadata), Plot.binX({y: "count"}, {x: hist_x_var, fill: hist_color_var})) : Plot.rectY(transpose(metadata), Plot.binX({y: "count"}, {x: hist_x_var})),
+    # Plot.rectY(transpose(metadata), hist_color_var ? Plot.binX({y: "count"}, {x: hist_x_var, fill: hist_color_var}) : Plot.binX({y: "count"}, {x: hist_x_var})),
+
 ```
 
 ```{ojs}
 Plot = import("https://esm.sh/@observablehq/plot") 
+
+default_color = "grey"
 
 vars = new Map([["Number responses", "n_responses"],
                 ["Number participants", "n_participants"],
@@ -44,15 +50,17 @@ vars = new Map([["Number responses", "n_responses"],
                 ["Responses per participant", "responses_per_participant"],
                 ["Responses per item", "responses_per_item"],
                 ["Sparsity", "sparsity"]])
+color_opts = new Map([["None", null],
+                      ["Dichotomous vs. Polytomous", "partition"]])
 
-viewof hist_var = Inputs.select(vars, {value: "n_items", label: "Variable"})
+viewof hist_x_var = Inputs.select(vars, {value: "n_items", label: "x axis"})
+viewof hist_color_var = Inputs.select(color_opts, {label: "color"})
 
 Plot.plot({
   y: {grid: true},
   color: {legend: true},
   marks: [
-    Plot.rectY(transpose(metadata), Plot.binX({y: "count"}, 
-    {x: hist_var, fill: "partition"})),
+    Plot.rectY(transpose(metadata), Plot.binX({y: "count"}, {x: hist_x_var, fill: hist_color_var || default_color})),
     Plot.ruleY([0])
   ]
 })
@@ -63,17 +71,18 @@ Plot.plot({
 ```{ojs}
 viewof scatter_x_var = Inputs.select(vars, {value: "n_items", label: "x axis"})
 viewof scatter_y_var = Inputs.select(vars, {value: "n_participants", label: "y axis"})
+viewof scatter_color_var = Inputs.select(color_opts, {label: "color"})
 
 Plot.plot({
   x: {type: "log"},
   y: {type: "log"},
   grid: true,
-  color: {legend: true},
+  color: {legend: scatter_color_var != null},
   marks: [
     Plot.dot(transpose(metadata), {
       x: scatter_x_var,
       y: scatter_y_var, 
-      stroke: "partition"
+      stroke: scatter_color_var || default_color
     }),
     Plot.tip(transpose(metadata), Plot.pointer({
       x: scatter_x_var,
@@ -84,7 +93,7 @@ Plot.plot({
     Plot.linearRegressionY(transpose(metadata), {
       x: scatter_x_var, 
       y: scatter_y_var, 
-      stroke: "partition"
+      stroke: scatter_color_var || default_color
     })
   ] 
 })
