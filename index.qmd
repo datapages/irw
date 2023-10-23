@@ -1,51 +1,80 @@
 ---
 title: "The Item Response Warehouse"
 ---
-The Item Response Warehouse (IRW) is a collection of open, harmonized item response datasets. These datasets span a wide range of measures; examples include measures of ability in education settings, measures of partisanship based on voting records, and personality measures based on survey questions. While they span a wide range of measures, the data are harmonized in a common format to allow for standardized analysis of larger quantities of data. The key element required of data for inclusion in the IRW is that the data need to report individual responses that are cross-classified by the focus of measurement (typically a person) and the measurement tool (typically an item). Responses can be scored in a variety of ways (dichotomous, polytomous, continuous) and may contain additional data (e.g., response time), but the cross-classification aspect is fundamental. 
 
+The Item Response Warehouse (IRW) is a collection of open, harmonized item response datasets. These datasets span a wide range of measures; examples include measures of ability in education settings, measures of partisanship based on voting records, and personality measures based on survey questions. While they span a wide range of measures, the data are harmonized in a common format to allow for standardized analysis of larger quantities of data. The key element required of data for inclusion in the IRW is that the data need to report individual responses that are cross-classified by the focus of measurement (typically a person) and the measurement tool (typically an item). Responses can be scored in a variety of ways (dichotomous, polytomous, continuous) and may contain additional data (e.g., response time), but the cross-classification aspect is fundamental. 
 
 ```{r}
 library(dplyr)
 library(readr)
 library(stringr)
-
-md <- read_csv("data/IRW Data Dictionary - data snapshot.csv")
-md_tidy <- md |>
-  slice(2:n()) |>
-  rename(dataset = `...1`) |>
-  mutate(dataset = str_remove(dataset, ".Rdata$"),
-         partition = if_else(ncat == 2, "dichotomous", "polytomous")) |>
-  select(dataset, partition, n_responses = nresp, n_participants = person.n,
-         n_items = item.n, sparsity = sparse,
-         responses_per_participant = resp.per.person,
-         responses_per_item = resp.per.item)
-
-ojs_define(metadata = md_tidy)
 ```
 
 ```{r}
-# Sys.setenv(REDIVIS_API_TOKEN = "AAACP+iMkCP41u+XMORLrR49kZJtscgl")
-# 
-# user <- redivis::user("mcfrank")
-# dataset <- user$dataset("item_response_warehouse")
-# 
-# metadata <- dataset$query("SELECT * FROM `metadata`")$to_tibble() |>
-#   mutate(dichotomous = ifelse(dichotomous,
-#                               "dichotomous",
-#                               "polytomous"))
-# 
-# ojs_define(data = metadata)
+token <- readLines("scripts/redivis_token")
+Sys.setenv(REDIVIS_API_TOKEN = token)
 
-    # hist_color_var ? Plot.rectY(transpose(metadata), Plot.binX({y: "count"}, {x: hist_x_var, fill: hist_color_var})) : Plot.rectY(transpose(metadata), Plot.binX({y: "count"}, {x: hist_x_var})),
-    # Plot.rectY(transpose(metadata), hist_color_var ? Plot.binX({y: "count"}, {x: hist_x_var, fill: hist_color_var}) : Plot.binX({y: "count"}, {x: hist_x_var})),
+user <- redivis::user("stanford_templates")
+dataset <- user$dataset("item_response_warehouse")
+table <- dataset$table("florida_twins_behavior")
 
+metadata_table <- dataset$table("metadata")
+metadata <- metadata_table$to_tibble()
+
+datasets <- list(
+  "4thgrade_math_sirt" = dataset$table("4thgrade_math_sirt")$to_tibble(),
+  "florida_twins_behavior" = dataset$table("florida_twins_behavior")$to_tibble()
+)
 ```
+
+```{r}
+ojs_define(metadata = metadata)
+ojs_define(datasets = datasets)
+```
+
+## Individual datasets
 
 ```{ojs}
 Plot = import("https://esm.sh/@observablehq/plot") 
-
 default_color = "grey"
 
+ds = new Map(Object.entries(datasets))
+viewof dataset = Inputs.select(ds, {label: "Dataset"})
+
+item_summary = d3.rollup(transpose(dataset),
+                         v => {return {mean: d3.mean(v, d => d.resp)}},
+                         d => d.item)
+subj_summary = d3.rollup(transpose(dataset),
+                         v => {return {mean: d3.mean(v, d => d.resp)}},
+                         d => d.id)
+
+viewof item_plot = Plot.plot({
+  x: {label: "Item mean response"},
+  y: {grid: true},
+  marks: [
+    Plot.rectY(item_summary.values(), Plot.binX({y: "count"}, {x: "mean"})),
+    Plot.ruleY([0])
+  ]
+})
+
+viewof subj_plot = Plot.plot({
+  x: {label: "Subject mean response"},
+  y: {grid: true},
+  marks: [
+    Plot.rectY(subj_summary.values(), Plot.binX({y: "count"}, {x: "mean"})),
+    Plot.ruleY([0])
+  ]
+})
+
+html`<div style="display: flex;">
+ <div style="flex-basis:50%">${viewof item_plot}</div>
+ <div style="flex-basis:50%">${viewof subj_plot} </div>
+</div>`
+```
+
+## Metadata
+
+```{ojs}
 vars = new Map([["Number responses", "n_responses"],
                 ["Number participants", "n_participants"],
                 ["Number items", "n_items"],
@@ -55,48 +84,48 @@ vars = new Map([["Number responses", "n_responses"],
 color_opts = new Map([["None", null],
                       ["Dichotomous vs. Polytomous", "partition"]])
 
-viewof hist_x_var = Inputs.select(vars, {value: "n_items", label: "x axis"})
-viewof hist_color_var = Inputs.select(color_opts, {label: "color"})
+viewof x_var = Inputs.select(vars, {value: "n_items", label: "X axis"})
+viewof y_var = Inputs.select(vars, {value: "n_participants", label: "Y axis"})
+viewof color_var = Inputs.select(color_opts, {label: "Color"})
+```
 
-Plot.plot({
+```{ojs}
+viewof metadata_hist = Plot.plot({
   y: {grid: true},
-  color: {legend: true},
+  color: {legend: color_var != null},
   marks: [
-    Plot.rectY(transpose(metadata), Plot.binX({y: "count"}, {x: hist_x_var, fill: hist_color_var || default_color})),
+    Plot.rectY(transpose(metadata), Plot.binX({y: "count"}, {x: x_var, fill: color_var || default_color})),
     Plot.ruleY([0])
   ]
 })
 
-
-```
-
-```{ojs}
-viewof scatter_x_var = Inputs.select(vars, {value: "n_items", label: "x axis"})
-viewof scatter_y_var = Inputs.select(vars, {value: "n_participants", label: "y axis"})
-viewof scatter_color_var = Inputs.select(color_opts, {label: "color"})
-
-Plot.plot({
+viewof metadata_scatter = Plot.plot({
   x: {type: "log"},
   y: {type: "log"},
   grid: true,
-  color: {legend: scatter_color_var != null},
+  color: {legend: color_var != null},
   marks: [
     Plot.dot(transpose(metadata), {
-      x: scatter_x_var,
-      y: scatter_y_var, 
-      stroke: scatter_color_var || default_color
+      x: x_var,
+      y: y_var, 
+      stroke: color_var || default_color
     }),
     Plot.tip(transpose(metadata), Plot.pointer({
-      x: scatter_x_var,
-      y: scatter_y_var,
+      x: x_var,
+      y: y_var,
       stroke: "partition",
       title: "dataset"
     })),
     Plot.linearRegressionY(transpose(metadata), {
-      x: scatter_x_var, 
-      y: scatter_y_var, 
-      stroke: scatter_color_var || default_color
+      x: x_var, 
+      y: y_var, 
+      stroke: color_var || default_color
     })
-  ] 
+  ]
 })
+
+html`<div style="display: flex;">
+ <div style="flex-basis:50%">${viewof metadata_hist}</div>
+ <div style="flex-basis:50%">${viewof metadata_scatter} </div>
+</div>`
 ```
