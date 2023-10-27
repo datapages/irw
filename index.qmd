@@ -6,59 +6,59 @@ The Item Response Warehouse (IRW) is a collection of open, harmonized item respo
 
 ```{r}
 library(dplyr)
-library(readr)
-library(stringr)
+library(tidyr)
 ```
 
 ```{r}
 # set user and dataset
 user <- redivis::user("stanford_templates")
 dataset <- user$dataset("item_response_warehouse")
-
-# get metadata table
+#  
+# # get metadata table
 metadata_table <- dataset$table("metadata")
 metadata <- metadata_table$to_tibble()
-
-# get dataset tables
-datasets <- list(
-  "4thgrade_math_sirt" = dataset$table("4thgrade_math_sirt")$to_tibble(),
-  "florida_twins_behavior" = dataset$table("florida_twins_behavior")$to_tibble()
-)
-
-# pass data to ojs
 ojs_define(metadata = metadata)
-ojs_define(datasets = datasets)
+
+project <- redivis::user("mikabr")$project("irw")
+item_table <- project$table("item_summary_output")
+item_summary <- item_table$to_tibble()
+
+subject_table <- project$table("subject_summary_output")
+subject_summary <- subject_table$to_tibble()
+
+items <- item_summary |> nest(items = -dataset_name)
+subjects <- subject_summary |> nest(subjects = -dataset_name)
+
+summary_data <- left_join(items, subjects) |>
+  mutate(data = map2(items, subjects, \(i, s) list(items = i, subjects = s)))
+
+summaries <- set_names(summary_data$data, summary_data$dataset_name)
+
+ojs_define(summaries = summaries)
 ```
+
 
 ## Individual datasets
 
 ```{ojs}
-Plot = import("https://esm.sh/@observablehq/plot") 
-
 // selector for dataset
-ds = new Map(Object.entries(datasets))
-viewof dataset = Inputs.select(ds, {label: "Dataset"})
+summaries_map = new Map(Object.entries(summaries))
+viewof dataset = Inputs.select(summaries_map, {label: 'Dataset', value: '4thgrade_math_sirt'})
 
-// summarise items
-item_summary = d3.rollup(transpose(dataset),
-                         v => {return {mean: d3.mean(v, d => d.resp)}},
-                         d => d.item)
+items = transpose(dataset.items)
+subjects = transpose(dataset.subjects)
+metadata_trans = transpose(metadata)
+```
 
-// summarise subjects
-// items = new Set(dataset.item)
-
-subj_summary = d3.rollup(transpose(dataset),
-                         v => {return {mean: d3.mean(v, d => d.resp)}},
-                                       // n_items: v.length,
-                                       // prop: d3.count(v, d => d.item) / items.size}},
-                         d => d.id)
+```{ojs}
+Plot = import("https://esm.sh/@observablehq/plot")
 
 // plot items
 viewof item_plot = Plot.plot({
   x: {label: "Item mean response"},
   y: {grid: true},
   marks: [
-    Plot.rectY(item_summary.values(), Plot.binX({y: "count"}, {x: "mean"})),
+    Plot.rectY(items, Plot.binX({y: "count"}, {x: "mean"})),
     Plot.ruleY([0])
   ]
 })
@@ -68,15 +68,15 @@ viewof subj_plot = Plot.plot({
   x: {label: "Subject mean response"},
   y: {grid: true},
   marks: [
-    Plot.rectY(subj_summary.values(), Plot.binX({y: "count"}, {x: "mean"})),
+    Plot.rectY(subjects, Plot.binX({y: "count"}, {x: "mean"})),
     Plot.ruleY([0])
   ]
 })
 
 // display item and subject plots side by side
 html`<div style="display: flex;">
- <div style="flex-basis:50%">${viewof item_plot}</div>
- <div style="flex-basis:50%">${viewof subj_plot} </div>
+ <div style="flex-basis:50%"> ${viewof item_plot} </div>
+ <div style="flex-basis:50%"> ${viewof subj_plot} </div>
 </div>`
 ```
 
@@ -108,7 +108,7 @@ viewof metadata_hist = Plot.plot({
   y: {grid: true},
   color: {legend: color_var != null},
   marks: [
-    Plot.rectY(transpose(metadata), Plot.binX({y: "count"}, {x: x_var, fill: color_var || default_color})),
+    Plot.rectY(metadata_trans, Plot.binX({y: "count"}, {x: x_var, fill: color_var || default_color})),
     Plot.ruleY([0])
   ]
 })
@@ -120,18 +120,18 @@ viewof metadata_scatter = Plot.plot({
   grid: true,
   color: {legend: color_var != null},
   marks: [
-    Plot.dot(transpose(metadata), {
+    Plot.dot(metadata_trans, {
       x: x_var,
       y: y_var, 
       stroke: color_var || default_color
     }),
-    Plot.tip(transpose(metadata), Plot.pointer({
+    Plot.tip(metadata_trans, Plot.pointer({
       x: x_var,
       y: y_var,
       stroke: "partition",
       title: "dataset"
     })),
-    Plot.linearRegressionY(transpose(metadata), {
+    Plot.linearRegressionY(metadata_trans, {
       x: x_var, 
       y: y_var, 
       stroke: color_var || default_color
@@ -141,7 +141,7 @@ viewof metadata_scatter = Plot.plot({
 
 // display histogram and scatter plots side by side
 html`<div style="display: flex;">
- <div style="flex-basis:50%">${viewof metadata_hist}</div>
- <div style="flex-basis:50%">${viewof metadata_scatter} </div>
+ <div style="flex-basis:50%"> ${viewof metadata_hist}    </div>
+ <div style="flex-basis:50%"> ${viewof metadata_scatter} </div>
 </div>`
 ```
