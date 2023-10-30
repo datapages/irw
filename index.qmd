@@ -7,33 +7,51 @@ The Item Response Warehouse (IRW) is a collection of open, harmonized item respo
 ```{r}
 library(dplyr)
 library(tidyr)
+library(stringr)
 ```
 
 ```{r}
 # set user and dataset
-user <- redivis::user("stanford_templates")
-dataset <- user$dataset("item_response_warehouse")
-#  
-# # get metadata table
-metadata_table <- dataset$table("metadata")
-metadata <- metadata_table$to_tibble()
-ojs_define(metadata = metadata)
+# dataset <- redivis::user("stanford_templates")$dataset("item_response_warehouse")
+
+# get metadata table
+# metadata_table <- dataset$table("metadata")
+# metadata <- metadata_table$to_tibble()
 
 project <- redivis::user("mikabr")$project("irw")
+
+# get metadata table
+metadata_table <- project$table("metadata_output")
+metadata <- metadata_table$to_tibble()
+metadata <- metadata |>
+  mutate(partition = if_else(n_categories == 2, "dichotomous", "polytomous"))
+
+# cont_vars <- metadata |> select(where(is.numeric)) |> colnames()
+# cont_vars_list <- set_names(cont_vars, cont_vars |> str_replace_all("_", " ") |> str_to_sentence()) |> as.list()
+# ojs_define(cont_vars = cont_vars_list)
+
+# get item summary table
 item_table <- project$table("item_summary_output")
 item_summary <- item_table$to_tibble()
 
+# get subject summary table
 subject_table <- project$table("subject_summary_output")
 subject_summary <- subject_table$to_tibble()
 
-items <- item_summary |> nest(items = -dataset_name)
-subjects <- subject_summary |> nest(subjects = -dataset_name)
+# combine item and subject summaries, put into data structure for selector
+summaries <- full_join(
+  item_summary |> nest(items = -dataset_name),
+  subject_summary |> nest(subjects = -dataset_name),
+  by = "dataset_name"
+) |>
+  mutate(data = map2(items, subjects, \(i, s) list(items = i, subjects = s)),
+         summaries = map2(dataset_name, data, \(n, d) set_names(list(d), n))) |>
+  arrange(dataset_name) |>
+  pull(summaries) |>
+  flatten()
 
-summary_data <- left_join(items, subjects) |>
-  mutate(data = map2(items, subjects, \(i, s) list(items = i, subjects = s)))
-
-summaries <- set_names(summary_data$data, summary_data$dataset_name)
-
+# pass data to ojs
+ojs_define(metadata = metadata)
 ojs_define(summaries = summaries)
 ```
 
@@ -43,8 +61,9 @@ ojs_define(summaries = summaries)
 ```{ojs}
 // selector for dataset
 summaries_map = new Map(Object.entries(summaries))
-viewof dataset = Inputs.select(summaries_map, {label: 'Dataset', value: '4thgrade_math_sirt'})
+viewof dataset = Inputs.select(summaries_map, {label: 'Dataset'})
 
+// transpose all data for plotting
 items = transpose(dataset.items)
 subjects = transpose(dataset.subjects)
 metadata_trans = transpose(metadata)
@@ -55,8 +74,8 @@ Plot = import("https://esm.sh/@observablehq/plot")
 
 // plot items
 viewof item_plot = Plot.plot({
-  x: {label: "Item mean response"},
-  y: {grid: true},
+      x: {label: "Item mean response"},
+      y: {grid: true},
   marks: [
     Plot.rectY(items, Plot.binX({y: "count"}, {x: "mean"})),
     Plot.ruleY([0])
@@ -65,8 +84,8 @@ viewof item_plot = Plot.plot({
 
 // plot subjects
 viewof subj_plot = Plot.plot({
-  x: {label: "Subject mean response"},
-  y: {grid: true},
+      x: {label: "Subject mean response"},
+      y: {grid: true},
   marks: [
     Plot.rectY(subjects, Plot.binX({y: "count"}, {x: "mean"})),
     Plot.ruleY([0])
@@ -91,7 +110,9 @@ vars = new Map([["Number responses", "n_responses"],
                 ["Responses per item", "responses_per_item"],
                 ["Sparsity", "sparsity"]])
 
-viewof x_var = Inputs.select(vars, {value: "n_items", label: "X axis"})
+// vars = new Map(Object.entries(cont_vars))
+// console.log(Array.from(vars.values())[1])
+viewof x_var = Inputs.select(vars, {value: "n_items",        label: "X axis"})
 viewof y_var = Inputs.select(vars, {value: "n_participants", label: "Y axis"})
 
 // selector for color variable
@@ -103,39 +124,32 @@ viewof color_var = Inputs.select(color_opts, {label: "Color"})
 ```
 
 ```{ojs}
+plt_color = color_var || default_color
+
 // histogram
 viewof metadata_hist = Plot.plot({
-  y: {grid: true},
+      x: {type: "log"},
+      y: {grid: true},
   color: {legend: color_var != null},
   marks: [
-    Plot.rectY(metadata_trans, Plot.binX({y: "count"}, {x: x_var, fill: color_var || default_color})),
+    Plot.rectY(metadata_trans, Plot.binX({y: "count"}, {x: x_var, fill: plt_color})),
     Plot.ruleY([0])
   ]
 })
 
 // scatter plot
 viewof metadata_scatter = Plot.plot({
-  x: {type: "log"},
-  y: {type: "log"},
-  grid: true,
+      x: {type: "log"},
+      y: {type: "log"},
+   grid: true,
   color: {legend: color_var != null},
   marks: [
-    Plot.dot(metadata_trans, {
-      x: x_var,
-      y: y_var, 
-      stroke: color_var || default_color
-    }),
-    Plot.tip(metadata_trans, Plot.pointer({
-      x: x_var,
-      y: y_var,
-      stroke: "partition",
-      title: "dataset"
-    })),
-    Plot.linearRegressionY(metadata_trans, {
-      x: x_var, 
-      y: y_var, 
-      stroke: color_var || default_color
-    })
+    // points
+    Plot.dot(metadata_trans, {x: x_var, y: y_var, stroke: plt_color}),
+    // tooltips
+    Plot.tip(metadata_trans, Plot.pointer({x: x_var, y: y_var, stroke: plt_color, title: "dataset_name"})),
+    // regression line
+    Plot.linearRegressionY(metadata_trans, {x: x_var, y: y_var, stroke: plt_color})
   ]
 })
 
