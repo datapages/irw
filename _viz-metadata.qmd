@@ -1,0 +1,58 @@
+```{ojs}
+// selectors for x and y variables
+vars = new Map([["Number responses", "n_responses"],
+                ["Number participants", "n_participants"],
+                ["Number items", "n_items"],
+                ["Responses per participant", "responses_per_participant"],
+                ["Responses per item", "responses_per_item"],
+                ["Sparsity", "sparsity"]])
+
+// vars = new Map(Object.entries(cont_vars))
+// console.log(Array.from(vars.values())[1])
+viewof x_var = Inputs.select(vars, {value: "n_items",        label: "X axis"})
+viewof y_var = Inputs.select(vars, {value: "n_participants", label: "Y axis"})
+
+// selector for color variable
+default_color = "grey"
+color_opts = new Map([["None", null],
+                      ["Dichotomous vs. Polytomous", "partition"]])
+
+viewof color_var = Inputs.select(color_opts, {label: "Color"})
+```
+
+```{ojs}
+plt_color = color_var || default_color
+
+// histogram
+viewof metadata_hist = Plot.plot({
+      // x: {type: "log"},
+      y: {grid: true},
+  color: {legend: color_var != null},
+  marks: [
+    Plot.rectY(metadata_trans, Plot.binX({y: "count"}, {x: x_var, fill: plt_color})),
+    Plot.ruleY([0])
+  ]
+})
+
+// scatter plot
+viewof metadata_scatter = Plot.plot({
+      x: {type: "log"},
+      y: {type: "log"},
+   grid: true,
+  color: {legend: color_var != null},
+  marks: [
+    // points
+    Plot.dot(metadata_trans, {x: x_var, y: y_var, stroke: plt_color}),
+    // tooltips
+    Plot.tip(metadata_trans, Plot.pointer({x: x_var, y: y_var, stroke: plt_color, title: "dataset_name"})),
+    // regression line
+    Plot.linearRegressionY(metadata_trans, {x: x_var, y: y_var, stroke: plt_color})
+  ]
+})
+
+// display histogram and scatter plots side by side
+html`<div style="display: flex;">
+ <div style="flex-basis:50%"> ${viewof metadata_hist}    </div>
+ <div style="flex-basis:50%"> ${viewof metadata_scatter} </div>
+</div>`
+```

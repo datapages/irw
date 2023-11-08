@@ -1,0 +1,40 @@
+```{ojs}
+// selector for dataset
+summaries_map = new Map(Object.entries(summaries))
+viewof dataset = Inputs.select(summaries_map, {label: 'Dataset'})
+
+// transpose all data for plotting
+items = transpose(dataset.items)
+subjects = transpose(dataset.subjects)
+metadata_trans = transpose(metadata)
+```
+
+```{ojs}
+Plot = import("https://esm.sh/@observablehq/plot")
+
+// plot items
+viewof item_plot = Plot.plot({
+      x: {label: "Item mean response"},
+      y: {grid: true},
+  marks: [
+    Plot.rectY(items, Plot.binX({y: "count"}, {x: "mean"})),
+    Plot.ruleY([0])
+  ]
+})
+
+// plot subjects
+viewof subj_plot = Plot.plot({
+      x: {label: "Subject mean response"},
+      y: {grid: true},
+  marks: [
+    Plot.rectY(subjects, Plot.binX({y: "count"}, {x: "mean"})),
+    Plot.ruleY([0])
+  ]
+})
+
+// display item and subject plots side by side
+html`<div style="display: flex;">
+ <div style="flex-basis:50%"> ${viewof item_plot} </div>
+ <div style="flex-basis:50%"> ${viewof subj_plot} </div>
+</div>`
+```

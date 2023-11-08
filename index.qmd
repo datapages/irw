@@ -1,161 +1,23 @@
 ---
-title: "The Item Response Warehouse"
+title: "Item Response Warehouse"
+subtitle: "The Item Response Warehouse (IRW) is a collection of open, harmonized item response datasets."
+description: |
+  These datasets in IRW span a wide range of measures; examples include measures of ability in education settings, measures of partisanship based on voting records, and personality measures based on survey questions. While they span a wide range of measures, the data are harmonized in a common format to allow for standardized analysis of larger quantities of data. The key element required of data for inclusion in the IRW is that the data need to report individual responses that are cross-classified by the focus of measurement (typically a person) and the measurement tool (typically an item). Responses can be scored in a variety of ways (dichotomous, polytomous, continuous) and may contain additional data (e.g., response time), but the cross-classification aspect is fundamental.
+title-block-banner: "#2780e3"
+title-block-banner-color: white
 ---
 
-The Item Response Warehouse (IRW) is a collection of open, harmonized item response datasets. These datasets span a wide range of measures; examples include measures of ability in education settings, measures of partisanship based on voting records, and personality measures based on survey questions. While they span a wide range of measures, the data are harmonized in a common format to allow for standardized analysis of larger quantities of data. The key element required of data for inclusion in the IRW is that the data need to report individual responses that are cross-classified by the focus of measurement (typically a person) and the measurement tool (typically an item). Responses can be scored in a variety of ways (dichotomous, polytomous, continuous) and may contain additional data (e.g., response time), but the cross-classification aspect is fundamental. 
-
-```{r}
-library(dplyr)
-library(tidyr)
-library(stringr)
-```
-
-```{r}
-# set user and dataset
-# dataset <- redivis::user("stanford_templates")$dataset("item_response_warehouse")
-
-# get metadata table
-# metadata_table <- dataset$table("metadata")
-# metadata <- metadata_table$to_tibble()
-
-project <- redivis::user("mikabr")$project("irw")
-
-# get metadata table
-metadata_table <- project$table("metadata_output")
-metadata <- metadata_table$to_tibble()
-metadata <- metadata |>
-  mutate(partition = if_else(n_categories == 2, "dichotomous", "polytomous"))
-
-# cont_vars <- metadata |> select(where(is.numeric)) |> colnames()
-# cont_vars_list <- set_names(cont_vars, cont_vars |> str_replace_all("_", " ") |> str_to_sentence()) |> as.list()
-# ojs_define(cont_vars = cont_vars_list)
-
-# get item summary table
-item_table <- project$table("item_summary_output")
-item_summary <- item_table$to_tibble()
-
-# get subject summary table
-subject_table <- project$table("subject_summary_output")
-subject_summary <- subject_table$to_tibble()
-
-# combine item and subject summaries, put into data structure for selector
-summaries <- full_join(
-  item_summary |> nest(items = -dataset_name),
-  subject_summary |> nest(subjects = -dataset_name),
-  by = "dataset_name"
-) |>
-  mutate(data = map2(items, subjects, \(i, s) list(items = i, subjects = s)),
-         summaries = map2(dataset_name, data, \(n, d) set_names(list(d), n))) |>
-  arrange(dataset_name) |>
-  pull(summaries) |>
-  flatten()
-
-# pass data to ojs
-ojs_define(metadata = metadata)
-ojs_define(summaries = summaries)
-```
-
+{{< include _load-data.qmd >}}
 
 ## Individual datasets
 
-```{ojs}
-// selector for dataset
-summaries_map = new Map(Object.entries(summaries))
-viewof dataset = Inputs.select(summaries_map, {label: 'Dataset'})
+Explore each dataset's distribution of mean responses by item and by subject.
 
-// transpose all data for plotting
-items = transpose(dataset.items)
-subjects = transpose(dataset.subjects)
-metadata_trans = transpose(metadata)
-```
+{{< include _viz-datasets.qmd >}}
 
-```{ojs}
-Plot = import("https://esm.sh/@observablehq/plot")
-
-// plot items
-viewof item_plot = Plot.plot({
-      x: {label: "Item mean response"},
-      y: {grid: true},
-  marks: [
-    Plot.rectY(items, Plot.binX({y: "count"}, {x: "mean"})),
-    Plot.ruleY([0])
-  ]
-})
-
-// plot subjects
-viewof subj_plot = Plot.plot({
-      x: {label: "Subject mean response"},
-      y: {grid: true},
-  marks: [
-    Plot.rectY(subjects, Plot.binX({y: "count"}, {x: "mean"})),
-    Plot.ruleY([0])
-  ]
-})
-
-// display item and subject plots side by side
-html`<div style="display: flex;">
- <div style="flex-basis:50%"> ${viewof item_plot} </div>
- <div style="flex-basis:50%"> ${viewof subj_plot} </div>
-</div>`
-```
 
 ## Metadata
 
-```{ojs}
-// selectors for x and y variables
-vars = new Map([["Number responses", "n_responses"],
-                ["Number participants", "n_participants"],
-                ["Number items", "n_items"],
-                ["Responses per participant", "responses_per_participant"],
-                ["Responses per item", "responses_per_item"],
-                ["Sparsity", "sparsity"]])
+Examine sample sizes and other dataset summary statistics.
 
-// vars = new Map(Object.entries(cont_vars))
-// console.log(Array.from(vars.values())[1])
-viewof x_var = Inputs.select(vars, {value: "n_items",        label: "X axis"})
-viewof y_var = Inputs.select(vars, {value: "n_participants", label: "Y axis"})
-
-// selector for color variable
-default_color = "grey"
-color_opts = new Map([["None", null],
-                      ["Dichotomous vs. Polytomous", "partition"]])
-
-viewof color_var = Inputs.select(color_opts, {label: "Color"})
-```
-
-```{ojs}
-plt_color = color_var || default_color
-
-// histogram
-viewof metadata_hist = Plot.plot({
-      // x: {type: "log"},
-      y: {grid: true},
-  color: {legend: color_var != null},
-  marks: [
-    Plot.rectY(metadata_trans, Plot.binX({y: "count"}, {x: x_var, fill: plt_color})),
-    Plot.ruleY([0])
-  ]
-})
-
-// scatter plot
-viewof metadata_scatter = Plot.plot({
-      x: {type: "log"},
-      y: {type: "log"},
-   grid: true,
-  color: {legend: color_var != null},
-  marks: [
-    // points
-    Plot.dot(metadata_trans, {x: x_var, y: y_var, stroke: plt_color}),
-    // tooltips
-    Plot.tip(metadata_trans, Plot.pointer({x: x_var, y: y_var, stroke: plt_color, title: "dataset_name"})),
-    // regression line
-    Plot.linearRegressionY(metadata_trans, {x: x_var, y: y_var, stroke: plt_color})
-  ]
-})
-
-// display histogram and scatter plots side by side
-html`<div style="display: flex;">
- <div style="flex-basis:50%"> ${viewof metadata_hist}    </div>
- <div style="flex-basis:50%"> ${viewof metadata_scatter} </div>
-</div>`
-```
+{{< include _viz-metadata.qmd >}}
