@@ -1,0 +1,36 @@
+```{ojs}
+redivis = require("redivis")
+redivis.authorize({ apiToken: "AAACU4CudFBM4Xf9jNnGda//my9ozSjZ" })
+
+dataset = await redivis
+  .user('stanford_templates')
+  .dataset('item_response_warehouse')
+
+tables = await dataset.listTables()
+dataset_names = await tables.map(t => t.name).filter(s => !s.startsWith('_')).sort()
+datasets = new Map()
+
+async function getTable(tableName) {
+  const rows = await redivis
+    .user('stanford_templates')
+    .dataset('item_response_warehouse')
+    .table(tableName)
+    .listRows({ maxResults: 10 })
+  return rows
+}
+
+async function getData(name) {
+  if (! datasets.has(name)) {
+    const table = await getTable(name);
+    datasets.set(name, table);
+  }
+  return datasets.get(name)
+}
+```
+
+```{ojs}
+viewof name = Inputs.select(dataset_names) //, {label: 'Dataset'})
+curr_data = await getData(name)
+
+Inputs.table(curr_data)
+```
