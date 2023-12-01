@@ -1,0 +1,87 @@
+---
+title: "Data analysis"
+---
+
+Here we provide example code in R and Python for loading multiple datasets in IRW and performing some summary computations over them. This should be a useful starting point for conducting your own analyses of the data.
+
+::: {.panel-tabset}
+
+## R
+
+```{r}
+#| echo: true
+
+library(dplyr)
+library(purrr)
+
+dataset_names <- c("4thgrade_math_sirt", "chess_lnirt", "dd_rotation")
+
+compute_metadata <- function(df) {
+  df <- df |> filter(!is.na(resp)) |> mutate(resp = as.numeric(resp))
+  tibble(
+    n_responses = nrow(df),
+    n_categories = n_distinct(df$resp),
+    n_participants = n_distinct(df$id),
+    n_items = n_distinct(df$item),
+    responses_per_participant = n_responses / n_participants,
+    responses_per_item = n_responses / n_items,
+    sparsity = (sqrt(n_responses) / n_participants) * (sqrt(n_responses) / n_items)
+  )
+}
+
+dataset <- redivis::user("stanford_templates")$dataset("item_response_warehouse")
+get_data_summary <- function(dataset_name) {
+  # fetch data
+  df <- dataset$table(dataset_name)$to_tibble()
+  # compute summary
+  compute_metadata(df) |> mutate(dataset_name = dataset_name, .before = everything())
+}
+
+summaries_list <- map(dataset_names, get_data_summary)
+summaries <- bind_rows(summaries_list)
+summaries
+```
+
+## Python
+
+```{python}
+#| eval: false
+#| echo: true
+#| python.reticulate: false
+
+import pandas as pd
+from math import sqrt
+import redivis
+
+dataset_names = ["4thgrade_math_sirt", "chess_lnirt", "dd_rotation"]
+
+def compute_metadata(df):
+    df = (df
+          .loc[~df['resp'].isna()]
+          .assign(resp=pd.to_numeric(df['resp']))
+         )
+    
+    return pd.DataFrame({
+        'n_responses': [len(df)],
+        'n_categories': [df['resp'].nunique()],
+        'n_participants': [df['id'].nunique()],
+        'n_items': [df['item'].nunique()],
+        'responses_per_participant': [len(df) / df['id'].nunique()],
+        'responses_per_item': [len(df) / df['item'].nunique()],
+        'sparsity': [(sqrt(len(df)) / df['id'].nunique()) * (sqrt(len(df)) / df['item'].nunique())]
+    })
+
+dataset = redivis.user('stanford_templates').dataset('item_response_warehouse')
+def get_data_summary(dataset_name):
+  df = pd.DataFrame(dataset.table(dataset_name).to_pandas_dataframe())
+    
+  summary = compute_metadata(df)
+  summary.insert(0, 'dataset_name', dataset_name)
+  return summary
+
+summaries_list = [get_data_summary(name) for name in dataset_names]
+summaries = pd.concat(summaries_list, ignore_index=True)
+print(summaries)
+```
+
+:::
