@@ -94,6 +94,9 @@ Here is a slightly more complex example showing how to compute the InterModel Vi
 
 ```{r}
 #| echo: true
+library(mirt)
+library(irw) 
+
 dataset <- redivis::user("stanford_templates")$dataset("item_response_warehouse")
 df <- dataset$table("content_literacy_intervention")$to_data_frame()
 items<-unique(df$item)
@@ -101,10 +104,7 @@ if (all(items %in% 1:length(items))) {
     df$item<-paste("item_",df$item,sep='')
     items<-unique(df$item)
 }
-library(irw) #devtools::install_github("ben-domingue/irw/irw_pkg")
 resp<-irw::long2resp(df)
-
-library(mirt)
 id<-resp$id
 resp$id<-NULL
 
@@ -122,13 +122,13 @@ for (i in 1:ntimes) {
     id<-resp0$id
     resp0$id<-NULL
     ##rasch model
-    m0<-mirt(resp0,1,'Rasch')
+    m0<-mirt(resp0,1,'Rasch',verbose=FALSE)
     ##2pl
     ni<-ncol(resp0)
     s<-paste("F=1-",ni,"
              PRIOR = (1-",ni,", a1, lnorm, 0.0, 1.0)",sep="")
     model<-mirt.model(s)
-    m1<-mirt(resp0,model,itemtype=rep("2PL",ni),method="EM",technical=list(NCYCLES=10000))
+    m1<-mirt(resp0,model,itemtype=rep("2PL",ni),method="EM",technical=list(NCYCLES=10000),verbose=FALSE)
     ##
     z0<-getp(m0,x=x[x$oos==1,],id=id)
     z1<-getp(m1,x=x[x$oos==1,],id=id)
