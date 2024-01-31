@@ -93,7 +93,6 @@ Here is a slightly more complex example showing how to compute the InterModel Vi
 ## R
 
 ```{r}
-#| eval: false
 #| echo: true
 dataset <- redivis::user("stanford_templates")$dataset("item_response_warehouse")
 df <- dataset$table("content_literacy_intervention")$to_data_frame()
@@ -103,7 +102,8 @@ if (all(items %in% 1:length(items))) {
     items<-unique(df$item)
 }
 
-library(irw) #devtools::install_github("ben-domingue/irw/irw_pkg")
+devtools::install_github("ben-domingue/irw/irw_pkg")
+library(irw) 
 resp<-irw::long2resp(df)
 
 library(mirt)
@@ -111,6 +111,7 @@ id<-resp$id
 resp$id<-NULL
 
 ##cross-validation for models estimated in mirt
+set.seed(8675309)
 ntimes<-4
 df$gr<-sample(1:ntimes,nrow(df),replace=TRUE)
 x.hold<-df
