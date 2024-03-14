@@ -1,5 +1,26 @@
 [
   {
+    "objectID": "research.html",
+    "href": "research.html",
+    "title": "Research",
+    "section": "",
+    "text": "Domingue B, & Kanopka K (2023). The Item Response Warehouse (IRW). PsyArXiv."
+  },
+  {
+    "objectID": "research.html#key-paper-describing-the-irw",
+    "href": "research.html#key-paper-describing-the-irw",
+    "title": "Research",
+    "section": "",
+    "text": "Domingue B, & Kanopka K (2023). The Item Response Warehouse (IRW). PsyArXiv."
+  },
+  {
+    "objectID": "research.html#psychometrics-research-that-use-data-from-the-irw-including-non-public-portions-of-the-repository",
+    "href": "research.html#psychometrics-research-that-use-data-from-the-irw-including-non-public-portions-of-the-repository",
+    "title": "Research",
+    "section": "Psychometrics research that use data from the IRW (including non-public portions of the repository):",
+    "text": "Psychometrics research that use data from the IRW (including non-public portions of the repository):\n\nAhmed I, Bertling M, Zhang L, Ho A, Loyalka P, Xue H, Rozelle S, Domingue B. (2023). Heterogeneity of item-treatment interactions masks complexity and generalizability in randomized controlled trials. EdWorkingPapers.\nDomingue B, Kanopka K, Kapoor R, Pohl S, Chalmers P, Rahal C, & Rhemtulla M (2022). The InterModel Vigorish as a lens for understanding (and quantifying) the value of item response models for dichotomously coded items. PsyArXiv.\nDomingue B, Kanopka K, Stenhaug B, Sulik MJ, Beverly T, Brinkhuis M, Circi R, Faul J, Liao D, McCandliss B, Obradović J, Piech C, Porter T, Soland J, Weeks J, Wise S, Yeatman J. (2022). Speed–Accuracy Trade-Off? Not So Fast: Marginal Changes in Speed Have Inconsistent Relationships With Accuracy in Real-World Settings. Journal of Educational and Behavioral Statistics, 47(5), 576-602."
+  },
+  {
     "objectID": "about.html",
     "href": "about.html",
     "title": "About",
@@ -35,13 +56,6 @@
     "text": "Programmatic access\nYou can also access IRW data programmatically using the Redivis API for R or Python (note that you will first need to generate and set an API token). For example:\n\nRPython\n\n\n\n\nCode\n# first install redivis package: devtools::install_github(\"redivis/redivis-r\", ref=\"main\")\n\n# individual dataset\ndataset &lt;- redivis::user(\"datapages\")$dataset(\"item_response_warehouse\")\ndf &lt;- dataset$table(\"4thgrade_math_sirt\")$to_tibble()\n\n# metadata\nproject &lt;- redivis::user(\"mikabr\")$project(\"irw\")\nmetadata &lt;- project$table(\"metadata_output\")$to_tibble()\n\n\n\n\n\n\nCode\nimport redivis\n\n# individual dataset\ndataset = redivis.user('datapages').dataset('item_response_warehouse')\ndf = dataset.table('4thgrade_math_sirt').to_pandas_dataframe()\n\n# metadata\nproject = redivis.user('mikabr').project('irw')\nmetadata = project.table('metadata_output').to_pandas_dataframe()"
   },
   {
-    "objectID": "contact.html",
-    "href": "contact.html",
-    "title": "Contact Us",
-    "section": "",
-    "text": "The IRW is a work in progress. If you\n\nHave questions\nWant to send comments on any data\nHave pointers to data we should add\nWant to get involved\n\nthen please contact us at itemresponsewarehouse@stanford.edu."
-  },
-  {
     "objectID": "analysis.html",
     "href": "analysis.html",
     "title": "Data analysis",
@@ -49,25 +63,11 @@
     "text": "Here we provide example code in R and Python for loading multiple datasets in IRW and performing some summary computations over them. This should be a useful starting point for conducting your own analyses of the data. You may also be interested in the functionality embedded in the irw package.\n\nRPython\n\n\n\n\nCode\nlibrary(dplyr)\nlibrary(purrr)\n\ndataset_names &lt;- c(\"4thgrade_math_sirt\", \"chess_lnirt\", \"dd_rotation\")\n\ncompute_metadata &lt;- function(df) {\n  df &lt;- df |&gt; filter(!is.na(resp)) |&gt; mutate(resp = as.numeric(resp))\n  tibble(\n    n_responses = nrow(df),\n    n_categories = n_distinct(df$resp),\n    n_participants = n_distinct(df$id),\n    n_items = n_distinct(df$item),\n    responses_per_participant = n_responses / n_participants,\n    responses_per_item = n_responses / n_items,\n    sparsity = (sqrt(n_responses) / n_participants) * (sqrt(n_responses) / n_items)\n  )\n}\n\ndataset &lt;- redivis::user(\"datapages\")$dataset(\"item_response_warehouse\")\nget_data_summary &lt;- function(dataset_name) {\n  # fetch data\n  df &lt;- dataset$table(dataset_name)$to_tibble()\n  # compute summary\n  compute_metadata(df) |&gt; mutate(dataset_name = dataset_name, .before = everything())\n}\n\nsummaries_list &lt;- map(dataset_names, get_data_summary)\nsummaries &lt;- bind_rows(summaries_list)\nsummaries\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\ndataset_name\nn_responses\nn_categories\nn_participants\nn_items\nresponses_per_participant\nresponses_per_item\nsparsity\n\n\n\n\n4thgrade_math_sirt\n19920\n2\n664\n30\n30.000000\n664.0\n1.0000000\n\n\nchess_lnirt\n10240\n2\n256\n40\n40.000000\n256.0\n1.0000000\n\n\ndd_rotation\n1178\n2\n121\n10\n9.735537\n117.8\n0.9735537\n\n\n\n\n\n\n\n\n\n\nCode\nimport pandas as pd\nfrom math import sqrt\nimport redivis\n\ndataset_names = [\"4thgrade_math_sirt\", \"chess_lnirt\", \"dd_rotation\"]\n\ndef compute_metadata(df):\n    df = (df\n          .loc[~df['resp'].isna()]\n          .assign(resp=pd.to_numeric(df['resp']))\n         )\n    \n    return pd.DataFrame({\n        'n_responses': [len(df)],\n        'n_categories': [df['resp'].nunique()],\n        'n_participants': [df['id'].nunique()],\n        'n_items': [df['item'].nunique()],\n        'responses_per_participant': [len(df) / df['id'].nunique()],\n        'responses_per_item': [len(df) / df['item'].nunique()],\n        'sparsity': [(sqrt(len(df)) / df['id'].nunique()) * (sqrt(len(df)) / df['item'].nunique())]\n    })\n\ndataset = redivis.user('datapages').dataset('item_response_warehouse')\ndef get_data_summary(dataset_name):\n  df = pd.DataFrame(dataset.table(dataset_name).to_pandas_dataframe())\n    \n  summary = compute_metadata(df)\n  summary.insert(0, 'dataset_name', dataset_name)\n  return summary\n\nsummaries_list = [get_data_summary(name) for name in dataset_names]\nsummaries = pd.concat(summaries_list, ignore_index=True)\nprint(summaries)\n\n\n\n\n\nHere is a slightly more complex example showing how to compute the InterModel Vigorish contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation across 4 folds).\n\nR\n\n\n\n\nCode\nlibrary(mirt)\nlibrary(irw) \n\ndataset &lt;- redivis::user(\"datapages\")$dataset(\"item_response_warehouse\")\ndf &lt;- dataset$table(\"kim2023\")$to_data_frame()\nitems&lt;-unique(df$item)\nif (all(items %in% 1:length(items))) {\n    df$item&lt;-paste(\"item_\",df$item,sep='')\n    items&lt;-unique(df$item)\n}\nresp&lt;-irw::long2resp(df)\nid&lt;-resp$id\nresp$id&lt;-NULL\n\n##cross-validation for models estimated in mirt\nset.seed(8675309)\nntimes&lt;-4\ndf$gr&lt;-sample(1:ntimes,nrow(df),replace=TRUE)\nx.hold&lt;-df\nomega&lt;-numeric()\nfor (i in 1:ntimes) {\n    x&lt;-x.hold\n    x$oos&lt;-ifelse(x$gr==i,1,0)\n    x0&lt;-x[x$oos==0,]\n    resp0&lt;-data.frame(irw::long2resp(x0))\n    id&lt;-resp0$id\n    resp0$id&lt;-NULL\n    ##rasch model\n    m0&lt;-mirt(resp0,1,'Rasch',verbose=FALSE)\n    ##2pl\n    ni&lt;-ncol(resp0)\n    s&lt;-paste(\"F=1-\",ni,\"\n             PRIOR = (1-\",ni,\", a1, lnorm, 0.0, 1.0)\",sep=\"\")\n    model&lt;-mirt.model(s)\n    m1&lt;-mirt(resp0,model,itemtype=rep(\"2PL\",ni),method=\"EM\",technical=list(NCYCLES=10000),verbose=FALSE)\n    ##\n    z0&lt;-getp(m0,x=x[x$oos==1,],id=id)\n    z1&lt;-getp(m1,x=x[x$oos==1,],id=id)\n    z0&lt;-z0[,c(\"item\",\"id\",\"resp\",\"p\")]\n    names(z0)[4]&lt;-'p1'\n    z1&lt;-z1[,c(\"item\",\"id\",\"p\")]\n    names(z1)[3]&lt;-'p2'\n    z&lt;-merge(z0,z1)\n    omega[i]&lt;-imv(z,p1=\"p1\",p2=\"p2\")\n}\nmean(omega)\n\n\n[1] 0.01292754"
   },
   {
-    "objectID": "research.html",
-    "href": "research.html",
-    "title": "Research",
+    "objectID": "contact.html",
+    "href": "contact.html",
+    "title": "Contact Us",
     "section": "",
-    "text": "Domingue B, & Kanopka K (2023). The Item Response Warehouse (IRW). PsyArXiv."
-  },
-  {
-    "objectID": "research.html#key-paper-describing-the-irw",
-    "href": "research.html#key-paper-describing-the-irw",
-    "title": "Research",
-    "section": "",
-    "text": "Domingue B, & Kanopka K (2023). The Item Response Warehouse (IRW). PsyArXiv."
-  },
-  {
-    "objectID": "research.html#psychometrics-research-that-use-data-from-the-irw-including-non-public-portions-of-the-repository",
-    "href": "research.html#psychometrics-research-that-use-data-from-the-irw-including-non-public-portions-of-the-repository",
-    "title": "Research",
-    "section": "Psychometrics research that use data from the IRW (including non-public portions of the repository):",
-    "text": "Psychometrics research that use data from the IRW (including non-public portions of the repository):\n\nAhmed I, Bertling M, Zhang L, Ho A, Loyalka P, Xue H, Rozelle S, Domingue B. (2023). Heterogeneity of item-treatment interactions masks complexity and generalizability in randomized controlled trials. EdWorkingPapers.\nDomingue B, Kanopka K, Kapoor R, Pohl S, Chalmers P, Rahal C, & Rhemtulla M (2022). The InterModel Vigorish as a lens for understanding (and quantifying) the value of item response models for dichotomously coded items. PsyArXiv.\nDomingue B, Kanopka K, Stenhaug B, Sulik MJ, Beverly T, Brinkhuis M, Circi R, Faul J, Liao D, McCandliss B, Obradović J, Piech C, Porter T, Soland J, Weeks J, Wise S, Yeatman J. (2022). Speed–Accuracy Trade-Off? Not So Fast: Marginal Changes in Speed Have Inconsistent Relationships With Accuracy in Real-World Settings. Journal of Educational and Behavioral Statistics, 47(5), 576-602."
+    "text": "The IRW is a work in progress. If you\n\nHave questions\nWant to send comments on any data\nHave pointers to data we should add\nWant to get involved\n\nthen please contact us at itemresponsewarehouse@stanford.edu."
   },
   {
     "objectID": "docs.html",
@@ -95,6 +95,6 @@
     "href": "index.html#individual-datasets",
     "title": "Item Response Warehouse",
     "section": "Individual datasets",
-    "text": "Individual datasets\nExplore each dataset’s distribution of mean responses by item and subject.\n\n\nCode\nsummaries_map = new Map(Object.entries(summaries))\nviewof dataset = Inputs.select(summaries_map, {label: 'Dataset'})\n\n// transpose all data for plotting\nitems = transpose(dataset.items)\nsubjects = transpose(dataset.subjects)\nmetadata_trans = transpose(metadata)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nCode\nPlot = import(\"https://esm.sh/@observablehq/plot\")\n\n// plot items\nviewof item_plot = Plot.plot({\n      x: {label: \"Item mean response\"},\n      y: {grid: true},\n  marks: [\n    Plot.rectY(items, Plot.binX({y: \"count\"}, {x: \"mean\"})),\n    Plot.ruleY([0])\n  ]\n})\n\n// plot subjects\nviewof subj_plot = Plot.plot({\n      x: {label: \"Subject mean response\"},\n      y: {grid: true},\n  marks: [\n    Plot.rectY(subjects, Plot.binX({y: \"count\"}, {x: \"mean\"})),\n    Plot.ruleY([0])\n  ]\n})\n\n// display item and subject plots side by side\nhtml`&lt;div style=\"display: flex;\"&gt;\n &lt;div style=\"flex-basis:50%\"&gt; ${viewof item_plot} &lt;/div&gt;\n &lt;div style=\"flex-basis:50%\"&gt; ${viewof subj_plot} &lt;/div&gt;\n&lt;/div&gt;`"
+    "text": "Individual datasets\nExplore each dataset’s distribution of mean responses by item and subject.\n\n\nCode\nsummaries_map = new Map(Object.entries(summaries))\nviewof dataset = Inputs.select(summaries_map, {label: 'Dataset'})\n\n// transpose all data for plotting\nitems = transpose(dataset.items)\nsubjects = transpose(dataset.subjects)\nmetadata_trans = transpose(metadata)\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nCode\nPlot = import(\"https://esm.sh/@observablehq/plot@0.6.13\")\n\n// plot items\nviewof item_plot = Plot.plot({\n      x: {label: \"Item mean response\"},\n      y: {grid: true},\n  marks: [\n    Plot.rectY(items, Plot.binX({y: \"count\"}, {x: \"mean\"})),\n    Plot.ruleY([0])\n  ]\n})\n\n// plot subjects\nviewof subj_plot = Plot.plot({\n      x: {label: \"Subject mean response\"},\n      y: {grid: true},\n  marks: [\n    Plot.rectY(subjects, Plot.binX({y: \"count\"}, {x: \"mean\"})),\n    Plot.ruleY([0])\n  ]\n})\n\n// display item and subject plots side by side\nhtml`&lt;div style=\"display: flex;\"&gt;\n &lt;div style=\"flex-basis:50%\"&gt; ${viewof item_plot} &lt;/div&gt;\n &lt;div style=\"flex-basis:50%\"&gt; ${viewof subj_plot} &lt;/div&gt;\n&lt;/div&gt;`"
   }
 ]
