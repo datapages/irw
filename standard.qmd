@@ -1,0 +1,70 @@
+---
+title: "The IRW Data Standard"
+---
+
+Data standards are an essential mechanism of increasing reusability and interoperability of data amongst researchers. As such, they play a critical role in increasing the extent to which science is [FAIR](https://www.nature.com/articles/sdata201618) (findable, accessible, interoperable, reusable). The IRW data standard is meant to be a straightforward way of standardizing item response data such that it can be readily used by interested researchers in a wide variety of psychometric analyses.
+
+
+## Key Elements
+
+The below three features are essential components of an IRW dataset (with some small exceptions to be explained below). Note that the typesetting of the data elements is consistent with that of the IRW.
+
+- `id` This is a persistent identifer for the focal unit, i.e. *the thing being measured*. This wlil typically be a person but in some cases may be, for example, a word (when interest is in establishing some property of the word).
+
+- `item` This is a persistent identifier for *the probe being used to measure*. There are some cases wherein a unique item identifier cannot be identified; for more information on these cases see the discussion of trials below.
+
+- `resp` 
+
+## Other elements
+
+These elements are optional features of IRW datasets. When IRW datasets have these columns, they have been consistently formatted as per the data standards described here.
+
+- `rt` The response time used to produce an item response is coded in seconds.
+
+- `date` The calendar time at which a response was produced is included. Coding of this variable is done in two ways. In some cases, there were only relative dates (e.g., 30 days into data collection). In that case, we convert to the number of seconds since the first piece of data in the dataset was collected). In cases where more exact information was given (e.g., 1:30PM 03/04/2008), we convert to [Unix time](https://www.unixtimestamp.com/) (i.e., seconds since JAN 01 1970. (UTC)).
+
+
+- `qmatrix` When items are classified into a small number of skills (i.e., for the purposes of cognitive diagnostic modeling \cite{ravand2015cognitive}), we have included these item-level classifications. Note that the column headers will be `qmatrix1`, ..., `qmatrixN` when there are `N` skills.
+
+- `rater` In scenarios wherein the focal unit is being rated by other observers (perhaps along multiple dimensions), an identifier associated with the rater producing the rating.
+
+- `wave` In settings wherein data is collected longitudinally (but precise timing as in `date` is not available), we indicate the wave of data collection. Note that this is also used to indicate pre/post treatment in the case of data collected from randomized controlled trials (RCTs).
+
+- `treat` An indicator of whether a respondent was in a treatment group (1=Yes) in an experimental study (e.g., an RCT or quasiexperiment).
+
+
+## Additional Considerations
+
+In some cases, we deviate from the above rules for specific reasons. We describe those here. Some of the below may be considered more experimental features of the IRW.
+
+- Process data: In general, a single row of data in the IRW corresponds to a unque response from an individual to an item. In the context of ['process data'](https://link.springer.com/article/10.1007/s11336-022-09880-8), more information about a response is available. [example]
+
+- Trials: Many constructs in cognitive psychology are measured via repeated trials of similar tasks wherein the probes either do not vary or vary in terms of some quantifiable feature of the stimulus. In such cases, [what do we do?]
+
+# Contributing data to the IRW
+
+## Constructing an IRW-compliant dataset
+
+Below are critical instructions for formatting data for the IRW. 
+
+1. Numeric values of a response should be meaningful. For example, missing values cannot be coded as numbers (e.g., -9).
+
+2. Please check that the `id` and `item` identifers have an appropriate number of unique values.
+
+3. Additional data elements (e.g., `rt`, `date`, `wave`, `rater`, `qmatrix`) should all be formatted as specified above. 
+
+4. If there are multiple scales available, the responses need to be split into mutiple files (one per scale). If multiple groups are assessed via the same scale, these data can be put into a single file (if desired, a column indicating group membership can be added).
+
+While we have tried to offer generic guidance on formatting data to the IRW standard, there are innumerable idiosyncracies that may merit additional conversation. To discuss specific  issues associated with your formatting your data to the IRW standard, please feel free to each out to us at `itemresponsewarehouse@stanford.edu`. We would be happy to talk more!
+
+## Adding data to the IRW
+
+To add properly formatted data to the IRW repository there are three todo items: 
+
+1. Create a Github issue for this repository that describes any decisions you had to make and also includes a file with data (in CSV format).
+
+2. Once the IRW team has confirmed that the data is appropriate, submit a pull request so that the code used to format the data gets added [here](https://github.com/ben-domingue/irw/tree/main/data). The pull request should go to the original repository (not your forked version of it) and to the main branch. 
+
+3. Finally, work with the IRW team to ensure that the 'data index' page  [here](https://docs.google.com/spreadsheets/d/1nhPyvuAm3JO8c9oa1swPvQZghAvmnf4xlYgbvsFH99s/edit#gid=0) gets updated with the relevant information. 
+
+Completion of these three steps will place the data in the IRW repository. This will be reflected on the Redivis site and the website at our next scheduled update time.
