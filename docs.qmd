@@ -16,7 +16,19 @@ data_index <- read_csv("data/IRW Data Dictionary - data index.csv",
 ```
 
 ```{=html}
+<input type="text" id="searchBar" placeholder="Search datasets..." style="width: 100%; padding: 10px; margin-bottom: 20px; font-size: 16px;">
 <script>
+function searchDatasets() {
+  var input = document.getElementById('searchBar');
+  var filter = input.value.toLowerCase();
+  var items = document.getElementsByClassName('dataset-item');
+  
+  for (var i = 0; i < items.length; i++) {
+    var text = items[i].textContent || items[i].innerText;
+    items[i].style.display = text.toLowerCase().indexOf(filter) > -1 ? '' : 'none';
+  }
+}
+
 async function getCitation(doi, buttonId, targetId) {
   const button = document.getElementById(buttonId);
   button.disabled = true;
@@ -83,6 +95,8 @@ async function getCitation(doi, buttonId, targetId) {
     button.textContent = 'Get Citation';
   }
 }
+
+document.getElementById('searchBar').addEventListener('input', searchDatasets);
 </script>
 
 <style>
