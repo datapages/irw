@@ -1,16 +1,13 @@
 ---
 title: "Data documentation"
 ---
-
 Click on each dataset's name to see its description, license, citation, and link to its original source. Code used to create these data can be found [here](https://github.com/ben-domingue/irw/tree/main/data).
-
 ```{r}
 library(dplyr)
 library(purrr)
 library(readr)
 library(stringr)
 library(glue)
-
 data_index <- read_csv("data/IRW Data Dictionary - data index.csv",
                        na = character()) |>
   select(dataset = Filename, url = URL, license = `Derived License`,
@@ -18,14 +15,30 @@ data_index <- read_csv("data/IRW Data Dictionary - data index.csv",
   mutate(dataset = str_remove(dataset, ".R.ata$"))
 ```
 
+```{=html}
+<input type="text" id="searchBar" placeholder="Search datasets..." style="width: 100%; padding: 10px; margin-bottom: 20px; font-size: 16px;">
+<script>
+function searchDatasets() {
+  var input = document.getElementById('searchBar');
+  var filter = input.value.toLowerCase();
+  var items = document.getElementsByClassName('dataset-item');
+  
+  for (var i = 0; i < items.length; i++) {
+    var text = items[i].textContent || items[i].innerText;
+    items[i].style.display = text.toLowerCase().indexOf(filter) > -1 ? '' : 'none';
+  }
+}
+document.getElementById('searchBar').addEventListener('input', searchDatasets);
+</script>
+```
+
 ```{r}
 #| results: asis
-
 el <- function(ds) {
   lic <- if (ds$license != "") glue("({ds$license})") else ""
   glue(
   "
-  ::: {{.g-col-4}}
+  ::: {{.g-col-4 .dataset-item}}
   
   ::: {{.callout-note collapse='true'}}
   ## {ds$dataset}
@@ -39,7 +52,6 @@ el <- function(ds) {
   "
   )
 }
-
 els <- transpose(data_index) |> map(el) |> paste(collapse = "\n")
 cat(glue(
   "
