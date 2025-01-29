@@ -6,16 +6,13 @@ library(stringr)
 
 ```{r}
 # set user and dataset
-# dataset <- redivis::user("datapages")$dataset("item_response_warehouse")
+
+library(redivis)
+user <- redivis$user("bdomingu")
+dataset <- user$dataset("irw_meta:bdxt:v1_1")
+metadata_table <- dataset$table("metadata:h5gs")
 
 # get metadata table
-# metadata_table <- dataset$table("metadata")
-# metadata <- metadata_table$to_tibble()
-
-project <- redivis::user("mikabr")$project("irw")
-
-# get metadata table
-metadata_table <- project$table("metadata_output")
 metadata <- metadata_table$to_tibble()
 metadata <- metadata |>
   mutate(partition = if_else(n_categories == 2, "dichotomous", "polytomous"))
@@ -24,27 +21,6 @@ metadata <- metadata |>
 # cont_vars_list <- set_names(cont_vars, cont_vars |> str_replace_all("_", " ") |> str_to_sentence()) |> as.list()
 # ojs_define(cont_vars = cont_vars_list)
 
-# get item summary table
-item_table <- project$table("item_summary_output")
-item_summary <- item_table$to_tibble()
-
-# get subject summary table
-subject_table <- project$table("subject_summary_output")
-subject_summary <- subject_table$to_tibble()
-
-# combine item and subject summaries, put into data structure for selector
-summaries <- full_join(
-  item_summary |> nest(items = -dataset_name),
-  subject_summary |> nest(subjects = -dataset_name),
-  by = "dataset_name"
-) |>
-  mutate(data = map2(items, subjects, \(i, s) list(items = i, subjects = s)),
-         summaries = map2(dataset_name, data, \(n, d) set_names(list(d), n))) |>
-  arrange(dataset_name) |>
-  pull(summaries) |>
-  flatten()
-
 # pass data to ojs
 ojs_define(metadata = metadata)
-ojs_define(summaries = summaries)
 ```
