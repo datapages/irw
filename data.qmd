@@ -11,30 +11,6 @@ Below we show metadata for the entire IRW, an example dataset, and illustrations
 <iframe width="800" height="500" allowfullscreen src="https://redivis.com/embed/tables/bdomingu.irw_meta:bdxt:current.metadata:h5gs#cells" style="border:0;"></iframe>
 
 
-## Individual dataset
-
-
-```{ojs}
-summaries_map = new Map(Object.entries(summaries))
-viewof dataset = Inputs.select(summaries_map, {label: 'Dataset'})
-
-// Function to find the key that corresponds to the selected dataset
-function findDatasetNameFromMap(map, selectedDataset) {
-  for (let [key, value] of map.entries()) {
-    if (value === selectedDataset) {
-      return key; 
-    }
-  }
-  return null;
-}
-
-// Look up the name of the dataset and set up the URL
-dataset_name = findDatasetNameFromMap(summaries_map, dataset);
-dataset_url = "https://redivis.com/embed/tables/datapages.item_response_warehouse:as2e:current." + dataset_name
-
-html`<iframe id="myIframe" width="800" height="500" allowfullscreen style="border:0;" src = "${dataset_url}"></iframe>`
-```
-
 ## Programmatic access
 
 You can also access IRW data programmatically using the Redivis API for [R](https://apidocs.redivis.com/client-libraries/redivis-r) or [Python](https://apidocs.redivis.com/client-libraries/redivis-python) (**note** that you will first need to [generate and set an API token](https://apidocs.redivis.com/client-libraries/redivis-r/getting-started)). For example:
@@ -52,9 +28,6 @@ You can also access IRW data programmatically using the Redivis API for [R](http
 dataset <- redivis::user("datapages")$dataset("item_response_warehouse")
 df <- dataset$table("4thgrade_math_sirt")$to_tibble()
 
-# metadata
-project <- redivis::user("mikabr")$project("irw")
-metadata <- project$table("metadata_output")$to_tibble()
 ```
 
 ## Python
@@ -69,8 +42,5 @@ import redivis
 dataset = redivis.user('datapages').dataset('item_response_warehouse')
 df = dataset.table('4thgrade_math_sirt').to_pandas_dataframe()
 
-# metadata
-project = redivis.user('mikabr').project('irw')
-metadata = project.table('metadata_output').to_pandas_dataframe()
 ```
 :::
