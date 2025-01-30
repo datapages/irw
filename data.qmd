@@ -10,27 +10,44 @@ Below we show metadata for the entire IRW, an example dataset, and illustrations
 
 <iframe width="800" height="500" allowfullscreen src="https://redivis.com/embed/tables/bdomingu.irw_meta:bdxt:current.metadata:h5gs#cells" style="border:0;"></iframe>
 
-
 ## Individual dataset
 
-
 ```{ojs}
-summaries_map = new Map(Object.entries(summaries))
-viewof dataset = Inputs.select(summaries_map, {label: 'Dataset'})
+function createDatasetMap(df) {
+  let datasetMap = new Map();
 
-// Function to find the key that corresponds to the selected dataset
+  // Convert column-based object into an array of row objects
+  let dataArray = Array.from({ length: df[Object.keys(df)[0]].length }, (_, i) => {
+    return Object.fromEntries(Object.entries(df).map(([key, values]) => [key, values[i]]));
+  });
+
+  // Populate the Map using filename as the key
+  for (let row of dataArray) {
+    datasetMap.set(row.dataset_name, row); // Ensure 'filename' exists in the metadata
+  }
+
+  return datasetMap;
+}
+
+// Convert metadata table into datasetMap
+dataset_map = createDatasetMap(metadata);
+
+// Dropdown selector for dataset
+viewof dataset = Inputs.select(dataset_map, { label: 'Dataset' });
+
+// Function to find dataset name from the Map
 function findDatasetNameFromMap(map, selectedDataset) {
   for (let [key, value] of map.entries()) {
     if (value === selectedDataset) {
-      return key; 
+      return key;
     }
   }
   return null;
 }
 
-// Look up the name of the dataset and set up the URL
-dataset_name = findDatasetNameFromMap(summaries_map, dataset);
-dataset_url = "https://redivis.com/embed/tables/datapages.item_response_warehouse:as2e:current." + dataset_name
+// Look up the name of the dataset and construct the URL
+dataset_name = findDatasetNameFromMap(dataset_map, dataset);
+dataset_url = `https://redivis.com/embed/tables/datapages.item_response_warehouse:as2e:current.${dataset_name}`;
 
 html`<iframe id="myIframe" width="800" height="500" allowfullscreen style="border:0;" src = "${dataset_url}"></iframe>`
 ```
@@ -52,9 +69,6 @@ You can also access IRW data programmatically using the Redivis API for [R](http
 dataset <- redivis::user("datapages")$dataset("item_response_warehouse")
 df <- dataset$table("4thgrade_math_sirt")$to_tibble()
 
-# metadata
-project <- redivis::user("mikabr")$project("irw")
-metadata <- project$table("metadata_output")$to_tibble()
 ```
 
 ## Python
@@ -69,8 +83,5 @@ import redivis
 dataset = redivis.user('datapages').dataset('item_response_warehouse')
 df = dataset.table('4thgrade_math_sirt').to_pandas_dataframe()
 
-# metadata
-project = redivis.user('mikabr').project('irw')
-metadata = project.table('metadata_output').to_pandas_dataframe()
 ```
 :::
