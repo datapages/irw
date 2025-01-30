@@ -154,134 +154,94 @@ ul.task-list li input[type="checkbox"] {
 
 
 <p>Click on each dataset’s name to see its description, license, citation, and link to its original source. Code used to create these data can be found <a href="https://github.com/ben-domingue/irw/tree/main/data">here</a>.</p>
-<input type="text" id="searchBar" placeholder="Search datasets..." style="width: 100%; padding: 10px; margin-bottom: 20px; font-size: 16px;">
-<script>
-function searchDatasets() {
-  var input = document.getElementById('searchBar');
-  var filter = input.value.toLowerCase();
-  var items = document.getElementsByClassName('dataset-item');
-  
-  for (var i = 0; i < items.length; i++) {
-    var text = items[i].textContent || items[i].innerText;
-    items[i].style.display = text.toLowerCase().indexOf(filter) > -1 ? '' : 'none';
-  }
+<div class="panel-tabset-container">
+  <button onclick="toggleTabset()">To cite using IRW's R package</button>
+  <div class="tabset-margin-container"></div><div class="panel-tabset">
+    <div class="r-command">
+      <p>&gt; <code>irw_citation('gilbert_meta_48')</code></p>
+    </div>
+    <div class="bibtex-entry">
+      <pre>Citation for 'gilbert_meta_48':
+https://doi.org/10.7910/DVN/3SF36J
+
+BibTeX entry for 'gilbert_meta_48':
+@misc{https://doi.org/10.7910/dvn/3sf36j,
+  doi = {10.7910/DVN/3SF36J},
+  url = {https://dataverse.harvard.edu/citation?persistentId=doi:10.7910/DVN/3SF36J},
+  author = {Cárdenas, Sergio and Evans, David K.},
+  keywords = {Social Sciences},
+  title = {Replication Data for: Parent Training and Child Development at Low Cost? Evidence from a Randomized Field Experiment in Mexico},
+  publisher = {Harvard Dataverse},
+  year = {2023}
 }
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function getCitation(doi, buttonId, targetId) {
-  const button = document.getElementById(buttonId);
-  button.disabled = true; // Disable the button
-  button.textContent = 'Loading...'; // Show loading state
-
-  try {
-    let citation;
-    if (doi.startsWith('@')) {
-      // Directly assign BibTeX if available
-      button.textContent = 'Loading...'; // Show loading state
-      await sleep(500);
-      citation = doi;
-    } else {
-      // Fetch BibTeX using DOI
-      const response = await fetch(`https://doi.org/${doi}`, {
-        headers: { Accept: 'application/x-bibtex' },
-      });
-      if (!response.ok) throw new Error('Failed to fetch citation');
-      citation = await response.text();
-    }
-
-    const target = document.getElementById(targetId);
-
-    const container = document.createElement('div');
-    container.className = 'citation-container';
-
-    const citationText = document.createElement('pre');
-    citationText.className = 'citation-pre';
-    citationText.textContent = citation;
-
-    const copyButton = document.createElement('button');
-    copyButton.className = 'copy-button';
-    copyButton.innerHTML = '📋 Copy';
-    copyButton.onclick = () => {
-      navigator.clipboard
-        .writeText(citation)
-        .then(() => {
-          copyButton.innerHTML = '✓ Copied!';
-          setTimeout(() => (copyButton.innerHTML = '📋 Copy'), 2000);
-        })
-        .catch(() => (copyButton.innerHTML = '❌ Error'));
-    };
-
-    target.innerHTML = '';
-    container.appendChild(citationText);
-    container.appendChild(copyButton);
-    target.appendChild(container);
-    target.style.display = 'block';
-  } catch (error) {
-    console.error('Error fetching citation:', error);
-    const target = document.getElementById(targetId);
-    target.textContent = 'Error fetching citation. Please try again.';
-    target.style.display = 'block';
-  } finally {
-    // Re-enable the button after processing
-    button.disabled = false;
-    button.textContent = 'Get BibTex';
-  }
-}
-
-
-document.getElementById('searchBar').addEventListener('input', searchDatasets);
-</script>
+      </pre>
+    </div>
+  </div>
+</div>
 
 <style>
-.citation-container {
-  position: relative;
-  margin-top: 10px;
-  padding: 10px;
-  background-color: #f5f5f5;
-  border-radius: 4px;
-  min-height: 50px;
-}
-.citation-pre {
-  font-family: monospace;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  margin: 0;
-  padding: 20px 10px 10px 10px;
-  max-width: 100%;
-  overflow-x: auto;
-}
-.copy-button {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  background-color: #ffffff;
-  border: 1px solid #dddddd;
-  border-radius: 4px;
-  padding: 4px 8px;
-  cursor: pointer;
-  font-size: 12px;
-  z-index: 1;
-}
-.copy-button:hover {
-  background-color: #f0f0f0;
-}
-.citation-button {
-  background-color: #007bff;
+/* Style for the toggle button */
+.panel-tabset-container button {
+  margin-bottom: 10px;
+  padding: 5px 10px;
+  background-color: #007BFF;
   color: white;
   border: none;
-  padding: 5px 10px;
   border-radius: 4px;
   cursor: pointer;
-  margin-top: 10px;
 }
-.citation-button:disabled {
-  background-color: #cccccc;
-  cursor: not-allowed;
+
+.panel-tabset-container button:hover {
+  background-color: #0056b3;
+}
+
+/* Style for the panel content */
+.panel-tabset {
+  border: 1px solid #ddd;
+  padding: 10px;
+  border-radius: 4px;
+  background: #f9f9f9;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+/* Style for the R command line */
+.r-command {
+  margin-bottom: 15px;
+  color: #333;
+  font-size: 14px;
+}
+
+.r-command p {
+  margin: 0;
+  padding: 5px;
+  background-color: #f3f3f3;
+  border-left: 3px solid #007BFF;
+  font-family: monospace;
+}
+
+/* Style for the BibTeX block */
+.bibtex-entry pre {
+  background-color: #f3f3f3;
+  padding: 10px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-family: monospace;
+  font-size: 14px;
+  overflow-x: auto;
 }
 </style>
+
+<script>
+  function toggleTabset() {
+    const tabset = document.querySelector('.panel-tabset');
+    if (tabset.style.display === 'none') {
+      tabset.style.display = 'block';
+    } else {
+      tabset.style.display = 'none';
+    }
+  }
+</script>
+
 <div class="grid">
 <div class="g-col-4 dataset-item">
 <div class="callout callout-style-default callout-note no-icon callout-titled">
