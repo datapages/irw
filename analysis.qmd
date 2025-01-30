@@ -1,8 +1,66 @@
 ---
-title: "Data analysis"
+title: "Getting Started"
 ---
 
-Here we provide example code in R and Python for loading multiple datasets in IRW and performing some summary computations over them. This should be a useful starting point for conducting your own analyses of the data. You may also be interested in the functionality embedded in the `irw` [package](https://github.com/ben-domingue/irw/tree/main/irw_pkg).
+
+There are several ways of working with the IRW data. Below we will first describe how to get data from the IRW and then offer some suggestions for how to analyze it. 
+
+## Getting the data
+
+There are several ways of getting data from the IRW.
+
+* You can use the [Data Browser](data.qmd) to investigate individual datasets and then download them directly via [Redivis](https://redivis.com/datasets/as2e-cv7jb41fd/tables).
+
+* You can also access IRW data programmatically. There are several ways of doing this that we describe below.
+
+  + You can use a Redivis notebook. Consider some example workflows [here](https://redivis.com/workspace/studies/1812/workflows).
+
+  + You can use the Redivis API for [R](https://apidocs.redivis.com/client-libraries/redivis-r) or [Python](https://apidocs.redivis.com/client-libraries/redivis-python) (**note** that you will first need to [generate and set an API token](https://apidocs.redivis.com/client-libraries/redivis-r/getting-started)). Given that we anticipate this being a popular means of using the IRW, we elaborate on how this can be done in the next section.
+
+## Accessing IRW data from your machine
+
+### Basic access
+
+To illustrate a basic approach to using the IRW, we offer some code that shows a simple approach for downloading IRW data to your machine.
+
+::: {.panel-tabset}
+## R
+
+```{r}
+#| eval: false
+#| echo: true
+
+# first install redivis package: devtools::install_github("redivis/redivis-r", ref="main")
+
+# individual dataset
+dataset <- redivis::user("datapages")$dataset("item_response_warehouse")
+df <- dataset$table("4thgrade_math_sirt")$to_tibble()
+
+```
+
+## Python
+
+```{python}
+#| eval: false
+#| echo: true
+#| python.reticulate: false
+import redivis
+
+# individual dataset
+dataset = redivis.user('datapages').dataset('item_response_warehouse')
+df = dataset.table('4thgrade_math_sirt').to_pandas_dataframe()
+
+```
+:::
+
+### Flexible access
+
+More complex workflows will benefit from using the custom R package `irwpkg`. We describe how this package can be used to flexibly download customized lists of data and do other useful things (e.g., generate lists of citations for data) [here](https://hansorlee.github.io/irwpkg/).
+
+
+## Analyzing the data
+
+Here we provide a first example of how you can work with IRW data.  code in R and Python for loading multiple datasets in IRW and performing some summary computations over them. This should be a useful starting point for conducting your own analyses of the data. 
 
 ::: {.panel-tabset}
 
@@ -83,7 +141,6 @@ summaries_list = [get_data_summary(name) for name in dataset_names]
 summaries = pd.concat(summaries_list, ignore_index=True)
 print(summaries)
 ```
-
 :::
 
 Here is a slightly more complex example showing how to compute the InterModel Vigorish contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation across 4 folds).
