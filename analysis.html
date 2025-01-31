@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Data analysis – Item Response Warehouse</title>
+<title>Getting Started – Item Response Warehouse</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -126,24 +126,24 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <span class="menu-text">Home</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link" href="./standard.html"> 
-<span class="menu-text">Data Standard</span></a>
+    <a class="nav-link active" href="./analysis.html" aria-current="page"> 
+<span class="menu-text">Getting Started</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./data.html"> 
-<span class="menu-text">Data</span></a>
+<span class="menu-text">Data Browser</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="./standard.html"> 
+<span class="menu-text">Data Standard</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./docs.html"> 
 <span class="menu-text">Documentation</span></a>
   </li>  
   <li class="nav-item">
-    <a class="nav-link active" href="./analysis.html" aria-current="page"> 
-<span class="menu-text">Analysis</span></a>
-  </li>  
-  <li class="nav-item">
     <a class="nav-link" href="./research.html"> 
-<span class="menu-text">Research</span></a>
+<span class="menu-text">Research Examples</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./about.html"> 
@@ -170,7 +170,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Data analysis</h1>
+<h1 class="title">Getting Started</h1>
 </div>
 
 
@@ -187,7 +187,24 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </header>
 
 
-<p>Here we provide example code in R and Python for loading multiple datasets in IRW and performing some summary computations over them. This should be a useful starting point for conducting your own analyses of the data. You may also be interested in the functionality embedded in the <code>irw</code> <a href="https://github.com/ben-domingue/irw/tree/main/irw_pkg">package</a>.</p>
+<p>There are several ways of working with the IRW data. Below we will first describe how to get data from the IRW and then offer some suggestions for how to analyze it.</p>
+<section id="getting-the-data" class="level2">
+<h2 class="anchored" data-anchor-id="getting-the-data">Getting the data</h2>
+<p>There are several ways of getting data from the IRW.</p>
+<ul>
+<li><p>You can use the <a href="./data.html">Data Browser</a> to investigate individual datasets and then download them directly via <a href="https://redivis.com/datasets/as2e-cv7jb41fd/tables">Redivis</a>.</p></li>
+<li><p>You can also access IRW data programmatically. There are several ways of doing this that we describe below.</p>
+<ul>
+<li><p>You can use a Redivis notebook. Consider some example workflows <a href="https://redivis.com/workspace/studies/1812/workflows">here</a>.</p></li>
+<li><p>You can use the Redivis API for <a href="https://apidocs.redivis.com/client-libraries/redivis-r">R</a> or <a href="https://apidocs.redivis.com/client-libraries/redivis-python">Python</a> (<strong>note</strong> that you will first need to <a href="https://apidocs.redivis.com/client-libraries/redivis-r/getting-started">generate and set an API token</a>). Given that we anticipate this being a popular means of using the IRW, we elaborate on how this can be done in the next section.</p></li>
+</ul></li>
+</ul>
+</section>
+<section id="accessing-irw-data-from-your-machine" class="level2">
+<h2 class="anchored" data-anchor-id="accessing-irw-data-from-your-machine">Accessing IRW data from your machine</h2>
+<section id="basic-access" class="level3">
+<h3 class="anchored" data-anchor-id="basic-access">Basic access</h3>
+<p>To illustrate a basic approach to using the IRW, we offer some code that shows a simple approach for downloading IRW data to your machine.</p>
 <div class="tabset-margin-container"></div><div class="panel-tabset">
 <ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-1-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-1" role="tab" aria-controls="tabset-1-1" aria-selected="true">R</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-1-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-2" role="tab" aria-controls="tabset-1-2" aria-selected="false">Python</a></li></ul>
 <div class="tab-content">
@@ -195,35 +212,73 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(purrr)</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>dataset_names <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"4thgrade_math_sirt"</span>, <span class="st">"chess_lnirt"</span>, <span class="st">"dd_rotation"</span>)</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>compute_metadata <span class="ot">&lt;-</span> <span class="cf">function</span>(df) {</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>  df <span class="ot">&lt;-</span> df <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(resp)) <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">resp =</span> <span class="fu">as.numeric</span>(resp))</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_responses =</span> <span class="fu">nrow</span>(df),</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_categories =</span> <span class="fu">n_distinct</span>(df<span class="sc">$</span>resp),</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_participants =</span> <span class="fu">n_distinct</span>(df<span class="sc">$</span>id),</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_items =</span> <span class="fu">n_distinct</span>(df<span class="sc">$</span>item),</span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">responses_per_participant =</span> n_responses <span class="sc">/</span> n_participants,</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">responses_per_item =</span> n_responses <span class="sc">/</span> n_items,</span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="at">density =</span> (<span class="fu">sqrt</span>(n_responses) <span class="sc">/</span> n_participants) <span class="sc">*</span> (<span class="fu">sqrt</span>(n_responses) <span class="sc">/</span> n_items)</span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>dataset <span class="ot">&lt;-</span> redivis<span class="sc">::</span><span class="fu">user</span>(<span class="st">"datapages"</span>)<span class="sc">$</span><span class="fu">dataset</span>(<span class="st">"item_response_warehouse"</span>)</span>
-<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>get_data_summary <span class="ot">&lt;-</span> <span class="cf">function</span>(dataset_name) {</span>
-<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>  <span class="co"># fetch data</span></span>
-<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>  df <span class="ot">&lt;-</span> dataset<span class="sc">$</span><span class="fu">table</span>(dataset_name)<span class="sc">$</span><span class="fu">to_tibble</span>()</span>
-<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>  <span class="co"># compute summary</span></span>
-<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">compute_metadata</span>(df) <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">dataset_name =</span> dataset_name, <span class="at">.before =</span> <span class="fu">everything</span>())</span>
-<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>summaries_list <span class="ot">&lt;-</span> <span class="fu">map</span>(dataset_names, get_data_summary)</span>
-<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a>summaries <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(summaries_list)</span>
-<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>summaries</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># first install redivis package: devtools::install_github("redivis/redivis-r", ref="main")</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># individual dataset</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>dataset <span class="ot">&lt;-</span> redivis<span class="sc">::</span><span class="fu">user</span>(<span class="st">"datapages"</span>)<span class="sc">$</span><span class="fu">dataset</span>(<span class="st">"item_response_warehouse"</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>df <span class="ot">&lt;-</span> dataset<span class="sc">$</span><span class="fu">table</span>(<span class="st">"4thgrade_math_sirt"</span>)<span class="sc">$</span><span class="fu">to_tibble</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+</div>
+<div id="tabset-1-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-2-tab">
+<div class="cell" data-python.reticulate="false">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> redivis</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># individual dataset</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>dataset <span class="op">=</span> redivis.user(<span class="st">'datapages'</span>).dataset(<span class="st">'item_response_warehouse'</span>)</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> dataset.table(<span class="st">'4thgrade_math_sirt'</span>).to_pandas_dataframe()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section id="flexible-access" class="level3">
+<h3 class="anchored" data-anchor-id="flexible-access">Flexible access</h3>
+<p>More complex workflows will benefit from using the custom R package <code>irwpkg</code>. We describe how this package can be used to flexibly download customized lists of data and do other useful things (e.g., generate lists of citations for data) <a href="https://hansorlee.github.io/irwpkg/">here</a>.</p>
+</section>
+</section>
+<section id="analyzing-the-data" class="level2">
+<h2 class="anchored" data-anchor-id="analyzing-the-data">Analyzing the data</h2>
+<p>Here we provide a first example of how you can work with IRW data. code in R and Python for loading multiple datasets in IRW and performing some summary computations over them. This should be a useful starting point for conducting your own analyses of the data.</p>
+<div class="tabset-margin-container"></div><div class="panel-tabset">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-2-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-2-1" role="tab" aria-controls="tabset-2-1" aria-selected="true">R</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-2-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-2-2" role="tab" aria-controls="tabset-2-2" aria-selected="false">Python</a></li></ul>
+<div class="tab-content">
+<div id="tabset-2-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-2-1-tab">
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(purrr)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>dataset_names <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"4thgrade_math_sirt"</span>, <span class="st">"chess_lnirt"</span>, <span class="st">"dd_rotation"</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>compute_metadata <span class="ot">&lt;-</span> <span class="cf">function</span>(df) {</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  df <span class="ot">&lt;-</span> df <span class="sc">|&gt;</span> <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(resp)) <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">resp =</span> <span class="fu">as.numeric</span>(resp))</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_responses =</span> <span class="fu">nrow</span>(df),</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_categories =</span> <span class="fu">n_distinct</span>(df<span class="sc">$</span>resp),</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_participants =</span> <span class="fu">n_distinct</span>(df<span class="sc">$</span>id),</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_items =</span> <span class="fu">n_distinct</span>(df<span class="sc">$</span>item),</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">responses_per_participant =</span> n_responses <span class="sc">/</span> n_participants,</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">responses_per_item =</span> n_responses <span class="sc">/</span> n_items,</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="at">density =</span> (<span class="fu">sqrt</span>(n_responses) <span class="sc">/</span> n_participants) <span class="sc">*</span> (<span class="fu">sqrt</span>(n_responses) <span class="sc">/</span> n_items)</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>dataset <span class="ot">&lt;-</span> redivis<span class="sc">::</span><span class="fu">user</span>(<span class="st">"datapages"</span>)<span class="sc">$</span><span class="fu">dataset</span>(<span class="st">"item_response_warehouse"</span>)</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>get_data_summary <span class="ot">&lt;-</span> <span class="cf">function</span>(dataset_name) {</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>  <span class="co"># fetch data</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>  df <span class="ot">&lt;-</span> dataset<span class="sc">$</span><span class="fu">table</span>(dataset_name)<span class="sc">$</span><span class="fu">to_tibble</span>()</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>  <span class="co"># compute summary</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">compute_metadata</span>(df) <span class="sc">|&gt;</span> <span class="fu">mutate</span>(<span class="at">dataset_name =</span> dataset_name, <span class="at">.before =</span> <span class="fu">everything</span>())</span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>summaries_list <span class="ot">&lt;-</span> <span class="fu">map</span>(dataset_names, get_data_summary)</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>summaries <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(summaries_list)</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>summaries</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output-display">
 <div class="kable-table">
@@ -287,43 +342,43 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 </div>
 </div>
-<div id="tabset-1-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-2-tab">
+<div id="tabset-2-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-2-2-tab">
 <div class="cell" data-python.reticulate="false">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> math <span class="im">import</span> sqrt</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> redivis</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>dataset_names <span class="op">=</span> [<span class="st">"4thgrade_math_sirt"</span>, <span class="st">"chess_lnirt"</span>, <span class="st">"dd_rotation"</span>]</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> compute_metadata(df):</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    df <span class="op">=</span> (df</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>          .loc[<span class="op">~</span>df[<span class="st">'resp'</span>].isna()]</span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>          .assign(resp<span class="op">=</span>pd.to_numeric(df[<span class="st">'resp'</span>]))</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>         )</span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> pd.DataFrame({</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_responses'</span>: [<span class="bu">len</span>(df)],</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_categories'</span>: [df[<span class="st">'resp'</span>].nunique()],</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_participants'</span>: [df[<span class="st">'id'</span>].nunique()],</span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_items'</span>: [df[<span class="st">'item'</span>].nunique()],</span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">'responses_per_participant'</span>: [<span class="bu">len</span>(df) <span class="op">/</span> df[<span class="st">'id'</span>].nunique()],</span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">'responses_per_item'</span>: [<span class="bu">len</span>(df) <span class="op">/</span> df[<span class="st">'item'</span>].nunique()],</span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>        <span class="st">'density'</span>: [(sqrt(<span class="bu">len</span>(df)) <span class="op">/</span> df[<span class="st">'id'</span>].nunique()) <span class="op">*</span> (sqrt(<span class="bu">len</span>(df)) <span class="op">/</span> df[<span class="st">'item'</span>].nunique())]</span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    })</span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>dataset <span class="op">=</span> redivis.user(<span class="st">'datapages'</span>).dataset(<span class="st">'item_response_warehouse'</span>)</span>
-<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> get_data_summary(dataset_name):</span>
-<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>  df <span class="op">=</span> pd.DataFrame(dataset.table(dataset_name).to_pandas_dataframe())</span>
-<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>  summary <span class="op">=</span> compute_metadata(df)</span>
-<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>  summary.insert(<span class="dv">0</span>, <span class="st">'dataset_name'</span>, dataset_name)</span>
-<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> summary</span>
-<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>summaries_list <span class="op">=</span> [get_data_summary(name) <span class="cf">for</span> name <span class="kw">in</span> dataset_names]</span>
-<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>summaries <span class="op">=</span> pd.concat(summaries_list, ignore_index<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(summaries)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> math <span class="im">import</span> sqrt</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> redivis</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>dataset_names <span class="op">=</span> [<span class="st">"4thgrade_math_sirt"</span>, <span class="st">"chess_lnirt"</span>, <span class="st">"dd_rotation"</span>]</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> compute_metadata(df):</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    df <span class="op">=</span> (df</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>          .loc[<span class="op">~</span>df[<span class="st">'resp'</span>].isna()]</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>          .assign(resp<span class="op">=</span>pd.to_numeric(df[<span class="st">'resp'</span>]))</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>         )</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> pd.DataFrame({</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_responses'</span>: [<span class="bu">len</span>(df)],</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_categories'</span>: [df[<span class="st">'resp'</span>].nunique()],</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_participants'</span>: [df[<span class="st">'id'</span>].nunique()],</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_items'</span>: [df[<span class="st">'item'</span>].nunique()],</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">'responses_per_participant'</span>: [<span class="bu">len</span>(df) <span class="op">/</span> df[<span class="st">'id'</span>].nunique()],</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">'responses_per_item'</span>: [<span class="bu">len</span>(df) <span class="op">/</span> df[<span class="st">'item'</span>].nunique()],</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>        <span class="st">'density'</span>: [(sqrt(<span class="bu">len</span>(df)) <span class="op">/</span> df[<span class="st">'id'</span>].nunique()) <span class="op">*</span> (sqrt(<span class="bu">len</span>(df)) <span class="op">/</span> df[<span class="st">'item'</span>].nunique())]</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>    })</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>dataset <span class="op">=</span> redivis.user(<span class="st">'datapages'</span>).dataset(<span class="st">'item_response_warehouse'</span>)</span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> get_data_summary(dataset_name):</span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>  df <span class="op">=</span> pd.DataFrame(dataset.table(dataset_name).to_pandas_dataframe())</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>  summary <span class="op">=</span> compute_metadata(df)</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>  summary.insert(<span class="dv">0</span>, <span class="st">'dataset_name'</span>, dataset_name)</span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> summary</span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a>summaries_list <span class="op">=</span> [get_data_summary(name) <span class="cf">for</span> name <span class="kw">in</span> dataset_names]</span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a>summaries <span class="op">=</span> pd.concat(summaries_list, ignore_index<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(summaries)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 </div>
 </div>
@@ -331,58 +386,58 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 <p>Here is a slightly more complex example showing how to compute the InterModel Vigorish contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation across 4 folds).</p>
 <div class="tabset-margin-container"></div><div class="panel-tabset">
-<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-2-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-2-1" role="tab" aria-controls="tabset-2-1" aria-selected="true">R</a></li></ul>
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-3-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-3-1" role="tab" aria-controls="tabset-3-1" aria-selected="true">R</a></li></ul>
 <div class="tab-content">
-<div id="tabset-2-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-2-1-tab">
+<div id="tabset-3-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-3-1-tab">
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(mirt)</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(irw) </span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>dataset <span class="ot">&lt;-</span> redivis<span class="sc">::</span><span class="fu">user</span>(<span class="st">"datapages"</span>)<span class="sc">$</span><span class="fu">dataset</span>(<span class="st">"item_response_warehouse"</span>)</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>df <span class="ot">&lt;-</span> dataset<span class="sc">$</span><span class="fu">table</span>(<span class="st">"gilbert_meta_2"</span>)<span class="sc">$</span><span class="fu">to_data_frame</span>()</span>
-<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>items<span class="ot">&lt;-</span><span class="fu">unique</span>(df<span class="sc">$</span>item)</span>
-<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">all</span>(items <span class="sc">%in%</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(items))) {</span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    df<span class="sc">$</span>item<span class="ot">&lt;-</span><span class="fu">paste</span>(<span class="st">"item_"</span>,df<span class="sc">$</span>item,<span class="at">sep=</span><span class="st">''</span>)</span>
-<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    items<span class="ot">&lt;-</span><span class="fu">unique</span>(df<span class="sc">$</span>item)</span>
-<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>resp<span class="ot">&lt;-</span>irw<span class="sc">::</span><span class="fu">long2resp</span>(df)</span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>id<span class="ot">&lt;-</span>resp<span class="sc">$</span>id</span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>resp<span class="sc">$</span>id<span class="ot">&lt;-</span><span class="cn">NULL</span></span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="do">##cross-validation for models estimated in mirt</span></span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">8675309</span>)</span>
-<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>ntimes<span class="ot">&lt;-</span><span class="dv">4</span></span>
-<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>df<span class="sc">$</span>gr<span class="ot">&lt;-</span><span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span>ntimes,<span class="fu">nrow</span>(df),<span class="at">replace=</span><span class="cn">TRUE</span>)</span>
-<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>x.hold<span class="ot">&lt;-</span>df</span>
-<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>omega<span class="ot">&lt;-</span><span class="fu">numeric</span>()</span>
-<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>ntimes) {</span>
-<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>    x<span class="ot">&lt;-</span>x.hold</span>
-<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    x<span class="sc">$</span>oos<span class="ot">&lt;-</span><span class="fu">ifelse</span>(x<span class="sc">$</span>gr<span class="sc">==</span>i,<span class="dv">1</span>,<span class="dv">0</span>)</span>
-<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>    x0<span class="ot">&lt;-</span>x[x<span class="sc">$</span>oos<span class="sc">==</span><span class="dv">0</span>,]</span>
-<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>    resp0<span class="ot">&lt;-</span><span class="fu">data.frame</span>(irw<span class="sc">::</span><span class="fu">long2resp</span>(x0))</span>
-<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    id<span class="ot">&lt;-</span>resp0<span class="sc">$</span>id</span>
-<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    resp0<span class="sc">$</span>id<span class="ot">&lt;-</span><span class="cn">NULL</span></span>
-<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    <span class="do">##rasch model</span></span>
-<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>    m0<span class="ot">&lt;-</span><span class="fu">mirt</span>(resp0,<span class="dv">1</span>,<span class="st">'Rasch'</span>,<span class="at">verbose=</span><span class="cn">FALSE</span>)</span>
-<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a>    <span class="do">##2pl</span></span>
-<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a>    ni<span class="ot">&lt;-</span><span class="fu">ncol</span>(resp0)</span>
-<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>    s<span class="ot">&lt;-</span><span class="fu">paste</span>(<span class="st">"F=1-"</span>,ni,<span class="st">"</span></span>
-<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a><span class="st">             PRIOR = (1-"</span>,ni,<span class="st">", a1, lnorm, 0.0, 1.0)"</span>,<span class="at">sep=</span><span class="st">""</span>)</span>
-<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>    model<span class="ot">&lt;-</span><span class="fu">mirt.model</span>(s)</span>
-<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a>    m1<span class="ot">&lt;-</span><span class="fu">mirt</span>(resp0,model,<span class="at">itemtype=</span><span class="fu">rep</span>(<span class="st">"2PL"</span>,ni),<span class="at">method=</span><span class="st">"EM"</span>,<span class="at">technical=</span><span class="fu">list</span>(<span class="at">NCYCLES=</span><span class="dv">10000</span>),<span class="at">verbose=</span><span class="cn">FALSE</span>)</span>
-<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a>    <span class="do">##</span></span>
-<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a>    z0<span class="ot">&lt;-</span><span class="fu">getp</span>(m0,<span class="at">x=</span>x[x<span class="sc">$</span>oos<span class="sc">==</span><span class="dv">1</span>,],<span class="at">id=</span>id)</span>
-<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>    z1<span class="ot">&lt;-</span><span class="fu">getp</span>(m1,<span class="at">x=</span>x[x<span class="sc">$</span>oos<span class="sc">==</span><span class="dv">1</span>,],<span class="at">id=</span>id)</span>
-<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>    z0<span class="ot">&lt;-</span>z0[,<span class="fu">c</span>(<span class="st">"item"</span>,<span class="st">"id"</span>,<span class="st">"resp"</span>,<span class="st">"p"</span>)]</span>
-<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a>    <span class="fu">names</span>(z0)[<span class="dv">4</span>]<span class="ot">&lt;-</span><span class="st">'p1'</span></span>
-<span id="cb3-41"><a href="#cb3-41" aria-hidden="true" tabindex="-1"></a>    z1<span class="ot">&lt;-</span>z1[,<span class="fu">c</span>(<span class="st">"item"</span>,<span class="st">"id"</span>,<span class="st">"p"</span>)]</span>
-<span id="cb3-42"><a href="#cb3-42" aria-hidden="true" tabindex="-1"></a>    <span class="fu">names</span>(z1)[<span class="dv">3</span>]<span class="ot">&lt;-</span><span class="st">'p2'</span></span>
-<span id="cb3-43"><a href="#cb3-43" aria-hidden="true" tabindex="-1"></a>    z<span class="ot">&lt;-</span><span class="fu">merge</span>(z0,z1)</span>
-<span id="cb3-44"><a href="#cb3-44" aria-hidden="true" tabindex="-1"></a>    omega[i]<span class="ot">&lt;-</span><span class="fu">imv</span>(z,<span class="at">p1=</span><span class="st">"p1"</span>,<span class="at">p2=</span><span class="st">"p2"</span>)</span>
-<span id="cb3-45"><a href="#cb3-45" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb3-46"><a href="#cb3-46" aria-hidden="true" tabindex="-1"></a><span class="fu">mean</span>(omega)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(mirt)</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(irw) </span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>dataset <span class="ot">&lt;-</span> redivis<span class="sc">::</span><span class="fu">user</span>(<span class="st">"datapages"</span>)<span class="sc">$</span><span class="fu">dataset</span>(<span class="st">"item_response_warehouse"</span>)</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>df <span class="ot">&lt;-</span> dataset<span class="sc">$</span><span class="fu">table</span>(<span class="st">"gilbert_meta_2"</span>)<span class="sc">$</span><span class="fu">to_data_frame</span>()</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>items<span class="ot">&lt;-</span><span class="fu">unique</span>(df<span class="sc">$</span>item)</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">all</span>(items <span class="sc">%in%</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(items))) {</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    df<span class="sc">$</span>item<span class="ot">&lt;-</span><span class="fu">paste</span>(<span class="st">"item_"</span>,df<span class="sc">$</span>item,<span class="at">sep=</span><span class="st">''</span>)</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    items<span class="ot">&lt;-</span><span class="fu">unique</span>(df<span class="sc">$</span>item)</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>resp<span class="ot">&lt;-</span>irw<span class="sc">::</span><span class="fu">long2resp</span>(df)</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>id<span class="ot">&lt;-</span>resp<span class="sc">$</span>id</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>resp<span class="sc">$</span>id<span class="ot">&lt;-</span><span class="cn">NULL</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="do">##cross-validation for models estimated in mirt</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">8675309</span>)</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>ntimes<span class="ot">&lt;-</span><span class="dv">4</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>df<span class="sc">$</span>gr<span class="ot">&lt;-</span><span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span>ntimes,<span class="fu">nrow</span>(df),<span class="at">replace=</span><span class="cn">TRUE</span>)</span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>x.hold<span class="ot">&lt;-</span>df</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>omega<span class="ot">&lt;-</span><span class="fu">numeric</span>()</span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>ntimes) {</span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>    x<span class="ot">&lt;-</span>x.hold</span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>    x<span class="sc">$</span>oos<span class="ot">&lt;-</span><span class="fu">ifelse</span>(x<span class="sc">$</span>gr<span class="sc">==</span>i,<span class="dv">1</span>,<span class="dv">0</span>)</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>    x0<span class="ot">&lt;-</span>x[x<span class="sc">$</span>oos<span class="sc">==</span><span class="dv">0</span>,]</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>    resp0<span class="ot">&lt;-</span><span class="fu">data.frame</span>(irw<span class="sc">::</span><span class="fu">long2resp</span>(x0))</span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    id<span class="ot">&lt;-</span>resp0<span class="sc">$</span>id</span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>    resp0<span class="sc">$</span>id<span class="ot">&lt;-</span><span class="cn">NULL</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>    <span class="do">##rasch model</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>    m0<span class="ot">&lt;-</span><span class="fu">mirt</span>(resp0,<span class="dv">1</span>,<span class="st">'Rasch'</span>,<span class="at">verbose=</span><span class="cn">FALSE</span>)</span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>    <span class="do">##2pl</span></span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>    ni<span class="ot">&lt;-</span><span class="fu">ncol</span>(resp0)</span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>    s<span class="ot">&lt;-</span><span class="fu">paste</span>(<span class="st">"F=1-"</span>,ni,<span class="st">"</span></span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a><span class="st">             PRIOR = (1-"</span>,ni,<span class="st">", a1, lnorm, 0.0, 1.0)"</span>,<span class="at">sep=</span><span class="st">""</span>)</span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>    model<span class="ot">&lt;-</span><span class="fu">mirt.model</span>(s)</span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>    m1<span class="ot">&lt;-</span><span class="fu">mirt</span>(resp0,model,<span class="at">itemtype=</span><span class="fu">rep</span>(<span class="st">"2PL"</span>,ni),<span class="at">method=</span><span class="st">"EM"</span>,<span class="at">technical=</span><span class="fu">list</span>(<span class="at">NCYCLES=</span><span class="dv">10000</span>),<span class="at">verbose=</span><span class="cn">FALSE</span>)</span>
+<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>    <span class="do">##</span></span>
+<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>    z0<span class="ot">&lt;-</span><span class="fu">getp</span>(m0,<span class="at">x=</span>x[x<span class="sc">$</span>oos<span class="sc">==</span><span class="dv">1</span>,],<span class="at">id=</span>id)</span>
+<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>    z1<span class="ot">&lt;-</span><span class="fu">getp</span>(m1,<span class="at">x=</span>x[x<span class="sc">$</span>oos<span class="sc">==</span><span class="dv">1</span>,],<span class="at">id=</span>id)</span>
+<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>    z0<span class="ot">&lt;-</span>z0[,<span class="fu">c</span>(<span class="st">"item"</span>,<span class="st">"id"</span>,<span class="st">"resp"</span>,<span class="st">"p"</span>)]</span>
+<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>    <span class="fu">names</span>(z0)[<span class="dv">4</span>]<span class="ot">&lt;-</span><span class="st">'p1'</span></span>
+<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>    z1<span class="ot">&lt;-</span>z1[,<span class="fu">c</span>(<span class="st">"item"</span>,<span class="st">"id"</span>,<span class="st">"p"</span>)]</span>
+<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>    <span class="fu">names</span>(z1)[<span class="dv">3</span>]<span class="ot">&lt;-</span><span class="st">'p2'</span></span>
+<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>    z<span class="ot">&lt;-</span><span class="fu">merge</span>(z0,z1)</span>
+<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>    omega[i]<span class="ot">&lt;-</span><span class="fu">imv</span>(z,<span class="at">p1=</span><span class="st">"p1"</span>,<span class="at">p2=</span><span class="st">"p2"</span>)</span>
+<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a><span class="fu">mean</span>(omega)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>[1] 0.01273903</code></pre>
@@ -393,6 +448,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 
 
+</section>
 
 </main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
