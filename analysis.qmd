@@ -5,7 +5,7 @@ title: "Getting Started"
 
 There are several ways of working with the IRW data. Below we will first describe how to get data from the IRW and then offer some suggestions for how to analyze it. 
 
-## Getting the data
+## Getting IRW data
 
 There are several ways of getting data from the IRW.
 
@@ -17,11 +17,9 @@ There are several ways of getting data from the IRW.
 
   + You can use the Redivis API for [R](https://apidocs.redivis.com/client-libraries/redivis-r) or [Python](https://apidocs.redivis.com/client-libraries/redivis-python) (**note** that you will first need to [generate and set an API token](https://apidocs.redivis.com/client-libraries/redivis-r/getting-started)). Given that we anticipate this being a popular means of using the IRW, we elaborate on how this can be done in the next section.
 
-## Accessing IRW data from your machine
+## Programmatic access of IRW data
 
-### Basic access
-
-To illustrate a basic approach to using the IRW, we offer some code that shows a simple approach for downloading IRW data to your machine.
+Below we offer examples in both Python and R for how to access data programatically from the IRW. In R, we make use of the `irwpkg` which was written to help facilitate handling of IRW data in R; more details available [here](https://hansorlee.github.io/irwpkg/).
 
 ::: {.panel-tabset}
 ## R
@@ -30,12 +28,9 @@ To illustrate a basic approach to using the IRW, we offer some code that shows a
 #| eval: false
 #| echo: true
 
-# first install redivis package: devtools::install_github("redivis/redivis-r", ref="main")
-
 # individual dataset
-dataset <- redivis::user("datapages")$dataset("item_response_warehouse")
-df <- dataset$table("4thgrade_math_sirt")$to_tibble()
-
+library(irwpkg)
+df <- irw_fetch("4thgrade_math_sirt")
 ```
 
 ## Python
@@ -53,14 +48,14 @@ df = dataset.table('4thgrade_math_sirt').to_pandas_dataframe()
 ```
 :::
 
-### Flexible access
-
-More complex workflows will benefit from using the custom R package `irwpkg`. We describe how this package can be used to flexibly download customized lists of data and do other useful things (e.g., generate lists of citations for data) [here](https://hansorlee.github.io/irwpkg/).
 
 
-## Analyzing the data
+## Analysis of IRW data
 
-Here we provide a first example of how you can work with IRW data.  code in R and Python for loading multiple datasets in IRW and performing some summary computations over them. This should be a useful starting point for conducting your own analyses of the data. 
+We next provide a first example for working with IRW data. The below code blocks import multiple datasets from the IRW and compute some simple metadata (e.g., the number of responses). This should be a useful starting point for conducting your own analyses of the data.
+
+### A first analysis
+
 
 ::: {.panel-tabset}
 
@@ -72,7 +67,6 @@ Here we provide a first example of how you can work with IRW data.  code in R an
 library(dplyr)
 library(purrr)
 
-dataset_names <- c("4thgrade_math_sirt", "chess_lnirt", "dd_rotation")
 
 compute_metadata <- function(df) {
   df <- df |> filter(!is.na(resp)) |> mutate(resp = as.numeric(resp))
@@ -87,16 +81,11 @@ compute_metadata <- function(df) {
   )
 }
 
-dataset <- redivis::user("datapages")$dataset("item_response_warehouse")
-get_data_summary <- function(dataset_name) {
-  # fetch data
-  df <- dataset$table(dataset_name)$to_tibble()
-  # compute summary
-  compute_metadata(df) |> mutate(dataset_name = dataset_name, .before = everything())
-}
-
-summaries_list <- map(dataset_names, get_data_summary)
+dataset_names <- c("4thgrade_math_sirt", "chess_lnirt", "dd_rotation")
+tables<-irwpkg::irw_fetch(dataset_names)
+summaries_list <- lapply(tables,compute_metadata)
 summaries <- bind_rows(summaries_list)
+summaries<-cbind(table=dataset_names,summaries)
 summaries
 ```
 
@@ -143,7 +132,9 @@ print(summaries)
 ```
 :::
 
-Here is a slightly more complex example that takes advantage of `irwpkg` to easily fetch a dataset and to then compute the [InterModel Vigorish](https://www.cambridge.org/core/journals/psychometrika/article/intermodel-vigorish-as-a-lens-for-understanding-and-quantifying-the-value-of-item-response-models-for-dichotomously-coded-items/F61C75F6F945A5B13F73C6128EB83998) contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation across 4 folds; see also the documentation in the related [`imv`](https://github.com/intermodelvigorish/imv_R) package).
+### Reformatting IRW data for use with other packages
+
+Here is a slightly more complex example that takes advantage of `irwpkg` to easily fetch a dataset and to then compute the [InterModel Vigorish](https://www.cambridge.org/core/journals/psychometrika/article/intermodel-vigorish-as-a-lens-for-understanding-and-quantifying-the-value-of-item-response-models-for-dichotomously-coded-items/F61C75F6F945A5B13F73C6128EB83998) contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation across 4 folds; see also the documentation in the related [`imv`](https://github.com/intermodelvigorish/imv_R) package). Note the `irw_long2resp` function which is helpful for reformatting IRW data from long to wide.
 
 ::: {.panel-tabset}
 
@@ -152,7 +143,6 @@ Here is a slightly more complex example that takes advantage of `irwpkg` to easi
 ```{r}
 #| echo: true
 df<-irwpkg::irw_fetch("gilbert_meta_2")  #https://github.com/hansorlee/irwpkg
-df$item<-paste("item_",df$item,sep='')
 resp<-irwpkg::irw_long2resp(df)
 resp$id<-NULL
 ##1pl/Rasch model
