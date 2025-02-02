@@ -384,7 +384,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 </div>
 </div>
-<p>Here is a slightly more complex example showing how to compute the InterModel Vigorish contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation across 4 folds).</p>
+<p>Here is a slightly more complex example that takes advantage of <code>irwpkg</code> to easily fetch a dataset and to then compute the <a href="https://www.cambridge.org/core/journals/psychometrika/article/intermodel-vigorish-as-a-lens-for-understanding-and-quantifying-the-value-of-item-response-models-for-dichotomously-coded-items/F61C75F6F945A5B13F73C6128EB83998">InterModel Vigorish</a> contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation across 4 folds; see also the documentation in the related <a href="https://github.com/intermodelvigorish/imv_R"><code>imv</code></a> package).</p>
 <div class="tabset-margin-container"></div><div class="panel-tabset">
 <ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-3-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-3-1" role="tab" aria-controls="tabset-3-1" aria-selected="true">R</a></li></ul>
 <div class="tab-content">
@@ -392,55 +392,25 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(mirt)</span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(irw) </span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>dataset <span class="ot">&lt;-</span> redivis<span class="sc">::</span><span class="fu">user</span>(<span class="st">"datapages"</span>)<span class="sc">$</span><span class="fu">dataset</span>(<span class="st">"item_response_warehouse"</span>)</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>df <span class="ot">&lt;-</span> dataset<span class="sc">$</span><span class="fu">table</span>(<span class="st">"gilbert_meta_2"</span>)<span class="sc">$</span><span class="fu">to_data_frame</span>()</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>items<span class="ot">&lt;-</span><span class="fu">unique</span>(df<span class="sc">$</span>item)</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">all</span>(items <span class="sc">%in%</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(items))) {</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    df<span class="sc">$</span>item<span class="ot">&lt;-</span><span class="fu">paste</span>(<span class="st">"item_"</span>,df<span class="sc">$</span>item,<span class="at">sep=</span><span class="st">''</span>)</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>    items<span class="ot">&lt;-</span><span class="fu">unique</span>(df<span class="sc">$</span>item)</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>resp<span class="ot">&lt;-</span>irw<span class="sc">::</span><span class="fu">long2resp</span>(df)</span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>id<span class="ot">&lt;-</span>resp<span class="sc">$</span>id</span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>resp<span class="sc">$</span>id<span class="ot">&lt;-</span><span class="cn">NULL</span></span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="do">##cross-validation for models estimated in mirt</span></span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">8675309</span>)</span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>ntimes<span class="ot">&lt;-</span><span class="dv">4</span></span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>df<span class="sc">$</span>gr<span class="ot">&lt;-</span><span class="fu">sample</span>(<span class="dv">1</span><span class="sc">:</span>ntimes,<span class="fu">nrow</span>(df),<span class="at">replace=</span><span class="cn">TRUE</span>)</span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>x.hold<span class="ot">&lt;-</span>df</span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>omega<span class="ot">&lt;-</span><span class="fu">numeric</span>()</span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span>ntimes) {</span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>    x<span class="ot">&lt;-</span>x.hold</span>
-<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>    x<span class="sc">$</span>oos<span class="ot">&lt;-</span><span class="fu">ifelse</span>(x<span class="sc">$</span>gr<span class="sc">==</span>i,<span class="dv">1</span>,<span class="dv">0</span>)</span>
-<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>    x0<span class="ot">&lt;-</span>x[x<span class="sc">$</span>oos<span class="sc">==</span><span class="dv">0</span>,]</span>
-<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>    resp0<span class="ot">&lt;-</span><span class="fu">data.frame</span>(irw<span class="sc">::</span><span class="fu">long2resp</span>(x0))</span>
-<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>    id<span class="ot">&lt;-</span>resp0<span class="sc">$</span>id</span>
-<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>    resp0<span class="sc">$</span>id<span class="ot">&lt;-</span><span class="cn">NULL</span></span>
-<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>    <span class="do">##rasch model</span></span>
-<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>    m0<span class="ot">&lt;-</span><span class="fu">mirt</span>(resp0,<span class="dv">1</span>,<span class="st">'Rasch'</span>,<span class="at">verbose=</span><span class="cn">FALSE</span>)</span>
-<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>    <span class="do">##2pl</span></span>
-<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>    ni<span class="ot">&lt;-</span><span class="fu">ncol</span>(resp0)</span>
-<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>    s<span class="ot">&lt;-</span><span class="fu">paste</span>(<span class="st">"F=1-"</span>,ni,<span class="st">"</span></span>
-<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a><span class="st">             PRIOR = (1-"</span>,ni,<span class="st">", a1, lnorm, 0.0, 1.0)"</span>,<span class="at">sep=</span><span class="st">""</span>)</span>
-<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>    model<span class="ot">&lt;-</span><span class="fu">mirt.model</span>(s)</span>
-<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>    m1<span class="ot">&lt;-</span><span class="fu">mirt</span>(resp0,model,<span class="at">itemtype=</span><span class="fu">rep</span>(<span class="st">"2PL"</span>,ni),<span class="at">method=</span><span class="st">"EM"</span>,<span class="at">technical=</span><span class="fu">list</span>(<span class="at">NCYCLES=</span><span class="dv">10000</span>),<span class="at">verbose=</span><span class="cn">FALSE</span>)</span>
-<span id="cb5-36"><a href="#cb5-36" aria-hidden="true" tabindex="-1"></a>    <span class="do">##</span></span>
-<span id="cb5-37"><a href="#cb5-37" aria-hidden="true" tabindex="-1"></a>    z0<span class="ot">&lt;-</span><span class="fu">getp</span>(m0,<span class="at">x=</span>x[x<span class="sc">$</span>oos<span class="sc">==</span><span class="dv">1</span>,],<span class="at">id=</span>id)</span>
-<span id="cb5-38"><a href="#cb5-38" aria-hidden="true" tabindex="-1"></a>    z1<span class="ot">&lt;-</span><span class="fu">getp</span>(m1,<span class="at">x=</span>x[x<span class="sc">$</span>oos<span class="sc">==</span><span class="dv">1</span>,],<span class="at">id=</span>id)</span>
-<span id="cb5-39"><a href="#cb5-39" aria-hidden="true" tabindex="-1"></a>    z0<span class="ot">&lt;-</span>z0[,<span class="fu">c</span>(<span class="st">"item"</span>,<span class="st">"id"</span>,<span class="st">"resp"</span>,<span class="st">"p"</span>)]</span>
-<span id="cb5-40"><a href="#cb5-40" aria-hidden="true" tabindex="-1"></a>    <span class="fu">names</span>(z0)[<span class="dv">4</span>]<span class="ot">&lt;-</span><span class="st">'p1'</span></span>
-<span id="cb5-41"><a href="#cb5-41" aria-hidden="true" tabindex="-1"></a>    z1<span class="ot">&lt;-</span>z1[,<span class="fu">c</span>(<span class="st">"item"</span>,<span class="st">"id"</span>,<span class="st">"p"</span>)]</span>
-<span id="cb5-42"><a href="#cb5-42" aria-hidden="true" tabindex="-1"></a>    <span class="fu">names</span>(z1)[<span class="dv">3</span>]<span class="ot">&lt;-</span><span class="st">'p2'</span></span>
-<span id="cb5-43"><a href="#cb5-43" aria-hidden="true" tabindex="-1"></a>    z<span class="ot">&lt;-</span><span class="fu">merge</span>(z0,z1)</span>
-<span id="cb5-44"><a href="#cb5-44" aria-hidden="true" tabindex="-1"></a>    omega[i]<span class="ot">&lt;-</span><span class="fu">imv</span>(z,<span class="at">p1=</span><span class="st">"p1"</span>,<span class="at">p2=</span><span class="st">"p2"</span>)</span>
-<span id="cb5-45"><a href="#cb5-45" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb5-46"><a href="#cb5-46" aria-hidden="true" tabindex="-1"></a><span class="fu">mean</span>(omega)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>df<span class="ot">&lt;-</span>irwpkg<span class="sc">::</span><span class="fu">irw_fetch</span>(<span class="st">"gilbert_meta_2"</span>)  <span class="co">#https://github.com/hansorlee/irwpkg</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>df<span class="sc">$</span>item<span class="ot">&lt;-</span><span class="fu">paste</span>(<span class="st">"item_"</span>,df<span class="sc">$</span>item,<span class="at">sep=</span><span class="st">''</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>resp<span class="ot">&lt;-</span>irwpkg<span class="sc">::</span><span class="fu">irw_long2resp</span>(df)</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>resp<span class="sc">$</span>id<span class="ot">&lt;-</span><span class="cn">NULL</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="do">##1pl/Rasch model</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>m0<span class="ot">&lt;-</span>mirt<span class="sc">::</span><span class="fu">mirt</span>(resp,<span class="dv">1</span>,<span class="st">'Rasch'</span>,<span class="at">verbose=</span><span class="cn">FALSE</span>)</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="do">##2pl</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>ni<span class="ot">&lt;-</span><span class="fu">ncol</span>(resp)</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>s<span class="ot">&lt;-</span><span class="fu">paste</span>(<span class="st">"F=1-"</span>,ni,<span class="st">"</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="st">             PRIOR = (1-"</span>,ni,<span class="st">", a1, lnorm, 0.0, 1.0)"</span>,<span class="at">sep=</span><span class="st">""</span>)</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>model<span class="ot">&lt;-</span>mirt<span class="sc">::</span><span class="fu">mirt.model</span>(s)</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>m1<span class="ot">&lt;-</span>mirt<span class="sc">::</span><span class="fu">mirt</span>(resp,model,<span class="at">itemtype=</span><span class="fu">rep</span>(<span class="st">"2PL"</span>,ni),<span class="at">method=</span><span class="st">"EM"</span>,<span class="at">technical=</span><span class="fu">list</span>(<span class="at">NCYCLES=</span><span class="dv">10000</span>),<span class="at">verbose=</span><span class="cn">FALSE</span>)</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="do">##compute IMV comparing predictions from 1pl and 2pl</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">8675309</span>)</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>omega<span class="ot">&lt;-</span>imv<span class="sc">::</span><span class="fu">imv.mirt</span>(m0,m1)</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="fu">mean</span>(omega)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>[1] 0.01273903</code></pre>
+<pre><code>[1] 0.01276902</code></pre>
 </div>
 </div>
 </div>
