@@ -55,12 +55,12 @@ df = dataset.table('4thgrade_math_sirt').to_pandas_dataframe()
 
 ### Flexible access
 
-More complex workflows will benefit from using the custom R package `irwpkg`. We describe how this package can be used to flexibly download customized lists of data and do other useful things (e.g., generate lists of citations for data) [here](https://hansorlee.github.io/irwpkg/).
+More complex workflows will benefit from using the custom R package `irwpkg`. We describe how this package can be used to flexibly download customized lists of data and do other useful things (e.g., generate lists of citations for data) [here](https://hansorlee.github.io/irwpkg/) and take advantage of its flexibility below.
 
 
 ## Analyzing the data
 
-Here we provide a first example of how you can work with IRW data.  code in R and Python for loading multiple datasets in IRW and performing some summary computations over them. This should be a useful starting point for conducting your own analyses of the data. 
+Here we provide a first example for working with IRW data. We include code in R and Python for loading multiple datasets from the IRW and computing some simple metadata (e.g., the number of responses). This should be a useful starting point for conducting your own analyses of the data. 
 
 ::: {.panel-tabset}
 
@@ -72,7 +72,6 @@ Here we provide a first example of how you can work with IRW data.  code in R an
 library(dplyr)
 library(purrr)
 
-dataset_names <- c("4thgrade_math_sirt", "chess_lnirt", "dd_rotation")
 
 compute_metadata <- function(df) {
   df <- df |> filter(!is.na(resp)) |> mutate(resp = as.numeric(resp))
@@ -87,16 +86,11 @@ compute_metadata <- function(df) {
   )
 }
 
-dataset <- redivis::user("datapages")$dataset("item_response_warehouse")
-get_data_summary <- function(dataset_name) {
-  # fetch data
-  df <- dataset$table(dataset_name)$to_tibble()
-  # compute summary
-  compute_metadata(df) |> mutate(dataset_name = dataset_name, .before = everything())
-}
-
-summaries_list <- map(dataset_names, get_data_summary)
+dataset_names <- c("4thgrade_math_sirt", "chess_lnirt", "dd_rotation")
+tables<-irwpkg::irw_fetch(dataset_names)
+summaries_list <- lapply(tables,compute_metadata)
 summaries <- bind_rows(summaries_list)
+summaries<-cbind(table=dataset_names,summaries)
 summaries
 ```
 
@@ -152,7 +146,6 @@ Here is a slightly more complex example that takes advantage of `irwpkg` to easi
 ```{r}
 #| echo: true
 df<-irwpkg::irw_fetch("gilbert_meta_2")  #https://github.com/hansorlee/irwpkg
-df$item<-paste("item_",df$item,sep='')
 resp<-irwpkg::irw_long2resp(df)
 resp$id<-NULL
 ##1pl/Rasch model
