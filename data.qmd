@@ -13,27 +13,61 @@ Below we show metadata for the entire IRW, an example dataset, and illustrations
 ## Individual dataset
 
 ```{ojs}
+// Load the dictionary and bib data
+dictionary = FileAttachment("data/IRW Data Dictionary - data index.csv").csv()
+bibliography = FileAttachment("data/BibTex_Manual.csv").csv()
+
 function createDatasetMap(df) {
   let datasetMap = new Map();
-
-  // Convert column-based object into an array of row objects
   let dataArray = Array.from({ length: df[Object.keys(df)[0]].length }, (_, i) => {
     return Object.fromEntries(Object.entries(df).map(([key, values]) => [key, values[i]]));
   });
-
-  // Populate the Map using filename as the key
   for (let row of dataArray) {
-    datasetMap.set(row.dataset_name, row); // Ensure 'filename' exists in the metadata
+    datasetMap.set(row.dataset_name, row);
   }
-
   return datasetMap;
 }
 
-// Convert metadata table into datasetMap
+// Function to generate BibTeX from DOI or get from bibliography
+async function generateBibTeX(doi, datasetName, bibliographyDf) {
+  // If no DOI or DOI is NA, try to get BibTeX from bibliography
+  if (!doi || doi === "NA") {
+    const bibRow = bibliographyDf.find(row => row.Filename === datasetName);
+    return bibRow?.BibTex || "BibTeX not available";
+  }
+  
+  // If DOI exists and starts with @, it's already a BibTeX entry
+  if (doi.startsWith('@')) {
+    return doi;
+  }
+  
+  // Otherwise, fetch from CrossRef
+  try {
+    const response = await fetch(`https://doi.org/${doi}`, {
+      headers: { Accept: 'application/x-bibtex' }
+    });
+    if (!response.ok) throw new Error('Failed to fetch BibTeX');
+    return await response.text();
+  } catch (error) {
+    // If CrossRef fails, try bibliography as fallback
+    const bibRow = bibliographyDf.find(row => row.Filename === datasetName);
+    return bibRow?.BibTex || "Error generating BibTeX";
+  }
+}
+
+// Function to find dataset info from dictionary
+function findDatasetInfo(dictionaryDf, datasetName) {
+  const dictRow = dictionaryDf.find(row => row.Filename === datasetName);
+  return {
+    reference: dictRow?.Reference || "Reference not available",
+    doi: dictRow?.DOI || "DOI not available"
+  };
+}
+
 dataset_map = createDatasetMap(metadata);
 
-// Dropdown selector for dataset
-viewof dataset = Inputs.select(dataset_map, { label: 'Dataset' });
+// Dataset selector
+viewof dataset = Inputs.select(dataset_map, { label: 'Dataset' })
 
 // Function to find dataset name from the Map
 function findDatasetNameFromMap(map, selectedDataset) {
@@ -45,43 +79,211 @@ function findDatasetNameFromMap(map, selectedDataset) {
   return null;
 }
 
-// Look up the name of the dataset and construct the URL
+// Look up the name of the dataset
 dataset_name = findDatasetNameFromMap(dataset_map, dataset);
-dataset_url = `https://redivis.com/embed/tables/datapages.item_response_warehouse:as2e:current.${dataset_name}`;
 
-html`<iframe id="myIframe" width="800" height="500" allowfullscreen style="border:0;" src = "${dataset_url}"></iframe>`
+// Get dataset info
+dataset_info = findDatasetInfo(dictionary, dataset_name);
+
+// Create the display elements with reference and BibTeX
+display = {
+  const url = `https://redivis.com/embed/tables/datapages.item_response_warehouse:as2e:current.${dataset_name}`;
+  
+  const container = html`<div>
+    <div style="margin-bottom: 20px;">
+      <button onclick="toggleInfo(this)" style="
+        padding: 8px 16px;
+        background-color: #4287f5;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        transition: background-color 0.2s;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      ">
+        <span>Show Citation Info</span>
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="transform: rotate(0deg); transition: transform 0.3s;">
+          <path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      
+      <div style="
+        display: none;
+        margin-top: 10px;
+        padding: 20px;
+        background-color: #ffffff;
+        border-radius: 8px;
+        border: 1px solid #e1e4e8;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      ">
+        <div style="display: flex; gap: 20px;">
+          <div style="flex: 1;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+              <div style="font-weight: 600; color: #24292e;">Reference</div>
+              <button onclick="copyText(this, 'reference')" style="
+                padding: 4px 12px;
+                background-color: #f6f8fa;
+                border: 1px solid #e1e4e8;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 0.8em;
+                color: #24292e;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                transition: all 0.2s;
+              ">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path d="M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.242a2 2 0 0 0-.602-1.43L16.083 2.57A2 2 0 0 0 14.685 2H10a2 2 0 0 0-2 2z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M16 18v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Copy
+              </button>
+            </div>
+            <div style="
+              font-size: 0.95em;
+              line-height: 1.6;
+              color: #24292e;
+              font-style: italic;
+              background-color: #f8f9fa;
+              padding: 12px;
+              border-radius: 6px;
+              border: 1px solid #e1e4e8;
+            " class="reference-text">${dataset_info.reference}</div>
+          </div>
+          <div style="flex: 1;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+              <div style="font-weight: 600; color: #24292e;">BibTeX</div>
+              <button onclick="copyText(this, 'bibtex')" style="
+                padding: 4px 12px;
+                background-color: #f6f8fa;
+                border: 1px solid #e1e4e8;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 0.8em;
+                color: #24292e;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                transition: all 0.2s;
+              ">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path d="M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.242a2 2 0 0 0-.602-1.43L16.083 2.57A2 2 0 0 0 14.685 2H10a2 2 0 0 0-2 2z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M16 18v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Copy
+              </button>
+            </div>
+            <pre style="
+              margin: 0;
+              padding: 12px;
+              background-color: #f8f9fa;
+              border-radius: 6px;
+              border: 1px solid #e1e4e8;
+              font-size: 0.9em;
+              line-height: 1.5;
+              overflow-x: auto;
+              white-space: pre-wrap;
+              word-wrap: break-word;
+              color: #24292e;
+              font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+            " class="bibtex-text"></pre>
+          </div>
+        </div>
+        
+        <!-- R Package Citation -->
+        <div style="margin-top: 20px;">
+          <button onclick="toggleRCitation(this)" style="
+            padding: 6px 12px;
+            background-color: #4287f5;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background-color 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          ">To cite using IRW's R package</button>
+          
+          <div class="r-citation" style="
+            display: none;
+            margin-top: 10px;
+            padding: 12px;
+            background-color: #f8f9fa;
+            border-radius: 6px;
+            border: 1px solid #e1e4e8;
+            font-family: monospace;
+          ">
+            <div style="
+              padding: 8px;
+              background-color: #f8f9fa;
+              border-left: 3px solid #4287f5;
+              margin-bottom: 10px;
+            ">
+              > <code>irw_citation('${dataset_name}')</code>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <iframe id="myIframe" width="800" height="500" allowfullscreen style="border: 1px solid #e1e4e8; border-radius: 8px;" src="${url}"></iframe>
+  </div>`;
+  
+  // Add toggle functions to window object
+  window.toggleInfo = function(button) {
+    const infoDiv = button.nextElementSibling;
+    const arrow = button.querySelector('svg');
+    const isVisible = infoDiv.style.display === 'block';
+    
+    infoDiv.style.display = isVisible ? 'none' : 'block';
+    arrow.style.transform = isVisible ? 'rotate(0deg)' : 'rotate(180deg)';
+    button.querySelector('span').textContent = isVisible ? 'Show Citation Info' : 'Hide Citation Info';
+  };
+  
+  window.toggleRCitation = function(button) {
+    const citationDiv = button.nextElementSibling;
+    citationDiv.style.display = citationDiv.style.display === 'none' ? 'block' : 'none';
+  };
+  
+  // Add copy function to window object
+  window.copyText = function(button, type) {
+    const container = button.closest('div').parentElement;
+    const text = type === 'reference' ? 
+      container.querySelector('.reference-text').textContent :
+      container.querySelector('.bibtex-text').textContent;
+    
+    navigator.clipboard.writeText(text).then(() => {
+      const originalText = button.textContent;
+      button.textContent = 'Copied!';
+      button.style.backgroundColor = '#28a745';
+      button.style.borderColor = '#28a745';
+      button.style.color = 'white';
+      
+      setTimeout(() => {
+        button.innerHTML = `
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M8 4v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7.242a2 2 0 0 0-.602-1.43L16.083 2.57A2 2 0 0 0 14.685 2H10a2 2 0 0 0-2 2z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M16 18v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Copy
+        `;
+        button.style.backgroundColor = '#f6f8fa';
+        button.style.borderColor = '#e1e4e8';
+        button.style.color = '#24292e';
+      }, 2000);
+    });
+  };
+  
+  // Update BibTeX
+  generateBibTeX(dataset_info.doi, dataset_name, bibliography).then(bibtex => {
+    container.querySelector('.bibtex-text').textContent = bibtex;
+  });
+  
+  return container;
+}
 ```
-
-## Programmatic access
-
-You can also access IRW data programmatically using the Redivis API for [R](https://apidocs.redivis.com/client-libraries/redivis-r) or [Python](https://apidocs.redivis.com/client-libraries/redivis-python) (**note** that you will first need to [generate and set an API token](https://apidocs.redivis.com/client-libraries/redivis-r/getting-started)). For example:
-
-::: {.panel-tabset}
-## R
-
-```{r}
-#| eval: false
-#| echo: true
-
-# first install redivis package: devtools::install_github("redivis/redivis-r", ref="main")
-
-# individual dataset
-dataset <- redivis::user("datapages")$dataset("item_response_warehouse")
-df <- dataset$table("4thgrade_math_sirt")$to_tibble()
-
-```
-
-## Python
-
-```{python}
-#| eval: false
-#| echo: true
-#| python.reticulate: false
-import redivis
-
-# individual dataset
-dataset = redivis.user('datapages').dataset('item_response_warehouse')
-df = dataset.table('4thgrade_math_sirt').to_pandas_dataframe()
-
-```
-:::
