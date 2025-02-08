@@ -1,8 +1,61 @@
 ---
-title: "Data analysis"
+title: "Getting Started"
 ---
 
-Here we provide example code in R and Python for loading multiple datasets in IRW and performing some summary computations over them. This should be a useful starting point for conducting your own analyses of the data. You may also be interested in the functionality embedded in the `irw` [package](https://github.com/ben-domingue/irw/tree/main/irw_pkg).
+
+There are several ways of working with the IRW data. Below we will first describe how to get data from the IRW and then offer some suggestions for how to analyze it. 
+
+## Getting IRW data
+
+There are several ways of getting data from the IRW.
+
+* You can use the [Data Browser](data.qmd) to investigate individual datasets and then download them directly via [Redivis](https://redivis.com/datasets/as2e-cv7jb41fd/tables).
+
+* You can also access IRW data programmatically. There are several ways of doing this that we describe below.
+
+  + You can use a Redivis notebook. Consider some example workflows [here](https://redivis.com/workspace/studies/1812/workflows).
+
+  + You can use the Redivis API for [R](https://apidocs.redivis.com/client-libraries/redivis-r) or [Python](https://apidocs.redivis.com/client-libraries/redivis-python) (**note** that you will first need to [generate and set an API token](https://apidocs.redivis.com/client-libraries/redivis-r/getting-started)). Given that we anticipate this being a popular means of using the IRW, we elaborate on how this can be done in the next section.
+
+## Programmatic access of IRW data
+
+Below we offer examples in both Python and R for how to access data programatically from the IRW. In R, we make use of the `irwpkg` which was written to help facilitate handling of IRW data in R; more details available [here](https://hansorlee.github.io/irwpkg/).
+
+::: {.panel-tabset}
+## R
+
+```{r}
+#| eval: false
+#| echo: true
+
+# individual dataset
+library(irwpkg)
+df <- irw_fetch("4thgrade_math_sirt")
+```
+
+## Python
+
+```{python}
+#| eval: false
+#| echo: true
+#| python.reticulate: false
+import redivis
+
+# individual dataset
+dataset = redivis.user('datapages').dataset('item_response_warehouse')
+df = dataset.table('4thgrade_math_sirt').to_pandas_dataframe()
+
+```
+:::
+
+
+
+## Analysis of IRW data
+
+We next provide a first example for working with IRW data. The below code blocks import multiple datasets from the IRW and compute some simple metadata (e.g., the number of responses). This should be a useful starting point for conducting your own analyses of the data.
+
+### A first analysis
+
 
 ::: {.panel-tabset}
 
@@ -14,7 +67,6 @@ Here we provide example code in R and Python for loading multiple datasets in IR
 library(dplyr)
 library(purrr)
 
-dataset_names <- c("4thgrade_math_sirt", "chess_lnirt", "dd_rotation")
 
 compute_metadata <- function(df) {
   df <- df |> filter(!is.na(resp)) |> mutate(resp = as.numeric(resp))
@@ -29,16 +81,11 @@ compute_metadata <- function(df) {
   )
 }
 
-dataset <- redivis::user("datapages")$dataset("item_response_warehouse")
-get_data_summary <- function(dataset_name) {
-  # fetch data
-  df <- dataset$table(dataset_name)$to_tibble()
-  # compute summary
-  compute_metadata(df) |> mutate(dataset_name = dataset_name, .before = everything())
-}
-
-summaries_list <- map(dataset_names, get_data_summary)
+dataset_names <- c("4thgrade_math_sirt", "chess_lnirt", "dd_rotation")
+tables<-irwpkg::irw_fetch(dataset_names)
+summaries_list <- lapply(tables,compute_metadata)
 summaries <- bind_rows(summaries_list)
+summaries<-cbind(table=dataset_names,summaries)
 summaries
 ```
 
@@ -83,10 +130,11 @@ summaries_list = [get_data_summary(name) for name in dataset_names]
 summaries = pd.concat(summaries_list, ignore_index=True)
 print(summaries)
 ```
-
 :::
 
-Here is a slightly more complex example showing how to compute the InterModel Vigorish contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation across 4 folds).
+### Reformatting IRW data for use with other packages
+
+Here is a slightly more complex example that takes advantage of `irwpkg` to easily fetch a dataset and to then compute the [InterModel Vigorish](https://www.cambridge.org/core/journals/psychometrika/article/intermodel-vigorish-as-a-lens-for-understanding-and-quantifying-the-value-of-item-response-models-for-dichotomously-coded-items/F61C75F6F945A5B13F73C6128EB83998) contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation across 4 folds; see also the documentation in the related [`imv`](https://github.com/intermodelvigorish/imv_R) package). Note the `irw_long2resp` function which is helpful for reformatting IRW data from long to wide.
 
 ::: {.panel-tabset}
 
@@ -94,51 +142,20 @@ Here is a slightly more complex example showing how to compute the InterModel Vi
 
 ```{r}
 #| echo: true
-library(mirt)
-library(irw) 
-
-dataset <- redivis::user("datapages")$dataset("item_response_warehouse")
-df <- dataset$table("gilbert_meta_2")$to_data_frame()
-items<-unique(df$item)
-if (all(items %in% 1:length(items))) {
-    df$item<-paste("item_",df$item,sep='')
-    items<-unique(df$item)
-}
-resp<-irw::long2resp(df)
-id<-resp$id
+df<-irwpkg::irw_fetch("gilbert_meta_2")  #https://github.com/hansorlee/irwpkg
+resp<-irwpkg::irw_long2resp(df)
 resp$id<-NULL
-
-##cross-validation for models estimated in mirt
-set.seed(8675309)
-ntimes<-4
-df$gr<-sample(1:ntimes,nrow(df),replace=TRUE)
-x.hold<-df
-omega<-numeric()
-for (i in 1:ntimes) {
-    x<-x.hold
-    x$oos<-ifelse(x$gr==i,1,0)
-    x0<-x[x$oos==0,]
-    resp0<-data.frame(irw::long2resp(x0))
-    id<-resp0$id
-    resp0$id<-NULL
-    ##rasch model
-    m0<-mirt(resp0,1,'Rasch',verbose=FALSE)
-    ##2pl
-    ni<-ncol(resp0)
-    s<-paste("F=1-",ni,"
+##1pl/Rasch model
+m0<-mirt::mirt(resp,1,'Rasch',verbose=FALSE)
+##2pl
+ni<-ncol(resp)
+s<-paste("F=1-",ni,"
              PRIOR = (1-",ni,", a1, lnorm, 0.0, 1.0)",sep="")
-    model<-mirt.model(s)
-    m1<-mirt(resp0,model,itemtype=rep("2PL",ni),method="EM",technical=list(NCYCLES=10000),verbose=FALSE)
-    ##
-    z0<-getp(m0,x=x[x$oos==1,],id=id)
-    z1<-getp(m1,x=x[x$oos==1,],id=id)
-    z0<-z0[,c("item","id","resp","p")]
-    names(z0)[4]<-'p1'
-    z1<-z1[,c("item","id","p")]
-    names(z1)[3]<-'p2'
-    z<-merge(z0,z1)
-    omega[i]<-imv(z,p1="p1",p2="p2")
-}
+model<-mirt::mirt.model(s)
+m1<-mirt::mirt(resp,model,itemtype=rep("2PL",ni),method="EM",technical=list(NCYCLES=10000),verbose=FALSE)
+##compute IMV comparing predictions from 1pl and 2pl
+set.seed(8675309)
+omega<-imv::imv.mirt(m0,m1)
 mean(omega)
 ```
 :::
