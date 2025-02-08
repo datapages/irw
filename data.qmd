@@ -18,10 +18,15 @@ dictionary = FileAttachment("data/IRW Data Dictionary - data index.csv").csv()
 bibliography = FileAttachment("data/BibTex_Manual.csv").csv()
 
 function createDatasetMap(df) {
-  let datasetMap = new Map();
   let dataArray = Array.from({ length: df[Object.keys(df)[0]].length }, (_, i) => {
     return Object.fromEntries(Object.entries(df).map(([key, values]) => [key, values[i]]));
   });
+  
+  // Sort the array alphabetically by dataset_name
+  dataArray.sort((a, b) => a.dataset_name.localeCompare(b.dataset_name));
+  
+  // Create the map from sorted array
+  let datasetMap = new Map();
   for (let row of dataArray) {
     datasetMap.set(row.dataset_name, row);
   }
