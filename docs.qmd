@@ -95,21 +95,16 @@ library(purrr)
 library(readr)
 library(stringr)
 library(glue)
+library(redivis)
+
+biblio <- redivis$user("bdomingu")$dataset("irw_meta:bdxt:v5_0")$table("biblio:qahg")$to_tibble()
 
 # Load datasets
-data_index <- read_csv("data/IRW Data Dictionary - data index.csv",
-                       na = character()) |>
-  select(dataset = `Filename`, url = URL, license = `Derived License`,
-         description = Description, reference = Reference, doi = DOI) |>
-  mutate(dataset = str_remove(dataset, ".R.ata$"))
-
-dataset_without_doi <- read_csv("data/BibTex_Manual.csv", na=character())
-
-# Populate missing DOI with BibTex from dataset_without_doi
-data_index <- data_index %>% 
-  left_join(dataset_without_doi, by = c("dataset" = "Filename")) %>% 
-  mutate(doi = if_else(is.na(doi) | doi == "", BibTex, doi)) %>% 
-  select(-BibTex)
+data_index <- biblio |>
+  rename(dataset = `table`, url = URL__for_data_, license = `Derived_License`,
+         description = Description, reference = Reference_x, doi = DOI__for_paper_) |>
+  mutate(dataset = str_remove(dataset, ".R.ata$")) |>
+  arrange(dataset)
 ```
 
 ```{=html}
@@ -130,42 +125,28 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function getCitation(doi, buttonId, targetId) {
+async function getCitation(bibtex, buttonId, targetId) {
   const button = document.getElementById(buttonId);
-  button.disabled = true; // Disable the button
-  button.textContent = 'Loading...'; // Show loading state
+  button.disabled = true;
+  button.textContent = 'Loading...';
 
   try {
-    let citation;
-    if (doi.startsWith('@')) {
-      // Directly assign BibTeX if available
-      button.textContent = 'Loading...'; // Show loading state
-      await sleep(500);
-      citation = doi;
-    } else {
-      // Fetch BibTeX using DOI
-      const response = await fetch(`https://doi.org/${doi}`, {
-        headers: { Accept: 'application/x-bibtex' },
-      });
-      if (!response.ok) throw new Error('Failed to fetch citation');
-      citation = await response.text();
-    }
-
+    await sleep(100); // Small delay for UI feedback
+    
     const target = document.getElementById(targetId);
-
     const container = document.createElement('div');
     container.className = 'citation-container';
 
     const citationText = document.createElement('pre');
     citationText.className = 'citation-pre';
-    citationText.textContent = citation;
+    citationText.textContent = bibtex;
 
     const copyButton = document.createElement('button');
     copyButton.className = 'copy-button';
     copyButton.innerHTML = '📋 Copy';
     copyButton.onclick = () => {
       navigator.clipboard
-        .writeText(citation)
+        .writeText(bibtex)
         .then(() => {
           copyButton.innerHTML = '✓ Copied!';
           setTimeout(() => (copyButton.innerHTML = '📋 Copy'), 2000);
@@ -179,17 +160,15 @@ async function getCitation(doi, buttonId, targetId) {
     target.appendChild(container);
     target.style.display = 'block';
   } catch (error) {
-    console.error('Error fetching citation:', error);
+    console.error('Error displaying citation:', error);
     const target = document.getElementById(targetId);
-    target.textContent = 'Error fetching citation. Please try again.';
+    target.textContent = 'Error displaying citation. Please try again.';
     target.style.display = 'block';
   } finally {
-    // Re-enable the button after processing
     button.disabled = false;
     button.textContent = 'Get BibTex';
   }
 }
-
 
 document.getElementById('searchBar').addEventListener('input', searchDatasets);
 </script>
@@ -247,14 +226,14 @@ document.getElementById('searchBar').addEventListener('input', searchDatasets);
 #| results: asis
 el <- function(ds) {
   lic <- if (ds$license != "") glue("({ds$license})") else ""
-  doi <- ds$doi
-  escaped_doi <- if (!is.na(doi) && doi != "") gsub("'", "\\\\'", doi) else ""
-
-  doi_button <- if (escaped_doi != "") {
+  bibtex <- ds$BibTex  # Use BibTex column directly
+  escaped_bibtex <- if (!is.na(bibtex) && bibtex != "") gsub("'", "\\\\'", bibtex) else ""
+  
+  citation_button <- if (escaped_bibtex != "") {
     button_id <- paste0("cite-button-", make.names(ds$dataset))
     target_id <- paste0("cite-text-", make.names(ds$dataset))
     glue(
-      '<button id="{button_id}" class="citation-button" onclick="getCitation(`{escaped_doi}`, \'{button_id}\', \'{target_id}\')">
+      '<button id="{button_id}" class="citation-button" onclick="getCitation(`{escaped_bibtex}`, \'{button_id}\', \'{target_id}\')">
         Get BibTex
       </button>
       <div id="{target_id}" class="citation-text"></div>'
@@ -268,7 +247,7 @@ el <- function(ds) {
     ## {ds$dataset}
     {ds$description} {lic} [[link]]({ds$url})
     <i>{ds$reference}</i>
-    {doi_button}
+    {citation_button}
     :::
     :::
     "

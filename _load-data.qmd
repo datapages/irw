@@ -1,25 +1,34 @@
 ```{r}
+#| output: true
+#| echo: false
+#| label: load-data
+
 library(dplyr)
 library(tidyr)
 library(stringr)
-```
-
-```{r}
-# set user and dataset
-
+library(purrr)
+library(readr)
+library(glue)
+library(jsonlite)
 library(redivis)
+
 project <- redivis::user("bdomingu")$dataset("irw_meta:bdxt:v1_1")
 metadata_table <- project$table("metadata:h5gs")
-
 # get metadata table
 metadata <- metadata_table$to_tibble()
 metadata <- metadata |>
   mutate(partition = if_else(n_categories == 2, "dichotomous", "polytomous"))
 
-# cont_vars <- metadata |> select(where(is.numeric)) |> colnames()
-# cont_vars_list <- set_names(cont_vars, cont_vars |> str_replace_all("_", " ") |> str_to_sentence()) |> as.list()
-# ojs_define(cont_vars = cont_vars_list)
+biblio <- redivis$user("bdomingu")$dataset("irw_meta:bdxt:v5_0")$table("biblio:qahg")$to_tibble()
 
-# pass data to ojs
+# First in the R section, we need to properly define the data for OJS
+data_index <- biblio |>
+  rename(dataset = `table`, url = URL__for_data_, license = `Derived_License`,
+         description = Description, reference = Reference_x, doi = DOI__for_paper_) |>
+  mutate(dataset = str_remove(dataset, ".R.ata$")) |>
+  arrange(dataset)
+
+# Make it available to OJS 
+ojs_define(data_index = data_index)
 ojs_define(metadata = metadata)
 ```
