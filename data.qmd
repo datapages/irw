@@ -10,69 +10,54 @@ Below we show metadata for the entire IRW, an example dataset, and illustrations
 
 <iframe width="800" height="500" allowfullscreen src="https://redivis.com/embed/tables/bdomingu.irw_meta:bdxt:current.metadata:h5gs#cells" style="border:0;"></iframe>
 
-## Individual dataset
-
 ```{ojs}
 // Load the dictionary and bib data
-dictionary = FileAttachment("data/IRW Data Dictionary - data index.csv").csv()
-bibliography = FileAttachment("data/BibTex_Manual.csv").csv()
+dictionary = data_index
 
 function createDatasetMap(df) {
   let dataArray = Array.from({ length: df[Object.keys(df)[0]].length }, (_, i) => {
     return Object.fromEntries(Object.entries(df).map(([key, values]) => [key, values[i]]));
   });
   
-  // Sort the array alphabetically by dataset_name
-  dataArray.sort((a, b) => a.dataset_name.localeCompare(b.dataset_name));
+  // Sort the array alphabetically by dataset
+  dataArray.sort((a, b) => a.dataset.localeCompare(b.dataset));
   
   // Create the map from sorted array
   let datasetMap = new Map();
   for (let row of dataArray) {
-    datasetMap.set(row.dataset_name, row);
+    datasetMap.set(row.dataset, row);
   }
   return datasetMap;
 }
 
-// Function to generate BibTeX from DOI or get from bibliography
-async function generateBibTeX(doi, datasetName, bibliographyDf) {
-  // If no DOI or DOI is NA, try to get BibTeX from bibliography
-  if (!doi || doi === "NA") {
-    const bibRow = bibliographyDf.find(row => row.Filename === datasetName);
-    return bibRow?.BibTex || "BibTeX not available";
-  }
-  
-  // If DOI exists and starts with @, it's already a BibTeX entry
-  if (doi.startsWith('@')) {
-    return doi;
-  }
-  
-  // Otherwise, fetch from CrossRef
-  try {
-    const response = await fetch(`https://doi.org/${doi}`, {
-      headers: { Accept: 'application/x-bibtex' }
-    });
-    if (!response.ok) throw new Error('Failed to fetch BibTeX');
-    return await response.text();
-  } catch (error) {
-    // If CrossRef fails, try bibliography as fallback
-    const bibRow = bibliographyDf.find(row => row.Filename === datasetName);
-    return bibRow?.BibTex || "Error generating BibTeX";
-  }
-}
+// Create dataset map from data_index instead of metadata
+dataset_map = createDatasetMap(data_index);
 
-// Function to find dataset info from dictionary
-function findDatasetInfo(dictionaryDf, datasetName) {
-  const dictRow = dictionaryDf.find(row => row.Filename === datasetName);
+// Dataset selector with default value
+viewof dataset = Inputs.select(
+  dataset_map, 
+  { 
+    label: 'Dataset',
+    // Set default value to first entry in the map
+    value: Array.from(dataset_map.values())[0]
+  }
+);
+
+// Function to find dataset info from dictionary (fixed field name)
+function findDatasetInfo(dictionary, datasetName) {
+  // Convert dictionary column data into array of objects
+  const dictionaryArray = Array.from({ length: dictionary[Object.keys(dictionary)[0]].length }, (_, i) => {
+    return Object.fromEntries(Object.entries(dictionary).map(([key, values]) => [key, values[i]]));
+  });
+  
+  // Now we can use find on the array
+  const dictRow = dictionaryArray.find(row => row.dataset === datasetName);
   return {
-    reference: dictRow?.Reference || "Reference not available",
-    doi: dictRow?.DOI || "DOI not available"
+    reference: dictRow?.reference || "Reference not available",
+    BibTex: dictRow?.BibTex || "BibTeX not available",
+    doi: dictRow?.doi
   };
 }
-
-dataset_map = createDatasetMap(metadata);
-
-// Dataset selector
-viewof dataset = Inputs.select(dataset_map, { label: 'Dataset' })
 
 // Function to find dataset name from the Map
 function findDatasetNameFromMap(map, selectedDataset) {
@@ -86,8 +71,6 @@ function findDatasetNameFromMap(map, selectedDataset) {
 
 // Look up the name of the dataset
 dataset_name = findDatasetNameFromMap(dataset_map, dataset);
-
-// Get dataset info
 dataset_info = findDatasetInfo(dictionary, dataset_name);
 
 // Create the display elements with reference and BibTeX
@@ -285,10 +268,11 @@ display = {
     });
   };
   
-  // Update BibTeX
-  generateBibTeX(dataset_info.doi, dataset_name, bibliography).then(bibtex => {
-    container.querySelector('.bibtex-text').textContent = bibtex;
-  });
+// Update BibTeX text
+const bibtexElement = container.querySelector('.bibtex-text');
+if (bibtexElement) {
+  bibtexElement.textContent = dataset_info.BibTex || "BibTeX not available";
+}
   
   return container;
 }
