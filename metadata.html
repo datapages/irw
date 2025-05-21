@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Contributing data to the IRW – Item Response Warehouse</title>
+<title>Metadata for IRW tables – Item Response Warehouse</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -19,6 +19,41 @@ ul.task-list li input[type="checkbox"] {
   width: 0.8em;
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 </style>
 
@@ -191,7 +226,7 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Contributing data to the IRW</h1>
+<h1 class="title">Metadata for IRW tables</h1>
 </div>
 
 
@@ -208,27 +243,251 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </header>
 
 
-<p>We welcome contribution of new datasets to the IRW! Compatability with the IRW data standard is an essential requirement of data included in the IRW and so we first describe methods of ensuring comparability before a discussion of how a properly formatted dataset can be contributed to the IRW.</p>
-<section id="constructing-an-irw-compliant-dataset" class="level2">
-<h2 class="anchored" data-anchor-id="constructing-an-irw-compliant-dataset">Constructing an IRW-compliant dataset</h2>
-<p>Below are critical instructions for formatting data for the IRW.</p>
-<ol type="1">
-<li><p>Numeric values of a response should be meaningful. For example, missing values cannot be coded as numbers (e.g., -9).</p></li>
-<li><p>Please check that the <code>id</code> and <code>item</code> identifers have an appropriate number of unique values.</p></li>
-<li><p>Additional data elements (e.g., <code>rt</code>, <code>date</code>, <code>wave</code>, <code>rater</code>, <code>qmatrix</code>) should all be formatted as specified above.</p></li>
-<li><p>If there are multiple scales available, the responses need to be split into mutiple files (one per scale). If multiple groups are assessed via the same scale, these data can be put into a single file (if desired, a column indicating group membership can be added).</p></li>
-</ol>
-<p>While we have tried to offer generic guidance on formatting data to the IRW standard, there are innumerable idiosyncracies that may merit additional conversation. To discuss specific issues associated with your formatting your data to the IRW standard, please feel free to each out to us at <code>itemresponsewarehouse@stanford.edu</code>. We would be happy to talk more! You can also use the <a href="https://irw-dataset-builder.streamlit.app/">IRW Dataset Builder</a> that will help port data to the IRW data standard if you like.</p>
+<p>We supplement the data in the IRW tables with various kinds of metadata about the tables. For clarity, we separately describe the qualitative and quantitative metadata.</p>
+<section id="quantitative-metadata" class="level2">
+<h2 class="anchored" data-anchor-id="quantitative-metadata">Quantitative Metadata</h2>
+<p>A variety of features of the tables (e.g., the number of rows) are pre-computed (using <a href="https://github.com/itemresponsewarehouse/misc/blob/main/metadata/01_metadata.R">this code</a>) to help users select datasets with desirable features. We provide information on:</p>
+<ul>
+<li>‘n_responses’ The number of rows in the table.</li>
+<li>‘n_categories’ The number of unique values of the <code>resp</code> column in the table. [Note: This needs to be treated with some care given that <code>NA</code> values are considered a level.]</li>
+<li>‘n_participants’ The number of objects being measured.</li>
+<li>‘n_items’ The number of probes being used to measure.</li>
+<li>‘responses_per_participant’ The average number of responses for an object of measurement.</li>
+<li>‘responses_per_item’ The average number of responses for a probe.</li>
+<li>‘density’ The average number of responses for an individual measurement object to an individual probe.</li>
+<li>‘variables’ The names of all the columns in the table.</li>
+</ul>
 </section>
-<section id="adding-data-to-the-irw" class="level2">
-<h2 class="anchored" data-anchor-id="adding-data-to-the-irw">Adding data to the IRW</h2>
-<p>To add properly formatted data to the IRW repository there are three todo items:</p>
-<ol type="1">
-<li><p>Create a Github issue for this repository that describes any decisions you had to make and also includes a file with data (in CSV format).</p></li>
-<li><p>Once the IRW team has confirmed that the data is appropriate, submit a pull request so that the code used to format the data gets added <a href="https://github.com/ben-domingue/irw/tree/main/data">here</a>. The pull request should go to the original repository (not your forked version of it) and to the main branch.</p></li>
-<li><p>Finally, work with the IRW team to ensure that the ‘data index’ page <a href="https://docs.google.com/spreadsheets/d/1nhPyvuAm3JO8c9oa1swPvQZghAvmnf4xlYgbvsFH99s/edit#gid=0">here</a> gets updated with the relevant information.</p></li>
-</ol>
-<p>Completion of these three steps will place the data in the IRW repository. This will be reflected on the Redivis site and the website at our next scheduled update time.</p>
+<section id="qualitative-metadata" class="level2">
+<h2 class="anchored" data-anchor-id="qualitative-metadata">Qualitative Metadata</h2>
+<p>The IRW tables have been annotated with additional information about the sample of objects being measured and the nature of the probes being used to measure. For each table, we describe:</p>
+<ul>
+<li>‘age range’ The age range of the measurement objects (when they are humans).</li>
+<li><code>child age (for child-focused studies)</code> Additional information on the age range of child-focused studies.</li>
+<li><code>sample</code> A description of the sample of objects (e.g., is it a convenience sample?).</li>
+<li><code>construct type</code> A classification of the construct type (e.g., is this a cognitive measure?).</li>
+<li><code>measurement tool</code> The type of measure (e.g., are these ratings? collected responses?).</li>
+<li><code>item format</code> The format of the item.</li>
+<li><code>primary language(s)</code> The language used in the assessment.</li>
+<li><code>construct name</code> A formal description of the construct (from the original source).</li>
+</ul>
+<p>Note that this information was produced by human raters; some degree of subjectivity should be expected.</p>
+</section>
+<section id="querying-irw-tables" class="level2">
+<h2 class="anchored" data-anchor-id="querying-irw-tables">Querying IRW tables</h2>
+<p>Given the volume of tables in the IRW and their heterogeneity, being able to effectively query IRW tables is essential. To do so, we recommend using the <code>irw::irw_filter()</code> function. Information on that function is <a href="https://itemresponsewarehouse.github.io/Rpkg/reference/irw_filter.html">here</a>. Below we provide a variety of simple use cases; once a user has identified the appropriate tables, <code>irw::irw_fetch()</code> can be used to easily download them.</p>
+<div class="tabset-margin-container"></div><div class="panel-tabset">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-1-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-1" role="tab" aria-controls="tabset-1-1" aria-selected="true">R</a></li></ul>
+<div class="tab-content">
+<div id="tabset-1-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-1-1-tab">
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>irw<span class="sc">::</span><span class="fu">irw_filter</span>(<span class="at">n_participants=</span><span class="fu">c</span>(<span class="dv">100000</span>,<span class="cn">Inf</span>)) <span class="co">#Those tables with more than 100000 participants (using default density filter)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code> [1] "aslec_insomnia_wang2025" "criticalperiod_syntax"  
+ [3] "enem_2013_1mil_ch"       "enem_2013_1mil_cn"      
+ [5] "enem_2013_1mil_lc"       "enem_2013_1mil_mt"      
+ [7] "enem_2014_1mil_ch"       "enem_2014_1mil_cn"      
+ [9] "enem_2014_1mil_lc"       "enem_2015_1mil_ch"      
+[11] "enem_2016_1mil_ch"       "enem_2016_1mil_lc"      
+[13] "enem_2018_1mil_cn"       "enem_2018_1mil_lc"      
+[15] "enem_2018_1mil_mt"       "enem_2019_1mil_ch"      
+[17] "enem_2019_1mil_cn"       "enem_2019_1mil_lc"      
+[19] "enem_2019_1mil_mt"       "enem_2020_1mil_lc"      
+[21] "enem_2021_1mil_ch"       "enem_2022_1mil_ch"      
+[23] "ffm_AGR"                 "ffm_CSN"                
+[25] "ffm_EST"                 "ffm_EXT"                
+[27] "ffm_OPN"                 "gender_roles"           
+[29] "isi_insomnia_wang2025"   "mbft_anunciacao_2024"   
+[31] "nonverbal_immediacy"     "phq_insomnia_wang2025"  
+[33] "pisa2003_science"        "pisa2006_read"          
+[35] "riasec"                 </code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>irw<span class="sc">::</span><span class="fu">irw_filter</span>(<span class="at">n_participants=</span><span class="fu">c</span>(<span class="dv">100000</span>,<span class="cn">Inf</span>),<span class="at">density=</span><span class="cn">NULL</span>) <span class="co">#All tables with more than 100000 participants</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code> [1] "aslec_insomnia_wang2025"  "criticalperiod_syntax"   
+ [3] "enem_2013_1mil_ch"        "enem_2013_1mil_cn"       
+ [5] "enem_2013_1mil_lc"        "enem_2013_1mil_mt"       
+ [7] "enem_2014_1mil_ch"        "enem_2014_1mil_cn"       
+ [9] "enem_2014_1mil_lc"        "enem_2014_1mil_mt"       
+[11] "enem_2015_1mil_ch"        "enem_2015_1mil_cn"       
+[13] "enem_2015_1mil_lc"        "enem_2015_1mil_mt"       
+[15] "enem_2016_1mil_ch"        "enem_2016_1mil_cn"       
+[17] "enem_2016_1mil_lc"        "enem_2016_1mil_mt"       
+[19] "enem_2017_1mil_ch"        "enem_2017_1mil_cn"       
+[21] "enem_2017_1mil_lc"        "enem_2017_1mil_mt"       
+[23] "enem_2018_1mil_ch"        "enem_2018_1mil_cn"       
+[25] "enem_2018_1mil_lc"        "enem_2018_1mil_mt"       
+[27] "enem_2019_1mil_ch"        "enem_2019_1mil_cn"       
+[29] "enem_2019_1mil_lc"        "enem_2019_1mil_mt"       
+[31] "enem_2020_1mil_ch"        "enem_2020_1mil_cn"       
+[33] "enem_2020_1mil_lc"        "enem_2020_1mil_mt"       
+[35] "enem_2021_1mil_ch"        "enem_2021_1mil_cn"       
+[37] "enem_2021_1mil_lc"        "enem_2021_1mil_mt"       
+[39] "enem_2022_1mil_ch"        "enem_2022_1mil_cn"       
+[41] "enem_2022_1mil_lc"        "enem_2022_1mil_mt"       
+[43] "ffm_AGR"                  "ffm_CSN"                 
+[45] "ffm_EST"                  "ffm_EXT"                 
+[47] "ffm_OPN"                  "ftna_kasper_2022"        
+[49] "gender_roles"             "gilbert_meta_52"         
+[51] "isi_insomnia_wang2025"    "mbft_anunciacao_2024"    
+[53] "neurips_2020"             "nonverbal_immediacy"     
+[55] "phq_insomnia_wang2025"    "pisa2000_math"           
+[57] "pisa2000_read"            "pisa2000_science"        
+[59] "pisa2003_math"            "pisa2003_problem_solving"
+[61] "pisa2003_read"            "pisa2003_science"        
+[63] "pisa2006_math"            "pisa2006_read"           
+[65] "pisa2006_science"         "pisa2009_math"           
+[67] "pisa2009_read"            "pisa2009_science"        
+[69] "pisa2012_math"            "pisa2012_read"           
+[71] "pisa2012_science"         "pisa2015_math"           
+[73] "pisa2015_read"            "pisa2015_science"        
+[75] "pisa2018_math"            "pisa2018_read"           
+[77] "pisa2018_science"         "pisa2022_math"           
+[79] "pisa2022_read"            "pisa2022_science"        
+[81] "riasec"                   "twod_rotation_mather2023"</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>irw<span class="sc">::</span><span class="fu">irw_filter</span>(<span class="at">n_categories=</span><span class="fu">c</span>(<span class="dv">10</span>,<span class="cn">Inf</span>),<span class="at">density=</span><span class="cn">NULL</span>) <span class="co">#Tables with responses in 10 or more categories</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code> [1] "cub_relgoods"                           
+ [2] "deception_game"                         
+ [3] "deception_professors"                   
+ [4] "DEMOS"                                  
+ [5] "det_naismith_2023"                      
+ [6] "DMCT_Addis_2020_PSIQ"                   
+ [7] "ecps_sahm_2024_ia"                      
+ [8] "ecps_sahm_2024_trust"                   
+ [9] "envirisk_lalot_2025"                    
+[10] "estcrm_epia"                            
+[11] "estcrm_selfeff"                         
+[12] "evpromisi_stone_2021_global"            
+[13] "Fh_Okcsr_Roos_2022_study2_Feeling_Heard"
+[14] "figure_skating"                         
+[15] "florida_twins_par"                      
+[16] "fullscaleiq_memory"                     
+[17] "fullscaleiq_mentalrotation"             
+[18] "gilbert_meta_95"                        
+[19] "HEARD_Roch_2022_SWLPWI"                 
+[20] "ieswriting_molloy_2022"                 
+[21] "immer12_immer"                          
+[22] "mgkt"                                   
+[23] "ml_harper_2015"                         
+[24] "much_tte_2025_currentmotivation"        
+[25] "nas_rogoza_2024_study5_nas"             
+[26] "nas_rogoza_2024_study5_ngs"             
+[27] "nas_rogoza_2024_study5_nvs"             
+[28] "psiq_woelk2022"                         
+[29] "realpic_souza2021"                      
+[30] "rightwing_authoritariansim"             
+[31] "SBD_Smith_2020"                         
+[32] "sned_bendall_2024"                      
+[33] "tears"                                  
+[34] "timss_tam"                              
+[35] "western_reserve_project"                
+[36] "wine_luckett2021"                       </code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>irw<span class="sc">::</span><span class="fu">irw_filter</span>(<span class="at">var=</span><span class="st">'rt'</span>) <span class="co">#Tables with response time data</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code> [1] "artistic_preferences"                     
+ [2] "brain_hemisphere"                         
+ [3] "broadband_inventories"                    
+ [4] "chess_lnirt"                              
+ [5] "credentialform_lnirt"                     
+ [6] "dd_rotation"                              
+ [7] "depression_anxiety_stress"                
+ [8] "DMCT_Addis_2020_MCT"                      
+ [9] "face_memory_test"                         
+[10] "ffm_AGR"                                  
+[11] "ffm_CSN"                                  
+[12] "ffm_EST"                                  
+[13] "ffm_EXT"                                  
+[14] "ffm_OPN"                                  
+[15] "fisher_temperment"                        
+[16] "fullscaleiq_memory"                       
+[17] "fullscaleiq_mentalrotation"               
+[18] "fullscaleiq_vocab"                        
+[19] "gcbs_brotherton_2013"                     
+[20] "introversion_extroversion"                
+[21] "machivallianism_test_main"                
+[22] "mgkt"                                     
+[23] "much_tte_2025_matrixreasoning"            
+[24] "nature_relatedness"                       
+[25] "nomt_hooper_2024_study2"                  
+[26] "nonverbal_immediacy"                      
+[27] "orev_bohn2024"                            
+[28] "protestant_workethic"                     
+[29] "roar_lexical"                             
+[30] "sned_bendall_2024"                        
+[31] "vocab_assessment_3_to_8_year_old_children"</code></pre>
+</div>
+<details class="code-fold">
+<summary>Code</summary>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>irw<span class="sc">::</span><span class="fu">irw_filter</span>(<span class="at">age_range=</span><span class="st">"Child (&lt;18y)"</span>) <span class="co">#Tables with child-focused data</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</details>
+<div class="cell-output cell-output-stdout">
+<pre><code> [1] "ALSECYPIAMH_WU_2022_CPS"                 
+ [2] "ALSECYPIAMH_WU_2022_Empathy"             
+ [3] "ALSECYPIAMH_WU_2022_MIL"                 
+ [4] "ALSECYPIAMH_WU_2022_NEI"                 
+ [5] "ALSECYPIAMH_WU_2022_PEI"                 
+ [6] "ALSECYPIAMH_WU_2022_PHQ"                 
+ [7] "ALSECYPIAMH_WU_2022_PIL"                 
+ [8] "ALSECYPIAMH_WU_2022_SDQ"                 
+ [9] "ALSECYPIAMH_WU_2022_SWEMWBS"             
+[10] "ALSECYPIAMH_WU_2022_SWLS"                
+[11] "aslec_insomnia_wang2025"                 
+[12] "BAFACALO_Golino_2013_CIS"                
+[13] "content_literacy_intervention_g1"        
+[14] "difnlr_msatb"                            
+[15] "EEN_Lacey_2024_Children"                 
+[16] "florida_twins_auth"                      
+[17] "florida_twins_leq"                       
+[18] "gilbert_meta_11"                         
+[19] "gilbert_meta_2"                          
+[20] "gilbert_meta_55"                         
+[21] "gilbert_meta_64"                         
+[22] "gilbert_meta_7"                          
+[23] "gilbert_meta_8"                          
+[24] "isi_insomnia_wang2025"                   
+[25] "mpsycho_ceaq"                            
+[26] "mpsycho_Rogers"                          
+[27] "mpsycho_youthdep"                        
+[28] "mpsycho_zareki"                          
+[29] "oxfordcovid_xue_2024_pswq_c"             
+[30] "oxfordcovid_xue_2024_school"             
+[31] "phq_insomnia_wang2025"                   
+[32] "pisa2003_science"                        
+[33] "pisa2006_read"                           
+[34] "PPPASBPNSSedaisw_Pedro_2022_EBSV"        
+[35] "PPPASBPNSSedaisw_Pedro_2022_NPBE"        
+[36] "PPPASBPNSSedaisw_Pedro_2022_PANAS"       
+[37] "PROMISPME_Forrest_2021_GHGlobal_Children"
+[38] "PROMISPME_Forrest_2021_Physical_Children"
+[39] "PROMISPME_Forrest_2021_Physical_Proxy"   
+[40] "PROMISPME_Forrest_2021_PosAff_Children"  
+[41] "PROMISPME_Forrest_2021_Psych_Children"   
+[42] "psychtools_blot"                         
+[43] "PTAM_Kretzschmar_2017_Raven"             
+[44] "PTAM_Kretzschmar_2017_Reasoning"         
+[45] "scoliosis_dueber"                        
+[46] "test_taking_patterns_over_time"          
+[47] "transreas_mokken"                        </code></pre>
+</div>
+</div>
+</div>
+</div>
+</div>
 
 
 </section>
