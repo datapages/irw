@@ -2,68 +2,106 @@
 title: "Getting Started"
 ---
 
+IRW datasets are hosted on [Redivis](https://redivis.com), a platform for academic data sharing and analysis. Because all data access goes through Redivis, some setup is required depending on how you want to work with the data. The sections below describe the main ways to access IRW data and include example code to help you get started.
 
-There are several ways of working with the IRW data. Below we will first describe how to get data from the IRW and then offer some suggestions for how to analyze it. 
+## Option 1: Browse and Download from the Redivis Web Interface
 
-## Getting IRW data
+If you're just looking to explore or download datasets manually, no additional account or setup is required.
 
-There are several ways of getting data from the IRW.
+-   View datasets through the [IRW Data Browser](data.qmd)
+-   Download tables as CSV files from the [Redivis web interface](https://redivis.com/datasets/as2e-cv7jb41fd/tables)
 
-* You can use the [Data Browser](data.qmd) to investigate individual datasets and then download them directly via [Redivis](https://redivis.com/datasets/as2e-cv7jb41fd/tables).
+This is the fastest way to get started if you don’t need programmatic access.
 
-* You can also access IRW data programmatically. There are several ways of doing this that we describe below.
+## Option 2: Use the `irw` R Package (Recommended)
 
-  + You can use a Redivis notebook. Consider some example workflows [here](https://redivis.com/workspace/studies/1812/workflows).
+We recommend the `irw` R package if you work in R and want a simple, streamlined way to access IRW data. For complete setup instructions and a reference guide to available functions, visit the package website: https://itemresponsewarehouse.github.io/Rpkg/.
 
-  + You can use the Redivis API for [R](https://apidocs.redivis.com/client-libraries/redivis-r) or [Python](https://apidocs.redivis.com/client-libraries/redivis-python) (**note** that you will first need to [generate and set an API token](https://apidocs.redivis.com/client-libraries/redivis-r/getting-started)). Given that we anticipate this being a popular means of using the IRW, we elaborate on how this can be done in the next section.
+-   Requires a Redivis account (you can create one [here](https://redivis.com/?createAccount)).
+-   On first use, you’ll be prompted to log in with your Redivis account and grant access via OAuth. This authentication step is required once per R session. For details, see the “Redivis Authentication” section on the package website.
 
-## Programmatic access of IRW data
-
-Below we offer examples in both Python and R for how to access data programatically from the IRW. In R, we make use of the `irw` which was written to help facilitate handling of IRW data in R; more details available [here](https://itemresponsewarehouse.github.io/Rpkg/).
-
-::: {.panel-tabset}
-## R
+### Setup & Example Usage
 
 ```{r}
 #| eval: false
 #| echo: true
 
-# individual dataset
+# Install and load the package
+devtools::install_github("itemresponsewarehouse/Rpkg")
 library(irw)
+
+irw_info()                  # Overview of the IRW
+irw_list_tables()          # List available tables
+irw_filter(var = "rt")     # Search for tables with a specific variable
 df <- irw_fetch("4thgrade_math_sirt")
 ```
 
-## Python
+## Option 3: Use Redivis Client Libraries (R or Python)
+
+If you prefer working outside of R or want low-level access to Redivis features, you can use the official Redivis client libraries. These are available for both [R](https://apidocs.redivis.com/client-libraries/redivis-r) and [Python](https://apidocs.redivis.com/client-libraries/redivis-python).
+
+### Example access to IRW with Redivis Client Libraries:
+
+::: panel-tabset
+## R (redivis-r)
+
+```{r}
+#| eval: false
+#| echo: true
+# first install redivis R package: 
+devtools::install_github("redivis/redivis-r", ref="main")
+library("redivis")
+
+dataset <- redivis::user("datapages")$dataset("item_response_warehouse") # connect to IRW
+df <- dataset$table("4thgrade_math_sirt")$to_tibble() # download data
+```
+
+## Python (redivis-python)
 
 ```{python}
 #| eval: false
 #| echo: true
 #| python.reticulate: false
+# first install redivis Python package with `pip install --upgrade redivis`
 import redivis
 
-# individual dataset
-dataset = redivis.user('datapages').dataset('item_response_warehouse')
-df = dataset.table('4thgrade_math_sirt').to_pandas_dataframe()
-
+dataset = redivis.user('datapages').dataset('item_response_warehouse') # connect to IRW
+df = dataset.table('4thgrade_math_sirt').to_pandas_dataframe() # download data
 ```
 :::
 
+### How to use the Redivis Client Libraries
 
+There are two main ways to use the Redivis client libraries:
 
-## Analysis of IRW data
+1.  Use a Redivis Notebook
 
-We next provide a first example for working with IRW data. The below code blocks import multiple datasets from the IRW and compute some simple metadata (e.g., the number of responses). This should be a useful starting point for conducting your own analyses of the data.
+-   Redivis notebooks come preloaded with the latest library -- no installation or authentication required. Ideal for first-time users or lightweight workflows.
+-   We also provide some example workflows with IRW in Redivis notebooks [here](https://redivis.com/workspace/studies/1812/workflows).
+
+2.  Use in Other Environments (e.g., RStudio, Jupyter, Colab, etc.)
+
+-   Requires installing the appropriate client library (see example code above for installation)
+-   You will need to authenticate with your Redivis account (First-time use will prompt browser login for OAuth), or you may also use API tokens for authentication for long-running jobs (see [here](https://apidocs.redivis.com/rest-api/authorization) for more information about how to generate and set up your API token).
+
+For more detailed setup and usage examples, see the full Redivis R and Python client documentation here:
+
+-   [Redivis R Client documentation](https://apidocs.redivis.com/client-libraries/redivis-r)
+-   [Redivis Python Client documentation](https://apidocs.redivis.com/client-libraries/redivis-python)
+
+# Analysis of IRW data
+
+We next provide some examples for working with IRW data. The below code blocks import multiple datasets from the IRW and compute some simple metadata (e.g., the number of responses). This should be a useful starting point for conducting your own analyses of the data.
 
 ### A first analysis
 
-
-::: {.panel-tabset}
-
+::: panel-tabset
 ## R
 
 ```{r}
 #| echo: true
 
+library(irw)
 library(dplyr)
 library(purrr)
 
@@ -136,8 +174,7 @@ print(summaries)
 
 Here is a slightly more complex example that takes advantage of `irw` to easily fetch a dataset and to then compute the [InterModel Vigorish](https://www.cambridge.org/core/journals/psychometrika/article/intermodel-vigorish-as-a-lens-for-understanding-and-quantifying-the-value-of-item-response-models-for-dichotomously-coded-items/F61C75F6F945A5B13F73C6128EB83998) contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation across 4 folds; see also the documentation in the related [`imv`](https://github.com/intermodelvigorish/imv_R) package). Note the `irw_long2resp` function which is helpful for reformatting IRW data from long to wide.
 
-::: {.panel-tabset}
-
+::: panel-tabset
 ## R
 
 ```{r}
@@ -159,3 +196,5 @@ omega<-imv::imv.mirt(m0,m1)
 mean(omega)
 ```
 :::
+
+:::::
