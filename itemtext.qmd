@@ -2,11 +2,13 @@
 title: "Item Text"
 ---
 
+## The standard for item information
+
 We have begun to incorporate the text of the items used to produce stimuli in the IRW. This information is available [here](https://redivis.com/datasets/07b6-11dggrv8c). These data are structured as follows:
 
 - `table` This identifier can be used to link to the IRW response data.
 
-- `section_id` This is an identifier for a group of items that share a common context. It is conceptually equivalent to the `item_family` element in the IRW standard and is used for things like testlets or items grouped under a single reading passage.
+- `section_id` This is an identifier for a group of items that share a common context. It is conceptually equivalent to the `item_family` element in the IRW standard and is used to annotate information about, for example, testlets (i.e., items grouped under a single reading passage).
 
 - `item` This is a persistent identifier for *the probe being used to measure*, matching the `item` field in the core IRW dataset.
 
@@ -23,6 +25,27 @@ We have begun to incorporate the text of the items used to produce stimuli in th
 - `option_text` This is the literal text for a specific response option available for an item.
 
 - `resp` This is the value assigned to a specific `option_text` (e.g., A, B, C or 0, 1, 2). It provides the link between the literal text of an option and its corresponding value in the core `resp` data.
->>>>>>> da9226591581c70797c3e242d657165d7165431b
 
-how to merge
+## Incorporation with the IRW response data
+
+This dataset is designed to be interoperable with the core IRW item response data. Specifically, the `table` identifer should allow for merging across these two data resources. Researchers can link these item text records to response-level data using the `item` field, which serves as a shared, persistent identifier across both datasets.
+
+To incorporate response option text, the resp field in this dataset provides a mapping between response codes (e.g., A, B, C or 0, 1, 2) and their corresponding option_text. This allows users to reconstruct full item presentations or analyze response behavior with access to the literal item wording.
+
+::: panel-tabset
+## R
+
+```{r}
+#| echo: true
+items<-irw::irw_itemtext("gilbert_meta_49")
+df<-irw::irw_fetch("gilbert_meta_49")
+df<-merge(items,df)
+head(df)
+```
+:::
+
+Merging these datasets allows for a more complete view of the data, including:
+
+- The full wording of each item and response option
+- Analysis of how item phrasing may influence responses
+- Richer visualizations and content-based filtering
