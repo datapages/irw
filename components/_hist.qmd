@@ -1,0 +1,71 @@
+```{ojs}
+function hist(values = [], opt = {}) {
+  const max = d3.max(values);
+  let {
+    domain,
+    thresholds,
+    width,
+    height,
+    fillStyle,
+    strokeStyle,
+    domainLineWidth
+  } = {
+    domain: [0, max],
+    thresholds: d3.thresholdFreedmanDiaconis(
+      values,
+      ...(opt.domain ?? [0, max])
+    ),
+    width: 100,
+    height: 14,
+    fillStyle: 'rgba(0,0,0,1)',
+    strokeStyle: 'rgba(0,0,0,0.2)',
+    domainLineWidth: 1,
+    ...opt
+  };
+
+  // custom threshold generator so we don't nice domains
+  const thresholdGen = (data, min, max) =>
+    d3.range(thresholds).map(t => min + (t / thresholds) * (max - min));
+
+  const x = d3
+    .scaleLinear()
+    .domain(domain)
+    .range([0, width]);
+  const binsGenerator = d3
+    .histogram()
+    .domain(x.domain())
+    .thresholds(thresholdGen);
+
+  const bins = binsGenerator(values);
+
+  const y = d3
+    .scaleLinear()
+    .domain([0, d3.max(bins.map(b => b.length))])
+    .range([height - domainLineWidth, 0]);
+
+  const ctx = DOM.context2d(width, height);
+
+  ctx.fillStyle = fillStyle;
+
+  if (domainLineWidth) {
+    ctx.strokeStyle = strokeStyle;
+    ctx.lineWidth = domainLineWidth;
+
+    ctx.beginPath();
+    ctx.moveTo(0, height - domainLineWidth / 2);
+    ctx.lineTo(width, height - domainLineWidth / 2);
+    ctx.stroke();
+  }
+
+  for (const d of bins) {
+    ctx.fillRect(
+      x(d.x0),
+      y(d.length),
+      x(d.x1) - x(d.x0) - 1,
+      height - domainLineWidth - y(d.length)
+    );
+  }
+
+  return ctx.canvas;
+}
+```

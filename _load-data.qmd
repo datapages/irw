@@ -8,18 +8,91 @@ library(tidyr)
 library(stringr)
 library(purrr)
 library(readr)
+library(tibble)
 library(glue)
 library(jsonlite)
 library(redivis)
 
-project <- redivis::user("bdomingu")$dataset("irw_meta:bdxt:v1_1")
-metadata_table <- project$table("metadata:h5gs")
-# get metadata table
-metadata <- metadata_table$to_tibble()
-metadata <- metadata |>
-  mutate(partition = if_else(n_categories == 2, "dichotomous", "polytomous"))
+irw_meta <- redivis$user("bdomingu")$dataset("irw_meta:bdxt")
+metadata_table <- irw_meta$table("metadata:h5gs")$to_tibble()
 
-biblio <- redivis$user("bdomingu")$dataset("irw_meta:bdxt:latest")$table("biblio:qahg")$to_tibble()
+longitudinal_vars <- c("wave", "date")
+
+metadata <- metadata_table |>
+  mutate(table = str_to_lower(table)) |>
+  mutate(variable = str_split(variables, "\\| "),
+         prefix = str_extract_all(variables, "(?<= )[A-z_]*?(?=_)") |>
+           map(unique) |> map(sort),
+         prefix = if_else(map_int(prefix, length) == 0, list("[no prefix]"), prefix)) |>
+  mutate(longitudinal = map_lgl(variable, \(v) any(v %in% longitudinal_vars)))
+  # mutate(partition = if_else(n_categories == 2, "dichotomous", "polytomous"))
+
+var_vals <- metadata |>
+  select(table, variable, prefix) |>
+  pivot_longer(cols = -table, names_to = "type", values_to = "value") |>
+  unnest(value) |>
+  count(type, value) |>
+  arrange(type, desc(n)) |>
+  select(-n) |>
+  group_by(type) |>
+  summarise(vals = list(value)) |>
+  deframe()
+
+biblio <- irw_meta$table("biblio:qahg")$to_tibble()
+bib_data <- biblio |>
+  mutate(table = str_to_lower(table)) |>
+  select(table, license = `Derived_License`)
+
+
+tag_table <- irw_meta$table("tags:7nkh")$to_tibble()
+
+na_vals <- c("no access to the osf page", "non-verbal task",
+             "I can't find the description of this dataset",
+             "missing description", "need help", "no link or info",
+             "Missing (NA)")
+
+# parse_opts <- \(x) vroom::vroom(I(x), delim = ",", show_col_types = FALSE) |> colnames()
+comma <- "~"
+# parse_opts <- \(s) s |> str_replace_all('\\"(.*?),(.*?)\\"', glue("\\1{comma}\\2")) |> str_split(",") |> map(str_trim) |> map(\(x) str_replace_all(x, comma, ","))
+# 
+# mult_cols <- tag_table |>
+#   pivot_longer(cols = -table, names_to = "tag", values_to = "value") |>
+#   select(-table) |>
+#   filter(str_detect(value, ",")) |>
+#   distinct(tag) |>
+#   pull(tag)
+
+tags <- tag_table |>
+  mutate(table = str_to_lower(table)) |>
+  left_join(bib_data) |>
+  mutate(across(everything(), \(s) if_else(s %in% na_vals, "NA", s))) |>
+  mutate(across(everything(), \(s) replace_na(s, "NA"))) |>
+  mutate(sample = sample |> str_replace_all(",(?= etc)", comma) |> str_remove_all('\\"')) |>
+  mutate(across(-table, \(s) s |> str_split(",") |> map(str_trim) |> map(\(x) str_replace_all(x, comma, ","))))
+  # mutate(across(mult_cols, \(s) s |> map(parse_opts) |> map(str_trim)))
+  # mutate(across(everything(), \(v) na_if(v, "NA"))) |>
+  # mutate(across(c(child_age__for_child_focused_studies_, construct_type, measurement_tool, primary_language_s_, sample),
+
+tag_vals <- tags |>
+  pivot_longer(cols = -table, names_to = "tag", values_to = "value") |>
+  unnest(value) |>
+  # filter(!is.na(value)) |>
+  count(tag, value) |>
+  arrange(tag, desc(n)) |>
+  select(-n) |>
+  group_by(tag) |>
+  summarise(vals = list(value)) |>
+  deframe()
+
+datasets <- metadata |> inner_join(tags) |> #inner_join(bib_data)
+  arrange(table)
+
+# info_compare <- metadata |> select(table) |> mutate(in_metadata = TRUE) |>
+#   full_join(tags |> select(table) |> mutate(in_tags = TRUE)) |>
+#   full_join(bib_data |> select(table) |> mutate(in_biblio = TRUE)) |>
+#   mutate(across(everything(), \(v) replace_na(v, FALSE)))
+# info_compare |> count(in_metadata, in_tags, in_biblio, name = "n_tables")
+
 
 # First in the R section, we need to properly define the data for OJS
 data_index <- biblio |>
@@ -30,5 +103,8 @@ data_index <- biblio |>
 
 # Make it available to OJS 
 ojs_define(data_index = data_index)
-ojs_define(metadata = metadata)
+# ojs_define(metadata = metadata)
+ojs_define(datasets = datasets)
+ojs_define(tags = tag_vals)
+ojs_define(vars = var_vals)
 ```

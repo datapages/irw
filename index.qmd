@@ -16,9 +16,339 @@ title-block-banner-color: white
 
 {{< include _load-data.qmd >}}
 
-## IRW Metadata
+{{< include components/_interval.qmd >}}
+{{< include components/_hist.qmd >}}
 
-Examine sample sizes and other dataset summary statistics.
+```{ojs prelims}
+// import newer version of observable plot than the one embedded in quarto 
+Plot = import("https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm")
 
-{{< include _viz-metadata.qmd >}}
+md = transpose(datasets)
+```
+
+{{< include components/_style.qmd >}}
+
+```{ojs filter-funs}
+// formatting function for how two ended slider displays selected range
+interval_format = ([start, end]) => `[${start}; ${end}]`
+log10_format = (v) => Math.pow(10, v).toLocaleString('en-US')
+log10_interval_format = ([start, end]) => `[${log10_format(start)}; ${log10_format(end)}]`
+
+log2_format = (v) => Math.pow(2, v).toLocaleString('en-US')
+log2_interval_format = ([start, end]) => `[${log2_format(start)}; ${log2_format(end)}]`
+
+log10_range = (obj, prop) => {
+  return [Math.floor(Math.log10(d3.min(obj.map(d => d[prop])))),
+          Math.ceil(Math.log10(d3.max(obj.map(d => d[prop]))))]
+}
+
+log2_range = (obj, prop) => {
+  return [Math.floor(Math.log2(d3.min(obj.map(d => d[prop])))),
+          Math.ceil(Math.log2(d3.max(obj.map(d => d[prop]))))]
+}
+
+range = (obj, prop) => {
+  return [Math.floor(d3.min(obj.map(d => d[prop]))),
+          Math.ceil(d3.max(obj.map(d => d[prop])))]
+}
+```
+
+:::::: {.column-screen-inset}
+::::: {layout="[ [19,55,26] ]"}
+
+:::: {.panel-input}
+
+_Filter by quantitative properties._
+
+::: {.side-inputs}
+
+::: {.filters-container}
+
+```{ojs filter-responses}
+viewof n_responses_range = interval(log10_range(md, "n_responses"), {
+  step: 1, label: "Number of responses", width: "95%", format: log10_interval_format
+})
+```
+
+```{ojs filter-categories}
+viewof n_categories_range = interval(log2_range(md, "n_categories"), {
+  step: 1, label: "Number of categories", width: "95%", format: log2_interval_format
+  //format: ([start, end]) => `[${start}, ${end}]`
+})
+//viewof n_categories_over = Inputs.checkbox(["12+"], {value: ["12+"]})
+```
+
+```{ojs filter-participants}
+viewof n_participants_range = interval(log10_range(md, "n_participants"), {
+  step: 1, label: "Number of participants", width: "95%", format: log10_interval_format
+})
+```
+
+```{ojs filter-items}
+viewof n_items_range = interval(log10_range(md, "n_items"), {
+  step: 1, label: "Number of items", width: "95%", format: log10_interval_format
+})
+```
+
+```{ojs filter-responses-per-participant}
+viewof responses_per_participant_range = interval(log10_range(md, "responses_per_participant"), {
+  step: 1, label: "Responses per participant", width: "95%", format: log10_interval_format
+})
+```
+
+```{ojs filter-responses-per-item}
+viewof responses_per_item_range = interval(log10_range(md, "responses_per_item"), {
+  step: 1, label: "Responses per item", width: "95%", format: log10_interval_format
+})
+```
+
+```{ojs filter-density}
+viewof density_range = interval(log10_range(md, "density"), {
+  step: 1, label: "Density", width: "95%", format: log10_interval_format
+})
+```
+
+:::
+:::
+
+-----
+
+_Filter by variables._
+
+::: {.side-inputs}
+
+::: {.filters-container}
+
+```{ojs filter-variable}
+viewof variable = Inputs.select(vars.variable, {
+  label: "Variable", multiple: true, value: vars.variable
+})
+```
+
+```{ojs filter-prefix}
+viewof prefix = Inputs.select(vars.prefix, {
+  label: "Variable prefix", multiple: true, value: vars.prefix
+})
+```
+
+```{ojs filter-longitudinal}
+long_vals = new Map([["Any", null], ["Require", true], ["Exclude", false]])
+viewof longitudinal = Inputs.select(long_vals, {
+  label: "Longitudinal variables"
+})
+```
+
+:::
+:::
+
+::::
+
+:::: {.panel-fill}
+
+```{ojs data-filtered}
+ds = md.filter(d => d.n_responses >= 10 ** n_responses_range[0] &
+                    d.n_responses <= 10 ** n_responses_range[1])
+       .filter(d => d.n_categories >= 2 ** n_categories_range[0] &
+                    d.n_categories <= 2 ** n_categories_range[1])
+       .filter(d => d.n_participants >= 10 ** n_participants_range[0] &
+                    d.n_participants <= 10 ** n_participants_range[1])
+       .filter(d => d.n_items >= 10 ** n_items_range[0] &
+                    d.n_items <= 10 ** n_items_range[1])
+       .filter(d => d.responses_per_participant >= 10 ** responses_per_participant_range[0] &
+                    d.responses_per_participant <= 10 ** responses_per_participant_range[1])
+       .filter(d => d.responses_per_item >= 10 ** responses_per_item_range[0] &
+                    d.responses_per_item <= 10 ** responses_per_item_range[1])
+       .filter(d => d.density >= 10 ** density_range[0] &
+                    d.density <= 10 ** density_range[1])
+
+       .filter(d => variable.some(v => d.variable.includes(v)))
+       .filter(d => prefix.some(v => d.prefix.includes(v)))
+       .filter(d => longitudinal === null | longitudinal === d.longitudinal)
+       
+       .filter(d => age_range.some(v => d.age_range.includes(v)))
+       .filter(d => child_age.some(v => d.child_age__for_child_focused_studies_.includes(v)))
+       .filter(d => construct_type.some(v => d.construct_type.includes(v)))
+       .filter(d => sample.some(v => d.sample.includes(v)))
+       .filter(d => measurement_tool.some(v => d.measurement_tool.includes(v)))
+       .filter(d => item_format.some(v => d.item_format.includes(v)))
+       .filter(d => primary_language.some(v => d.primary_language_s_.includes(v)))
+       .filter(d => license.some(v => d.license.includes(v)))
+```
+
+```{ojs}
+num_vars = new Map([["Number responses", "n_responses"],
+                    ["Number participants", "n_participants"],
+                    ["Number items", "n_items"],
+                    ["Responses per participant", "responses_per_participant"],
+                    ["Responses per item", "responses_per_item"],
+                    ["Density (#responses/(#ids*#items))", "density"]])
+
+cat_vars = new Map([
+  ["None", null],
+  ["Age range", "age_range"],
+  ["Child age (for child-focused studies)", "child_age__for_child_focused_studies_"],
+  ["Construct type", "construct_type"],
+  ["Sample", "sample"],
+  ["Measurement tool", "measurement_tool"],
+  ["Item format", "item_format"],
+  ["Primary language(s)", "primary_language_s_"],
+  ["License", "license"]
+])
+```
+
+::: {.plot-container}
+::: {.plot-inputs}
+```{ojs}
+viewof x_var = Inputs.select(num_vars, {value: "n_items", label: "X axis"})
+```
+
+```{ojs}
+viewof y_var = Inputs.select(num_vars, {value: "n_participants", label: "Y axis"})
+```
+
+```{ojs}
+viewof color_var = Inputs.select(cat_vars, {label: "Color"})
+```
+:::
+
+```{ojs}
+default_color = "grey"
+plt_color = color_var || default_color
+
+// scatter plot
+viewof metadata_scatter = Plot.plot({
+  x: {type: "log"},
+  y: {type: "log"},
+  width: 700,
+  grid: true,
+  color: {legend: color_var != null},
+  marks: [
+    // points
+    Plot.dot(ds, {x: x_var, y: y_var, stroke: plt_color}),
+    // regression line
+    Plot.linearRegressionY(ds, {x: x_var, y: y_var, stroke: plt_color}),
+    // tooltips
+    Plot.tip(ds, Plot.pointer({x: x_var, y: y_var, stroke: plt_color}))
+  ]
+})
+```
+:::
+
+```{ojs}
+html`<p><i>Filtered to ${ds.length} datasets out of ${md.length} total.</i></p>`
+```
+
+```{ojs table}
+function sparkbar(max) {
+  return x => htl.html`<div style="
+    background: lightblue;
+    width: ${100 * Math.log(x) / Math.log(max)}%;
+    float: right;
+    padding-right: 3px;
+    box-sizing: border-box;
+    overflow: visible;
+    display: flex;
+    justify-content: end;">${x.toLocaleString("en")}`
+}
+
+function inlinehist(vals, head) {
+  return htl.html`<span class="hist">${hist(vals)}${head}</span>`
+}
+
+// data table for selected tables
+Inputs.table(ds, {
+  rows: 20,
+  sort: "n_responses", reverse: true,
+  columns: ["table", ...num_vars.values(), ...cat_vars.values()],
+  header: {
+    n_responses: inlinehist(ds.map(d => Math.log10(d.n_responses)), "n_responses"),
+    n_categories: inlinehist(ds.map(d => Math.log2(d.n_categories)), "n_categories"),
+    n_participants: inlinehist(ds.map(d => Math.log10(d.n_participants)), "n_participants"),
+    n_items: inlinehist(ds.map(d => Math.log10(d.n_items)), "n_items"),
+    responses_per_participant: inlinehist(ds.map(d => Math.log10(d.responses_per_participant)), "responses_per_participant"),
+    responses_per_item: inlinehist(ds.map(d => Math.log10(d.responses_per_item)), "responses_per_item"),
+    density: inlinehist(ds.map(d => d.density), "density")
+  },
+  format: {
+    n_responses: sparkbar(d3.max(ds, d => d.n_responses)),
+    n_categories: sparkbar(d3.max(ds, d => d.n_categories)),
+    n_participants: sparkbar(d3.max(ds, d => d.participants)),
+    n_items: sparkbar(d3.max(ds, d => d.n_items)),
+    responses_per_participant: sparkbar(d3.max(ds, d => d.responses_per_participant)),
+    responses_per_item: sparkbar(d3.max(ds, d => d.responses_per_item)),
+    density: sparkbar(d3.max(ds, d => d.density)),
+  }
+})
+```
+
+::::
+
+:::: {.panel-input}
+
+_Filter by qualitative features._
+
+::: {.side-inputs}
+
+::: {.filters-container}
+
+```{ojs filter-age-range}
+viewof age_range = Inputs.checkbox(tags.age_range, {
+  label: "Age range", value: tags.age_range
+})
+```
+
+```{ojs filter-child-age}
+viewof child_age = Inputs.checkbox(tags.child_age__for_child_focused_studies_, {
+  label: "Child age (for child-focused studies)", value: tags.child_age__for_child_focused_studies_
+})
+```
+
+```{ojs filter-construct-type}
+viewof construct_type = Inputs.checkbox(tags.construct_type, {
+  label: "Construct type", value: tags.construct_type
+})
+```
+
+```{ojs filter-sample}
+viewof sample = Inputs.checkbox(tags.sample, {
+  label: "Sample", value: tags.sample
+})
+```
+
+```{ojs filter-measurement-tool}
+viewof measurement_tool = Inputs.checkbox(tags.measurement_tool, {
+  label: "Measurement tool", value: tags.measurement_tool
+})
+```
+
+```{ojs filter-item-format}
+viewof item_format = Inputs.checkbox(tags.item_format, {
+  label: "Item format", value: tags.item_format
+})
+```
+
+```{ojs filter-primary-language}
+viewof primary_language = Inputs.checkbox(tags.primary_language_s_, {
+  label: "Primary language(s)", value: tags.primary_language_s_
+})
+```
+
+```{ojs filter-license}
+viewof license = Inputs.checkbox(tags.license, {
+  label: "License", value: tags.license
+})
+```
+
+:::
+:::
+::::
+
+:::::
+::::::
+
+<!-- ## IRW Metadata -->
+
+<!-- Examine sample sizes and other dataset summary statistics. -->
+
+<!-- {{< include _viz-metadata.qmd >}} -->
 
