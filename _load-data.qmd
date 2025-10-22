@@ -16,7 +16,7 @@ library(redivis)
 irw_meta <- redivis$user("bdomingu")$dataset("irw_meta:bdxt")
 metadata_table <- irw_meta$table("metadata:h5gs")$to_tibble()
 
-longitudinal_vars <- c("wave", "date")
+# longitudinal_vars <- c("wave", "date")
 
 metadata <- metadata_table |>
   mutate(table = str_to_lower(table)) |>
@@ -24,11 +24,13 @@ metadata <- metadata_table |>
          prefix = str_extract_all(variables, "(?<= )[A-z_]*?(?=_)") |>
            map(unique) |> map(sort),
          prefix = if_else(map_int(prefix, length) == 0, list("[no prefix]"), prefix)) |>
-  mutate(longitudinal = map_lgl(variable, \(v) any(v %in% longitudinal_vars)))
+  mutate(longitudinal = if_else(longitudinal, "longitudinal", "cross-sectional"),
+         longitudinal = as.list(longitudinal))
+  # mutate(longitudinal = map_lgl(variable, \(v) any(v %in% longitudinal_vars)))
   # mutate(partition = if_else(n_categories == 2, "dichotomous", "polytomous"))
 
 var_vals <- metadata |>
-  select(table, variable, prefix) |>
+  select(table, variable, prefix, longitudinal) |>
   pivot_longer(cols = -table, names_to = "type", values_to = "value") |>
   unnest(value) |>
   count(type, value) |>

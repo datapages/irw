@@ -28,29 +28,50 @@ md = transpose(datasets)
 
 {{< include components/_style.qmd >}}
 
+```{ojs info}
+// info for numeric variables
+vi = ({
+  "n_responses":               { label: "Number responses",          base: 10 },
+  "n_categories":              { label: "Number categories",         base:  2 },
+  "n_participants":            { label: "Number participants",       base: 10 },
+  "n_items":                   { label: "Number items",              base: 10 },
+  "responses_per_participant": { label: "Responses per participant", base: 10 },
+  "responses_per_item":        { label: "Responses per item",        base: 10 },
+  "density":                   { label: "Density",                   base: 10 }
+})
+
+// info for tag variables
+ti = ({
+  "age_range":                             { label: "Age range"                             } ,
+  "child_age__for_child_focused_studies_": { label: "Child age (for child-focused studies)" } ,
+  "construct_type":                        { label: "Construct type"                        } ,
+  "sample":                                { label: "Sample"                                } ,
+  "measurement_tool":                      { label: "Measurement tool"                      } ,
+  "item_format":                           { label: "Item format"                           } ,
+  "primary_language_s_":                   { label: "Primary language(s)"                   } ,
+  "license":                               { label: "License"                               } ,
+})
+```
+
 ```{ojs filter-funs}
 // formatting function for how two ended slider displays selected range
-interval_format = ([start, end]) => `[${start}; ${end}]`
-log10_format = (v) => Math.pow(10, v).toLocaleString('en-US')
-log10_interval_format = ([start, end]) => `[${log10_format(start)}; ${log10_format(end)}]`
+pow_format = (v, b) => Math.pow(b, v).toLocaleString('en-US')
+interval_format = (b) => ([start, end]) => `[${pow_format(start, b)}; ${pow_format(end, b)}]`
 
-log2_format = (v) => Math.pow(2, v).toLocaleString('en-US')
-log2_interval_format = ([start, end]) => `[${log2_format(start)}; ${log2_format(end)}]`
+// any base log
+log = (x, b) => Math.log(x) / Math.log(b)
+// log-transformed extent of array of values
+log_range = (x, b) => [Math.floor(log(d3.min(x), b)), Math.ceil(log(d3.max(x), b))]
 
-log10_range = (obj, prop) => {
-  return [Math.floor(Math.log10(d3.min(obj.map(d => d[prop])))),
-          Math.ceil(Math.log10(d3.max(obj.map(d => d[prop]))))]
+// interval input for a given numeric variable
+var_interval = (v) => {
+  return interval(log_range(md.map(d => d[v]), vi[v].base), {
+    step: 1, label: vi[v].label, format: interval_format(vi[v].base), width: "95%"
+  })
 }
 
-log2_range = (obj, prop) => {
-  return [Math.floor(Math.log2(d3.min(obj.map(d => d[prop])))),
-          Math.ceil(Math.log2(d3.max(obj.map(d => d[prop]))))]
-}
-
-range = (obj, prop) => {
-  return [Math.floor(d3.min(obj.map(d => d[prop]))),
-          Math.ceil(d3.max(obj.map(d => d[prop])))]
-}
+// checkbox input for a given tag variable
+tag_checkbox = (t) => Inputs.checkbox(tags[t], {label: ti[t].label, value: tags[t]})
 ```
 
 :::::: {.column-screen-inset}
@@ -65,47 +86,31 @@ _Filter by quantitative properties._
 ::: {.filters-container}
 
 ```{ojs filter-responses}
-viewof n_responses_range = interval(log10_range(md, "n_responses"), {
-  step: 1, label: "Number of responses", width: "95%", format: log10_interval_format
-})
+viewof n_responses_range = var_interval("n_responses")
 ```
 
 ```{ojs filter-categories}
-viewof n_categories_range = interval(log2_range(md, "n_categories"), {
-  step: 1, label: "Number of categories", width: "95%", format: log2_interval_format
-  //format: ([start, end]) => `[${start}, ${end}]`
-})
-//viewof n_categories_over = Inputs.checkbox(["12+"], {value: ["12+"]})
+viewof n_categories_range = var_interval("n_categories")
 ```
 
 ```{ojs filter-participants}
-viewof n_participants_range = interval(log10_range(md, "n_participants"), {
-  step: 1, label: "Number of participants", width: "95%", format: log10_interval_format
-})
+viewof n_participants_range = var_interval("n_participants")
 ```
 
 ```{ojs filter-items}
-viewof n_items_range = interval(log10_range(md, "n_items"), {
-  step: 1, label: "Number of items", width: "95%", format: log10_interval_format
-})
+viewof n_items_range = var_interval("n_items")
 ```
 
 ```{ojs filter-responses-per-participant}
-viewof responses_per_participant_range = interval(log10_range(md, "responses_per_participant"), {
-  step: 1, label: "Responses per participant", width: "95%", format: log10_interval_format
-})
+viewof responses_per_participant_range = var_interval("responses_per_participant")
 ```
 
 ```{ojs filter-responses-per-item}
-viewof responses_per_item_range = interval(log10_range(md, "responses_per_item"), {
-  step: 1, label: "Responses per item", width: "95%", format: log10_interval_format
-})
+viewof responses_per_item_range = var_interval("responses_per_item")
 ```
 
 ```{ojs filter-density}
-viewof density_range = interval(log10_range(md, "density"), {
-  step: 1, label: "Density", width: "95%", format: log10_interval_format
-})
+viewof density_range = var_interval("density")
 ```
 
 :::
@@ -132,9 +137,8 @@ viewof prefix = Inputs.select(vars.prefix, {
 ```
 
 ```{ojs filter-longitudinal}
-long_vals = new Map([["Any", null], ["Require", true], ["Exclude", false]])
-viewof longitudinal = Inputs.select(long_vals, {
-  label: "Longitudinal variables"
+viewof longitudinal = Inputs.checkbox(vars.longitudinal, {
+  label: "Longitudinality", value: vars.longitudinal
 })
 ```
 
@@ -146,72 +150,70 @@ viewof longitudinal = Inputs.select(long_vals, {
 :::: {.panel-fill}
 
 ```{ojs data-filtered}
-ds = md.filter(d => d.n_responses >= 10 ** n_responses_range[0] &
-                    d.n_responses <= 10 ** n_responses_range[1])
-       .filter(d => d.n_categories >= 2 ** n_categories_range[0] &
-                    d.n_categories <= 2 ** n_categories_range[1])
-       .filter(d => d.n_participants >= 10 ** n_participants_range[0] &
-                    d.n_participants <= 10 ** n_participants_range[1])
-       .filter(d => d.n_items >= 10 ** n_items_range[0] &
-                    d.n_items <= 10 ** n_items_range[1])
-       .filter(d => d.responses_per_participant >= 10 ** responses_per_participant_range[0] &
-                    d.responses_per_participant <= 10 ** responses_per_participant_range[1])
-       .filter(d => d.responses_per_item >= 10 ** responses_per_item_range[0] &
-                    d.responses_per_item <= 10 ** responses_per_item_range[1])
-       .filter(d => d.density >= 10 ** density_range[0] &
-                    d.density <= 10 ** density_range[1])
+// generate range filter function for a given numeric variable and input range
+range_filter = (v, v_range) => {
+  return (d) => d[v] >= Math.pow(vi[v].base, v_range[0]) &
+                d[v] <= Math.pow(vi[v].base, v_range[1])
+}
 
-       .filter(d => variable.some(v => d.variable.includes(v)))
-       .filter(d => prefix.some(v => d.prefix.includes(v)))
-       .filter(d => longitudinal === null | longitudinal === d.longitudinal)
-       
-       .filter(d => age_range.some(v => d.age_range.includes(v)))
-       .filter(d => child_age.some(v => d.child_age__for_child_focused_studies_.includes(v)))
-       .filter(d => construct_type.some(v => d.construct_type.includes(v)))
-       .filter(d => sample.some(v => d.sample.includes(v)))
-       .filter(d => measurement_tool.some(v => d.measurement_tool.includes(v)))
-       .filter(d => item_format.some(v => d.item_format.includes(v)))
-       .filter(d => primary_language.some(v => d.primary_language_s_.includes(v)))
-       .filter(d => license.some(v => d.license.includes(v)))
-```
-
-```{ojs}
-num_vars = new Map([["Number responses", "n_responses"],
-                    ["Number participants", "n_participants"],
-                    ["Number items", "n_items"],
-                    ["Responses per participant", "responses_per_participant"],
-                    ["Responses per item", "responses_per_item"],
-                    ["Density (#responses/(#ids*#items))", "density"]])
-
-cat_vars = new Map([
-  ["None", null],
-  ["Age range", "age_range"],
-  ["Child age (for child-focused studies)", "child_age__for_child_focused_studies_"],
-  ["Construct type", "construct_type"],
-  ["Sample", "sample"],
-  ["Measurement tool", "measurement_tool"],
-  ["Item format", "item_format"],
-  ["Primary language(s)", "primary_language_s_"],
-  ["License", "license"]
+// array of range filter functions for all numeric variables
+range_filters = ([
+  range_filter( "n_responses",               n_responses_range               ),
+  range_filter( "n_categories",              n_categories_range              ),
+  range_filter( "n_participants",            n_participants_range            ),
+  range_filter( "n_items",                   n_items_range                   ),
+  range_filter( "responses_per_participant", responses_per_participant_range ),
+  range_filter( "responses_per_item",        responses_per_item_range        ),
+  range_filter( "density",                   density_range                   ),
 ])
+
+// generate overlap filter function for a given categorical variable and input values
+overlap_filter = (t, t_vals) => {
+  return (d) => t_vals.some(v => d[t].includes(v))
+}
+
+// array of overlap filter functions for all categorical variables
+overlap_filters = ([
+  overlap_filter( "age_range",                             age_range_vals        ),
+  overlap_filter( "child_age__for_child_focused_studies_", child_age_vals        ),
+  overlap_filter( "construct_type",                        construct_type_vals   ),
+  overlap_filter( "sample",                                sample_vals           ),
+  overlap_filter( "measurement_tool",                      measurement_tool_vals ),
+  overlap_filter( "item_format",                           item_format_vals      ),
+  overlap_filter( "primary_language_s_",                   primary_language_vals ),
+  overlap_filter( "license",                               license_vals          ),
+  overlap_filter( "variable",                              variable              ),
+  overlap_filter( "prefix",                                prefix                ),
+  overlap_filter( "longitudinal",                          longitudinal          ),
+])
+
+// apply all range filters and overlap filters to metadata
+all_filters = [...range_filters, ...overlap_filters]
+ds = all_filters.reduce((mdf, fun) => mdf.filter(fun), md)
 ```
 
 ::: {.plot-container}
 ::: {.plot-inputs}
-```{ojs}
+
+```{ojs x-var}
+num_vars = new Map(Object.entries(vi).map(([key, value]) => [value.label, key]))
 viewof x_var = Inputs.select(num_vars, {value: "n_items", label: "X axis"})
 ```
 
-```{ojs}
+```{ojs y-var}
 viewof y_var = Inputs.select(num_vars, {value: "n_participants", label: "Y axis"})
 ```
 
-```{ojs}
+```{ojs color-var}
+cat_array = Object.entries(ti).map(([key, value]) => [value.label, key])
+cat_vars = new Map([["None", null], ...cat_array])
 viewof color_var = Inputs.select(cat_vars, {label: "Color"})
 ```
+
 :::
 
-```{ojs}
+```{ojs scatter}
+// define color for plot content: color_var if set, otherwise default_color
 default_color = "grey"
 plt_color = color_var || default_color
 
@@ -234,50 +236,43 @@ viewof metadata_scatter = Plot.plot({
 ```
 :::
 
-```{ojs}
+```{ojs result-message}
 html`<p><i>Filtered to ${ds.length} datasets out of ${md.length} total.</i></p>`
 ```
 
 ```{ojs table}
-function sparkbar(max) {
-  return x => htl.html`<div style="
-    background: lightblue;
-    width: ${100 * Math.log(x) / Math.log(max)}%;
-    float: right;
-    padding-right: 3px;
-    box-sizing: border-box;
-    overflow: visible;
-    display: flex;
-    justify-content: end;">${x.toLocaleString("en")}`
+// sparkbar element generator given max value and log base
+sparkbar = (max, b) => {
+  return x => htl.html`<div class="sparkbar" style="width: ${100 * log(x, b) / log(max, b)}%;">${x.toLocaleString("en")}`
 }
 
-function inlinehist(vals, head) {
+// sparkbar element generator for a given numeric variable
+var_sparkbar = (v) => sparkbar(d3.max(ds, d => d[v]), vi[v].base)
+
+// sparkbars for each numeric variable
+sparks = Object.fromEntries(Object.entries(vi).map(([key, value]) => [key, var_sparkbar(key)]))
+
+// inline histogram element given array of values and header string
+inlinehist = (vals, head) => {
   return htl.html`<span class="hist">${hist(vals)}${head}</span>`
 }
+
+// inline histogram for a given numeric variable
+var_hist = (v) => inlinehist(ds.map(d => log(d[v], vi[v].base)), v)
+
+// histograms for each numeric variable
+hists = Object.fromEntries(Object.entries(vi).map(([key, value]) => [key, var_hist(key)]))
 
 // data table for selected tables
 Inputs.table(ds, {
   rows: 20,
   sort: "n_responses", reverse: true,
+  // show columns "table", all numeric variables, and all tag variables
   columns: ["table", ...num_vars.values(), ...cat_vars.values()],
-  header: {
-    n_responses: inlinehist(ds.map(d => Math.log10(d.n_responses)), "n_responses"),
-    n_categories: inlinehist(ds.map(d => Math.log2(d.n_categories)), "n_categories"),
-    n_participants: inlinehist(ds.map(d => Math.log10(d.n_participants)), "n_participants"),
-    n_items: inlinehist(ds.map(d => Math.log10(d.n_items)), "n_items"),
-    responses_per_participant: inlinehist(ds.map(d => Math.log10(d.responses_per_participant)), "responses_per_participant"),
-    responses_per_item: inlinehist(ds.map(d => Math.log10(d.responses_per_item)), "responses_per_item"),
-    density: inlinehist(ds.map(d => d.density), "density")
-  },
-  format: {
-    n_responses: sparkbar(d3.max(ds, d => d.n_responses)),
-    n_categories: sparkbar(d3.max(ds, d => d.n_categories)),
-    n_participants: sparkbar(d3.max(ds, d => d.participants)),
-    n_items: sparkbar(d3.max(ds, d => d.n_items)),
-    responses_per_participant: sparkbar(d3.max(ds, d => d.responses_per_participant)),
-    responses_per_item: sparkbar(d3.max(ds, d => d.responses_per_item)),
-    density: sparkbar(d3.max(ds, d => d.density)),
-  }
+  // use inline histograms in header
+  header: hists,
+  // use sparkbars in cells
+  format: sparks
 })
 ```
 
@@ -292,51 +287,35 @@ _Filter by qualitative features._
 ::: {.filters-container}
 
 ```{ojs filter-age-range}
-viewof age_range = Inputs.checkbox(tags.age_range, {
-  label: "Age range", value: tags.age_range
-})
+viewof age_range_vals = tag_checkbox("age_range")
 ```
 
 ```{ojs filter-child-age}
-viewof child_age = Inputs.checkbox(tags.child_age__for_child_focused_studies_, {
-  label: "Child age (for child-focused studies)", value: tags.child_age__for_child_focused_studies_
-})
+viewof child_age_vals = tag_checkbox("child_age__for_child_focused_studies_")
 ```
 
 ```{ojs filter-construct-type}
-viewof construct_type = Inputs.checkbox(tags.construct_type, {
-  label: "Construct type", value: tags.construct_type
-})
+viewof construct_type_vals = tag_checkbox("construct_type")
 ```
 
 ```{ojs filter-sample}
-viewof sample = Inputs.checkbox(tags.sample, {
-  label: "Sample", value: tags.sample
-})
+viewof sample_vals = tag_checkbox("sample")
 ```
 
 ```{ojs filter-measurement-tool}
-viewof measurement_tool = Inputs.checkbox(tags.measurement_tool, {
-  label: "Measurement tool", value: tags.measurement_tool
-})
+viewof measurement_tool_vals = tag_checkbox("measurement_tool")
 ```
 
 ```{ojs filter-item-format}
-viewof item_format = Inputs.checkbox(tags.item_format, {
-  label: "Item format", value: tags.item_format
-})
+viewof item_format_vals = tag_checkbox("item_format")
 ```
 
 ```{ojs filter-primary-language}
-viewof primary_language = Inputs.checkbox(tags.primary_language_s_, {
-  label: "Primary language(s)", value: tags.primary_language_s_
-})
+viewof primary_language_vals = tag_checkbox("primary_language_s_")
 ```
 
 ```{ojs filter-license}
-viewof license = Inputs.checkbox(tags.license, {
-  label: "License", value: tags.license
-})
+viewof license_vals = tag_checkbox("license")
 ```
 
 :::
@@ -345,10 +324,3 @@ viewof license = Inputs.checkbox(tags.license, {
 
 :::::
 ::::::
-
-<!-- ## IRW Metadata -->
-
-<!-- Examine sample sizes and other dataset summary statistics. -->
-
-<!-- {{< include _viz-metadata.qmd >}} -->
-
