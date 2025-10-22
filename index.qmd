@@ -18,13 +18,18 @@ title-block-banner-color: white
 
 {{< include components/_interval.qmd >}}
 {{< include components/_hist.qmd >}}
+{{< include components/_tol.qmd >}}
 
 ```{ojs prelims}
 // import newer version of observable plot than the one embedded in quarto 
 Plot = import("https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm")
 
 md = transpose(datasets)
+md
+//mda = md.map(obj => Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, Array.isArray(value) ? value : [value]])))
+//mda
 ```
+
 
 {{< include components/_style.qmd >}}
 
@@ -55,7 +60,8 @@ ti = ({
 
 ```{ojs filter-funs}
 // formatting function for how two ended slider displays selected range
-pow_format = (v, b) => Math.pow(b, v).toLocaleString('en-US')
+// (use SI prefix if base 10 otherwise  default format)
+pow_format = (v, b) => b === 10 ? d3.format("~s")(Math.pow(b, v)) : Plot.formatNumber("en-US")(Math.pow(b, v))
 interval_format = (b) => ([start, end]) => `[${pow_format(start, b)}; ${pow_format(end, b)}]`
 
 // any base log
@@ -205,7 +211,8 @@ viewof y_var = Inputs.select(num_vars, {value: "n_participants", label: "Y axis"
 ```
 
 ```{ojs color-var}
-cat_array = Object.entries(ti).map(([key, value]) => [value.label, key])
+//cat_array = Object.entries(ti).map(([key, value]) => [value.label, key])
+cat_array = color_vars.map((t) => [ti[t].label, t])
 cat_vars = new Map([["None", null], ...cat_array])
 viewof color_var = Inputs.select(cat_vars, {label: "Color"})
 ```
@@ -215,22 +222,45 @@ viewof color_var = Inputs.select(cat_vars, {label: "Color"})
 ```{ojs scatter}
 // define color for plot content: color_var if set, otherwise default_color
 default_color = "grey"
-plt_color = color_var || default_color
+
+// construct object of all variables to be tip channels
+// table = ({table: {label: "table"}})
+// channels = Object.fromEntries(Object.entries({...table, ...vi, ...ti}).map(([key, value]) => [key, key]))
+
+// given array of strings or single string, collapses to one comma separated string
+stringify = (x) => {
+  const ax = Array.isArray(x) ? x : [x]
+  return ax.join(", ")
+}
 
 // scatter plot
-viewof metadata_scatter = Plot.plot({
-  x: {type: "log"},
-  y: {type: "log"},
+Plot.plot({
+  x: {type: "log", base: vi[x_var].base},
+  y: {type: "log", base: vi[y_var].base},
   width: 700,
   grid: true,
-  color: {legend: color_var != null},
+  color: {range: tol.QualMuted, legend: color_var != null},
   marks: [
     // points
-    Plot.dot(ds, {x: x_var, y: y_var, stroke: plt_color}),
+    Plot.dot(ds, {
+      x: x_var,
+      y: y_var,
+      stroke: (d) => stringify(d[color_var])
+    }),
     // regression line
-    Plot.linearRegressionY(ds, {x: x_var, y: y_var, stroke: plt_color}),
+    Plot.linearRegressionY(ds, {
+      x: x_var,
+      y: y_var,
+      stroke: (d) => stringify(d[color_var])
+    }),
     // tooltips
-    Plot.tip(ds, Plot.pointer({x: x_var, y: y_var, stroke: plt_color}))
+    Plot.tip(ds, Plot.pointer({
+      x: x_var,
+      y: y_var,
+      stroke: (d) => stringify(d[color_var]),
+      title: "table",
+      // channels: channels
+    }))
   ]
 })
 ```

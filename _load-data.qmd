@@ -75,6 +75,13 @@ tags <- tag_table |>
   # mutate(across(everything(), \(v) na_if(v, "NA"))) |>
   # mutate(across(c(child_age__for_child_focused_studies_, construct_type, measurement_tool, primary_language_s_, sample),
 
+color_vars <- tags |>
+  pivot_longer(cols = -table, names_to = "tag", values_to = "value") |>
+  distinct(tag, value) |>
+  count(tag) |>
+  filter(n <= 10) |>
+  pull(tag)
+
 tag_vals <- tags |>
   pivot_longer(cols = -table, names_to = "tag", values_to = "value") |>
   unnest(value) |>
@@ -107,6 +114,7 @@ data_index <- biblio |>
 ojs_define(data_index = data_index)
 # ojs_define(metadata = metadata)
 ojs_define(datasets = datasets)
-ojs_define(tags = tag_vals)
 ojs_define(vars = var_vals)
+ojs_define(tags = tag_vals)
+ojs_define(color_vars = color_vars)
 ```
