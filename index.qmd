@@ -25,11 +25,7 @@ title-block-banner-color: white
 Plot = import("https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm")
 
 md = transpose(datasets)
-md
-//mda = md.map(obj => Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, Array.isArray(value) ? value : [value]])))
-//mda
 ```
-
 
 {{< include components/_style.qmd >}}
 
@@ -196,6 +192,7 @@ overlap_filters = ([
 // apply all range filters and overlap filters to metadata
 all_filters = [...range_filters, ...overlap_filters]
 ds = all_filters.reduce((mdf, fun) => mdf.filter(fun), md)
+dsf = ds.map(d => Object.fromEntries(Object.entries(d).map(([key, value]) => [key, value === "NA" ? null : value])))
 ```
 
 ::: {.plot-container}
@@ -220,18 +217,30 @@ viewof color_var = Inputs.select(cat_vars, {label: "Color"})
 :::
 
 ```{ojs scatter}
-// define color for plot content: color_var if set, otherwise default_color
-default_color = "grey"
+// color scheme
+scheme = tol.QualMuted
+
+// default color when there's no color variable
+default_color = "darkgrey"
+
+// color for missing values
+unk_color = "lightgrey"
+
+// indicator whether to use color
+use_color = color_var !== null
 
 // construct object of all variables to be tip channels
 // table = ({table: {label: "table"}})
 // channels = Object.fromEntries(Object.entries({...table, ...vi, ...ti}).map(([key, value]) => [key, key]))
 
+// turn value into array if it isn't one
+arrayify = (x) => Array.isArray(x) ? x : [x]
+
 // given array of strings or single string, collapses to one comma separated string
-stringify = (x) => {
-  const ax = Array.isArray(x) ? x : [x]
-  return ax.join(", ")
-}
+stringify = (x) => x === null ? null : arrayify(x).join(", ")
+
+// domain of values to use for color
+color_vals = color_var === null ? default_color : tags[color_var].filter((v) => v !== "NA")
 
 // scatter plot
 Plot.plot({
@@ -239,25 +248,30 @@ Plot.plot({
   y: {type: "log", base: vi[y_var].base},
   width: 700,
   grid: true,
-  color: {range: tol.QualMuted, legend: color_var != null},
+  color: {
+    domain: color_vals,
+    range: scheme,
+    unknown: unk_color,
+    legend: use_color
+  },
   marks: [
     // points
-    Plot.dot(ds, {
+    Plot.dot(dsf, {
       x: x_var,
       y: y_var,
-      stroke: (d) => stringify(d[color_var])
+      stroke: use_color ? (d) => stringify(d[color_var]) : default_color
     }),
     // regression line
-    Plot.linearRegressionY(ds, {
+    Plot.linearRegressionY(dsf, {
       x: x_var,
       y: y_var,
-      stroke: (d) => stringify(d[color_var])
+      stroke: use_color ? (d) => stringify(d[color_var]) : default_color
     }),
     // tooltips
-    Plot.tip(ds, Plot.pointer({
+    Plot.tip(dsf, Plot.pointer({
       x: x_var,
       y: y_var,
-      stroke: (d) => stringify(d[color_var]),
+      stroke: use_color ? (d) => stringify(d[color_var]) : default_color,
       title: "table",
       // channels: channels
     }))
@@ -270,7 +284,7 @@ Plot.plot({
 html`<p><i>Filtered to ${ds.length} datasets out of ${md.length} total.</i></p>`
 ```
 
-```{ojs table}
+```{ojs table-funs}
 // sparkbar element generator given max value and log base
 sparkbar = (max, b) => {
   return x => htl.html`<div class="sparkbar" style="width: ${100 * log(x, b) / log(max, b)}%;">${x.toLocaleString("en")}`
@@ -293,16 +307,40 @@ var_hist = (v) => inlinehist(ds.map(d => log(d[v], vi[v].base)), v)
 // histograms for each numeric variable
 hists = Object.fromEntries(Object.entries(vi).map(([key, value]) => [key, var_hist(key)]))
 
+// combine two arrays into pairs in one array
+zip = (a, b) => a.map((k, i) => [k, b[i]])
+
+// set colors for array of values, using default if there are too values
+pal = (v, colors, default_color) => v.length <= colors.length ? colors.slice(0, v.length) : Array(v.length).fill(default_color)
+
+// create object with colors for each tag value
+tag_colors = Object.fromEntries(Object.entries(tags).map(([tag, tag_values]) => {
+  const vals = tag_values.sort().filter((v) => v !== "NA");
+  return [tag, Object.fromEntries(zip(vals, pal(vals, scheme, default_color)))]
+}))
+
+// badge element for a given tag and values
+badgify = (vals, tag) => htl.html`<div>
+  ${arrayify(vals).map(val => htl.html.fragment`
+    <span class="badge" style="background-color: ${tag_colors[tag][val]};">${val}</span>`)}
+</div>`
+
+// badge elements for each tag
+badges = Object.fromEntries(Object.keys(ti).map(tag => [tag, d => badgify(d, tag)]))
+```
+
+
+```{ojs table}
 // data table for selected tables
-Inputs.table(ds, {
+Inputs.table(dsf, {
   rows: 20,
   sort: "n_responses", reverse: true,
   // show columns "table", all numeric variables, and all tag variables
-  columns: ["table", ...num_vars.values(), ...cat_vars.values()],
+  columns: ["table", ...Array.from(Object.keys(vi)), ...Array.from(Object.keys(ti))],
   // use inline histograms in header
   header: hists,
-  // use sparkbars in cells
-  format: sparks
+  // use sparkbars and badges in cells
+  format: {...sparks, ...badges}
 })
 ```
 
@@ -351,6 +389,5 @@ viewof license_vals = tag_checkbox("license")
 :::
 :::
 ::::
-
 :::::
 ::::::
