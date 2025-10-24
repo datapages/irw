@@ -1,0 +1,81 @@
+---
+title: "Simulating Item Difficulties using IRW"
+---
+
+Simulation is a powerful way to understand how psychometric models behave under different conditions. But many simulation studies make a simplifying assumption — that item difficulties follow a perfectly normal or uniform distribution. In reality, real-world tests rarely look that simple. Some have mostly easy items, others have clusters of hard ones, and some even show multiple peaks in difficulty levels.
+
+This tutorial introduces a practical way to simulate realistic item difficulties based on empirical data drawn from IRW. Using the `irw` R package, you can easily generate item difficulties that reflect the diversity seen in real assessments rather than relying on artificial assumptions.
+
+## How to Simulate Realistic Item Difficulties
+
+Before simulation, we estimated item difficulties and their uncertainties across multiple IRW datasets and stored the results in a pooled database. Based on these estimates, empirical difficulty distributions were constructed by sampling according to the estimated parameters for each dataset (details refer to Zhang et al., 2025).
+The `irw_simu_diff()` function draws samples directly from these empirically derived distributions, rather than assuming a normal or uniform form, thereby generating realistic difficulty parameters that reflect both observed variability and estimation uncertainty.
+
+```{r, eval=FALSE}
+# download the package
+devtools::install_github("itemresponsewarehouse/Rpkg") 
+
+# l oad the difficulty pool from the package
+data("diff_long", package = "irw")
+
+
+# seed setting for simulation reproducibility
+set.seed(1)
+
+# usage of the simu_item_diff() function
+simulated_difficulties <- irw::irw_simu_diff(
+  num_items = 25,
+  num_replications = 100,
+  difficulty_pool = diff_long
+)
+# num_items and num_replications define the number of items and the number of simulation replications, respectively
+
+```
+
+The current difficulty pool includes 73 datasets from IRW (version 11.12), covering a wide range of number of items, sample sizes, and difficulty distributions. The IRW database is growing. As new datasets are added, we will periodically update the difficulty pool in the `irw` package  to reflect an even broader range of assessments. 
+
+<div style="text-align: center;">
+![](diffsim/n_nitems.png)
+</div>
+
+
+
+
+
+Below is the figure showing how varied these distributions can be — some centered, some skewed, some even multimodal. This diversity helps us better understand how measurement behaves under realistic conditions.
+
+
+<div style="text-align: center;">
+![Distribution of Item Difficulties](diffsim/ridge_irw.png)
+
+<p style="font-size: 0.9em; color: gray;"><strong>Note:</strong> The color intensity reflects the standard deviation of difficulties in each dataset, with darker shades signifying greater variability.</p>
+
+</div>
+
+
+## A Small Simulation: Why Should We Care About Difficulty Distributions?
+
+In this section, we ran a small simulation to show why the shape of the item difficulty distribution matters. In particular, we examined how different distributions affect the sample size required for accurate parameter estimation.
+
+We used the empirical difficulty distributions from each of the 73 datasets in the IRW pool.
+For each dataset, the procedure consisted of the following steps:
+
+- Generate item difficulties: We sampled 50 items (n_item = 50) according to the empirical difficulty distribution from that dataset, and repeated this process 100 replications.
+
+- Simulate response data and estimate parameters: For a given sample size $N$, we generated response data using a simple Rasch model with the true difficulties. We then re-estimated item difficulties from the simulated responses and computed the correlation between estimated and true parameters.
+  
+- Search for the minimal sufficient sample size: To efficiently determine how many respondents were needed to achieve a reliable recovery, we used a binary search between $N$ = 50 and 10,000. The search terminated once the average correlation across replications exceeded 0.95 and the gap between the lower and upper bounds of the search interval was less than 10.
+  
+The results revealed differences across datasets. For some difficulty distributions, accurate recovery could be achieved with fewer than one hundred respondents, but for others, several hundred were needed to reach the same level of precision. As SD increased, estimation improved and the required sample size initially decreased. However, when SD became large, the required sample size increased again.
+
+<div style="text-align: center;">
+  <img src="diffsim/ridge_sample.png" alt="Distribution of Item Difficulties" width="40%">
+</div>
+
+
+
+## Reference
+
+For more details and additional simulation results, see:
+
+- Zhang, L., Liu, Y., Molenaar, D., Gilbert, J.B., Kanopka, K., & Domingue, B.W. (2025). Realistic Simulation of Item Difficulties. [PsyArXiv](https://doi.org/10.31234/osf.io/jbhxy_v2).
