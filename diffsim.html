@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Contact Us – Item Response Warehouse</title>
+<title>Simulating Item Difficulties using IRW – Item Response Warehouse</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -19,6 +19,41 @@ ul.task-list li input[type="checkbox"] {
   width: 0.8em;
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 </style>
 
@@ -78,6 +113,35 @@ gtag('js', new Date());
 gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </script>
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 </head>
 
@@ -224,7 +288,7 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Contact Us</h1>
+<h1 class="title">Simulating Item Difficulties using IRW</h1>
 </div>
 
 
@@ -241,16 +305,101 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </header>
 
 
-<p>The IRW is a work in progress. If you</p>
+<p>Simulation is a powerful way to understand how psychometric models behave under different conditions. But many simulation studies make a simplifying assumption — that item difficulties follow a perfectly normal or uniform distribution. In reality, real-world measures rarely look that simple. Some have mostly easy items, others have clusters of hard ones, and some even show multiple peaks in difficulty levels.</p>
+<p>This tutorial introduces a practical way to simulate realistic item difficulties based on empirical data drawn from IRW. Using the <code>irw</code> <a href="https://github.com/itemresponsewarehouse/Rpkg">R package</a>, you can easily generate item difficulties that reflect the diversity seen in real assessments rather than relying on artificial assumptions.</p>
+<section id="how-to-simulate-realistic-item-difficulties" class="level2">
+<h2 class="anchored" data-anchor-id="how-to-simulate-realistic-item-difficulties">How to Simulate Realistic Item Difficulties</h2>
+<p>Before simulation, we estimated item difficulties and their uncertainties across multiple IRW datasets and stored the results in a pooled database. Based on these estimates, empirical difficulty distributions were constructed by sampling according to the estimated parameters for each dataset (details refer to <a href="https://doi.org/10.31234/osf.io/jbhxy_v2">Zhang et al., 2025</a>). The <code>irw_simu_diff()</code> function draws samples directly from these empirically derived distributions, rather than assuming a normal or uniform form, thereby generating realistic difficulty parameters that reflect both observed variability and estimation uncertainty.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># download the package</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>devtools<span class="sc">::</span><span class="fu">install_github</span>(<span class="st">"itemresponsewarehouse/Rpkg"</span>) </span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"># load the difficulty pool from the package</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="fu">data</span>(<span class="st">"diff_long"</span>, <span class="at">package =</span> <span class="st">"irw"</span>)</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"># seed setting for simulation reproducibility</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>)</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co"># usage of the simu_item_diff() function</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>simulated_difficulties <span class="ot">&lt;-</span> irw<span class="sc">::</span><span class="fu">irw_simu_diff</span>(</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">num_items =</span> <span class="dv">25</span>,</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">num_replications =</span> <span class="dv">100</span>,</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">difficulty_pool =</span> diff_long</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="co"># num_items and num_replications define the number of items and the number of simulation replications, respectively</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</section>
+<section id="difficulty-estimates-pool" class="level2">
+<h2 class="anchored" data-anchor-id="difficulty-estimates-pool">Difficulty Estimates Pool</h2>
+<p>The current difficulty pool includes 145 datasets from IRW (as of 10-2025), covering a wide range of sample sizes and number of items.</p>
+<div style="text-align: center;">
+<p><img src="diffsim/n_nitems.png" class="img-fluid"></p>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># load the difficulty pool from the package</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="fu">data</span>(<span class="st">"diff_long"</span>, <span class="at">package =</span> <span class="st">"irw"</span>)</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co"># package for plot</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(dplyr)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(ggplot2)</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(ggridges)</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>diff_long_sd <span class="ot">&lt;-</span> diff_long <span class="sc">|&gt;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(dataset) <span class="sc">%&gt;%</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">SD =</span> <span class="fu">sd</span>(difficulty, <span class="at">na.rm =</span> <span class="cn">TRUE</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ungroup</span>()</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(diff_long_sd, <span class="fu">aes</span>(<span class="at">x =</span> difficulty, <span class="at">y =</span> <span class="fu">reorder</span>(dataset, SD), <span class="at">fill =</span> SD)) <span class="sc">+</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_density_ridges</span>(<span class="at">scale =</span> <span class="dv">3</span>, <span class="at">alpha =</span> <span class="fl">0.5</span>, <span class="at">rel_min_height =</span> <span class="fl">0.01</span>) <span class="sc">+</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_gradient</span>(<span class="at">low =</span> <span class="st">"lightblue"</span>, <span class="at">high =</span> <span class="st">"blue"</span>) <span class="sc">+</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_classic</span>() <span class="sc">+</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">axis.text.y =</span> <span class="fu">element_blank</span>(),</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="at">axis.ticks.y =</span> <span class="fu">element_blank</span>()</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">"Difficulty"</span>,</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">y =</span> <span class="cn">NULL</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<p>Below is the figure showing how varied these distributions can be — some centered, some skewed, some even multimodal. This diversity helps us better understand how measurement behaves under realistic conditions.</p>
+<div style="text-align: center;">
+<p><img src="diffsim/ridge_irw.png" alt="Distribution of Item Difficulties" width="40%"></p>
+<p style="font-size: 0.9em; color: gray;">
+<strong>Note:</strong> The color intensity reflects the standard deviation of difficulties in each dataset, with darker shades signifying greater variability.
+</p>
+</div>
+<p>The IRW database is growing. As new datasets are added, we will periodically update the difficulty pool in the <code>irw</code> package to reflect an even broader range of assessments.</p>
+</section>
+<section id="a-small-simulation-why-should-we-care-about-difficulty-distributions" class="level2">
+<h2 class="anchored" data-anchor-id="a-small-simulation-why-should-we-care-about-difficulty-distributions">A Small Simulation: Why Should We Care About Difficulty Distributions?</h2>
+<p>We ran a small simulation to show why the item difficulty distributions matter. In particular, we examined how different distributions affect the sample size required for accurate parameter estimation.</p>
+<p>We used the empirical difficulty distributions from each of the datasets in the IRW pool. For each dataset, the procedure consisted of the following steps:</p>
 <ul>
-<li><p>Have questions</p></li>
-<li><p>Want to send comments on any data</p></li>
-<li><p>Have pointers to data we should add</p></li>
-<li><p>Want to get involved</p></li>
+<li><p>Generate item difficulties: We sampled 50 items according to the empirical difficulty distribution from that dataset (as shown in the ridge plot above), and repeated this process 100 replications.</p></li>
+<li><p>Simulate response data and estimate parameters: For a given sample size <span class="math inline">\(N\)</span>, we generated response data using a simple Rasch model with the known difficulties. We then estimated item difficulties from the simulated responses and computed the correlation between estimated and true parameters.</p></li>
+<li><p>Search for the minimal sufficient sample size: To efficiently determine how many respondents were needed to achieve a reliable recovery, we used a binary search between <span class="math inline">\(N\)</span> = 50 and 10,000. The search terminated once the average correlation across replications exceeded 0.95 and the gap between the lower and upper bounds of the search interval was less than 10.</p></li>
 </ul>
-<p>then please contact us at <code>itemresponsewarehouse@stanford.edu</code>.</p>
+<p>The sample size requirement analysis demonstrates the strong influence of item difficulty distribution on model estimation. The results (shown below) revealed notable differences across datasets: for some difficulty distributions, accurate recovery could be achieved with fewer than one hundred respondents, whereas for others, several hundred were needed to reach the same level of accuracy. This variation is independent of the number of items (given that we always sampled 50 items). When the standard deviation (SD) of item difficulty is below 1, a smaller SD indicates less variation among item difficulties, which requires a larger sample size. As the SD increases, the required sample size initially decreases, but once the SD becomes too large, the required sample size begins to increase again.</p>
+<div style="text-align: center;">
+<p><img src="./diffsim/scatter_sd_logminn.png" width="60%"></p>
+</div>
+</section>
+<section id="reference" class="level2">
+<h2 class="anchored" data-anchor-id="reference">Reference</h2>
+<p>For more details and additional simulation results, see:</p>
+<ul>
+<li>Zhang, L., Liu, Y., Molenaar, D., Gilbert, J.B., Kanopka, K., &amp; Domingue, B.W. (2025). Realistic Simulation of Item Difficulties. <a href="https://doi.org/10.31234/osf.io/jbhxy_v2">PsyArXiv</a>.</li>
+</ul>
 
 
+</section>
 
 </main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
