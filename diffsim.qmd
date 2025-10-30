@@ -41,7 +41,33 @@ The current difficulty pool includes 145 datasets from IRW (as of 10-2025), cove
 </div>
 
 
+```{r, eval=FALSE}
+# load the difficulty pool from the package
+data("diff_long", package = "irw")
 
+# package for plot
+library(dplyr)
+library(ggplot2)
+library(ggridges)
+
+diff_long_sd <- diff_long |>
+  group_by(dataset) %>%
+  mutate(SD = sd(difficulty, na.rm = TRUE)) %>%
+  ungroup()
+
+ggplot(diff_long_sd, aes(x = difficulty, y = reorder(dataset, SD), fill = SD)) +
+  geom_density_ridges(scale = 3, alpha = 0.5, rel_min_height = 0.01) +
+  scale_fill_gradient(low = "lightblue", high = "blue") +
+  theme_classic() +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  labs(
+    x = "Difficulty",
+    y = NULL
+  )
+```
 
  
 Below is the figure showing how varied these distributions can be — some centered, some skewed, some even multimodal. This diversity helps us better understand how measurement behaves under realistic conditions.
