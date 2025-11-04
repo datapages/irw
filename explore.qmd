@@ -1,0 +1,458 @@
+---
+callout-icon: false
+---
+
+{{< include _load-data-explore.qmd >}}
+
+{{< include components/_interval.qmd >}}
+{{< include components/_hist.qmd >}}
+{{< include components/_tol.qmd >}}
+
+```{ojs prelims}
+// import newer version of observable plot than the one embedded in quarto 
+Plot = import("https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm")
+
+md = transpose(datasets)
+```
+
+{{< include components/_style.qmd >}}
+
+```{ojs info}
+// info for numeric variables
+vi = ({
+  "n_responses":               { label: "Number responses (n_responses)",                        base: 10 },
+  "n_categories":              { label: "Number categories (n_categories)",                      base:  2 },
+  "n_participants":            { label: "Number participants (n_participants)",                  base: 10 },
+  "n_items":                   { label: "Number items (n_items)",                                base: 10 },
+  "responses_per_participant": { label: "Responses per participant (responses_per_participant)", base: 10 },
+  "responses_per_item":        { label: "Responses per item (responses_per_item)",               base: 10 },
+  "density":                   { label: "Density (density)",                                     base: 10 }
+})
+
+// info for tag variables
+ti = ({
+  "age_range":                             { label: "Age range"                             } ,
+  "child_age__for_child_focused_studies_": { label: "Child age (for child-focused studies)" } ,
+  "construct_type":                        { label: "Construct type"                        } ,
+  "sample":                                { label: "Sample"                                } ,
+  "measurement_tool":                      { label: "Measurement tool"                      } ,
+  "item_format":                           { label: "Item format"                           } ,
+  "primary_language_s_":                   { label: "Primary language(s)"                   } ,
+  "license":                               { label: "License"                               } ,
+})
+```
+
+```{ojs filter-funs}
+// formatting function for how two ended slider displays selected range
+// (use SI prefix if base 10 otherwise  default format)
+pow_format = (v, b) => b === 10 ? d3.format("~s")(Math.pow(b, v)) : Plot.formatNumber("en-US")(Math.pow(b, v))
+interval_format = (b) => ([start, end]) => `[${pow_format(start, b)}; ${pow_format(end, b)}]`
+
+// any base log
+log = (x, b) => Math.log(x) / Math.log(b)
+// log-transformed extent of array of values
+log_range = (x, b) => [Math.floor(log(d3.min(x), b)), Math.ceil(log(d3.max(x), b))]
+
+// interval input for a given numeric variable
+var_interval = (v) => {
+  return interval(log_range(md.map(d => d[v]), vi[v].base), {
+    step: 1, label: vi[v].label, format: interval_format(vi[v].base), width: "95%"
+  })
+}
+
+// checkbox input for a given tag variable
+//tag_checkbox = (t) => Inputs.checkbox(tags[t], {label: ti[t].label, value: tags[t]})
+tag_checkbox = (t) => Inputs.checkbox(tags[t], {value: tags[t]})
+```
+
+:::::: {.column-screen-inset}
+::::: {layout="[ [19,55,26] ]"}
+
+:::: {.panel-input}
+
+_Filter by quantitative properties._
+
+::: {.side-inputs}
+
+::: {.filters-container}
+
+```{ojs filter-responses}
+viewof n_responses_range = var_interval("n_responses")
+```
+
+```{ojs filter-categories}
+viewof n_categories_range = var_interval("n_categories")
+```
+
+```{ojs filter-participants}
+viewof n_participants_range = var_interval("n_participants")
+```
+
+```{ojs filter-items}
+viewof n_items_range = var_interval("n_items")
+```
+
+```{ojs filter-responses-per-participant}
+viewof responses_per_participant_range = var_interval("responses_per_participant")
+```
+
+```{ojs filter-responses-per-item}
+viewof responses_per_item_range = var_interval("responses_per_item")
+```
+
+```{ojs filter-density}
+viewof density_range = var_interval("density")
+```
+
+
+:::
+:::
+
+-----
+
+_Filter by variables._
+
+::: {.side-inputs}
+
+::: {.filters-container}
+
+```{ojs filter-variable}
+viewof variable = Inputs.select(vars.variable, {
+  label: "Variable", multiple: true, value: vars.variable
+})
+```
+
+```{ojs filter-prefix}
+viewof prefix = Inputs.select(vars.prefix, {
+  label: "Variable prefix", multiple: true, value: vars.prefix
+})
+```
+
+:::
+:::
+
+::::
+
+:::: {.panel-fill}
+
+```{ojs data-filtered}
+// generate range filter function for a given numeric variable and input range
+range_filter = (v, v_range) => {
+  return (d) => d[v] >= Math.pow(vi[v].base, v_range[0]) &
+                d[v] <= Math.pow(vi[v].base, v_range[1])
+}
+
+// array of range filter functions for all numeric variables
+range_filters = ([
+  range_filter( "n_responses",               n_responses_range               ),
+  range_filter( "n_categories",              n_categories_range              ),
+  range_filter( "n_participants",            n_participants_range            ),
+  range_filter( "n_items",                   n_items_range                   ),
+  range_filter( "responses_per_participant", responses_per_participant_range ),
+  range_filter( "responses_per_item",        responses_per_item_range        ),
+  range_filter( "density",                   density_range                   ),
+])
+
+// generate overlap filter function for a given categorical variable and input values
+overlap_filter = (t, t_vals) => {
+  return (d) => t_vals.some(v => d[t].includes(v))
+}
+
+// array of overlap filter functions for all categorical variables
+overlap_filters = ([
+  overlap_filter( "age_range",                             age_range_vals        ),
+  overlap_filter( "child_age__for_child_focused_studies_", child_age_vals        ),
+  overlap_filter( "construct_type",                        construct_type_vals   ),
+  overlap_filter( "sample",                                sample_vals           ),
+  overlap_filter( "measurement_tool",                      measurement_tool_vals ),
+  overlap_filter( "item_format",                           item_format_vals      ),
+  overlap_filter( "primary_language_s_",                   primary_language_vals ),
+  overlap_filter( "license",                               license_vals          ),
+  overlap_filter( "variable",                              variable              ),
+  overlap_filter( "prefix",                                prefix                ),
+  overlap_filter( "longitudinal",                          longitudinal          ),
+])
+
+// apply all range filters and overlap filters to metadata
+all_filters = [...range_filters, ...overlap_filters]
+ds = all_filters.reduce((mdf, fun) => mdf.filter(fun), md)
+dsf = ds.map(d => Object.fromEntries(Object.entries(d).map(([key, value]) => [key, value === "NA" ? null : value])))
+```
+
+:::: {.output-container}
+
+::: {.plot-container}
+::: {.plot-inputs}
+
+```{ojs x-var}
+num_vars = new Map(Object.entries(vi).map(([key, value]) => [value.label, key]))
+viewof x_var = Inputs.select(num_vars, {value: "n_items", label: "X axis"})
+```
+
+```{ojs y-var}
+viewof y_var = Inputs.select(num_vars, {value: "n_participants", label: "Y axis"})
+```
+
+```{ojs color-var}
+//cat_array = Object.entries(ti).map(([key, value]) => [value.label, key])
+cat_array = color_vars.map((t) => [ti[t].label, t])
+cat_vars = new Map([["None", null], ...cat_array])
+viewof color_var = Inputs.select(cat_vars, {label: "Color"})
+```
+
+:::
+
+```{ojs scatter}
+// color scheme
+scheme = tol.QualMuted
+
+// default color when there's no color variable
+default_color = "darkgrey"
+
+// color for missing values
+unk_color = "lightgrey"
+
+// indicator whether to use color
+use_color = color_var !== null
+
+// construct object of all variables to be tip channels
+// table = ({table: {label: "table"}})
+// channels = Object.fromEntries(Object.entries({...table, ...vi, ...ti}).map(([key, value]) => [key, key]))
+
+// turn value into array if it isn't one
+arrayify = (x) => Array.isArray(x) ? x : [x]
+
+// given array of strings or single string, collapses to one comma separated string
+stringify = (x) => x === null ? null : arrayify(x).join(", ")
+
+// domain of values to use for color
+color_vals = color_var === null ? default_color : tags[color_var].filter((v) => v !== "NA")
+
+default_symbol = "circle"
+select_symbol = "times"
+
+default_size = 1
+select_size = 4
+
+// scatter plot
+Plot.plot({
+  x: {type: "log", base: vi[x_var].base},
+  y: {type: "log", base: vi[y_var].base},
+  width: 700,
+  grid: true,
+  color: {
+    domain: color_vals,
+    range: scheme,
+    unknown: unk_color,
+    legend: use_color
+  },
+  marks: [
+    // points
+    Plot.dot(dsf, {
+      x: x_var,
+      y: y_var,
+      stroke: use_color ? (d) => stringify(d[color_var]) : default_color,
+      symbol: (d) => row === null ? default_symbol : d.table !== row.table ? default_symbol : select_symbol,
+      r: (d) => row === null ? default_size : d.table !== row.table ? default_size : select_size
+    }),
+    // regression line
+    Plot.linearRegressionY(dsf, {
+      x: x_var,
+      y: y_var,
+      stroke: use_color ? (d) => stringify(d[color_var]) : default_color
+    }),
+    // tooltips
+    Plot.tip(dsf, Plot.pointer({
+      x: x_var,
+      y: y_var,
+      stroke: use_color ? (d) => stringify(d[color_var]) : default_color,
+      //title: (d) => `${d.table}\nhttps://redivis.com/datasets/bdxt-4fqe5tyf4/tables/h5gs-e70sxpxce`,
+      title: "table",
+      // channels: channels
+    }))
+  ]
+})
+```
+:::
+
+::: {.table-container}
+```{ojs result-message}
+html`<i>Filtered to ${ds.length} datasets out of ${md.length} total.</i>`
+```
+
+```{ojs table-funs}
+// sparkbar element generator given max value and log base
+sparkbar = (max, b) => {
+  return x => htl.html`<div class="sparkbar" style="width: ${100 * log(x, b) / log(max, b)}%;">${x.toLocaleString("en")}`
+}
+
+// sparkbar element generator for a given numeric variable
+var_sparkbar = (v) => sparkbar(d3.max(ds, d => d[v]), vi[v].base)
+
+// sparkbars for each numeric variable
+sparks = Object.fromEntries(Object.entries(vi).map(([key, value]) => [key, var_sparkbar(key)]))
+
+// inline histogram element given array of values and header string
+inlinehist = (vals, head) => {
+  return htl.html`<span class="hist">${hist(vals)}${head}</span>`
+}
+
+// inline histogram for a given numeric variable
+var_hist = (v) => inlinehist(ds.map(d => log(d[v], vi[v].base)), v)
+
+// histograms for each numeric variable
+hists = Object.fromEntries(Object.entries(vi).map(([key, value]) => [key, var_hist(key)]))
+
+// combine two arrays into pairs in one array
+zip = (a, b) => a.map((k, i) => [k, b[i]])
+
+// set colors for array of values, using default if there are too values
+pal = (v, colors, default_color) => v.length <= colors.length ? colors.slice(0, v.length) : Array(v.length).fill(default_color)
+
+// create object with colors for each tag value
+tag_colors = Object.fromEntries(Object.entries(tags).map(([tag, tag_values]) => {
+  //const vals = tag_values.sort().filter((v) => v !== "NA");
+  const vals = tag_values.filter((v) => v !== "NA");
+  return [tag, Object.fromEntries(zip(vals, pal(vals, scheme, default_color)))]
+}))
+
+// badge element for a given tag and values
+badgify = (vals, tag) => htl.html`<div>
+  ${arrayify(vals).map(val => htl.html.fragment`
+    <span class="badge" style="background-color: ${tag_colors[tag][val]};">${val}</span>`)}
+</div>`
+
+// badge elements for each tag
+badges = Object.fromEntries(Object.keys(ti).map(tag => [tag, d => badgify(d, tag)]))
+```
+
+
+```{ojs table}
+// data table for selected tables
+viewof row = Inputs.table(dsf, {
+  rows: 20,
+  sort: "n_responses", reverse: true,
+  required: false, multiple: false,
+  //value: dsf[1],
+  // show columns "table", all numeric variables, and all tag variables
+  columns: ["table", ...Array.from(Object.keys(vi)), ...Array.from(Object.keys(ti))],
+  // use inline histograms in header
+  header: hists,
+  // use sparkbars and badges in cells
+  format: {...sparks, ...badges}
+})
+```
+:::
+
+::: {.callout-note title="Information on selected table"}
+```{ojs}
+info = ({
+  "table":       { label: "Dataset"        },
+  "description": { label: "Description"    },
+  "variables":   { label: "Variables"      },
+  "url":         { label: "Link to table"  },
+  "reference":   { label: "Reference"      },
+  "data_url":    { label: "Link to source" },
+  "license":     { label: "License"        },
+})
+
+pullout = (head, text) => html.fragment`<p><b>${head}</b>: ${/Link/.test(head) ? html.fragment`<a href="${text}" target="_blank">${text}</a>` : text}</p>`
+placeholder = "No table selected"
+
+row ? html`<div class="pullout">
+  ${Object.entries(info).map(([field, properties]) => pullout(properties.label, row[field]))}
+</div>` : html`<div class="pullout"><i>${placeholder}</i></div>`
+```
+:::
+
+::::
+::::
+
+
+:::: {.panel-input}
+
+_Filter by qualitative features._
+
+::: {.side-inputs}
+
+::: {.filters-container}
+
+::: {.callout-note collapse="true" title="Longitudinality"}
+```{ojs filter-longitudinal}
+viewof longitudinal = Inputs.checkbox(vars.longitudinal, {
+  value: vars.longitudinal
+})
+```
+:::
+
+::: {.callout-note collapse="true" title="Age range"}
+```{ojs filter-age-range}
+viewof age_range_vals = tag_checkbox("age_range")
+```
+:::
+
+::: {.callout-note collapse="true" title="Child age (for child-focused studies)"}
+```{ojs filter-child-age}
+viewof child_age_vals = tag_checkbox("child_age__for_child_focused_studies_")
+```
+:::
+
+::: {.callout-note collapse="true" title="Construct type"}
+```{ojs filter-construct-type}
+viewof construct_type_vals = tag_checkbox("construct_type")
+```
+:::
+
+::: {.callout-note collapse="true" title="Sample"}
+```{ojs filter-sample}
+viewof sample_vals = tag_checkbox("sample")
+```
+:::
+
+::: {.callout-note collapse="true" title="Measurement tool"}
+```{ojs filter-measurement-tool}
+viewof measurement_tool_vals = tag_checkbox("measurement_tool")
+```
+:::
+
+::: {.callout-note collapse="true" title="Item format"}
+```{ojs filter-item-format}
+viewof item_format_vals = tag_checkbox("item_format")
+```
+:::
+
+::: {.callout-note collapse="true" title="Primary language(s)"}
+```{ojs filter-primary-language}
+viewof primary_language_vals = tag_checkbox("primary_language_s_")
+```
+:::
+
+::: {.callout-note collapse="true" title="License"}
+```{ojs filter-license}
+viewof license_vals = tag_checkbox("license")
+```
+:::
+
+
+
+:::
+:::
+::::
+:::::
+
+_If you have any questions or feedback, please feel free to [contact us](contact.qmd)._
+
+::::::
+
+<!--
+```{ojs}
+html`<p><i class="bi bi-question-square" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-title="Bem"></i></p>`
+```
+
+<p><i class="bi bi-question-square" data-bs-toggle="tooltip" data-bs-placement="right" data-bs-title="Bem"></i></p>
+
+```{ojs}
+tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+```
+-->

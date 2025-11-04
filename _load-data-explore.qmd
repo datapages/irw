@@ -1,0 +1,133 @@
+```{r}
+#| output: true
+#| include: false
+#| label: load-data
+
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(purrr)
+library(readr)
+library(tibble)
+library(forcats)
+library(glue)
+library(jsonlite)
+library(redivis)
+
+irw_meta <- redivis$user("bdomingu")$dataset("irw_meta:bdxt")
+metadata_table <- irw_meta$table("metadata:h5gs")$to_tibble()
+
+metadata <- metadata_table |>
+  mutate(table = str_to_lower(table)) |>
+  mutate(variable = str_split(variables, "\\| "),
+         prefix = str_extract_all(variables, "(?<= )[A-z_]*?(?=_)") |>
+           map(unique) |> map(sort),
+         prefix = if_else(map_int(prefix, length) == 0, list("[no prefix]"), prefix)) |>
+  mutate(longitudinal = if_else(longitudinal, "longitudinal", "cross-sectional"),
+         longitudinal = as.list(longitudinal))
+
+var_vals <- metadata |>
+  select(table, variable, prefix, longitudinal) |>
+  pivot_longer(cols = -table, names_to = "type", values_to = "value") |>
+  unnest(value) |>
+  count(type, value) |>
+  arrange(type, desc(n)) |>
+  select(-n) |>
+  group_by(type) |>
+  summarise(vals = list(value)) |>
+  deframe()
+
+biblio <- irw_meta$table("biblio:qahg")$to_tibble()
+bib_data <- biblio |>
+  mutate(table = str_to_lower(table)) |>
+  # select(table, license = `Derived_License`)
+  select(table, license = `Derived_License`, data_url = URL__for_data_, 
+         description = Description, reference = Reference_x, doi = DOI__for_paper_)
+
+tag_table <- irw_meta$table("tags:7nkh")$to_tibble()
+
+na_vals <- c("no access to the osf page", "non-verbal task",
+             "I can't find the description of this dataset",
+             "missing description", "need help", "no link or info",
+             "Missing (NA)")
+
+comma <- "~"
+tags <- tag_table |>
+  mutate(table = str_to_lower(table)) |>
+  left_join(bib_data |> select(table, license)) |>
+  mutate(across(everything(), \(s) if_else(s %in% na_vals, "NA", s))) |>
+  mutate(across(everything(), \(s) replace_na(s, "NA"))) |>
+  mutate(sample = sample |> str_replace_all(",(?= etc)", comma) |> str_remove_all('\\"')) |>
+  mutate(across(-table, \(s) s |> str_split(",") |> map(str_trim) |> map(\(x) str_replace_all(x, comma, ","))))
+
+color_vars <- tags |>
+  pivot_longer(cols = -table, names_to = "tag", values_to = "value") |>
+  distinct(tag, value) |>
+  count(tag) |>
+  filter(n <= 10) |>
+  pull(tag)
+
+sort_alpha <- \(v) v |> fct_relevel("NA", after = Inf) |> levels()
+sort_n <- \(v) v |> fct_infreq() |> fct_relevel("NA", after = Inf) |> levels()
+
+age_range_vals <- c("Child (<18y)", "Adult (18+)", "Elderly (minimum age >50)", "Mixed", "Non-human", "NA")
+child_age_vals <- c("Early (<6y)", "Child (6-12y)", "Adolescent (12-18y)", "NA")
+
+sort_funs <- list(
+  "age_range" = \(v) age_range_vals,
+  "child_age__for_child_focused_studies_" = \(v) child_age_vals,
+  "construct_name" = sort_alpha,
+  "construct_type" = sort_alpha,
+  "item_format" = sort_n,
+  "license" = sort_n,
+  "measurement_tool" = sort_alpha,
+  "primary_language_s_" = sort_n,
+  "sample" = sort_n
+)
+
+sort_tag_values <- \(tag, values) exec(sort_funs[[tag]], values)
+
+tag_vals <- tags |>
+  select(-construct_name) |>
+  pivot_longer(cols = -table, names_to = "tag", values_to = "value") |>
+  unnest(value) |>
+  group_by(tag) |>
+  summarise(values = list(value)) |>
+  mutate(vals = map2(tag, values, sort_tag_values)) |>
+  select(-values) |>
+  deframe()
+
+
+ds <- c("item_response_warehouse", "item_response_warehouse_2")
+urls <- ds |>
+  map(\(d) redivis$user("datapages")$dataset(d)$list_tables() |>
+        map(\(t) tibble(table = t$name, url = t$properties$url)) |>
+        list_rbind()) |>
+  list_rbind() |>
+  mutate(table = str_to_lower(table), url = str_remove(url, "\\?.*$"))
+
+datasets <- metadata |> inner_join(tags) |> inner_join(urls) |> inner_join(bib_data |> select(-license)) |> arrange(table)
+
+# table_comp <- list(
+#   metadata_table |> transmute(table = str_to_lower(table)) |> mutate(in_metadata = TRUE),
+#   tag_table |> transmute(table = str_to_lower(table)) |> mutate(in_tags = TRUE),
+#   biblio |> transmute(table = str_to_lower(table)) |> mutate(in_biblio = TRUE)
+# ) |> reduce(full_join) |>
+#   mutate(across(everything(), \(s) replace_na(s, FALSE)))
+
+# table_comp |> filter(!in_metadata | !in_tags | !in_biblio) |> View()
+# table_comp |> count(in_metadata, in_tags, in_biblio, name = "n_tables")
+# table_comp |> filter(in_tags, )
+
+# data_index <- biblio |>
+#   rename(dataset = `table`, url = URL__for_data_, license = `Derived_License`,
+#          description = Description, reference = Reference_x, doi = DOI__for_paper_) |>
+#   mutate(dataset = str_remove(dataset, ".R.ata$")) |>
+#   arrange(dataset)
+
+# ojs_define(data_index = data_index)
+ojs_define(datasets = datasets)
+ojs_define(tags = tag_vals)
+ojs_define(vars = var_vals)
+ojs_define(color_vars = color_vars)
+```
