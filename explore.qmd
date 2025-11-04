@@ -7,13 +7,16 @@ callout-icon: false
 {{< include components/_interval.qmd >}}
 {{< include components/_hist.qmd >}}
 {{< include components/_tol.qmd >}}
+<!-- {{< include components/_yamultiselect.qmd >}} -->
 
 ```{ojs prelims}
 // import newer version of observable plot than the one embedded in quarto 
 Plot = import("https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm")
+import {yamultiselect} from '@saneef/yet-another-multi-select'
 
 md = transpose(datasets)
 ```
+
 
 {{< include components/_style.qmd >}}
 
@@ -117,14 +120,14 @@ viewof density_range = var_interval("density")
 ::: {.filters-container}
 
 ```{ojs filter-variable}
-viewof variable = Inputs.select(vars.variable, {
-  label: "Variable", multiple: true, value: vars.variable
+viewof variable = yamultiselect(vars.variable, {
+  label: "Variable"
 })
 ```
 
 ```{ojs filter-prefix}
-viewof prefix = Inputs.select(vars.prefix, {
-  label: "Variable prefix", multiple: true, value: vars.prefix
+viewof prefix = yamultiselect(vars.prefix, {
+  label: "Variable prefix"
 })
 ```
 
@@ -158,8 +161,14 @@ overlap_filter = (t, t_vals) => {
   return (d) => t_vals.some(v => d[t].includes(v))
 }
 
+// generate overlap filter function as above but that defaults to including everything if input values empty
+overlap_null_filter = (t, t_vals) => {
+  return (d) => t_vals.length ? t_vals.some(v => d[t].includes(v)) : true
+}
+
 // array of overlap filter functions for all categorical variables
 overlap_filters = ([
+  overlap_filter( "longitudinal",                          longitudinal          ),
   overlap_filter( "age_range",                             age_range_vals        ),
   overlap_filter( "child_age__for_child_focused_studies_", child_age_vals        ),
   overlap_filter( "construct_type",                        construct_type_vals   ),
@@ -168,9 +177,8 @@ overlap_filters = ([
   overlap_filter( "item_format",                           item_format_vals      ),
   overlap_filter( "primary_language_s_",                   primary_language_vals ),
   overlap_filter( "license",                               license_vals          ),
-  overlap_filter( "variable",                              variable              ),
-  overlap_filter( "prefix",                                prefix                ),
-  overlap_filter( "longitudinal",                          longitudinal          ),
+  overlap_null_filter( "variable",                         variable              ),
+  overlap_null_filter( "prefix",                           prefix                ),
 ])
 
 // apply all range filters and overlap filters to metadata
