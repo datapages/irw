@@ -26,7 +26,7 @@ vi = ({
   "n_items":                   { label: "Number items (n_items)",                                base: 10 },
   "responses_per_participant": { label: "Responses per participant (responses_per_participant)", base: 10 },
   "responses_per_item":        { label: "Responses per item (responses_per_item)",               base: 10 },
-  "density":                   { label: "Density (density)",                                     base: 10 }
+  "density":                   { label: "Density (n_responses/(n_participants*n_items))",        base: 10 }
 })
 
 // info for tag variables
@@ -70,7 +70,7 @@ tag_checkbox = (t) => Inputs.checkbox(tags[t], {value: tags[t]})
 
 :::: {.panel-input}
 
-_Filter by quantitative properties._
+{{< bi filter >}} _Filter by quantitative properties._
 
 ::: {.side-inputs}
 
@@ -110,7 +110,7 @@ viewof density_range = var_interval("density")
 
 -----
 
-_Filter by variables._
+{{< bi filter >}} _Filter by variables._
 
 ::: {.side-inputs}
 
@@ -275,6 +275,7 @@ Plot.plot({
 ```
 :::
 
+
 ::: {.table-container}
 ```{ojs result-message}
 html`<i>Filtered to ${ds.length} datasets out of ${md.length} total.</i>`
@@ -344,7 +345,10 @@ viewof row = Inputs.table(dsf, {
 ```
 :::
 
-::: {.callout-note title="Information on selected table"}
+::: {.callout-note collapse=true}
+
+## {{< bi info-circle class=header-icon >}}Information on selected dataset
+
 ```{ojs}
 info = ({
   "table":       { label: "Dataset"        },
@@ -361,8 +365,44 @@ placeholder = "No table selected"
 
 row ? html`<div class="pullout">
   ${Object.entries(info).map(([field, properties]) => pullout(properties.label, row[field]))}
-</div>` : html`<div class="pullout"><i>${placeholder}</i></div>`
+</div>` : html`<div class="pullout"><em>${placeholder}</em></div>`
 ```
+:::
+
+::: {.callout-note collapse=true}
+
+## {{< bi code class=header-icon >}}Code snippet
+
+The R code snippet below uses the [irw package](https://itemresponsewarehouse.github.io/Rpkg/) to fetch all of the tables that match the filters specified here. We recommend only using this direct call with no more than X or so tables. To directly specify filters for data fetching, see [`irw_filter()`](https://itemresponsewarehouse.github.io/Rpkg/reference/irw_filter.html).
+
+```{ojs}
+// simple templating function: replace strings of the form "{{variable}}" in the
+// template with the corresponding value from values
+fillTemplate = (template, values) => {
+  return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+    return values[key] !== undefined ? values[key] : match;
+  });
+};
+
+r_template = FileAttachment("resources/templates/query_snippet.R").text();
+table_str = ds.map(d => `"${d.table}"`).join(", ")
+r_snippet = () => fillTemplate(r_template, { tables: table_str, n_tables: ds.length });
+
+ds.length > 100 ? html`<div class="pullout"><em>Too many tables selected.</em></div>` : html`
+<div class="pullout">
+<div class="code-copy-outer-scaffold">
+<div class="sourceCode">
+<pre class="sourceCode r code-with-copy">
+<code class="sourceCode r">
+<span>${r_snippet()}</span></code></pre>
+</div>
+<button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button>
+</div>
+</div>
+`
+```
+
+
 :::
 
 ::::
@@ -371,13 +411,15 @@ row ? html`<div class="pullout">
 
 :::: {.panel-input}
 
-_Filter by qualitative features._
+{{< bi filter >}} _Filter by qualitative features._
 
 ::: {.side-inputs}
 
 ::: {.filters-container}
 
-::: {.callout-note collapse="true" title="Longitudinality"}
+::: {.callout-note collapse="true"}
+## {{< bi graph-up class=header-icon >}}Longitudinality
+
 ```{ojs filter-longitudinal}
 viewof longitudinal = Inputs.checkbox(vars.longitudinal, {
   value: vars.longitudinal
@@ -385,49 +427,65 @@ viewof longitudinal = Inputs.checkbox(vars.longitudinal, {
 ```
 :::
 
-::: {.callout-note collapse="true" title="Age range"}
+::: {.callout-note collapse="true"}
+## {{< bi person-lines-fill class=header-icon >}}Age range
+
 ```{ojs filter-age-range}
 viewof age_range_vals = tag_checkbox("age_range")
 ```
 :::
 
-::: {.callout-note collapse="true" title="Child age (for child-focused studies)"}
+::: {.callout-note collapse="true"}
+## {{< bi person-arms-up class=header-icon >}}Child age (for child-focused studies)
+
 ```{ojs filter-child-age}
 viewof child_age_vals = tag_checkbox("child_age__for_child_focused_studies_")
 ```
 :::
 
-::: {.callout-note collapse="true" title="Construct type"}
+::: {.callout-note collapse="true"}
+## {{< bi grid class=header-icon >}}Construct type
+
 ```{ojs filter-construct-type}
 viewof construct_type_vals = tag_checkbox("construct_type")
 ```
 :::
 
-::: {.callout-note collapse="true" title="Sample"}
+::: {.callout-note collapse="true"}
+## {{< bi people class=header-icon >}}Sample
+
 ```{ojs filter-sample}
 viewof sample_vals = tag_checkbox("sample")
 ```
 :::
 
-::: {.callout-note collapse="true" title="Measurement tool"}
+::: {.callout-note collapse="true"}
+## {{< bi clipboard-data class=header-icon >}}Measurement tool
+
 ```{ojs filter-measurement-tool}
 viewof measurement_tool_vals = tag_checkbox("measurement_tool")
 ```
 :::
 
-::: {.callout-note collapse="true" title="Item format"}
+::: {.callout-note collapse="true"}
+## {{< bi sliders class=header-icon >}}Item format
+
 ```{ojs filter-item-format}
 viewof item_format_vals = tag_checkbox("item_format")
 ```
 :::
 
-::: {.callout-note collapse="true" title="Primary language(s)"}
+::: {.callout-note collapse="true"}
+## {{< bi translate class=header-icon >}}Primary language(s)
+
 ```{ojs filter-primary-language}
 viewof primary_language_vals = tag_checkbox("primary_language_s_")
 ```
 :::
 
-::: {.callout-note collapse="true" title="License"}
+::: {.callout-note collapse="true"}
+## {{< bi cc-circle class=header-icon >}}License
+
 ```{ojs filter-license}
 viewof license_vals = tag_checkbox("license")
 ```
