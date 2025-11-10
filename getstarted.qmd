@@ -17,20 +17,23 @@ If you're just looking to explore or manually download individual datasets, you 
 
 This is the simplest way to get started if you don’t need programmatic access.
 
-## Option 2: Use the `irw` R Package (Recommended)
+## Option 2: Use the `irw` packages for R or Python (Recommended)
 
-We recommend the `irw` R package if you work in R and want a simple, streamlined way to access IRW data. For complete setup instructions and a reference guide to available functions, visit the package website [here](https://itemresponsewarehouse.github.io/Rpkg/).
+We recommend the `irw` packages for R or Python if you want a simple, streamlined way to access IRW data.
 
-On first use, you’ll be prompted to log in with your Redivis account and grant access via OAuth. This authentication step is required once per R session. For details, see the “Redivis Authentication” section on the [package website](https://itemresponsewarehouse.github.io/Rpkg/).
+You can find setup instructions and function references for the [R package](https://itemresponsewarehouse.github.io/Rpkg/) and the [Python package](https://github.com/itemresponsewarehouse/Python-pkg).
+
+On first use, you’ll be prompted to log in with your Redivis account and grant access via OAuth (or use an API token). This authentication step is required once per session to securely connect to Redivis. For details, see the "Redivis Authentication" section in the package documentation.
 
 ### Setup & Example Usage
+
+::: panel-tabset
+## R
 
 ```{r}
 #| eval: false
 #| echo: true
-
-# Install and load the package
-devtools::install_github("itemresponsewarehouse/Rpkg")
+# Install package with `devtools::install_github("itemresponsewarehouse/Rpkg")`
 library(irw)
 
 irw_info()                  # Overview of the IRW
@@ -38,6 +41,22 @@ irw_list_tables()          # List available tables
 irw_filter(var = "rt")     # Search for tables with a specific variable
 df <- irw_fetch("4thgrade_math_sirt")
 ```
+
+## Python
+
+```{python}
+#| eval: false
+#| echo: true
+#| python.reticulate: false
+# Install package with`pip install "git+https://github.com/itemresponsewarehouse/Python-pkg.git"`
+import irw
+
+irw.info()                  # Overview of the IRW
+irw.list_tables()          # List available tables
+irw.filter(var = "rt")     # Search for tables with a specific variable
+df = irw.fetch("4thgrade_math_sirt")
+```
+:::
 
 ## Option 3: Use Redivis Client Libraries (R or Python)
 
@@ -51,8 +70,7 @@ If you prefer working outside of R or want low-level access to Redivis features,
 ```{r}
 #| eval: false
 #| echo: true
-# first install redivis R package: 
-devtools::install_github("redivis/redivis-r", ref="main")
+# first install redivis R package with `devtools::install_github("redivis/redivis-r", ref="main")`
 library("redivis")
 
 dataset <- redivis::user("datapages")$dataset("item_response_warehouse") # connect to IRW
@@ -172,4 +190,3 @@ summaries = pd.concat(summaries_list, ignore_index=True)
 print(summaries)
 ```
 :::
-
