@@ -1,0 +1,28 @@
+---
+title: "Calculating IMV values"
+---
+
+Here is a slightly more complex example that takes advantage of `irw` to easily fetch a dataset and to then compute the [InterModel Vigorish](https://www.cambridge.org/core/journals/psychometrika/article/intermodel-vigorish-as-a-lens-for-understanding-and-quantifying-the-value-of-item-response-models-for-dichotomously-coded-items/F61C75F6F945A5B13F73C6128EB83998) contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation across 4 folds; see also the documentation in the related [`imv`](https://github.com/intermodelvigorish/imv_R) package). Note the `irw_long2resp` function which is helpful for reformatting IRW data from long to wide.
+
+::: panel-tabset
+## R
+
+```{r}
+#| echo: true
+df<-irw::irw_fetch("gilbert_meta_2")  #https://github.com/itemresponsewarehouse/Rpkg
+resp<-irw::irw_long2resp(df)
+resp$id<-NULL
+##1pl/Rasch model
+m0<-mirt::mirt(resp,1,'Rasch',verbose=FALSE)
+##2pl
+ni<-ncol(resp)
+s<-paste("F=1-",ni,"
+             PRIOR = (1-",ni,", a1, lnorm, 0.0, 1.0)",sep="")
+model<-mirt::mirt.model(s)
+m1<-mirt::mirt(resp,model,itemtype=rep("2PL",ni),method="EM",technical=list(NCYCLES=10000),verbose=FALSE)
+##compute IMV comparing predictions from 1pl and 2pl
+set.seed(8675309)
+omega<-imv::imv.mirt(m0,m1) #https://github.com/intermodelvigorish/imv_R
+mean(omega)
+```
+:::
