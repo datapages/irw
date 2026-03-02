@@ -1,0 +1,42 @@
+### Logistic regression
+
+In the [chess data](https://www.rdocumentation.org/packages/LNIRT/versions/0.5.1/topics/AmsterdamChess), there is a special covariate related to the person’s ELO status. This is effectively their ‘ranking’ given their play in tournaments. [Get data via: `df<-irw::irw_fetch("chess_lnirt")`]
+
+- If you consider the items in the measure that they are giving (see Figure 2 [here](https://www.ejwagenmakers.com/2005/VanderMaasWagenmakersACTpaper.pdf)), how would you anticipate that it is connected with responses? 
+
+- Can you probe this via logistic regression? In thinking about this, how might you account for the fact that responses are coming from different items? 
+
+### Classical item analysis
+
+The simplest analysis of items involves calculation of (i) item-level mean responses and (ii) correlations between the item response and the sum score. For cognitive constructs, calculations of (i) give us a simple indication of item difficulty (larger values are easier items). Calculations of (ii) tell us about the degree to which an item is ‘hanging together’ with the rest of the items. If correlations between an item and the sum score are very low, this can be indicative of a problem. 
+
+For two IRW tables (`gilbert_meta_1` and `gilbert_meta_9`), consider what the above calculations (as well as considerations of reliability) tell us about each measure. (Hint: I would say one scale looks pretty good from this perspective [perhaps with one bad item] and one scale might wish us leaving we could do a little better.) Note that each of these tables is based on outcome data for an RCT (details below). *What do the descriptive statistics you have calculated imply for the inferences the RCT aims to make?*
+
+- `gilbert_meta_1`: “We examine the intention-to-treat impact of the MORE intervention on third-grade reading comprehension from a cluster-RCT. Our data, collected in the 2021–2022 school year, consist of 110 schools randomly assigned to treatment and control from a large urban district in the southeastern United States (N = 7,797 students).” ([link](https://journals.sagepub.com/doi/10.3102/10769986231171710))
+
+- `gilbert_meta_9`: “Using a randomized experiment in Ecuador, this study provides evidence on whether cash, vouchers, and food transfers targeted to women and intended to reduce poverty and food insecurity also affected intimate partner violence. Results indicate that transfers reduce controlling behaviors and physical and/or sexual violence by 6 to 7 percentage points. Impacts do not vary by transfer modality, which provides evidence that transfers not only have the potential to decrease violence in the short-term, but also that cash is just as effective as in-kind transfers.” ([link](https://www.openicpsr.org/openicpsr/project/113634/version/V1/view))
+
+### Towards IRT models
+
+We are going to start thinking about IRT models next week and I wanted to begin by further examining the relationship between sum scores (remind what those are) and responses for a single item. 
+
+- See [here](https://github.com/ben-domingue/252/blob/main/ps2/towards_irt.R). We will construct a figure where the x-axis is the sum score and the y-axis is the proportion of respondents with that sum score who got an individual item correct and each panel is a unique item. What do these figures suggest about the relationship between sum scores and item responses? 
+
+- Pick two items, one that is easy (most people get it right) and one that is hard (most do not). Can you estimate a logistic regression wherein you’re regressing the response for a single item on the sum score. How do the intercepts from these regressions look vis-a-vis your intuition about the difficulty of the items? 
+
+- Reconsider the above analysis with the `andrich_mudfold` table. What qualitatively different pattern do you notice between the relationship between item responses and sum scores here? 
+
+### Predictions
+
+One of the most powerful ideas (in my view) related to thinking about the performance of your models is to look at predictions ([This paper](https://pubmed.ncbi.nlm.nih.gov/28841086/) is really powerful on this point). We’re going to look at some predictive comparisons in an IRT context. Code [here](https://github.com/ben-domingue/252/blob/main/ps4/prediction.R).
+
+- Let’s start by understanding the importance of out-of-sample predictive tests. The idea here is that we want to look at predictions in ‘test’ or ‘hold-out’ data that was not used to generate model estimates (the training data upon which predictions are based) and contrast that with what we get when we look at predictions for ‘overfit’ data (i.e., the test and training data are the same). In particular we are going to look at the RMSE between the responses and the IRT-based probabilities for the same model applied to out-of-sample versus in-sample predictions. What do we observe in that case? (e.g., what model do we use to generate data? Which predictions are better in-sample? out-of-sample? 
+- Above we are looking at simulated data and seeing RMSEs between observed responses and estimated probabilities of those responses and seeing values above 0.4. This might seem big—these differences have to be less than 1 and we’d be surprised if they were bigger than 0.5—so perhaps we should be concerned? Can you assess how good they would be if we had *perfect prediction*? So, simulate data from the Rasch model and compute the RMSE of differences between the generated responses and the probabilities used to simulate them. How does this compare to what we observed in (a)?
+- Let’s now look at two different models applied to empirical data (`gilbert_meta_2`, where we won’t know the truth). Does the 1pl or 2pl seem to fit better out-of-sample? 
+- Let’s bring in one more table (`gilbert_meta_14`) and again compare 1pl and 2pl predictions. How does the change you observe here compare to that in (b)? That is, if someone said “for which of these datasets do you see bigger improvements as you go from the 1pl to the 2pl?”, how would you answer? [Hint: In my view, there is one difference (which I’ve maybe tried to point you towards in the code) in the two tables being compared that actually makes this a really challenging question.]  Is there anything that gives you pause? 
+
+### Incorporating Priors
+
+Priors can be very useful for IRT item parameters especially if you have smaller samples. We aren’t going to dive all the way into Bayesian models; rather, I am hoping to give you a conceptual guide to priors. For our purposes, priors are a way of ensuring good behavior in our parameter estimates. Estimates (the posterior distribution in the below figure) are going to be a mixture of the likelihood and the prior. When we’re worried the likelihood might be ill-behaved we can induce some better behavior via the posterior. We’ll often have poorly behaved guessing and discrimination parameters so we’re going to introduce some priors on them.
+
+An example of how to impose priors on the discrimination and guessing parameters can be found [here](https://github.com/ben-domingue/252/blob/main/ps4/priors.R). From whatever perspective you like (parameter estimates, predictions as in #2; feel free to find some different data that lead to more dramatic differences!), consider the implications of adding priors to analysis of some item response data. I have added a small example illustrating how item parameter estimates differ with and without priors. Feel free to build on this in any way you like—for example, by examining whether including priors improves predictive performance.
