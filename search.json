@@ -11,7 +11,7 @@
     "href": "imv.html",
     "title": "Calculating IMV values",
     "section": "",
-    "text": "Here is a slightly more complex example that takes advantage of irw to easily fetch a dataset and to then compute the InterModel Vigorish contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation across 4 folds; see also the documentation in the related imv package). Note the irw_long2resp function which is helpful for reformatting IRW data from long to wide.\n\nR\n\n\n\n\nCode\ndf&lt;-irw::irw_fetch(\"gilbert_meta_2\")  #https://github.com/itemresponsewarehouse/Rpkg\nresp&lt;-irw::irw_long2resp(df)\nresp$id&lt;-NULL\n##1pl/Rasch model\nm0&lt;-mirt::mirt(resp,1,'Rasch',verbose=FALSE)\n##2pl\nni&lt;-ncol(resp)\ns&lt;-paste(\"F=1-\",ni,\"\n             PRIOR = (1-\",ni,\", a1, lnorm, 0.0, 1.0)\",sep=\"\")\nmodel&lt;-mirt::mirt.model(s)\nm1&lt;-mirt::mirt(resp,model,itemtype=rep(\"2PL\",ni),method=\"EM\",technical=list(NCYCLES=10000),verbose=FALSE)\n##compute IMV comparing predictions from 1pl and 2pl\nset.seed(8675309)\nomega&lt;-imv::imv.mirt(m0,m1) #https://github.com/intermodelvigorish/imv_R\nmean(omega)\n\n\n[1] 0.01276902"
+    "text": "Here is a slightly more complex example that takes advantage of irw to easily fetch a dataset and to then compute the InterModel Vigorish contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation across 4 folds; see also the documentation in the related imv package). Note the irw_long2resp function which is helpful for reformatting IRW data from long to wide.\n\nR\n\n\n\n\nCode\ndf&lt;-irw::irw_fetch(\"gilbert_meta_2\")  #https://github.com/itemresponsewarehouse/Rpkg\nresp&lt;-irw::irw_long2resp(df)\nresp$id&lt;-NULL\n##1pl/Rasch model\nm0&lt;-mirt::mirt(resp,1,'Rasch',verbose=FALSE)\n##2pl\nni&lt;-ncol(resp)\ns&lt;-paste(\"F=1-\",ni,\"\n             PRIOR = (1-\",ni,\", a1, lnorm, 0.0, 1.0)\",sep=\"\")\nmodel&lt;-mirt::mirt.model(s)\nm1&lt;-mirt::mirt(resp,model,itemtype=rep(\"2PL\",ni),method=\"EM\",technical=list(NCYCLES=10000),verbose=FALSE)\n##compute IMV comparing predictions from 1pl and 2pl\nset.seed(8675309)\nomega&lt;-imv::imv.mirt(m0,m1) #https://github.com/intermodelvigorish/imv_R\nmean(omega)\n\n\n[1] 0.01415356"
   },
   {
     "objectID": "docs.html",
@@ -138,6 +138,13 @@
     "title": "The Nominal Data Standard",
     "section": "Accessing the nominal data",
     "text": "Accessing the nominal data\nDocumentation related to the tables can be found here."
+  },
+  {
+    "objectID": "nominal_standard.html#an-example",
+    "href": "nominal_standard.html#an-example",
+    "title": "The Nominal Data Standard",
+    "section": "An example",
+    "text": "An example\nLet’s look at an example of how we can fit the nominal response model to a table (preference_inventory) from the nominal branch of the IRW and generated category response functions for all items..\n\nR\n\n\n\n\nCode\ndf&lt;-irw::irw_fetch(\"preference_inventory\",source='nom')\nresp&lt;-irw::irw_long2resp(df,resp_col='text')\nresp$id&lt;-NULL\nlibrary(mirt)\nm&lt;-mirt(resp,1,'nominal')\n\n\nCode\nf&lt;-function(mod,n) {\n    extr &lt;- extract.item(mod,n)\n    Theta &lt;- matrix(seq(-6,6, length.out=2000))\n    pr &lt;- probtrace(extr, Theta)\n    list(Theta,pr)\n}\nout&lt;-list()\nfor (n in 1:ncol(resp)) out[[n]]&lt;-f(m,n)\n##\npar(mfrow=c(4,3),mgp=c(2,1,0),mar=c(3,3,1,1))\ncols&lt;-c(\"black\",\"red\",\"blue\",\"green\")\nfor (i in 1:length(out)) {\n    plot(NULL,xlim=c(-5,5),ylim=0:1,xlab='theta',ylab='Pr')\n    z&lt;-out[[i]]\n    for (j in 1:4) lines(z[[1]],z[[2]][,j],col=cols[j])\n}"
   },
   {
     "objectID": "comps_standard.html",
