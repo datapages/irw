@@ -78,6 +78,35 @@ gtag('js', new Date());
 gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </script>
 
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml-full.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
 
 </head>
 
@@ -380,6 +409,19 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 <li>You can examine the ‘fit’ of the model (with the big caveat that we don’t have much data).</li>
 </ul>
 <p>The idea here is to get you thinking about this. There are approaches that have been developed for working through this decision but I think it is always fun to struggle a little with a problem before looking at the solution! [Note: There is not a ton of data here, so in my view that limits any certainty about the right answer to this question!]</p>
+</section>
+<section id="cdm-what-makes-an-item" class="level3">
+<h3 class="anchored" data-anchor-id="cdm-what-makes-an-item">CDM &amp; what makes an item</h3>
+<p>Let’s examine what we get from a Q matrix using the <code>frac20</code> data (described <a href="https://www.jstatsoft.org/article/view/v093i14">here</a>), a standard dataset used in the cognitive diagnostic modeling literature. Here we have math problems involving fractions which are hypothesized to require some combination of 8 specific skills. The linkage of the items and skills is contained in the ‘Q matrix’. Let’s use the code <a href="https://github.com/ben-domingue/252/blob/main/ps7/cdm.R">here</a> to explore three ways of modeling the responses in that dataset!.</p>
+<ul>
+<li>Let’s first fit a lme4-style Rasch model <code>m1</code>. We can also fit a conventional Rasch model via mirt (<code>m2</code>). What do we get when we compare item parameters from such analyses?</li>
+<li>Let’s now contrast these findings with an analysis wherein we think of the individual items as being potentially ‘exchangeable’ with any other item that loads on the same skills. I am now asserting that the only thing about items that matters is the skills they load on. This is the <code>m2</code> object. Conceptually, we can imagine having a bunch of different items that have the same skill loadings. From the perspective of this model, we would basically be observing different responses to common stimuli. Such reasoning is a common feature of psychological studies where, for example, psychologists will ask people to do <a href="https://rdrr.io/cran/diffIRT/man/rotation.html">mental rotation tasks</a> wherein they are just varying the angle (there is no good definition of items here if angle is being varied continuously). Do you think this conceptualization of the items as interchangeable ‘tasks’ in this way is appropriate here? Do you have any empirical results to support/confirm your answer to the above?</li>
+<li>Let’s now estimate a CDM (see <code>m3</code>). In particular, we’re going to use the DINA approach. This approach is discussed in the above paper, the core idea is captured below (see page 4): <span class="math display">\[
+\Pr(\alpha^*_{lj})=\delta_{j0}+\delta_{j12...K^*_j} \Pi_{k-1}^{K^*_j} \alpha_{lk}
+\]</span> This equation asserts that the probability of a correct responses is delta_j0 if you do NOT have ALL of the requisite skills (where the Q matrix tells us what these are for each item) and delta_j0+delta_j12…K if you do have ALL the requisite skills (the A in DINA is for AND; there is also a DINO model that make a different assertion about how skills are required for generating correct responses). Stop for a second: we now have IRT results and CDM results. How might we expect the results (at either the person- or item-level) to compare? How might you examine this? In the code I do some basic analyses of the output of estimating this model. Do these results behave as you may expect vis-a-vis the IRT results? Note that I am doing a few ad-hoc things. There are no standardized way of really approaching comparisons of CDM and IRT outputs. What I am doing makes sense to me but there may be other approaches!</li>
+<li>The ‘fits’ of the 3 models (<code>m1 m2 m3</code>) are challenging to compare. I show how you can compare AICs in the code; according to those, which is optimal? How satisfied are you with this comparison? Could you come up with a plan that you think might yield more concrete insight about differences in prediction quality across these three approaches?</li>
+<li>BONUS: Can you implement your plan for comparing the fit of the three models?</li>
+</ul>
 
 
 </section>
