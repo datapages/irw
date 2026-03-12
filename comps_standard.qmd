@@ -57,3 +57,105 @@ head(df)
 
 
 Documentation related to the tables (including table names as with `collegefb_2021and2022`) can be found [here](https://docs.google.com/spreadsheets/d/1WZZYyVC2cmw8CUJM69qP0F_ZlQjQfdkCZbdsG-8mUrs/edit?usp=sharing).
+
+## An example
+
+Here is a first example wherein we fit an ELO model to data from the NFL.
+
+::: panel-tabset
+## R
+
+```{r}
+#| echo: true
+library(elo)
+library(BradleyTerry2)
+
+# Fetch and prepare data
+df <- irw::irw_fetch("nfl_2010-2019", source = 'comp')
+df <- df[order(df$date), ]
+
+# ===== ELO ANALYSIS =====
+er <- elo.run(score(score_a, score_b) ~ agent_a + agent_b, 
+              data = df, k = 20)
+
+# Convert ELO results to long format
+elo_results <- as.data.frame(er)
+elo_long <- lapply(seq_len(nrow(elo_results)), function(i) {
+  data.frame(
+    team = c(elo_results$team.A[i], elo_results$team.B[i]),
+    elo = c(elo_results$elo.A[i], elo_results$elo.B[i]),
+    date = df$date[i]
+  )
+})
+elo_long <- do.call(rbind, elo_long)
+
+# Convert dates to years with decimal (e.g., 2015.5 for mid-2015)
+elo_long$year <- elo_long$date/(365*24*60*60)
+
+
+elo_by_team <- split(elo_long, elo_long$team)
+
+# ===== BRADLEY-TERRY ANALYSIS =====
+# Create season variable based on date gaps
+date_diff <- diff(df$date)
+df$season <- c(0, cumsum(date_diff > 1e7)) + 2010
+
+# Prepare data for BT model
+df_bt <- df[df$winner != 'draw', ]
+df_bt$win <- as.numeric(df_bt$winner == 'agent_a')
+df_bt$agent_a <- factor(df_bt$agent_a)
+df_bt$agent_b <- factor(df_bt$agent_b)
+
+# Fit BT models by season
+bt_by_season <- lapply(split(df_bt, df_bt$season), function(season_df) {
+  mod <- BTm(win, agent_a, agent_b, data = season_df, id = "team")
+  co <- coef(mod)
+  names(co) <- gsub("team", "", names(co))
+  data.frame(
+    season = unique(season_df$season),
+    est = co,
+    team = names(co),
+    row.names = NULL
+  )
+})
+bt_results <- do.call(rbind, bt_by_season)
+bt_by_team <- split(bt_results, bt_results$team)
+
+# ===== PLOTTING =====
+par(mfrow = c(2, 1), mgp = c(2.5, 0.7, 0), mar = c(4, 4, 2, 1))
+
+# Plot 1: ELO ratings over time
+plot(NULL, 
+     xlim = c(0, 10),
+     ylim = c(1200,1800),
+     xlab = "Years since start of 2010 season", 
+     ylab = "ELO Rating",
+     main = "NFL Team ELO Ratings (2010-2019)",
+     xaxt = "n")
+axis(1, at = 0:10)
+
+for (team_data in elo_by_team) {
+  lines(team_data$year, team_data$elo, col = rgb(0, 0, 0, 0.3))
+  n <- nrow(team_data)
+  text(team_data$year[n], team_data$elo[n], team_data$team[n], 
+       pos = 4, cex = 0.6)
+}
+
+# Plot 2: Bradley-Terry coefficients by season
+plot(NULL, 
+     xlim = c(2010, 2020),
+     ylim = range(bt_results$est,na.rm=TRUE),
+     xlab = "Season", 
+     ylab = "Bradley-Terry Coefficient",
+     main = "NFL Team Strength by Season (Bradley-Terry Model)",
+     xaxt = "n")
+axis(1, at = 2010:2019)
+
+for (team_data in bt_by_team) {
+  lines(team_data$season, team_data$est, col = rgb(0, 0, 0, 0.3))
+  n <- nrow(team_data)
+  text(team_data$season[n], team_data$est[n], team_data$team[n], 
+       pos = 4, cex = 0.6)
+}
+```
+:::
