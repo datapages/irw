@@ -6,7 +6,7 @@ Note: This is an experimental feature.
 
 ## The data standard
 
-The IRW competition data standard is meant to describe data derived from pairwise comparisons or competitions. Such data are widely analyzed using ELO or Bradley-Luce-Terry approaches; more information about these approaches is available [here](https://www.annualreviews.org/content/journals/10.1146/annurev-statistics-040722-061813). The key distinction between these data and the conventional IRW data is that there are not `id` and `item` identifiers here but rather identifers of the two `agents` that are involved in a given competition.
+The IRW competition data standard is meant to describe data derived from pairwise comparisons or competitions. Such data are widely analyzed using Elo or Bradley-Luce-Terry approaches; more information about these approaches is available [here](https://www.annualreviews.org/content/journals/10.1146/annurev-statistics-040722-061813). The key distinction between these data and the conventional IRW data is that there are not `id` and `item` identifiers here but rather identifers of the two `agents` that are involved in a given competition.
 
 - `agent_a` name/id of first competitor
 - `agent_b` name/id of second competitor
@@ -16,6 +16,7 @@ The IRW competition data standard is meant to describe data derived from pairwis
 - `score_b` Score of `agent_b`.
 - `winner` Winner of the competition (typically based on a comparison of scores). Values will be `agent_a`, `agent_b` or `draw`.
 
+Additional information that may be predictive of the outcome can be included as additional columns. 
 
 ## Accessing the competition data
 
@@ -60,7 +61,7 @@ Documentation related to the tables (including table names as with `collegefb_20
 
 ## An example
 
-Here is a first example wherein we fit an ELO model to data from the NFL.
+Here is a first example wherein we fit an Elo model to data from the NFL.
 
 ::: panel-tabset
 ## R
@@ -74,11 +75,11 @@ library(BradleyTerry2)
 df <- irw::irw_fetch("nfl_2010-2019", source = 'comp')
 df <- df[order(df$date), ]
 
-# ===== ELO ANALYSIS =====
+# ===== Elo ANALYSIS =====
 er <- elo.run(score(score_a, score_b) ~ agent_a + agent_b, 
               data = df, k = 20)
 
-# Convert ELO results to long format
+# Convert Elo results to long format
 elo_results <- as.data.frame(er)
 elo_long <- lapply(seq_len(nrow(elo_results)), function(i) {
   data.frame(
@@ -124,13 +125,13 @@ bt_by_team <- split(bt_results, bt_results$team)
 # ===== PLOTTING =====
 par(mfrow = c(2, 1), mgp = c(2.5, 0.7, 0), mar = c(4, 4, 2, 1))
 
-# Plot 1: ELO ratings over time
+# Plot 1: Elo ratings over time
 plot(NULL, 
      xlim = c(0, 10),
      ylim = c(1200,1800),
      xlab = "Years since start of 2010 season", 
-     ylab = "ELO Rating",
-     main = "NFL Team ELO Ratings (2010-2019)",
+     ylab = "Elo Rating",
+     main = "NFL Team Elo Ratings (2010-2019)",
      xaxt = "n")
 axis(1, at = 0:10)
 
