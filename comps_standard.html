@@ -297,7 +297,7 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 <p>Note: This is an experimental feature.</p>
 <section id="the-data-standard" class="level2">
 <h2 class="anchored" data-anchor-id="the-data-standard">The data standard</h2>
-<p>The IRW competition data standard is meant to describe data derived from pairwise comparisons or competitions. Such data are widely analyzed using ELO or Bradley-Luce-Terry approaches; more information about these approaches is available <a href="https://www.annualreviews.org/content/journals/10.1146/annurev-statistics-040722-061813">here</a>. The key distinction between these data and the conventional IRW data is that there are not <code>id</code> and <code>item</code> identifiers here but rather identifers of the two <code>agents</code> that are involved in a given competition.</p>
+<p>The IRW competition data standard is meant to describe data derived from pairwise comparisons or competitions. Such data are widely analyzed using Elo or Bradley-Luce-Terry approaches; more information about these approaches is available <a href="https://www.annualreviews.org/content/journals/10.1146/annurev-statistics-040722-061813">here</a>. The key distinction between these data and the conventional IRW data is that there are not <code>id</code> and <code>item</code> identifiers here but rather identifers of the two <code>agents</code> that are involved in a given competition.</p>
 <ul>
 <li><code>agent_a</code> name/id of first competitor</li>
 <li><code>agent_b</code> name/id of second competitor</li>
@@ -307,6 +307,7 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 <li><code>score_b</code> Score of <code>agent_b</code>.</li>
 <li><code>winner</code> Winner of the competition (typically based on a comparison of scores). Values will be <code>agent_a</code>, <code>agent_b</code> or <code>draw</code>.</li>
 </ul>
+<p>Additional information that may be predictive of the outcome can be included as additional columns.</p>
 </section>
 <section id="accessing-the-competition-data" class="level2">
 <h2 class="anchored" data-anchor-id="accessing-the-competition-data">Accessing the competition data</h2>
@@ -352,7 +353,7 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </section>
 <section id="an-example" class="level2">
 <h2 class="anchored" data-anchor-id="an-example">An example</h2>
-<p>Here is a first example wherein we fit an ELO model to data from the NFL.</p>
+<p>Here is a first example wherein we fit an Elo model to data from the NFL.</p>
 <div class="tabset-margin-container"></div><div class="panel-tabset">
 <ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-2-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-2-1" role="tab" aria-controls="tabset-2-1" aria-selected="true" href="">R</a></li></ul>
 <div class="tab-content">
@@ -367,11 +368,11 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 <span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>df <span class="ot">&lt;-</span> irw<span class="sc">::</span><span class="fu">irw_fetch</span>(<span class="st">"nfl_2010-2019"</span>, <span class="at">source =</span> <span class="st">'comp'</span>)</span>
 <span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>df <span class="ot">&lt;-</span> df[<span class="fu">order</span>(df<span class="sc">$</span>date), ]</span>
 <span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="co"># ===== ELO ANALYSIS =====</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="co"># ===== Elo ANALYSIS =====</span></span>
 <span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>er <span class="ot">&lt;-</span> <span class="fu">elo.run</span>(<span class="fu">score</span>(score_a, score_b) <span class="sc">~</span> agent_a <span class="sc">+</span> agent_b, </span>
 <span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>              <span class="at">data =</span> df, <span class="at">k =</span> <span class="dv">20</span>)</span>
 <span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert ELO results to long format</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert Elo results to long format</span></span>
 <span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>elo_results <span class="ot">&lt;-</span> <span class="fu">as.data.frame</span>(er)</span>
 <span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>elo_long <span class="ot">&lt;-</span> <span class="fu">lapply</span>(<span class="fu">seq_len</span>(<span class="fu">nrow</span>(elo_results)), <span class="cf">function</span>(i) {</span>
 <span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">data.frame</span>(</span>
@@ -417,13 +418,13 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 <span id="cb3-55"><a href="#cb3-55" aria-hidden="true" tabindex="-1"></a><span class="co"># ===== PLOTTING =====</span></span>
 <span id="cb3-56"><a href="#cb3-56" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow =</span> <span class="fu">c</span>(<span class="dv">2</span>, <span class="dv">1</span>), <span class="at">mgp =</span> <span class="fu">c</span>(<span class="fl">2.5</span>, <span class="fl">0.7</span>, <span class="dv">0</span>), <span class="at">mar =</span> <span class="fu">c</span>(<span class="dv">4</span>, <span class="dv">4</span>, <span class="dv">2</span>, <span class="dv">1</span>))</span>
 <span id="cb3-57"><a href="#cb3-57" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot 1: ELO ratings over time</span></span>
+<span id="cb3-58"><a href="#cb3-58" aria-hidden="true" tabindex="-1"></a><span class="co"># Plot 1: Elo ratings over time</span></span>
 <span id="cb3-59"><a href="#cb3-59" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="cn">NULL</span>, </span>
 <span id="cb3-60"><a href="#cb3-60" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">10</span>),</span>
 <span id="cb3-61"><a href="#cb3-61" aria-hidden="true" tabindex="-1"></a>     <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">1200</span>,<span class="dv">1800</span>),</span>
 <span id="cb3-62"><a href="#cb3-62" aria-hidden="true" tabindex="-1"></a>     <span class="at">xlab =</span> <span class="st">"Years since start of 2010 season"</span>, </span>
-<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>     <span class="at">ylab =</span> <span class="st">"ELO Rating"</span>,</span>
-<span id="cb3-64"><a href="#cb3-64" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"NFL Team ELO Ratings (2010-2019)"</span>,</span>
+<span id="cb3-63"><a href="#cb3-63" aria-hidden="true" tabindex="-1"></a>     <span class="at">ylab =</span> <span class="st">"Elo Rating"</span>,</span>
+<span id="cb3-64"><a href="#cb3-64" aria-hidden="true" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">"NFL Team Elo Ratings (2010-2019)"</span>,</span>
 <span id="cb3-65"><a href="#cb3-65" aria-hidden="true" tabindex="-1"></a>     <span class="at">xaxt =</span> <span class="st">"n"</span>)</span>
 <span id="cb3-66"><a href="#cb3-66" aria-hidden="true" tabindex="-1"></a><span class="fu">axis</span>(<span class="dv">1</span>, <span class="at">at =</span> <span class="dv">0</span><span class="sc">:</span><span class="dv">10</span>)</span>
 <span id="cb3-67"><a href="#cb3-67" aria-hidden="true" tabindex="-1"></a></span>
