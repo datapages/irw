@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Simulated and synthetic (simsyn) data – Item Response Warehouse</title>
+<title>Merging item text and IRW response data – Item Response Warehouse</title>
 <style>
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -22,6 +22,41 @@ ul.task-list li input[type="checkbox"] {
   width: 0.8em;
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 </style>
 
@@ -263,7 +298,7 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Simulated and synthetic (simsyn) data</h1>
+<h1 class="title">Merging item text and IRW response data</h1>
 </div>
 
 
@@ -280,10 +315,202 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </header>
 
 
-<p>These data are simulated (according to some statistical model) or synthetic (so that they are meant to approximate a specific real dataset) but are otherwise in the IRW data standard.</p>
-<section id="accessing-the-simsyn-data" class="level2">
-<h2 class="anchored" data-anchor-id="accessing-the-simsyn-data">Accessing the simsyn data</h2>
-<p>Documentation related to the tables can be found <a href="https://docs.google.com/spreadsheets/d/1_2SR1_miAqUy0HWFQqo5vrBVrIN4V1FU6RfavBc7WdA/edit?gid=1337607315#gid=1337607315">here</a>.</p>
+<section id="incorporation-with-the-irw-response-data" class="level2">
+<h2 class="anchored" data-anchor-id="incorporation-with-the-irw-response-data">Incorporation with the IRW response data</h2>
+<p>This dataset is designed to be interoperable with the core IRW item response data. Specifically, the <code>table</code> identifer should allow for merging across these two data resources. Researchers can link these item text records to response-level data using the <code>item</code> field, which serves as a shared, persistent identifier across both datasets.</p>
+<p>To incorporate response option text, the <code>resp</code> field in this dataset provides a mapping between response codes (consistent with <code>resp</code> in the response-level data) and their corresponding option_text. This allows users to reconstruct full item presentations or analyze response behavior with access to the literal item wording. Below is an example of how the data can be merged (so that each row contains information about a single response, including information about the probe used to solicit information from the respondent).</p>
+<div class="tabset-margin-container"></div><div class="panel-tabset">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-1-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-1" role="tab" aria-controls="tabset-1-1" aria-selected="true" href="">R</a></li></ul>
+<div class="tab-content">
+<div id="tabset-1-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-1-1-tab">
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>items<span class="ot">&lt;-</span>irw<span class="sc">::</span><span class="fu">irw_itemtext</span>(<span class="st">"gilbert_meta_49"</span>)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>df<span class="ot">&lt;-</span>irw<span class="sc">::</span><span class="fu">irw_fetch</span>(<span class="st">"gilbert_meta_49"</span>)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>df<span class="ot">&lt;-</span><span class="fu">merge</span>(items,df)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">head</span>(df)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div class="kable-table">
+<table class="caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 2%">
+<col style="width: 0%">
+<col style="width: 2%">
+<col style="width: 1%">
+<col style="width: 7%">
+<col style="width: 59%">
+<col style="width: 2%">
+<col style="width: 5%">
+<col style="width: 2%">
+<col style="width: 2%">
+<col style="width: 0%">
+<col style="width: 1%">
+<col style="width: 0%">
+<col style="width: 1%">
+<col style="width: 1%">
+<col style="width: 2%">
+<col style="width: 2%">
+<col style="width: 1%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">item</th>
+<th style="text-align: right;">resp</th>
+<th style="text-align: left;">table</th>
+<th style="text-align: left;">section_id</th>
+<th style="text-align: left;">instrument</th>
+<th style="text-align: left;">instructions</th>
+<th style="text-align: left;">section_prompt</th>
+<th style="text-align: left;">item_text</th>
+<th style="text-align: left;">correct_response</th>
+<th style="text-align: left;">option_text</th>
+<th style="text-align: right;">id</th>
+<th style="text-align: right;">cluster_id</th>
+<th style="text-align: right;">wave</th>
+<th style="text-align: right;">treat</th>
+<th style="text-align: left;">cov_age</th>
+<th style="text-align: left;">cov_any_school</th>
+<th style="text-align: left;">cov_literate</th>
+<th style="text-align: left;">cov_income</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">constant_fat</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;">gilbert_meta_49</td>
+<td style="text-align: left;">srq20_1</td>
+<td style="text-align: left;">Psychological Distress (SRQ-20) in an RCT</td>
+<td style="text-align: left;">The following questions are related to certain pains and problems, that may have bothered you in the last 30 days. If you think the question applies to you and you had to describe the problem in the last 30 days, answer YES. On the other hand, if the question does not apply to you and you did not have the problem in the last 30 days, answer NO.</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">Do you feel tired all the time?</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">No</td>
+<td style="text-align: right;">54</td>
+<td style="text-align: right;">77</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;">35</td>
+<td style="text-align: left;">1</td>
+<td style="text-align: left;">1</td>
+<td style="text-align: left;">NA</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">constant_fat</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;">gilbert_meta_49</td>
+<td style="text-align: left;">srq20_1</td>
+<td style="text-align: left;">Psychological Distress (SRQ-20) in an RCT</td>
+<td style="text-align: left;">The following questions are related to certain pains and problems, that may have bothered you in the last 30 days. If you think the question applies to you and you had to describe the problem in the last 30 days, answer YES. On the other hand, if the question does not apply to you and you did not have the problem in the last 30 days, answer NO.</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">Do you feel tired all the time?</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">No</td>
+<td style="text-align: right;">44</td>
+<td style="text-align: right;">69</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;">26</td>
+<td style="text-align: left;">1</td>
+<td style="text-align: left;">1</td>
+<td style="text-align: left;">20000</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">constant_fat</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;">gilbert_meta_49</td>
+<td style="text-align: left;">srq20_1</td>
+<td style="text-align: left;">Psychological Distress (SRQ-20) in an RCT</td>
+<td style="text-align: left;">The following questions are related to certain pains and problems, that may have bothered you in the last 30 days. If you think the question applies to you and you had to describe the problem in the last 30 days, answer YES. On the other hand, if the question does not apply to you and you did not have the problem in the last 30 days, answer NO.</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">Do you feel tired all the time?</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">No</td>
+<td style="text-align: right;">148</td>
+<td style="text-align: right;">15</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: left;">26</td>
+<td style="text-align: left;">1</td>
+<td style="text-align: left;">0</td>
+<td style="text-align: left;">1000</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">constant_fat</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;">gilbert_meta_49</td>
+<td style="text-align: left;">srq20_1</td>
+<td style="text-align: left;">Psychological Distress (SRQ-20) in an RCT</td>
+<td style="text-align: left;">The following questions are related to certain pains and problems, that may have bothered you in the last 30 days. If you think the question applies to you and you had to describe the problem in the last 30 days, answer YES. On the other hand, if the question does not apply to you and you did not have the problem in the last 30 days, answer NO.</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">Do you feel tired all the time?</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">No</td>
+<td style="text-align: right;">188</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: left;">22</td>
+<td style="text-align: left;">1</td>
+<td style="text-align: left;">1</td>
+<td style="text-align: left;">2000</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">constant_fat</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;">gilbert_meta_49</td>
+<td style="text-align: left;">srq20_1</td>
+<td style="text-align: left;">Psychological Distress (SRQ-20) in an RCT</td>
+<td style="text-align: left;">The following questions are related to certain pains and problems, that may have bothered you in the last 30 days. If you think the question applies to you and you had to describe the problem in the last 30 days, answer YES. On the other hand, if the question does not apply to you and you did not have the problem in the last 30 days, answer NO.</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">Do you feel tired all the time?</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">No</td>
+<td style="text-align: right;">120</td>
+<td style="text-align: right;">19</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">1</td>
+<td style="text-align: left;">1</td>
+<td style="text-align: left;">45000</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">constant_fat</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;">gilbert_meta_49</td>
+<td style="text-align: left;">srq20_1</td>
+<td style="text-align: left;">Psychological Distress (SRQ-20) in an RCT</td>
+<td style="text-align: left;">The following questions are related to certain pains and problems, that may have bothered you in the last 30 days. If you think the question applies to you and you had to describe the problem in the last 30 days, answer YES. On the other hand, if the question does not apply to you and you did not have the problem in the last 30 days, answer NO.</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">Do you feel tired all the time?</td>
+<td style="text-align: left;">NA</td>
+<td style="text-align: left;">No</td>
+<td style="text-align: right;">180</td>
+<td style="text-align: right;">17</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: left;">40</td>
+<td style="text-align: left;">0</td>
+<td style="text-align: left;">0</td>
+<td style="text-align: left;">3000</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<p>Merging these datasets allows for a more complete view of the data, including:</p>
+<ul>
+<li>The full wording of each item and response option</li>
+<li>Analysis of how item phrasing may influence responses</li>
+<li>Richer visualizations and content-based filtering</li>
+</ul>
 
 
 </section>
