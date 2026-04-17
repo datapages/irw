@@ -1,0 +1,29 @@
+---
+title: "Merging item text and IRW response data"
+---
+
+
+## Incorporation with the IRW response data
+
+This dataset is designed to be interoperable with the core IRW item response data. Specifically, the `table` identifer should allow for merging across these two data resources. Researchers can link these item text records to response-level data using the `item` field, which serves as a shared, persistent identifier across both datasets.
+
+To incorporate response option text, the `resp` field in this dataset provides a mapping between response codes (consistent with `resp` in the response-level data) and their corresponding option_text. This allows users to reconstruct full item presentations or analyze response behavior with access to the literal item wording. Below is an example of how the data can be merged (so that each row contains information about a single response, including information about the probe used to solicit information from the respondent).
+
+::: panel-tabset
+## R
+
+```{r}
+#| echo: true
+items<-irw::irw_itemtext("gilbert_meta_49")
+df<-irw::irw_fetch("gilbert_meta_49")
+df<-merge(items,df)
+head(df)
+```
+:::
+
+Merging these datasets allows for a more complete view of the data, including:
+
+- The full wording of each item and response option
+- Analysis of how item phrasing may influence responses
+- Richer visualizations and content-based filtering
+

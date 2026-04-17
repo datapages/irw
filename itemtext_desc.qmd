@@ -1,0 +1,53 @@
+---
+title: "Item Text"
+---
+
+## Description of the IRW item text data
+
+The below scatterplot shows the mean number of words and characters in the items for the IRW tables with associated item text.
+
+
+
+```{r}
+#| label: load-data
+
+library(redivis)
+
+user <- redivis$user("bdomingu")
+dataset <- user$dataset("irw_meta:bdxt")
+table <- dataset$table("itemtext_metadata:drat")
+
+# Load table as tidyverse tibble
+data <- table$to_tibble()
+
+# Pass data to Observable
+ojs_define(plot_data = data)
+```
+
+```{ojs}
+//| label: scatterplot
+
+// Import Observable Plot
+Plot = require("@observablehq/plot")
+
+// Transpose the data for Observable
+plotData = transpose(plot_data)
+
+// Create scatterplot with enhanced tooltips
+Plot.plot({
+  marks: [
+    Plot.dot(plotData, {
+      x: "mean_word",
+      y: "mean_char",
+      title: d => `Table: ${d.table}\nSample: ${d.sample}\nConstruct: ${d.construct}\nMean Word: ${d.mean_word}\nMean Char: ${d.mean_char}`,
+      tip: true
+    })
+  ],
+  x: {
+    label: "Mean Word"
+  },
+  y: {
+    label: "Mean Characters"
+  }
+})
+```
