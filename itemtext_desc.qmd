@@ -4,7 +4,7 @@ title: "Item Text"
 
 ## Description of the IRW item text data
 
-The below scatterplot shows the mean number of words and characters in the items for the IRW tables with associated item text.
+The below scatterplot shows the mean number of words (when `item_text` is split by ' ') and characters in the items for the IRW tables with associated item text (along with the name of the relevant psychometric instrument).
 
 
 
@@ -19,6 +19,10 @@ table <- dataset$table("itemtext_metadata:drat")
 
 # Load table as tidyverse tibble
 data <- table$to_tibble()
+data<-as.data.frame(data)
+data$mean_word<-as.numeric(data$mean_word)
+data$mean_character<-as.numeric(data$mean_character)
+
 
 # Pass data to Observable
 ojs_define(plot_data = data)
@@ -38,8 +42,8 @@ Plot.plot({
   marks: [
     Plot.dot(plotData, {
       x: "mean_word",
-      y: "mean_char",
-      title: d => `Table: ${d.table}\nSample: ${d.sample}\nConstruct: ${d.construct}\nMean Word: ${d.mean_word}\nMean Char: ${d.mean_char}`,
+      y: "mean_character",
+      title: d => `Table: ${d.table}\nInstrument: ${d.instrument}\nMean Word: ${d.mean_word}\nMean Characters: ${d.mean_character}`,
       tip: true
     })
   ],
