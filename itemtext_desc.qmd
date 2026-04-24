@@ -10,6 +10,7 @@ The below scatterplot shows the mean number of words (when `item_text` is split 
 
 ```{r}
 #| label: load-data
+#| include: false
 
 library(redivis)
 
@@ -19,10 +20,12 @@ table <- dataset$table("itemtext_metadata:drat")
 
 # Load table as tidyverse tibble
 data <- table$to_tibble()
-data<-as.data.frame(data)
-data$mean_word<-as.numeric(data$mean_word)
-data$mean_character<-as.numeric(data$mean_character)
+data <- as.data.frame(data)
+data$mean_word <- as.numeric(data$mean_word)
+data$mean_character <- as.numeric(data$mean_character)
+data$instrument <- gsub("\n","",data$instrument)
 
+print(str(data))  # Let this show
 
 # Pass data to Observable
 ojs_define(plot_data = data)
@@ -34,8 +37,13 @@ ojs_define(plot_data = data)
 // Import Observable Plot
 Plot = require("@observablehq/plot")
 
-// Transpose the data for Observable
-plotData = transpose(plot_data)
+// Transpose the data from column format to row format
+plotData = plot_data.table.map((d, i) => ({
+  table: plot_data.table[i],
+  instrument: plot_data.instrument[i],
+  mean_word: plot_data.mean_word[i],
+  mean_character: plot_data.mean_character[i]
+}))
 
 // Create scatterplot with enhanced tooltips
 Plot.plot({
