@@ -1,0 +1,610 @@
+
+R version 4.5.3 (2026-03-11) -- "Reassured Reassurer"
+Copyright (C) 2026 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> # 2pl_across_datasets_compute.R
+> #
+> # Run this script once locally to produce the precomputed results object
+> # loaded by 2pl_across_datasets.qmd at render time.
+> #
+> # Output: 2pldata/2pl_across_datasets_results.rds
+> #
+> # Usage:
+> #   Rscript 2pl_across_datasets_compute.R   # from project root
+> #   -- or run interactively in RStudio --
+> 
+> library(irw)
+> library(mirt)
+Loading required package: stats4
+Loading required package: lattice
+> library(dplyr)
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+> library(purrr)
+> library(furrr)
+Loading required package: future
+> library(tibble)
+> 
+> # ------------------------------------------------------------------------------
+> # 1. Select datasets
+> # ------------------------------------------------------------------------------
+> 
+> cognitive_tables <- irw_filter(
++   construct_type = "Cognitive/educational",
++   n_categories   = 2,
++   n_items        = c(10, 60),
++   n_participants = c(500, Inf),
++   density        = c(0.8, 1.0)
++ )
+> 
+> message("Cognitive datasets: ", length(cognitive_tables))
+Cognitive datasets: 66
+> 
+> # ------------------------------------------------------------------------------
+> # 2. Fit 2PL to each dataset
+> #    Prior on a: lognormal(0, 1.0) — weak, centres near a=1,
+> #    allows roughly 0.1-7 range, prevents runaway estimates
+> # ------------------------------------------------------------------------------
+> 
+> fit_2pl <- function(table_name) {
++   message("  Fitting: ", table_name)
++ 
++   df <- tryCatch(irw_fetch(table_name), error = function(e) {
++     message("    fetch failed: ", conditionMessage(e))
++     NULL
++   })
++   if (is.null(df)) return(NULL)
++ 
++   # Downsample to at most 10000 unique respondents before reshaping
++   max_ids    <- 10000
++   unique_ids <- unique(df$id)
++   if (length(unique_ids) > max_ids) {
++     message("    downsampling from ", length(unique_ids), " to ", max_ids, " respondents")
++     df <- df[df$id %in% sample(unique_ids, max_ids), ]
++   }
++ 
++   resp <- irw_long2resp(df)
++   resp$id <- NULL
++ 
++   # Drop zero-variance items
++   resp <- resp[, sapply(resp, function(x) length(unique(na.omit(x))) > 1), drop = FALSE]
++   if (ncol(resp) < 5) {
++     message("    skipped: fewer than 5 usable items")
++     return(NULL)
++   }
++ 
++   ni <- ncol(resp)
++ 
++   model_spec <- mirt.model(paste0(
++     "F = 1-", ni, "\n",
++     "PRIOR = (1-", ni, ", a1, lnorm, 0.0, 1.0)"
++   ))
++ 
++   fit <- tryCatch(
++     mirt(resp, model_spec, itemtype = rep("2PL", ni),
++          method = "EM", technical = list(NCYCLES = 2000), verbose = FALSE),
++     error = function(e) {
++       message("    mirt failed: ", conditionMessage(e))
++       NULL
++     }
++   )
++   if (is.null(fit)) return(NULL)
++ 
++   params <- coef(fit, IRTpars = TRUE, simplify = TRUE)$items
++   tibble(
++     table = table_name,
++     item  = rownames(params),
++     a     = params[, "a"],
++     b     = params[, "b"]
++   )
++ }
+> 
+> # ------------------------------------------------------------------------------
+> # 3. Run in parallel, writing each result to disk as it completes
+> #    If the script crashes, re-running skips already-completed datasets
+> # ------------------------------------------------------------------------------
+> 
+> out_dir <- "./2pldata/fits"
+> dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+> 
+> fit_to_disk <- function(table_name) {
++   out_file <- file.path(out_dir, paste0(table_name, ".rds"))
++   if (file.exists(out_file)) {
++     message("  Skipping (already done): ", table_name)
++     return(invisible(NULL))
++   }
++   result <- fit_2pl(table_name)
++   if (!is.null(result)) saveRDS(result, out_file)
++ }
+> 
+> plan(multisession, workers = min(4, parallel::detectCores() %/% 2))
+> message("\nFitting ", length(cognitive_tables), " datasets...")
+
+Fitting 66 datasets...
+> future_map(cognitive_tables, fit_to_disk)
+  Skipping (already done): 4thgrade_math_sirt
+  Fitting: amatus_cipora_2024_arithmetic
+  Fitting: anunciacao_2024_intelligence_gmi
+  Fitting: art
+  Fitting: cdm_ecpe
+  Fitting: cdm_timss03
+  Fitting: CPDMMC_Kunnari_2020_PDP
+  Fitting: enem_2013_1mil_ch
+    downsampling from 999823 to 10000 respondents
+  Fitting: enem_2013_1mil_cn
+    downsampling from 999823 to 10000 respondents
+  Fitting: enem_2013_1mil_lc
+    downsampling from 999822 to 10000 respondents
+  Fitting: enem_2013_1mil_mt
+    downsampling from 999822 to 10000 respondents
+  Fitting: enem_2014_1mil_ch
+    downsampling from 1000000 to 10000 respondents
+  Fitting: enem_2014_1mil_cn
+    downsampling from 1000000 to 10000 respondents
+  Fitting: enem_2018_1mil_cn
+    downsampling from 1000000 to 10000 respondents
+  Fitting: enem_2018_1mil_mt
+    downsampling from 1000000 to 10000 respondents
+  Fitting: enem_2019_1mil_ch
+    downsampling from 1000000 to 10000 respondents
+  Fitting: enem_2019_1mil_cn
+    downsampling from 1000000 to 10000 respondents
+  Fitting: enem_2019_1mil_lc
+    downsampling from 1000000 to 10000 respondents
+  Fitting: enem_2019_1mil_mt
+    downsampling from 1000000 to 10000 respondents
+  Fitting: fims_tam
+  Fitting: frac20
+  Fitting: g308_sirt
+  Fitting: gcbs_brotherton_2013_vcl
+  Fitting: geiser_tam
+  Fitting: gilbert_meta_1
+17 ids removed (17 out of 7797, 0.22%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+  Fitting: gilbert_meta_102
+5 ids removed (5 out of 1914, 0.26%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+  Fitting: gilbert_meta_103
+6 ids removed (6 out of 1914, 0.31%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+  Fitting: gilbert_meta_11
+  Fitting: gilbert_meta_12
+  Fitting: gilbert_meta_15
+  Fitting: gilbert_meta_2
+  Fitting: gilbert_meta_37
+  Fitting: gilbert_meta_39
+  Fitting: gilbert_meta_55
+59 ids removed (59 out of 1763, 3.35%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+  Fitting: gilbert_meta_7
+4 ids removed (4 out of 1386, 0.29%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+  Fitting: gilbert_meta_8
+5 ids removed (5 out of 1335, 0.37%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+  Fitting: gilbert_meta_90
+Defaulting to the most frequent wave: 1
+Filtering applied: Keeping only responses from wave 1
+7 ids removed (7 out of 1773, 0.39%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+  Fitting: himmelstein-shipley_abstraction-2025
+Defaulting to the most frequent wave: 3
+Filtering applied: Keeping only responses from wave 3
+  Fitting: himmelstein-shipley_vocabulary-2025
+Defaulting to the most frequent wave: 3
+Filtering applied: Keeping only responses from wave 3
+  Fitting: KoreanNursing_Park_2017
+  Fitting: lexical_difficulty_altgassen_2025_s02_gc
+  Fitting: lexical_difficulty_altgassen_2025_s02_ws
+  Fitting: mpsycho_Rmotivation
+3 ids removed (3 out of 852, 0.35%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+  Fitting: mpsycho_rwdq
+9 ids removed (9 out of 1055, 0.85%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+  Fitting: mpsycho_wilmer
+  Fitting: much_tte_2025_actionorientation
+  Fitting: much_tte_2025_matrixreasoning
+Defaulting to the most frequent wave: 1
+Filtering applied: Keeping only responses from wave 1
+1 ids removed (1 out of 1244, 0.08%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+  Fitting: naep_multilcirt
+  Fitting: pirlsmissing_sirt
+1 ids removed (1 out of 3480, 0.03%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+  Fitting: pks_probability
+Defaulting to the most frequent wave: 0
+Filtering applied: Keeping only responses from wave 0
+  Fitting: preschool_sel_akt
+4 ids removed (4 out of 987, 0.41%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+"item_akt1_3s_t1" re-mapped to ensure all categories have a distance of 1
+"item_akt2_3s_t1" re-mapped to ensure all categories have a distance of 1
+"item_emta1_2s_t1" re-mapped to ensure all categories have a distance of 1
+"item_emta3_1s_t1" re-mapped to ensure all categories have a distance of 1
+"item_emta4_1s_t1" re-mapped to ensure all categories have a distance of 1
+"item_emta4_5s_t1" re-mapped to ensure all categories have a distance of 1
+"item_emta4_6s_t1" re-mapped to ensure all categories have a distance of 1
+"item_emtb1_1s_t1" re-mapped to ensure all categories have a distance of 1
+"item_emtb2_6s_t1" re-mapped to ensure all categories have a distance of 1
+"item_emtb4_5s_t1" re-mapped to ensure all categories have a distance of 1
+    mirt failed: Item 1 requires exactly 2 unique categories
+  Fitting: preschool_sel_box
+  Fitting: preschool_sel_dn
+3 ids removed (3 out of 880, 0.34%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+    mirt failed: Item 1 requires exactly 2 unique categories
+  Fitting: preschool_sel_htks
+    mirt failed: Item 1 requires exactly 2 unique categories
+  Fitting: project_kids_told_grade
+Defaulting to the most frequent wave: 2
+Filtering applied: Keeping only responses from wave 2
+  Fitting: project_kids_topel
+Defaulting to the most frequent wave: 1
+Filtering applied: Keeping only responses from wave 1
+  Fitting: project_kids_wj_spell_grade
+Defaulting to the most frequent wave: 2
+Filtering applied: Keeping only responses from wave 2
+  Fitting: project_kids_wj_spell_wave
+Defaulting to the most frequent wave: 3
+Filtering applied: Keeping only responses from wave 3
+  Fitting: psychtools_ability
+20 ids removed (20 out of 1525, 1.31%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+  Fitting: quantshort
+  Fitting: quopl2_forster_2021_dmat
+1662 ids removed (1662 out of 1994, 83.35%) due to response density below threshold (0.1).
+To disable filtering, set `id_density_threshold = NULL`.
+  Fitting: rmet_higgins_2022_tom
+  Fitting: test_taking_much_2025_ao
+  Fitting: test_taking_much_2025_mr
+NOTE: This dataset contains 'rater' information with 102 unique raters.
+
+  Fitting: vocab_assessment_3_to_8_year_old_children
+  Fitting: wooly_hartman2022
+[[1]]
+NULL
+
+[[2]]
+NULL
+
+[[3]]
+NULL
+
+[[4]]
+NULL
+
+[[5]]
+NULL
+
+[[6]]
+NULL
+
+[[7]]
+NULL
+
+[[8]]
+NULL
+
+[[9]]
+NULL
+
+[[10]]
+NULL
+
+[[11]]
+NULL
+
+[[12]]
+NULL
+
+[[13]]
+NULL
+
+[[14]]
+NULL
+
+[[15]]
+NULL
+
+[[16]]
+NULL
+
+[[17]]
+NULL
+
+[[18]]
+NULL
+
+[[19]]
+NULL
+
+[[20]]
+NULL
+
+[[21]]
+NULL
+
+[[22]]
+NULL
+
+[[23]]
+NULL
+
+[[24]]
+NULL
+
+[[25]]
+NULL
+
+[[26]]
+NULL
+
+[[27]]
+NULL
+
+[[28]]
+NULL
+
+[[29]]
+NULL
+
+[[30]]
+NULL
+
+[[31]]
+NULL
+
+[[32]]
+NULL
+
+[[33]]
+NULL
+
+[[34]]
+NULL
+
+[[35]]
+NULL
+
+[[36]]
+NULL
+
+[[37]]
+NULL
+
+[[38]]
+NULL
+
+[[39]]
+NULL
+
+[[40]]
+NULL
+
+[[41]]
+NULL
+
+[[42]]
+NULL
+
+[[43]]
+NULL
+
+[[44]]
+NULL
+
+[[45]]
+NULL
+
+[[46]]
+NULL
+
+[[47]]
+NULL
+
+[[48]]
+NULL
+
+[[49]]
+NULL
+
+[[50]]
+NULL
+
+[[51]]
+NULL
+
+[[52]]
+NULL
+
+[[53]]
+NULL
+
+[[54]]
+NULL
+
+[[55]]
+NULL
+
+[[56]]
+NULL
+
+[[57]]
+NULL
+
+[[58]]
+NULL
+
+[[59]]
+NULL
+
+[[60]]
+NULL
+
+[[61]]
+NULL
+
+[[62]]
+NULL
+
+[[63]]
+NULL
+
+[[64]]
+NULL
+
+[[65]]
+NULL
+
+[[66]]
+NULL
+
+Warning messages:
+1: UNRELIABLE VALUE: Future (<unnamed-1>) unexpectedly generated random numbers without specifying argument 'seed'. There is a risk that those random numbers are not statistically sound and the overall results might be invalid. To fix this, specify 'seed=TRUE'. This ensures that proper, parallel-safe random numbers are produced. To disable this check, use 'seed=NULL', or set option 'future.rng.onMisuse' to "ignore". [future <unnamed-1> (5e151b8f5a564501e862f2b7efdf572b-1); on 5e151b8f5a564501e862f2b7efdf572b@ben-Precision-5470<19304>] 
+2: UNRELIABLE VALUE: Future (<unnamed-2>) unexpectedly generated random numbers without specifying argument 'seed'. There is a risk that those random numbers are not statistically sound and the overall results might be invalid. To fix this, specify 'seed=TRUE'. This ensures that proper, parallel-safe random numbers are produced. To disable this check, use 'seed=NULL', or set option 'future.rng.onMisuse' to "ignore". [future <unnamed-2> (5e151b8f5a564501e862f2b7efdf572b-2); on 5e151b8f5a564501e862f2b7efdf572b@ben-Precision-5470<19304>] 
+3: UNRELIABLE VALUE: Future (<unnamed-3>) unexpectedly generated random numbers without specifying argument 'seed'. There is a risk that those random numbers are not statistically sound and the overall results might be invalid. To fix this, specify 'seed=TRUE'. This ensures that proper, parallel-safe random numbers are produced. To disable this check, use 'seed=NULL', or set option 'future.rng.onMisuse' to "ignore". [future <unnamed-3> (5e151b8f5a564501e862f2b7efdf572b-3); on 5e151b8f5a564501e862f2b7efdf572b@ben-Precision-5470<19304>] 
+4: UNRELIABLE VALUE: Future (<unnamed-4>) unexpectedly generated random numbers without specifying argument 'seed'. There is a risk that those random numbers are not statistically sound and the overall results might be invalid. To fix this, specify 'seed=TRUE'. This ensures that proper, parallel-safe random numbers are produced. To disable this check, use 'seed=NULL', or set option 'future.rng.onMisuse' to "ignore". [future <unnamed-4> (5e151b8f5a564501e862f2b7efdf572b-4); on 5e151b8f5a564501e862f2b7efdf572b@ben-Precision-5470<19304>] 
+> plan(sequential)
+> 
+> # ------------------------------------------------------------------------------
+> # 4. Combine results
+> # ------------------------------------------------------------------------------
+> 
+> all_results <- map(cognitive_tables, function(tbl) {
++   f <- file.path(out_dir, paste0(tbl, ".rds"))
++   if (file.exists(f)) readRDS(f) else NULL
++ }) |>
++   compact() |>
++   bind_rows()
+> 
+> message("\nDone. ", nrow(all_results), " item-level estimates across ",
++         n_distinct(all_results$table), " datasets.")
+
+Done. 1860 item-level estimates across 63 datasets.
+> 
+> # ------------------------------------------------------------------------------
+> # 5. Save combined output
+> # ------------------------------------------------------------------------------
+> 
+> saveRDS(
++   list(
++     all_results      = all_results,
++     cognitive_tables = cognitive_tables,
++     date_run         = Sys.Date(),
++     session          = sessionInfo()
++   ),
++   file = "2pldata/2pl_across_datasets_results.rds"
++ )
+> 
+> message("Saved to 2pldata/2pl_across_datasets_results.rds")
+Saved to 2pldata/2pl_across_datasets_results.rds
+> 
+> # ------------------------------------------------------------------------------
+> # 6. Generate citations
+> # ------------------------------------------------------------------------------
+> 
+> for (tbl in cognitive_tables) {
++   tryCatch(
++     irw_save_bibtex(tbl, output_file = "2pldata/irw_references.bib", append = TRUE),
++     error = function(e) message("  bibtex failed for: ", tbl)
++   )
++ }
+  bibtex failed for: 4thgrade_math_sirt
+  bibtex failed for: amatus_cipora_2024_arithmetic
+  bibtex failed for: anunciacao_2024_intelligence_gmi
+  bibtex failed for: art
+  bibtex failed for: cdm_ecpe
+  bibtex failed for: cdm_timss03
+  bibtex failed for: CPDMMC_Kunnari_2020_PDP
+  bibtex failed for: enem_2013_1mil_ch
+  bibtex failed for: enem_2013_1mil_cn
+  bibtex failed for: enem_2013_1mil_lc
+  bibtex failed for: enem_2013_1mil_mt
+  bibtex failed for: enem_2014_1mil_ch
+  bibtex failed for: enem_2014_1mil_cn
+  bibtex failed for: enem_2018_1mil_cn
+  bibtex failed for: enem_2018_1mil_mt
+  bibtex failed for: enem_2019_1mil_ch
+  bibtex failed for: enem_2019_1mil_cn
+  bibtex failed for: enem_2019_1mil_lc
+  bibtex failed for: enem_2019_1mil_mt
+  bibtex failed for: fims_tam
+  bibtex failed for: frac20
+  bibtex failed for: g308_sirt
+  bibtex failed for: gcbs_brotherton_2013_vcl
+  bibtex failed for: geiser_tam
+  bibtex failed for: gilbert_meta_1
+  bibtex failed for: gilbert_meta_102
+  bibtex failed for: gilbert_meta_103
+  bibtex failed for: gilbert_meta_11
+  bibtex failed for: gilbert_meta_12
+  bibtex failed for: gilbert_meta_15
+  bibtex failed for: gilbert_meta_2
+  bibtex failed for: gilbert_meta_37
+  bibtex failed for: gilbert_meta_39
+  bibtex failed for: gilbert_meta_55
+  bibtex failed for: gilbert_meta_7
+  bibtex failed for: gilbert_meta_8
+  bibtex failed for: gilbert_meta_90
+  bibtex failed for: himmelstein-shipley_abstraction-2025
+  bibtex failed for: himmelstein-shipley_vocabulary-2025
+  bibtex failed for: KoreanNursing_Park_2017
+  bibtex failed for: lexical_difficulty_altgassen_2025_s02_gc
+  bibtex failed for: lexical_difficulty_altgassen_2025_s02_ws
+  bibtex failed for: mpsycho_Rmotivation
+  bibtex failed for: mpsycho_rwdq
+  bibtex failed for: mpsycho_wilmer
+  bibtex failed for: much_tte_2025_actionorientation
+  bibtex failed for: much_tte_2025_matrixreasoning
+  bibtex failed for: naep_multilcirt
+  bibtex failed for: pirlsmissing_sirt
+  bibtex failed for: pks_probability
+  bibtex failed for: preschool_sel_akt
+  bibtex failed for: preschool_sel_box
+  bibtex failed for: preschool_sel_dn
+  bibtex failed for: preschool_sel_htks
+  bibtex failed for: project_kids_told_grade
+  bibtex failed for: project_kids_topel
+  bibtex failed for: project_kids_wj_spell_grade
+  bibtex failed for: project_kids_wj_spell_wave
+  bibtex failed for: psychtools_ability
+  bibtex failed for: quantshort
+  bibtex failed for: quopl2_forster_2021_dmat
+  bibtex failed for: rmet_higgins_2022_tom
+  bibtex failed for: test_taking_much_2025_ao
+  bibtex failed for: test_taking_much_2025_mr
+  bibtex failed for: vocab_assessment_3_to_8_year_old_children
+  bibtex failed for: wooly_hartman2022
+> 
+> message("Citations saved to 2pldata/irw_references.bib")
+Citations saved to 2pldata/irw_references.bib
+> 
+> proc.time()
+    user   system  elapsed 
+  91.244    3.324 1893.157 
