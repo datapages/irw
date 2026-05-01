@@ -33,14 +33,16 @@ function createDatasetMap(df) {
 // Create dataset map from data_index instead of metadata
 dataset_map = createDatasetMap(data_index);
 
-// Dataset selector with default value
+// Search input to filter dataset names
+viewof dataset_search = Inputs.search(Array.from(dataset_map.keys()), {
+  label: "Search datasets",
+  placeholder: "Type to search..."
+})
+
+// Dataset selector from filtered results
 viewof dataset = Inputs.select(
-  dataset_map, 
-  { 
-    label: 'Dataset',
-    // Set default value to first entry in the map
-    value: Array.from(dataset_map.values())[0]
-  }
+  new Map(dataset_search.map(name => [name, dataset_map.get(name)])),
+  { label: "Select dataset" }
 );
 
 // Function to find dataset info from dictionary (fixed field name)
