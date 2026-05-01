@@ -326,7 +326,7 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </header>
 
 
-<p>Here is a slightly more complex example that takes advantage of <code>irw</code> to easily fetch a dataset and to then compute the <a href="https://www.cambridge.org/core/journals/psychometrika/article/intermodel-vigorish-as-a-lens-for-understanding-and-quantifying-the-value-of-item-response-models-for-dichotomously-coded-items/F61C75F6F945A5B13F73C6128EB83998">InterModel Vigorish</a> contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation across 4 folds; see also the documentation in the related <a href="https://github.com/intermodelvigorish/imv_R"><code>imv</code></a> package). Note the <code>irw_long2resp</code> function which is helpful for reformatting IRW data from long to wide. We have also tried to further illustrate how the IMV can be used to understand predictions <a href="https://intermodelvigorish.github.io/shinysite/">here</a>.</p>
+<p>Here is a slightly more complex example that takes advantage of <code>irw</code> to easily fetch a dataset and to then compute the <a href="https://www.cambridge.org/core/journals/psychometrika/article/intermodel-vigorish-as-a-lens-for-understanding-and-quantifying-the-value-of-item-response-models-for-dichotomously-coded-items/F61C75F6F945A5B13F73C6128EB83998">InterModel Vigorish</a> contrasting predictings for the 2PL to predictions from the 1PL for an example dataset (using cross-validation; see also the documentation in the related <a href="https://github.com/intermodelvigorish/imv_R"><code>imv</code></a> package). Note the <code>irw_long2resp</code> function which is helpful for reformatting IRW data from long to wide. We have also tried to further illustrate how the IMV can be used to understand predictions <a href="https://intermodelvigorish.github.io/shinysite/">here</a>.</p>
 <div class="tabset-margin-container"></div><div class="panel-tabset">
 <ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-1-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-1" role="tab" aria-controls="tabset-1-1" aria-selected="true" href="">R</a></li></ul>
 <div class="tab-content">
@@ -334,24 +334,45 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>df<span class="ot">&lt;-</span>irw<span class="sc">::</span><span class="fu">irw_fetch</span>(<span class="st">"gilbert_meta_2"</span>)  <span class="co">#https://github.com/itemresponsewarehouse/Rpkg</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>resp<span class="ot">&lt;-</span>irw<span class="sc">::</span><span class="fu">irw_long2resp</span>(df)</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>resp<span class="sc">$</span>id<span class="ot">&lt;-</span><span class="cn">NULL</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="do">##1pl/Rasch model</span></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>m0<span class="ot">&lt;-</span>mirt<span class="sc">::</span><span class="fu">mirt</span>(resp,<span class="dv">1</span>,<span class="st">'Rasch'</span>,<span class="at">verbose=</span><span class="cn">FALSE</span>)</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="do">##2pl</span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>ni<span class="ot">&lt;-</span><span class="fu">ncol</span>(resp)</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>s<span class="ot">&lt;-</span><span class="fu">paste</span>(<span class="st">"F=1-"</span>,ni,<span class="st">"</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="st">             PRIOR = (1-"</span>,ni,<span class="st">", a1, lnorm, 0.0, 1.0)"</span>,<span class="at">sep=</span><span class="st">""</span>)</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>model<span class="ot">&lt;-</span>mirt<span class="sc">::</span><span class="fu">mirt.model</span>(s)</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>m1<span class="ot">&lt;-</span>mirt<span class="sc">::</span><span class="fu">mirt</span>(resp,model,<span class="at">itemtype=</span><span class="fu">rep</span>(<span class="st">"2PL"</span>,ni),<span class="at">method=</span><span class="st">"EM"</span>,<span class="at">technical=</span><span class="fu">list</span>(<span class="at">NCYCLES=</span><span class="dv">10000</span>),<span class="at">verbose=</span><span class="cn">FALSE</span>)</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="do">##compute IMV comparing predictions from 1pl and 2pl</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">8675309</span>)</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>omega<span class="ot">&lt;-</span>imv<span class="sc">::</span><span class="fu">imv.mirt</span>(m0,m1) <span class="co">#https://github.com/intermodelvigorish/imv_R</span></span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="fu">mean</span>(omega)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(imv)</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(irw)</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(mirt)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>df   <span class="ot">&lt;-</span> irw<span class="sc">::</span><span class="fu">irw_fetch</span>(<span class="st">"gilbert_meta_2"</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert from long format (one row per person-item) to wide response matrix</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>resp <span class="ot">&lt;-</span> irw<span class="sc">::</span><span class="fu">irw_long2resp</span>(df)</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>resp<span class="sc">$</span>id <span class="ot">&lt;-</span> <span class="cn">NULL</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Rasch / 1PL model</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>m0 <span class="ot">&lt;-</span> mirt<span class="sc">::</span><span class="fu">mirt</span>(resp, <span class="dv">1</span>, <span class="st">'Rasch'</span>, <span class="at">verbose =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"># 2PL model with log-normal prior on discriminations</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>ni    <span class="ot">&lt;-</span> <span class="fu">ncol</span>(resp)</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>s     <span class="ot">&lt;-</span> <span class="fu">paste0</span>(<span class="st">"F = 1-"</span>, ni, <span class="st">"</span><span class="sc">\n</span><span class="st">"</span>,</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>                <span class="st">"PRIOR = (1-"</span>, ni, <span class="st">", a1, lnorm, 0.0, 1.0)"</span>)</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>model <span class="ot">&lt;-</span> mirt<span class="sc">::</span><span class="fu">mirt.model</span>(s)</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>m1    <span class="ot">&lt;-</span> mirt<span class="sc">::</span><span class="fu">mirt</span>(resp, model,</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>                    <span class="at">itemtype  =</span> <span class="fu">rep</span>(<span class="st">"2PL"</span>, ni),</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>                    <span class="at">method    =</span> <span class="st">"EM"</span>,</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>                    <span class="at">technical =</span> <span class="fu">list</span>(<span class="at">NCYCLES =</span> <span class="dv">10000</span>),</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>                    <span class="at">verbose   =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">8675309</span>)</span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>result <span class="ot">&lt;-</span> <span class="fu">imv</span>(m0, m1)</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>result</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
-<pre><code>[1] 0.01415356</code></pre>
+<pre><code>$folds
+[1] 0.017189426 0.014739478 0.014186878 0.014899954 0.009752082
+
+$mean
+[1] 0.01415356
+
+$sd
+[1] 0.002715281
+
+$ci
+     lower      upper 
+0.01177351 0.01653361 </code></pre>
 </div>
 </div>
 </div>
