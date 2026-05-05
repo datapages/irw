@@ -105,28 +105,11 @@ message("\nItems: ", nrow(raw_data), " across ", n_distinct(raw_data$table), " t
 # 5. Extract text features (base R only, no quanteda)
 # ------------------------------------------------------------------------------
 
-negation_terms <- paste0(
-  "\\b(not|never|no|neither|nor|without|cannot|n't|",
-  "can't|doesn't|isn't|aren't|wasn't|weren't|hasn't|haven't|won't|wouldn't)\\b"
-)
-question_words <- "^(what|which|who|where|when|why|how)\\b"
-
 all_data <- raw_data |>
   mutate(
     word_count   = lengths(strsplit(trimws(item_text), "\\s+")),
     avg_word_len = nchar(gsub("[[:punct:]]", "", item_text)) /
-                   pmax(word_count, 1),
-    has_negation = as.integer(grepl(negation_terms, item_text, ignore.case = TRUE)),
-    has_question = as.integer(
-      grepl("\\?", item_text) |
-      grepl(question_words, trimws(item_text), ignore.case = TRUE)
-    ),
-    has_number   = as.integer(
-      grepl(
-        "[0-9]|\\b(one|two|three|four|five|six|seven|eight|nine|ten|all|none|some|most|few|many)\\b",
-        item_text, ignore.case = TRUE
-      )
-    )
+                   pmax(word_count, 1)
   )
 
 message("Features extracted.")

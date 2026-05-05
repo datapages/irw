@@ -23,6 +23,7 @@ execute:
 library(dplyr)
 library(ggplot2)
 library(tidyr)
+library(tibble)
 
 .cache          <- readRDS("itemtextdata/item_text_difficulty_results.rds")
 all_data        <- .cache$all_data
@@ -98,15 +99,12 @@ process_table <- function(table_name) {
 }
 ```
 
-We then extract the following features from each item's text using base R:
+We then extract two simple text features using base R:
 
 | Feature | Description |
 |---|---|
 | `word_count` | Number of words |
-| `avg_word_len` | Mean character length per word |
-| `has_negation` | Contains a negation word (not, never, no, …) |
-| `has_question` | Question format (ends with ? or starts with question word) |
-| `has_number` | Contains a numeral or number word |
+| `avg_word_len` | Mean character length per word (excluding punctuation) |
 
 ---
 
@@ -125,151 +123,81 @@ ggplot(all_data, aes(x = prop_correct)) +
   theme_minimal(base_size = 13)
 ```
 
-### Continuous features vs. proportion correct
-
-```{r}
-#| label: fig-scatter
-#| fig-cap: "Proportion correct vs. continuous text features. Lines are loess smooths."
-#| fig-height: 5
-
-all_data |>
-  select(prop_correct, word_count, avg_word_len, table) |>
-  pivot_longer(c(word_count, avg_word_len),
-               names_to = "feature", values_to = "value") |>
-  mutate(feature = recode(feature,
-    word_count   = "Word count",
-    avg_word_len = "Avg word length"
-  )) |>
-  ggplot(aes(x = value, y = prop_correct)) +
-  geom_point(alpha = 0.15, size = 0.8, colour = "#2166ac") +
-  geom_smooth(method = "loess", se = TRUE, colour = "#d6604d", linewidth = 0.8) +
-  facet_wrap(~feature, scales = "free_x", ncol = 2) +
-  labs(x = "Feature value", y = "Proportion correct") +
-  theme_minimal(base_size = 12)
-```
-
-### Binary features vs. proportion correct
-
-```{r}
-#| label: fig-binary
-#| fig-cap: "Proportion correct by binary text features. Points show means; bars show 95% CIs."
-#| fig-height: 4
-
-all_data |>
-  select(prop_correct, has_negation, has_question, has_number) |>
-  pivot_longer(c(has_negation, has_question, has_number),
-               names_to = "feature", values_to = "value") |>
-  mutate(
-    feature = recode(feature,
-      has_negation = "Negation present",
-      has_question = "Question format",
-      has_number   = "Number present"
-    ),
-    value = factor(value, levels = c(0, 1), labels = c("No", "Yes"))
-  ) |>
-  group_by(feature, value) |>
-  summarise(
-    mean_pc = mean(prop_correct, na.rm = TRUE),
-    se_pc   = sd(prop_correct, na.rm = TRUE) / sqrt(n()),
-    .groups = "drop"
-  ) |>
-  ggplot(aes(x = value, y = mean_pc, colour = value)) +
-  geom_point(size = 3) +
-  geom_errorbar(aes(ymin = mean_pc - 1.96 * se_pc,
-                    ymax = mean_pc + 1.96 * se_pc),
-                width = 0.15) +
-  scale_colour_manual(values = c("No" = "#888888", "Yes" = "#2166ac"),
-                      guide = "none") +
-  facet_wrap(~feature) +
-  labs(x = NULL, y = "Mean proportion correct") +
-  theme_minimal(base_size = 13)
-```
-
 ---
 
-## Step 4: How much variance do text features explain?
+## Step 4: Within-dataset relationships
 
-We fit a linear regression of proportion correct on all features, with dataset fixed
-effects to account for overall difficulty varying across instruments.
+Pooling all items together can be misleading — overall correlations between text
+features and difficulty are heavily influenced by which datasets happen to have longer
+or shorter items, not by within-instrument variation. Instead, we compute the
+correlation between each feature and proportion correct *separately per dataset*, then
+look at the distribution of those correlations across the `r n_distinct(all_data$table)`
+datasets.
 
 ```{r}
-#| label: regression
+#| label: within-cors
 
-mod <- lm(
-  prop_correct ~ word_count + avg_word_len + has_negation + has_question +
-                 has_number + table,
-  data = all_data
-)
+within_cors <- all_data |>
+  group_by(table) |>
+  summarise(
+    n_items      = n(),
+    r_word_count = round(cor(word_count,   prop_correct, use = "complete.obs"), 2),
+    r_avg_wlen   = round(cor(avg_word_len, prop_correct, use = "complete.obs"), 2),
+    .groups = "drop"
+  )
 
-mod_no_fe <- lm(
-  prop_correct ~ word_count + avg_word_len + has_negation + has_question +
-                 has_number,
-  data = all_data
-)
-
-r2_no_fe <- round(summary(mod_no_fe)$r.squared, 3)
-r2_fe    <- round(summary(mod)$r.squared, 3)
-
-ci <- confint(mod)
-coef_tbl <- as.data.frame(summary(mod)$coefficients) |>
-  tibble::rownames_to_column("term") |>
-  filter(!grepl("^table", term), term != "(Intercept)") |>
-  mutate(
-    `95% CI low`  = round(ci[term, 1], 3),
-    `95% CI high` = round(ci[term, 2], 3),
-    term = recode(term,
-      word_count   = "Word count",
-      avg_word_len = "Avg word length",
-      has_negation = "Negation present",
-      has_question = "Question format",
-      has_number   = "Number present"
-    ),
-    Estimate = round(Estimate, 3),
-    `p value` = round(`Pr(>|t|)`, 3)
-  ) |>
-  select(Feature = term, Estimate, `95% CI low`, `95% CI high`, `p value`)
-
-coef_tbl
+within_cors
 ```
 
-Without dataset fixed effects, text features explain **`r r2_no_fe * 100`%** of
-variance in proportion correct. Adding fixed effects brings this to
-**`r r2_fe * 100`%**, suggesting most explainable variance is between instruments
-rather than within them.
+```{r}
+#| label: fig-within-cors
+#| fig-cap: "Within-dataset correlations between text features and proportion correct. Each point is one dataset; the dashed line marks zero."
+#| fig-height: 4
+
+within_cors |>
+  pivot_longer(c(r_word_count, r_avg_wlen),
+               names_to = "feature", values_to = "r") |>
+  mutate(feature = recode(feature,
+    r_word_count = "Word count",
+    r_avg_wlen   = "Avg word length"
+  )) |>
+  ggplot(aes(x = r, y = feature)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
+  geom_jitter(height = 0.15, size = 2.5, alpha = 0.7, colour = "#2166ac") +
+  labs(x = "Correlation with proportion correct (within dataset)", y = NULL) +
+  theme_minimal(base_size = 13)
+```
 
 ```{r}
-#| label: fig-coefs
-#| fig-cap: "Regression coefficients for text features predicting proportion correct (with dataset fixed effects). Error bars are 95% CIs."
-#| fig-height: 3.5
+#| label: fig-scatter-facet
+#| fig-cap: "Word count vs. proportion correct, separately per dataset. Lines are OLS fits."
+#| fig-height: 8
 
-coef_tbl |>
-  mutate(Feature = reorder(Feature, Estimate)) |>
-  ggplot(aes(x = Estimate, y = Feature)) +
-  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
-  geom_errorbarh(aes(xmin = `95% CI low`, xmax = `95% CI high`),
-                 height = 0.25, colour = "#888888") +
-  geom_point(size = 3, colour = "#2166ac") +
-  labs(x = "Coefficient (effect on proportion correct)", y = NULL) +
-  theme_minimal(base_size = 13)
+ggplot(all_data, aes(x = word_count, y = prop_correct)) +
+  geom_point(alpha = 0.4, size = 0.9, colour = "#2166ac") +
+  geom_smooth(method = "lm", se = FALSE, colour = "#d6604d", linewidth = 0.7) +
+  facet_wrap(~table, scales = "free") +
+  labs(x = "Word count", y = "Proportion correct") +
+  theme_minimal(base_size = 10) +
+  theme(strip.text = element_text(size = 7))
 ```
 
 ---
 
 ## What to notice
 
-**Between- vs. within-instrument variance.** The jump in R² when adding fixed effects
-is the key comparison. If most variance is between instruments, overall difficulty is
-mostly a property of the test (content domain, target population) rather than item
-wording per se.
+**Heterogeneity across datasets.** If the within-dataset correlations are scattered
+around zero (some positive, some negative), that suggests any overall pooled
+relationship is an artifact of dataset-level confounds rather than a genuine
+text-difficulty signal.
 
-**Negation.** If items with negation show lower proportion correct, that's consistent
-with processing load rather than content difficulty — respondents may answer the item
-they wish had been asked.
+**Direction of word count effect.** Longer items could be harder (more to parse) or
+easier (more context provided). Looking within datasets avoids the confound that
+some instruments simply use longer items throughout.
 
 **Limitations.** Proportion correct conflates item difficulty with sample ability.
-A harder sample makes every item look more difficult. The dataset fixed effects
-partially address this, but within-dataset ability variation is not controlled.
-The natural next step is to use *b* parameters from the 2PL vignette instead.
+The natural next step is to use *b* parameters from the 2PL vignette instead, which
+are ability-adjusted.
 
 ---
 
