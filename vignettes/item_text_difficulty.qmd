@@ -123,6 +123,27 @@ ggplot(all_data, aes(x = prop_correct)) +
   theme_minimal(base_size = 13)
 ```
 
+### Text features
+
+```{r}
+#| label: fig-features
+#| fig-cap: "Distributions of word count and average word length across items."
+#| fig-height: 3.5
+
+all_data |>
+  pivot_longer(c(word_count, avg_word_len),
+               names_to = "feature", values_to = "value") |>
+  mutate(feature = recode(feature,
+    word_count   = "Word count",
+    avg_word_len = "Avg word length"
+  )) |>
+  ggplot(aes(x = value)) +
+  geom_histogram(bins = 40, fill = "#2166ac", colour = "white", alpha = 0.8) +
+  facet_wrap(~feature, scales = "free_x") +
+  labs(x = NULL, y = "Count") +
+  theme_minimal(base_size = 13)
+```
+
 ---
 
 ## Step 4: Within-dataset relationships
@@ -147,25 +168,6 @@ within_cors <- all_data |>
   )
 
 within_cors
-```
-
-```{r}
-#| label: fig-within-cors
-#| fig-cap: "Within-dataset correlations between text features and proportion correct. Each point is one dataset; the dashed line marks zero."
-#| fig-height: 4
-
-within_cors |>
-  pivot_longer(c(r_word_count, r_avg_wlen),
-               names_to = "feature", values_to = "r") |>
-  mutate(feature = recode(feature,
-    r_word_count = "Word count",
-    r_avg_wlen   = "Avg word length"
-  )) |>
-  ggplot(aes(x = r, y = feature)) +
-  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey60") +
-  geom_jitter(height = 0.15, size = 2.5, alpha = 0.7, colour = "#2166ac") +
-  labs(x = "Correlation with proportion correct (within dataset)", y = NULL) +
-  theme_minimal(base_size = 13)
 ```
 
 ```{r}
