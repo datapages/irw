@@ -33,17 +33,61 @@ function createDatasetMap(df) {
 // Create dataset map from data_index instead of metadata
 dataset_map = createDatasetMap(data_index);
 
-// Search input to filter dataset names
-viewof dataset_search = Inputs.search(Array.from(dataset_map.keys()), {
-  label: "Search datasets",
-  placeholder: "Type to search..."
-})
+// Searchable combo-box: type to filter, click to select
+viewof dataset = {
+  const allNames = Array.from(dataset_map.keys());
+  const container = html`<div style="position: relative; display: inline-block; width: 400px;">
+    <label style="font-weight: 600; display: block; margin-bottom: 4px;">Dataset</label>
+    <input type="text" placeholder="Type to search datasets…" 
+      style="width: 100%; padding: 6px 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;"
+    />
+    <div class="combo-count" style="font-size: 12px; color: #666; margin-top: 2px;">${allNames.length} datasets</div>
+    <div class="combo-list" style="
+      position: absolute; z-index: 999; width: 100%; max-height: 260px; overflow-y: auto;
+      border: 1px solid #ccc; border-top: none; border-radius: 0 0 4px 4px;
+      background: white; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    "></div>
+  </div>`;
 
-// Dataset selector from filtered results
-viewof dataset = Inputs.select(
-  new Map(dataset_search.map(name => [name, dataset_map.get(name)])),
-  { label: "Select dataset" }
-);
+  const input = container.querySelector("input");
+  const list = container.querySelector(".combo-list");
+  const countEl = container.querySelector(".combo-count");
+  let currentValue = dataset_map.get(allNames[0]);
+
+  function renderList(filter) {
+    const matches = filter
+      ? allNames.filter(n => n.toLowerCase().includes(filter.toLowerCase()))
+      : allNames;
+    countEl.textContent = `${matches.length} of ${allNames.length} datasets`;
+    list.innerHTML = "";
+    for (const name of matches.slice(0, 200)) {
+      const opt = html`<div style="
+        padding: 5px 10px; cursor: pointer; font-size: 13px;
+        border-bottom: 1px solid #f0f0f0;
+      ">${name}</div>`;
+      opt.onmousedown = (e) => {
+        e.preventDefault();
+        input.value = name;
+        list.style.display = "none";
+        currentValue = dataset_map.get(name);
+        container.value = currentValue;
+        container.dispatchEvent(new Event("input", {bubbles: true}));
+      };
+      opt.onmouseenter = () => opt.style.backgroundColor = "#f0f4ff";
+      opt.onmouseleave = () => opt.style.backgroundColor = "white";
+      list.appendChild(opt);
+    }
+  }
+
+  input.addEventListener("focus", () => { renderList(input.value); list.style.display = "block"; });
+  input.addEventListener("input", () => { renderList(input.value); list.style.display = "block"; });
+  input.addEventListener("blur", () => { setTimeout(() => list.style.display = "none", 150); });
+
+  // Initialize with first dataset
+  input.value = allNames[0];
+  container.value = currentValue;
+  return container;
+}
 
 // Function to find dataset info from dictionary (fixed field name)
 function findDatasetInfo(dictionary, datasetName) {
