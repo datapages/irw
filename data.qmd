@@ -33,59 +33,81 @@ function createDatasetMap(df) {
 // Create dataset map from data_index instead of metadata
 dataset_map = createDatasetMap(data_index);
 
-// Searchable combo-box: type to filter, click to select
-viewof dataset = {
+viewof dataset_name = {
   const allNames = Array.from(dataset_map.keys());
-  const container = html`<div style="position: relative; display: inline-block; width: 400px;">
-    <label style="font-weight: 600; display: block; margin-bottom: 4px;">Dataset</label>
-    <input type="text" placeholder="Type to search datasets…" 
-      style="width: 100%; padding: 6px 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;"
-    />
-    <div class="combo-count" style="font-size: 12px; color: #666; margin-top: 2px;">${allNames.length} datasets</div>
-    <div class="combo-list" style="
-      position: absolute; z-index: 999; width: 100%; max-height: 260px; overflow-y: auto;
-      border: 1px solid #ccc; border-top: none; border-radius: 0 0 4px 4px;
-      background: white; display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    "></div>
+  let selectedName = allNames[0];
+
+  // Attach list to body so it's never clipped by layout overflow
+  const list = document.createElement("div");
+  list.style.cssText = "position:fixed;z-index:99999;max-height:260px;overflow-y:auto;border:1px solid #ccc;border-radius:0 0 4px 4px;background:white;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.15);";
+  document.body.appendChild(list);
+
+  const container = html`<div style="display:inline-block;width:400px;margin-bottom:20px;">
+    <label style="font-weight:600;display:block;margin-bottom:4px;">Search Dataset</label>
+    <div style="position:relative;">
+      <svg style="position:absolute;left:8px;top:50%;transform:translateY(-50%);pointer-events:none;color:#888;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input type="text" placeholder="Type to search datasets…"
+        style="width:100%;padding:6px 10px 6px 28px;font-size:smaller;border:1px solid #ccc;border-radius:4px;box-sizing:border-box;" />
+    </div>
   </div>`;
 
   const input = container.querySelector("input");
-  const list = container.querySelector(".combo-list");
-  const countEl = container.querySelector(".combo-count");
-  let currentValue = dataset_map.get(allNames[0]);
+
+  function positionList() {
+    const r = input.getBoundingClientRect();
+    list.style.top = r.bottom + "px";
+    list.style.left = r.left + "px";
+    list.style.width = r.width + "px";
+  }
 
   function renderList(filter) {
     const matches = filter
       ? allNames.filter(n => n.toLowerCase().includes(filter.toLowerCase()))
       : allNames;
-    countEl.textContent = `${matches.length} of ${allNames.length} datasets`;
     list.innerHTML = "";
-    for (const name of matches.slice(0, 200)) {
-      const opt = html`<div style="
-        padding: 5px 10px; cursor: pointer; font-size: 13px;
-        border-bottom: 1px solid #f0f0f0;
-      ">${name}</div>`;
-      opt.onmousedown = (e) => {
+    for (const name of matches.slice(0, 300)) {
+      const item = document.createElement("div");
+      item.textContent = name;
+      item.style.cssText = "padding:5px 10px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0;";
+      item.onmousedown = (e) => {
         e.preventDefault();
+        selectedName = name;
         input.value = name;
         list.style.display = "none";
-        currentValue = dataset_map.get(name);
-        container.value = currentValue;
+        container.value = selectedName;
         container.dispatchEvent(new Event("input", {bubbles: true}));
       };
-      opt.onmouseenter = () => opt.style.backgroundColor = "#f0f4ff";
-      opt.onmouseleave = () => opt.style.backgroundColor = "white";
-      list.appendChild(opt);
+      item.onmouseenter = () => item.style.backgroundColor = "#f0f4ff";
+      item.onmouseleave = () => item.style.backgroundColor = "";
+      list.appendChild(item);
     }
   }
 
-  input.addEventListener("focus", () => { renderList(input.value); list.style.display = "block"; });
-  input.addEventListener("input", () => { renderList(input.value); list.style.display = "block"; });
-  input.addEventListener("blur", () => { setTimeout(() => list.style.display = "none", 150); });
+  input.addEventListener("focus", () => {
+    input.value = "";
+    renderList("");
+    positionList();
+    list.style.display = "block";
+  });
+  input.addEventListener("input", (e) => {
+    e.stopPropagation();
+    renderList(input.value);
+    positionList();
+    list.style.display = "block";
+  });
+  input.addEventListener("blur", () => {
+    setTimeout(() => { list.style.display = "none"; input.value = selectedName; }, 150);
+  });
 
-  // Initialize with first dataset
-  input.value = allNames[0];
-  container.value = currentValue;
+  function onScroll(e) { if (list.contains(e.target)) return; list.style.display = "none"; input.value = selectedName; }
+  window.addEventListener("scroll", onScroll, true);
+
+  invalidation.then(() => { list.remove(); window.removeEventListener("scroll", onScroll, true); });
+
+  input.value = selectedName;
+  container.value = selectedName;
   return container;
 }
 
