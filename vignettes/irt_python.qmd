@@ -85,7 +85,7 @@ resp_wide = irw.long2resp(df)
 resp_wide = resp_wide.drop(columns="id", errors="ignore")
 
 # Convert to numeric; encode missing as -1
-resp_arr = resp_wide.apply(pd.to_numeric, errors="coerce").values.astype(float)
+resp_arr = resp_wide.apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float, na_value=np.nan)
 
 n_persons, n_items = resp_arr.shape
 print(f"Persons: {n_persons}, Items: {n_items}")
@@ -204,7 +204,7 @@ resp_wide_poly = irw.long2resp(df_poly)
 resp_wide_poly = resp_wide_poly.drop(columns="id", errors="ignore")
 
 # Convert to numeric; shift so minimum category = 0
-resp_arr_poly = resp_wide_poly.apply(pd.to_numeric, errors="coerce").values.astype(float)
+resp_arr_poly = resp_wide_poly.apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float, na_value=np.nan)
 min_resp = int(np.nanmin(resp_arr_poly))
 resp_arr_poly = resp_arr_poly - min_resp
 
