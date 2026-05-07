@@ -1,0 +1,312 @@
+---
+title: "Estimating IRT Models in Python"
+description: |
+  A step-by-step introduction to importing IRW data in Python and fitting
+  standard IRT models (1PL, 2PL, 3PL, and graded response) using the `girth` package.
+format:
+  html:
+    code-fold: false
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  eval: true
+  message: false
+  warning: false
+---
+
+This vignette walks through a complete Python workflow for working with IRW data:
+fetching a dataset, preparing it for IRT estimation, fitting the 1PL (Rasch), 2PL,
+and 3PL models for dichotomous responses, and the graded response model (GRM) for
+polytomous data. We use the [`irw`](https://github.com/itemresponsewarehouse/Python-pkg)
+package for data access and [`girth`](https://github.com/eribean/girth) for IRT estimation.
+
+---
+
+## Setup
+
+### Install required packages
+
+```{python}
+# pip install --upgrade setuptools
+# pip install "git+https://github.com/itemresponsewarehouse/Python-pkg.git"
+# pip install girth scipy matplotlib
+```
+
+### Load libraries
+
+```{python}
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import irw
+from girth import (
+    rasch_mml,        # 1PL (Rasch)
+    twopl_mml,        # 2PL
+    threepl_mml,      # 3PL
+    grm_mml,          # Graded Response Model
+    tag_missing_data, # encode missing values for girth
+    INVALID_RESPONSE, # girth's missing-data sentinel (-99999)
+)
+```
+
+---
+
+## Part 1: Dichotomous IRT (1PL, 2PL, 3PL)
+
+### Fetch a dataset
+
+We start with `4thgrade_math_sirt`, a dichotomous cognitive dataset from the IRW
+containing math item responses from fourth-grade students. On first use, `irw.fetch()`
+will open a browser window prompting you to authenticate with your Redivis account.
+
+```{python}
+df = irw.fetch("4thgrade_math_sirt")
+print(df.head())
+print(f"\nShape: {df.shape}")
+print(f"Columns: {df.columns.tolist()}")
+```
+
+IRW data is in **long format**: one row per person–item response. The key columns are:
+
+- `id` — respondent identifier
+- `item` — item identifier
+- `resp` — response value (0/1 for dichotomous items)
+
+### Prepare the response matrix
+
+`girth` expects a **wide** integer array of shape `(n_items, n_persons)`. Missing
+responses must be encoded using `INVALID_RESPONSE` (girth's sentinel value, `-99999`);
+call `tag_missing_data()` to apply this encoding. We use `irw.long2resp()` to reshape
+from long to wide, then convert.
+
+```{python}
+# Reshape from long to wide (persons × items)
+resp_wide = irw.long2resp(df)
+resp_wide = resp_wide.drop(columns="id", errors="ignore")
+
+# Convert to numeric float array, then transpose to (items × persons)
+resp_arr = resp_wide.apply(pd.to_numeric, errors="coerce").values.astype(float)
+resp_arr = resp_arr.T  # shape: (n_items, n_persons)
+
+n_items, n_persons = resp_arr.shape
+print(f"Items: {n_items}, Persons: {n_persons}")
+print(f"Overall proportion correct: {np.nanmean(resp_arr):.3f}")
+
+# Encode missing values as INVALID_RESPONSE and validate with tag_missing_data
+resp_matrix = np.where(np.isnan(resp_arr), INVALID_RESPONSE, resp_arr).astype(int)
+resp_matrix = tag_missing_data(resp_matrix, [0, 1])
+```
+
+### Fit the 1PL (Rasch) model
+
+The 1PL constrains all items to share a common discrimination, estimating only item
+difficulties (the `b` parameters). `rasch_mml` uses marginal maximum likelihood (MML)
+estimation.
+
+```{python}
+rasch_results = rasch_mml(resp_matrix)
+
+difficulty_1pl = rasch_results["Difficulty"]
+
+print("1PL Item Difficulty Estimates (b):")
+print(pd.Series(difficulty_1pl, index=resp_wide.columns).round(3).to_string())
+```
+
+### Fit the 2PL model
+
+The 2PL additionally estimates a discrimination parameter (`a`) for each item,
+allowing items to differ in how sharply they separate high- and low-ability respondents.
+
+```{python}
+twopl_results = twopl_mml(resp_matrix)
+
+discrimination_2pl = twopl_results["Discrimination"]
+difficulty_2pl     = twopl_results["Difficulty"]
+
+summary_2pl = pd.DataFrame({
+    "item":            resp_wide.columns,
+    "discrimination":  discrimination_2pl.round(3),
+    "difficulty":      difficulty_2pl.round(3),
+})
+print(summary_2pl.to_string(index=False))
+```
+
+### Fit the 3PL model
+
+The 3PL adds a lower asymptote (`c`, the "guessing") parameter per item. This is
+appropriate when chance-level correct responding is plausible (e.g., multiple-choice
+exams).
+
+```{python}
+threepl_results = threepl_mml(resp_matrix)
+
+discrimination_3pl = threepl_results["Discrimination"]
+difficulty_3pl     = threepl_results["Difficulty"]
+guessing_3pl       = threepl_results["Guessing"]
+
+summary_3pl = pd.DataFrame({
+    "item":            resp_wide.columns,
+    "discrimination":  discrimination_3pl.round(3),
+    "difficulty":      difficulty_3pl.round(3),
+    "guessing":        guessing_3pl.round(3),
+})
+print(summary_3pl.to_string(index=False))
+```
+
+### Plot item characteristic curves (ICCs)
+
+Visualizing ICCs gives an intuitive view of how each item functions. Here we compare
+a selection of items across the 1PL and 2PL.
+
+```{python}
+theta_range = np.linspace(-4, 4, 200)
+
+def icc_1pl(theta, b):
+    return 1 / (1 + np.exp(-(theta - b)))
+
+def icc_2pl(theta, a, b):
+    return 1 / (1 + np.exp(-a * (theta - b)))
+
+item_names   = resp_wide.columns.tolist()
+selected     = item_names[:5]
+selected_idx = [item_names.index(i) for i in selected]
+
+fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
+
+for idx, name in zip(selected_idx, selected):
+    axes[0].plot(theta_range, icc_1pl(theta_range, difficulty_1pl[idx]), label=name)
+    axes[1].plot(theta_range, icc_2pl(theta_range, discrimination_2pl[idx], difficulty_2pl[idx]), label=name)
+
+for ax, title in zip(axes, ["1PL (Rasch)", "2PL"]):
+    ax.set_title(title)
+    ax.set_xlabel("Ability (θ)")
+    ax.set_ylabel("P(correct)")
+    ax.axhline(0.5, color="grey", linestyle="--", linewidth=0.8)
+    ax.legend(fontsize=8)
+    ax.set_ylim(0, 1)
+
+fig.suptitle("Item Characteristic Curves", fontsize=14)
+plt.tight_layout()
+plt.show()
+```
+
+---
+
+## Part 2: Polytomous IRT (Graded Response Model)
+
+The Graded Response Model (GRM) is appropriate for ordered polytomous items (e.g.,
+Likert-scale survey responses). Here we use a personality dataset from the IRW.
+
+### Fetch a polytomous dataset
+
+```{python}
+df_poly = irw.fetch("5personalityfactors")
+print(df_poly.head())
+print(f"\nUnique response categories: {sorted(df_poly['resp'].dropna().unique())}")
+```
+
+### Prepare the response matrix
+
+For the GRM, `girth` expects a `(n_items, n_persons)` integer array with categories
+coded starting from `0`. IRW personality data typically uses a 1–5 Likert scale, so we
+subtract 1 to shift to 0-indexed categories before encoding missing values.
+
+```{python}
+resp_wide_poly = irw.long2resp(df_poly)
+resp_wide_poly = resp_wide_poly.drop(columns="id", errors="ignore")
+
+# Convert to numeric, shift 1–5 → 0–4, transpose to (items × persons)
+resp_arr_poly = resp_wide_poly.apply(pd.to_numeric, errors="coerce").values.astype(float)
+resp_arr_poly = resp_arr_poly - 1
+resp_arr_poly = resp_arr_poly.T
+
+n_items_poly, n_persons_poly = resp_arr_poly.shape
+print(f"Items: {n_items_poly}, Persons: {n_persons_poly}")
+
+# Encode missing and validate
+resp_matrix_poly = np.where(np.isnan(resp_arr_poly), INVALID_RESPONSE, resp_arr_poly).astype(int)
+resp_matrix_poly = tag_missing_data(resp_matrix_poly, list(range(5)))
+```
+
+### Fit the Graded Response Model
+
+```{python}
+grm_results = grm_mml(resp_matrix_poly)
+
+discrimination_grm = grm_results["Discrimination"]
+thresholds_grm     = grm_results["Difficulty"]   # shape: (n_items, n_categories - 1)
+
+# Display results for first 10 items
+item_names_poly = resp_wide_poly.columns.tolist()
+for i in range(min(10, n_items_poly)):
+    thresholds_str = ", ".join([f"{t:.2f}" for t in thresholds_grm[i]])
+    print(
+        f"{item_names_poly[i]:30s}  "
+        f"a = {discrimination_grm[i]:.3f}  "
+        f"b = [{thresholds_str}]"
+    )
+```
+
+### Plot category response curves (CRCs)
+
+Category response curves show the probability of each response category as a function
+of ability. We plot CRCs for a single example item.
+
+```{python}
+from scipy.special import expit
+
+def grm_crc(theta, a, thresholds):
+    """
+    GRM category response curves.
+    P(X=k|θ) = P*(X≥k|θ) − P*(X≥k+1|θ), where P*(X≥k|θ) = logistic(a*(θ−b_k)).
+    """
+    cum_probs = np.array([expit(a * (t - theta)) for t in thresholds])
+    cum_probs = np.vstack([np.ones_like(theta), 1 - cum_probs, np.zeros_like(theta)])
+    return -np.diff(cum_probs, axis=0)
+
+item_idx  = 0
+item_name = item_names_poly[item_idx]
+a_item    = discrimination_grm[item_idx]
+b_item    = thresholds_grm[item_idx]
+
+crc = grm_crc(theta_range, a_item, b_item)
+
+fig, ax = plt.subplots(figsize=(8, 5))
+for k in range(crc.shape[0]):
+    ax.plot(theta_range, crc[k], label=f"Category {k + 1}")
+
+ax.set_title(f"GRM Category Response Curves\n{item_name}")
+ax.set_xlabel("Trait level (θ)")
+ax.set_ylabel("Response probability")
+ax.legend()
+ax.set_ylim(0, 1)
+plt.tight_layout()
+plt.show()
+```
+
+---
+
+## Summary
+
+The table below recaps the models covered and when to use each one.
+
+| Model | Response type | Parameters per item | Use when |
+|---|---|---|---|
+| 1PL (Rasch) | Dichotomous | difficulty `b` | Equal discrimination is theoretically warranted |
+| 2PL | Dichotomous | `a`, `b` | Items vary in how well they discriminate |
+| 3PL | Dichotomous | `a`, `b`, `c` | Multiple-choice; guessing is plausible |
+| GRM | Polytomous (ordered) | `a`, `b₁…bₖ₋₁` | Likert or partial-credit items |
+
+For a broader exploration of 2PL discrimination parameters across many IRW datasets,
+see the [2PL Across Datasets](2pl_across_datasets.qmd) vignette. To compare model fit
+between the 1PL and 2PL using cross-validated predictions, see the
+[IMV vignette](imv.qmd).
+
+---
+
+## Further reading
+
+- [`girth` documentation](https://eribean.github.io/girth/)
+- [`irw` Python package](https://github.com/itemresponsewarehouse/Python-pkg)
+- [IRW getting started guide](../getstarted.qmd)
