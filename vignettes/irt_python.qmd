@@ -2,7 +2,8 @@
 title: "Estimating IRT Models in Python"
 description: |
   A step-by-step introduction to importing IRW data in Python and fitting
-  standard IRT models (1PL, 2PL, 3PL, and graded response) using the `girth` package.
+  standard IRT models (1PL, 2PL, 3PL, and graded response) using the `mirt`
+  and `girth` packages.
 format:
   html:
     code-fold: false
@@ -19,7 +20,8 @@ This vignette walks through a complete Python workflow for working with IRW data
 fetching a dataset, preparing it for IRT estimation, fitting the 1PL (Rasch), 2PL,
 and 3PL models for dichotomous responses, and the graded response model (GRM) for
 polytomous data. We use the [`irw`](https://github.com/itemresponsewarehouse/Python-pkg)
-package for data access and [`girth`](https://github.com/eribean/girth) for IRT estimation.
+package for data access, [`mirt`](https://pypi.org/project/mirt/) for dichotomous
+estimation, and [`girth`](https://github.com/eribean/girth) for the GRM.
 
 ---
 
@@ -27,10 +29,14 @@ package for data access and [`girth`](https://github.com/eribean/girth) for IRT 
 
 ### Install required packages
 
+::: {.callout-note}
+The `mirt` package requires **Python ≥ 3.11**.
+:::
+
 ```{python}
 # pip install --upgrade setuptools
 # pip install "git+https://github.com/itemresponsewarehouse/Python-pkg.git"
-# pip install girth scipy matplotlib
+# pip install mirt girth scipy matplotlib
 ```
 
 ### Load libraries
@@ -40,14 +46,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import irw
-from girth import (
-    rasch_mml,        # 1PL (Rasch)
-    twopl_mml,        # 2PL
-    threepl_mml,      # 3PL
-    grm_mml,          # Graded Response Model
-    tag_missing_data, # encode missing values for girth
-    INVALID_RESPONSE, # girth's missing-data sentinel (-99999)
-)
+from mirt import fit_mirt
+from girth import grm_mml, tag_missing_data, INVALID_RESPONSE
 ```
 
 ---
@@ -75,42 +75,36 @@ IRW data is in **long format**: one row per person–item response. The key colu
 
 ### Prepare the response matrix
 
-`girth` expects a **wide** integer array of shape `(n_items, n_persons)`. Missing
-responses must be encoded using `INVALID_RESPONSE` (girth's sentinel value, `-99999`);
-call `tag_missing_data()` to apply this encoding. We use `irw.long2resp()` to reshape
-from long to wide, then convert.
+`mirt` expects a **wide** integer array of shape `(n_persons, n_items)` with missing
+responses coded as `-1`. We use `irw.long2resp()` to reshape from long to wide, then
+convert.
 
 ```{python}
 # Reshape from long to wide (persons × items)
 resp_wide = irw.long2resp(df)
 resp_wide = resp_wide.drop(columns="id", errors="ignore")
 
-# Convert to numeric float array, then transpose to (items × persons)
+# Convert to numeric; encode missing as -1
 resp_arr = resp_wide.apply(pd.to_numeric, errors="coerce").values.astype(float)
-resp_arr = resp_arr.T  # shape: (n_items, n_persons)
 
-n_items, n_persons = resp_arr.shape
-print(f"Items: {n_items}, Persons: {n_persons}")
+n_persons, n_items = resp_arr.shape
+print(f"Persons: {n_persons}, Items: {n_items}")
 print(f"Overall proportion correct: {np.nanmean(resp_arr):.3f}")
 
-# Encode missing values as INVALID_RESPONSE and validate with tag_missing_data
-resp_matrix = np.where(np.isnan(resp_arr), INVALID_RESPONSE, resp_arr).astype(int)
-resp_matrix = tag_missing_data(resp_matrix, [0, 1])
+resp_matrix = np.where(np.isnan(resp_arr), -1, resp_arr).astype(int)
 ```
 
 ### Fit the 1PL (Rasch) model
 
 The 1PL constrains all items to share a common discrimination, estimating only item
-difficulties (the `b` parameters). `rasch_mml` uses marginal maximum likelihood (MML)
-estimation.
+difficulties (the `b` parameters). `fit_mirt` uses marginal maximum likelihood via
+expectation-maximisation (EM).
 
 ```{python}
-rasch_results = rasch_mml(resp_matrix)
+item_names = resp_wide.columns.tolist()
 
-difficulty_1pl = rasch_results["Difficulty"]
-
-print("1PL Item Difficulty Estimates (b):")
-print(pd.Series(difficulty_1pl, index=resp_wide.columns).round(3).to_string())
+fit_1pl = fit_mirt(resp_matrix, model="1PL", item_names=item_names)
+print(fit_1pl.summary())
 ```
 
 ### Fit the 2PL model
@@ -119,17 +113,13 @@ The 2PL additionally estimates a discrimination parameter (`a`) for each item,
 allowing items to differ in how sharply they separate high- and low-ability respondents.
 
 ```{python}
-twopl_results = twopl_mml(resp_matrix)
-
-discrimination_2pl = twopl_results["Discrimination"]
-difficulty_2pl     = twopl_results["Difficulty"]
+fit_2pl = fit_mirt(resp_matrix, model="2PL", item_names=item_names)
 
 summary_2pl = pd.DataFrame({
-    "item":            resp_wide.columns,
-    "discrimination":  discrimination_2pl.round(3),
-    "difficulty":      difficulty_2pl.round(3),
-})
-print(summary_2pl.to_string(index=False))
+    "discrimination": fit_2pl.model.discrimination.round(3),
+    "difficulty":     fit_2pl.model.difficulty.round(3),
+}, index=item_names)
+print(summary_2pl.to_string())
 ```
 
 ### Fit the 3PL model
@@ -139,19 +129,14 @@ appropriate when chance-level correct responding is plausible (e.g., multiple-ch
 exams).
 
 ```{python}
-threepl_results = threepl_mml(resp_matrix)
-
-discrimination_3pl = threepl_results["Discrimination"]
-difficulty_3pl     = threepl_results["Difficulty"]
-guessing_3pl       = threepl_results["Guessing"]
+fit_3pl = fit_mirt(resp_matrix, model="3PL", item_names=item_names)
 
 summary_3pl = pd.DataFrame({
-    "item":            resp_wide.columns,
-    "discrimination":  discrimination_3pl.round(3),
-    "difficulty":      difficulty_3pl.round(3),
-    "guessing":        guessing_3pl.round(3),
-})
-print(summary_3pl.to_string(index=False))
+    "discrimination": fit_3pl.model.discrimination.round(3),
+    "difficulty":     fit_3pl.model.difficulty.round(3),
+    "guessing":       fit_3pl.model.guessing.round(3),
+}, index=item_names)
+print(summary_3pl.to_string())
 ```
 
 ### Plot item characteristic curves (ICCs)
@@ -168,13 +153,13 @@ def icc_1pl(theta, b):
 def icc_2pl(theta, a, b):
     return 1 / (1 + np.exp(-a * (theta - b)))
 
-item_names   = resp_wide.columns.tolist()
-selected     = item_names[:5]
-selected_idx = [item_names.index(i) for i in selected]
+difficulty_1pl     = fit_1pl.model.difficulty
+discrimination_2pl = fit_2pl.model.discrimination
+difficulty_2pl     = fit_2pl.model.difficulty
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
 
-for idx, name in zip(selected_idx, selected):
+for idx, name in zip(range(5), item_names[:5]):
     axes[0].plot(theta_range, icc_1pl(theta_range, difficulty_1pl[idx]), label=name)
     axes[1].plot(theta_range, icc_2pl(theta_range, discrimination_2pl[idx], difficulty_2pl[idx]), label=name)
 
@@ -196,7 +181,8 @@ plt.show()
 ## Part 2: Polytomous IRT (Graded Response Model)
 
 The Graded Response Model (GRM) is appropriate for ordered polytomous items (e.g.,
-Likert-scale survey responses). Here we use a personality dataset from the IRW.
+Likert-scale survey responses). We use `girth` for the GRM, which has a stable MML
+implementation for polytomous models.
 
 ### Fetch a polytomous dataset
 
@@ -208,25 +194,28 @@ print(f"\nUnique response categories: {sorted(df_poly['resp'].dropna().unique())
 
 ### Prepare the response matrix
 
-For the GRM, `girth` expects a `(n_items, n_persons)` integer array with categories
-coded starting from `0`. IRW personality data typically uses a 1–5 Likert scale, so we
-subtract 1 to shift to 0-indexed categories before encoding missing values.
+`girth` expects a `(n_items, n_persons)` integer array with categories coded starting
+from `0` and missing values encoded as `INVALID_RESPONSE` (girth's sentinel, `-99999`).
+We shift the responses so the lowest observed category becomes 0, round any values
+produced by duplicate-response averaging, then transpose.
 
 ```{python}
 resp_wide_poly = irw.long2resp(df_poly)
 resp_wide_poly = resp_wide_poly.drop(columns="id", errors="ignore")
 
-# Convert to numeric, shift 1–5 → 0–4, transpose to (items × persons)
+# Convert to numeric; shift so minimum category = 0
 resp_arr_poly = resp_wide_poly.apply(pd.to_numeric, errors="coerce").values.astype(float)
-resp_arr_poly = resp_arr_poly - 1
-resp_arr_poly = resp_arr_poly.T
+min_resp = int(np.nanmin(resp_arr_poly))
+resp_arr_poly = resp_arr_poly - min_resp
 
-n_items_poly, n_persons_poly = resp_arr_poly.shape
-print(f"Items: {n_items_poly}, Persons: {n_persons_poly}")
+n_categories = int(np.nanmax(resp_arr_poly)) + 1
+print(f"Persons: {resp_arr_poly.shape[0]}, Items: {resp_arr_poly.shape[1]}, Categories: {n_categories}")
 
-# Encode missing and validate
-resp_matrix_poly = np.where(np.isnan(resp_arr_poly), INVALID_RESPONSE, resp_arr_poly).astype(int)
-resp_matrix_poly = tag_missing_data(resp_matrix_poly, list(range(5)))
+# Round averaged duplicates, encode missing as INVALID_RESPONSE, transpose to (items × persons)
+resp_matrix_poly = np.where(np.isnan(resp_arr_poly),
+                            INVALID_RESPONSE,
+                            np.round(resp_arr_poly)).astype(int).T
+resp_matrix_poly = tag_missing_data(resp_matrix_poly, list(range(n_categories)))
 ```
 
 ### Fit the Graded Response Model
@@ -239,12 +228,12 @@ thresholds_grm     = grm_results["Difficulty"]   # shape: (n_items, n_categories
 
 # Display results for first 10 items
 item_names_poly = resp_wide_poly.columns.tolist()
-for i in range(min(10, n_items_poly)):
-    thresholds_str = ", ".join([f"{t:.2f}" for t in thresholds_grm[i]])
+for i in range(min(10, len(item_names_poly))):
+    thresh_str = ", ".join([f"{t:.2f}" for t in thresholds_grm[i]])
     print(
         f"{item_names_poly[i]:30s}  "
         f"a = {discrimination_grm[i]:.3f}  "
-        f"b = [{thresholds_str}]"
+        f"b = [{thresh_str}]"
     )
 ```
 
@@ -291,12 +280,12 @@ plt.show()
 
 The table below recaps the models covered and when to use each one.
 
-| Model | Response type | Parameters per item | Use when |
-|---|---|---|---|
-| 1PL (Rasch) | Dichotomous | difficulty `b` | Equal discrimination is theoretically warranted |
-| 2PL | Dichotomous | `a`, `b` | Items vary in how well they discriminate |
-| 3PL | Dichotomous | `a`, `b`, `c` | Multiple-choice; guessing is plausible |
-| GRM | Polytomous (ordered) | `a`, `b₁…bₖ₋₁` | Likert or partial-credit items |
+| Model | Package | Response type | Parameters per item | Use when |
+|---|---|---|---|---|
+| 1PL (Rasch) | `mirt` | Dichotomous | difficulty `b` | Equal discrimination is theoretically warranted |
+| 2PL | `mirt` | Dichotomous | `a`, `b` | Items vary in how well they discriminate |
+| 3PL | `mirt` | Dichotomous | `a`, `b`, `c` | Multiple-choice; guessing is plausible |
+| GRM | `girth` | Polytomous (ordered) | `a`, `b₁…bₖ₋₁` | Likert or partial-credit items |
 
 For a broader exploration of 2PL discrimination parameters across many IRW datasets,
 see the [2PL Across Datasets](2pl_across_datasets.qmd) vignette. To compare model fit
@@ -307,6 +296,7 @@ between the 1PL and 2PL using cross-validated predictions, see the
 
 ## Further reading
 
+- [`mirt` on PyPI](https://pypi.org/project/mirt/)
 - [`girth` documentation](https://eribean.github.io/girth/)
 - [`irw` Python package](https://github.com/itemresponsewarehouse/Python-pkg)
 - [IRW getting started guide](../getstarted.qmd)
