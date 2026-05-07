@@ -155,9 +155,9 @@ summaries
 #| echo: true
 #| python.reticulate: false
 
+import irw
 import pandas as pd
 from math import sqrt
-import redivis
 
 dataset_names = ["4thgrade_math_sirt", "chess_lnirt", "dd_rotation"]
 
@@ -166,7 +166,6 @@ def compute_metadata(df):
           .loc[~df['resp'].isna()]
           .assign(resp=pd.to_numeric(df['resp']))
          )
-    
     return pd.DataFrame({
         'n_responses': [len(df)],
         'n_categories': [df['resp'].nunique()],
@@ -177,16 +176,10 @@ def compute_metadata(df):
         'density': [(sqrt(len(df)) / df['id'].nunique()) * (sqrt(len(df)) / df['item'].nunique())]
     })
 
-dataset = redivis.user('datapages').dataset('item_response_warehouse')
-def get_data_summary(dataset_name):
-  df = pd.DataFrame(dataset.table(dataset_name).to_pandas_dataframe())
-    
-  summary = compute_metadata(df)
-  summary.insert(0, 'dataset_name', dataset_name)
-  return summary
-
-summaries_list = [get_data_summary(name) for name in dataset_names]
+tables = irw.fetch(dataset_names)
+summaries_list = [compute_metadata(df).assign(table=name) for name, df in tables.items()]
 summaries = pd.concat(summaries_list, ignore_index=True)
+summaries = summaries[['table'] + [c for c in summaries.columns if c != 'table']]
 print(summaries)
 ```
 :::
