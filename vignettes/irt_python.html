@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.9.37">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="description" content="A step-by-step introduction to importing IRW data in Python and fitting standard IRT models (1PL, 2PL, 3PL, and graded response) using the mirt and girth packages.">
+
+<title>Estimating IRT Models in Python – Item Response Warehouse</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js" integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2" crossorigin="anonymous"></script><script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-7f8f88aac4f3542376d5c11b86a4c14d.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-10060f8e727433433a053cb3242ece58.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-NM0Y0TP4RY"></script>
+
+<script type="text/javascript">
+
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
+</script>
+<script src="https://cdn.jsdelivr.net/npm/requirejs@2.3.6/require.min.js" integrity="sha384-c9c+LnTbwQ3aujuU7ULEPVvgLs+Fn6fJUvIGTsuu1ZcCf11fiEubah0ttpca4ntM sha384-6V1/AdqZRWk1KAlWbKBlGhN7VG4iE/yAZcO6NZPMF8od0vukrvr0tg4qY6NSrItx" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
+<script src="https://cdn.jsdelivr.net/npm/@jupyter-widgets/html-manager@*/dist/embed-amd.js" crossorigin="anonymous"></script>
+
+
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../index.html">
+    <span class="navbar-title">Item Response Warehouse</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../index.html"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-data" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Data</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-data">    
+        <li>
+    <a class="dropdown-item" href="../overview.html">
+ <span class="dropdown-text">Overview of IRW Data Standards</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../data.html">
+ <span class="dropdown-text">Browse the IRW Data</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../metadata.html">
+ <span class="dropdown-text">Metadata for IRW tables</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../docs.html">
+ <span class="dropdown-text">Data Documentation</span></a>
+  </li>  
+        <li><hr class="dropdown-divider"></li>
+        <li>
+    <a class="dropdown-item" href="../itemtext.html">
+ <span class="dropdown-text">Item Text Standard</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../itemtext_desc.html">
+ <span class="dropdown-text">Item Text Descriptives</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../itemtext_issues.html">
+ <span class="dropdown-text">Known Issues</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../itemtext_merge.html">
+ <span class="dropdown-text">Merging with IRW data</span></a>
+  </li>  
+        <li><hr class="dropdown-divider"></li>
+        <li>
+    <a class="dropdown-item" href="../standard.html">
+ <span class="dropdown-text">The Core IRW Data Standard</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../comps_standard.html">
+ <span class="dropdown-text">The Competition Data Standard</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../nominal_standard.html">
+ <span class="dropdown-text">The Nominal Data Standard</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../simsyn.html">
+ <span class="dropdown-text">Simulated and Synthetic Data</span></a>
+  </li>  
+        <li><hr class="dropdown-divider"></li>
+        <li>
+    <a class="dropdown-item" href="../contribute.html">
+ <span class="dropdown-text">Contributing Data to the IRW</span></a>
+  </li>  
+    </ul>
+  </li>
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-get-started" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Get Started</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-get-started">    
+        <li>
+    <a class="dropdown-item" href="../getstarted.html">
+ <span class="dropdown-text">Getting Started</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../training.html">
+ <span class="dropdown-text">Training Resources</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../problems.html">
+ <span class="dropdown-text">Problem Set Examples</span></a>
+  </li>  
+    </ul>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="../vignettes/index.html"> 
+<span class="menu-text">Vignettes</span></a>
+  </li>  
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-about" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">About</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-about">    
+        <li>
+    <a class="dropdown-item" href="../about.html">
+ <span class="dropdown-text">About the IRW</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../research.html">
+ <span class="dropdown-text">Research!</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../othersites.html">
+ <span class="dropdown-text">Related data resources</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../contact.html">
+ <span class="dropdown-text">Contact Us</span></a>
+  </li>  
+    </ul>
+  </li>
+</ul>
+            <ul class="navbar-nav navbar-nav-scroll ms-auto">
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-bi-github" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+      <i class="bi bi-github" role="img">
+</i> 
+ <span class="menu-text"></span>
+    </a>
+    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="nav-menu-bi-github">    
+        <li>
+    <a class="dropdown-item" href="https://github.com/itemresponsewarehouse/misc/tree/main/data">
+ <span class="dropdown-text">Data processing</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="https://itemresponsewarehouse.github.io/Rpkg/">
+ <span class="dropdown-text">irw: R package for managing IRW data</span></a>
+  </li>  
+    </ul>
+  </li>
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul class="collapse">
+  <li><a href="#setup" id="toc-setup" class="nav-link active" data-scroll-target="#setup">Setup</a></li>
+  <li><a href="#part-1-dichotomous-irt-1pl-2pl-3pl" id="toc-part-1-dichotomous-irt-1pl-2pl-3pl" class="nav-link" data-scroll-target="#part-1-dichotomous-irt-1pl-2pl-3pl">Part 1: Dichotomous IRT (1PL, 2PL, 3PL)</a></li>
+  <li><a href="#part-2-polytomous-irt-graded-response-model" id="toc-part-2-polytomous-irt-graded-response-model" class="nav-link" data-scroll-target="#part-2-polytomous-irt-graded-response-model">Part 2: Polytomous IRT (Graded Response Model)</a></li>
+  <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
+  <li><a href="#further-reading" id="toc-further-reading" class="nav-link" data-scroll-target="#further-reading">Further reading</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Estimating IRT Models in Python</h1>
+</div>
+
+<div>
+  <div class="description">
+    <p>A step-by-step introduction to importing IRW data in Python and fitting standard IRT models (1PL, 2PL, 3PL, and graded response) using the <code>mirt</code> and <code>girth</code> packages.</p>
+  </div>
+</div>
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>This vignette walks through a complete Python workflow for working with IRW data: fetching a dataset, preparing it for IRT estimation, fitting the 1PL (Rasch), 2PL, and 3PL models for dichotomous responses, and the graded response model (GRM) for polytomous data. We use the <a href="https://github.com/itemresponsewarehouse/Python-pkg"><code>irw</code></a> package for data access, <a href="https://pypi.org/project/mirt/"><code>mirt</code></a> for dichotomous estimation, and <a href="https://github.com/eribean/girth"><code>girth</code></a> for the GRM.</p>
+<hr>
+<section id="setup" class="level2">
+<h2 class="anchored" data-anchor-id="setup">Setup</h2>
+<section id="install-required-packages" class="level3">
+<h3 class="anchored" data-anchor-id="install-required-packages">Install required packages</h3>
+<div class="callout callout-style-default callout-note no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Note
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>The <code>mirt</code> package requires <strong>Python ≥ 3.11</strong>.</p>
+</div>
+</div>
+<div id="152dde9d" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># pip install --upgrade setuptools</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co"># pip install "git+https://github.com/itemresponsewarehouse/Python-pkg.git"</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"># pip install mirt girth scipy matplotlib</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+<section id="load-libraries" class="level3">
+<h3 class="anchored" data-anchor-id="load-libraries">Load libraries</h3>
+<div id="90fbc456" class="cell" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> irw</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> mirt <span class="im">import</span> fit_mirt</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> girth <span class="im">import</span> grm_mml, tag_missing_data, INVALID_RESPONSE</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<hr>
+</section>
+</section>
+<section id="part-1-dichotomous-irt-1pl-2pl-3pl" class="level2">
+<h2 class="anchored" data-anchor-id="part-1-dichotomous-irt-1pl-2pl-3pl">Part 1: Dichotomous IRT (1PL, 2PL, 3PL)</h2>
+<section id="fetch-a-dataset" class="level3">
+<h3 class="anchored" data-anchor-id="fetch-a-dataset">Fetch a dataset</h3>
+<p>We start with <code>4thgrade_math_sirt</code>, a dichotomous cognitive dataset from the IRW containing math item responses from fourth-grade students. On first use, <code>irw.fetch()</code> will open a browser window prompting you to authenticate with your Redivis account.</p>
+<div id="313dd4fd" class="cell" data-execution_count="3">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> irw.fetch(<span class="st">"4thgrade_math_sirt"</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(df.head())</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Shape: </span><span class="sc">{</span>df<span class="sc">.</span>shape<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Columns: </span><span class="sc">{</span>df<span class="sc">.</span>columns<span class="sc">.</span>tolist()<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Warning: Setting the REDIVIS_API_TOKEN for interactive sessions is deprecated and highly discouraged.
+Please delete the token on Redivis and remove it from your code, and follow the authentication prompts here instead.
+
+This environment variable should only ever be set in a non-interactive environment, such as in an automated script or service.
+
+Warning: Setting the REDIVIS_API_TOKEN for interactive sessions is deprecated and highly discouraged.
+Please delete the token on Redivis and remove it from your code, and follow the authentication prompts here instead.
+
+This environment variable should only ever be set in a non-interactive environment, such as in an automated script or service.
+
+Warning: Setting the REDIVIS_API_TOKEN for interactive sessions is deprecated and highly discouraged.
+Please delete the token on Redivis and remove it from your code, and follow the authentication prompts here instead.
+
+This environment variable should only ever be set in a non-interactive environment, such as in an automated script or service.
+</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<script type="application/vnd.jupyter.widget-view+json">
+{"model_id":"1e21c29baa4048809bb05ace6d30cb46","version_major":2,"version_minor":0,"quarto_mimetype":"application/vnd.jupyter.widget-view+json"}
+</script>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>  item   id  resp testlet      domain subdomain
+0  MA1  125     0      MA  arithmetic  addition
+1  MA1  653     0      MA  arithmetic  addition
+2  MA1  483     0      MA  arithmetic  addition
+3  MA1  609     0      MA  arithmetic  addition
+4  MA1  412     0      MA  arithmetic  addition
+
+Shape: (19920, 6)
+Columns: ['item', 'id', 'resp', 'testlet', 'domain', 'subdomain']</code></pre>
+</div>
+</div>
+<p>IRW data is in <strong>long format</strong>: one row per person–item response. The key columns are:</p>
+<ul>
+<li><code>id</code> — respondent identifier</li>
+<li><code>item</code> — item identifier</li>
+<li><code>resp</code> — response value (0/1 for dichotomous items)</li>
+</ul>
+</section>
+<section id="prepare-the-response-matrix" class="level3">
+<h3 class="anchored" data-anchor-id="prepare-the-response-matrix">Prepare the response matrix</h3>
+<p><code>mirt</code> expects a <strong>wide</strong> integer array of shape <code>(n_persons, n_items)</code> with missing responses coded as <code>-1</code>. We use <code>irw.long2resp()</code> to reshape from long to wide, then convert.</p>
+<div id="94017453" class="cell" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Reshape from long to wide (persons × items)</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>resp_wide <span class="op">=</span> irw.long2resp(df)</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>resp_wide <span class="op">=</span> resp_wide.drop(columns<span class="op">=</span><span class="st">"id"</span>, errors<span class="op">=</span><span class="st">"ignore"</span>)</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert to numeric; encode missing as -1</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>resp_arr <span class="op">=</span> resp_wide.<span class="bu">apply</span>(pd.to_numeric, errors<span class="op">=</span><span class="st">"coerce"</span>).to_numpy(dtype<span class="op">=</span><span class="bu">float</span>, na_value<span class="op">=</span>np.nan)</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>n_persons, n_items <span class="op">=</span> resp_arr.shape</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Persons: </span><span class="sc">{</span>n_persons<span class="sc">}</span><span class="ss">, Items: </span><span class="sc">{</span>n_items<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Overall proportion correct: </span><span class="sc">{</span>np<span class="sc">.</span>nanmean(resp_arr)<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>resp_matrix <span class="op">=</span> np.where(np.isnan(resp_arr), <span class="op">-</span><span class="dv">1</span>, resp_arr).astype(<span class="bu">int</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Persons: 664, Items: 30
+Overall proportion correct: 0.510</code></pre>
+</div>
+</div>
+</section>
+<section id="fit-the-1pl-rasch-model" class="level3">
+<h3 class="anchored" data-anchor-id="fit-the-1pl-rasch-model">Fit the 1PL (Rasch) model</h3>
+<p>The 1PL constrains all items to share a common discrimination, estimating only item difficulties (the <code>b</code> parameters). <code>fit_mirt</code> uses marginal maximum likelihood via expectation-maximisation (EM).</p>
+<div id="aa0c5454" class="cell" data-execution_count="5">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>item_names <span class="op">=</span> resp_wide.columns.tolist()</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>fit_1pl <span class="op">=</span> fit_mirt(resp_matrix, model<span class="op">=</span><span class="st">"1PL"</span>, item_names<span class="op">=</span>item_names)</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(fit_1pl.summary())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>================================================================================
+                               IRT Model Results                                
+================================================================================
+Model:              1PL                  Log-Likelihood:     -12319.6172
+No. Items:          30                   AIC:                 24759.2345
+No. Factors:        1                    BIC:                 25029.1314
+No. Persons:        664                  No. Parameters:              60
+Converged:          True                 Iterations:                  17
+--------------------------------------------------------------------------------
+
+discrimination:
+Item              Estimate    Std.Err    z-value      P&gt;|z|     [95%      CI]
+--------------------------------------------------------------------------------
+MA1                 1.0000     0.0000        nan        nan      nan      nan
+MA2                 1.0000     0.0000        nan        nan      nan      nan
+MA3                 1.0000     0.0000        nan        nan      nan      nan
+MA4                 1.0000     0.0000        nan        nan      nan      nan
+MB1                 1.0000     0.0000        nan        nan      nan      nan
+MB2                 1.0000     0.0000        nan        nan      nan      nan
+MB3                 1.0000     0.0000        nan        nan      nan      nan
+MB4                 1.0000     0.0000        nan        nan      nan      nan
+MC1                 1.0000     0.0000        nan        nan      nan      nan
+MC2                 1.0000     0.0000        nan        nan      nan      nan
+MC3                 1.0000     0.0000        nan        nan      nan      nan
+MC4                 1.0000     0.0000        nan        nan      nan      nan
+MD1                 1.0000     0.0000        nan        nan      nan      nan
+MD2                 1.0000     0.0000        nan        nan      nan      nan
+MD3                 1.0000     0.0000        nan        nan      nan      nan
+MD4                 1.0000     0.0000        nan        nan      nan      nan
+ME1                 1.0000     0.0000        nan        nan      nan      nan
+ME2                 1.0000     0.0000        nan        nan      nan      nan
+MF1                 1.0000     0.0000        nan        nan      nan      nan
+MG1                 1.0000     0.0000        nan        nan      nan      nan
+MG2                 1.0000     0.0000        nan        nan      nan      nan
+MG3                 1.0000     0.0000        nan        nan      nan      nan
+MG4                 1.0000     0.0000        nan        nan      nan      nan
+MH1                 1.0000     0.0000        nan        nan      nan      nan
+MH2                 1.0000     0.0000        nan        nan      nan      nan
+MH3                 1.0000     0.0000        nan        nan      nan      nan
+MH4                 1.0000     0.0000        nan        nan      nan      nan
+MI1                 1.0000     0.0000        nan        nan      nan      nan
+MI2                 1.0000     0.0000        nan        nan      nan      nan
+MI3                 1.0000     0.0000        nan        nan      nan      nan
+
+difficulty:
+Item              Estimate    Std.Err    z-value      P&gt;|z|     [95%      CI]
+--------------------------------------------------------------------------------
+MA1                -2.3541     0.1277    -18.441     0.0000  -2.6043  -2.1039
+MA2                -0.2902     0.0851     -3.410     0.0006  -0.4571  -0.1234
+MA3                -0.1176     0.0846     -1.390     0.1646  -0.2834   0.0482
+MA4                 0.4653     0.0858      5.421     0.0000   0.2971   0.6336
+MB1                -0.6463     0.0874     -7.391     0.0000  -0.8177  -0.4749
+MB2                -0.5553     0.0867     -6.407     0.0000  -0.7252  -0.3855
+MB3                 0.7367     0.0880      8.371     0.0000   0.5642   0.9092
+MB4                 0.7213     0.0879      8.209     0.0000   0.5491   0.8935
+MC1                -1.3914     0.0984    -14.147     0.0000  -1.5842  -1.1987
+MC2                 0.0967     0.0845      1.144     0.2526  -0.0690   0.2623
+MC3                -0.7940     0.0889     -8.928     0.0000  -0.9683  -0.6197
+MC4                -0.2541     0.0850     -2.990     0.0028  -0.4206  -0.0875
+MD1                -0.8982     0.0902     -9.960     0.0000  -1.0749  -0.7215
+MD2                -1.2873     0.0963    -13.368     0.0000  -1.4760  -1.0985
+MD3                -0.4955     0.0862     -5.746     0.0000  -0.6646  -0.3265
+MD4                -0.5030     0.0863     -5.829     0.0000  -0.6721  -0.3339
+ME1                -0.9805     0.0913    -10.742     0.0000  -1.1594  -0.8016
+ME2                 0.5171     0.0862      6.001     0.0000   0.3482   0.6860
+MF1                -0.3193     0.0852     -3.746     0.0002  -0.4863  -0.1522
+MG1                 0.3847     0.0854      4.506     0.0000   0.2174   0.5521
+MG2                 0.7756     0.0884      8.773     0.0000   0.6024   0.9489
+MG3                 0.3121     0.0851      3.669     0.0002   0.1454   0.4788
+MG4                 0.4653     0.0858      5.421     0.0000   0.2971   0.6336
+MH1                 0.0182     0.0845      0.215     0.8298  -0.1474   0.1837
+MH2                 0.6295     0.0870      7.234     0.0000   0.4590   0.8001
+MH3                 0.3629     0.0853      4.255     0.0000   0.1957   0.5300
+MH4                 0.8228     0.0889      9.253     0.0000   0.6485   0.9971
+MI1                 0.8387     0.0891      9.412     0.0000   0.6640   1.0133
+MI2                 0.1825     0.0847      2.156     0.0311   0.0166   0.3485
+MI3                 1.6350     0.1035     15.794     0.0000   1.4321   1.8379
+================================================================================</code></pre>
+</div>
+</div>
+</section>
+<section id="fit-the-2pl-model" class="level3">
+<h3 class="anchored" data-anchor-id="fit-the-2pl-model">Fit the 2PL model</h3>
+<p>The 2PL additionally estimates a discrimination parameter (<code>a</code>) for each item, allowing items to differ in how sharply they separate high- and low-ability respondents.</p>
+<div id="0cc04faf" class="cell" data-execution_count="6">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>fit_2pl <span class="op">=</span> fit_mirt(resp_matrix, model<span class="op">=</span><span class="st">"2PL"</span>, item_names<span class="op">=</span>item_names)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>summary_2pl <span class="op">=</span> pd.DataFrame({</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"discrimination"</span>: fit_2pl.model.discrimination.<span class="bu">round</span>(<span class="dv">3</span>),</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"difficulty"</span>:     fit_2pl.model.difficulty.<span class="bu">round</span>(<span class="dv">3</span>),</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>}, index<span class="op">=</span>item_names)</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(summary_2pl.to_string())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>     discrimination  difficulty
+MA1           1.073      -2.088
+MA2           1.389      -0.243
+MA3           2.049      -0.099
+MA4           2.085       0.196
+MB1           2.377      -0.338
+MB2           1.932      -0.338
+MB3           2.845       0.268
+MB4           2.989       0.254
+MC1           1.988      -0.778
+MC2           2.097       0.010
+MC3           1.951      -0.464
+MC4           2.304      -0.157
+MD1           2.428      -0.451
+MD2           2.090      -0.699
+MD3           2.459      -0.262
+MD4           2.022      -0.300
+ME1           2.154      -0.529
+ME2           2.145       0.217
+MF1           2.147      -0.197
+MG1           4.383       0.096
+MG2           4.998       0.207
+MG3           4.578       0.071
+MG4           5.000       0.113
+MH1           1.026      -0.031
+MH2           1.477       0.369
+MH3           1.361       0.209
+MH4           1.348       0.536
+MI1           0.828       0.855
+MI2           1.290       0.089
+MI3           1.438       1.055</code></pre>
+</div>
+</div>
+</section>
+<section id="fit-the-3pl-model" class="level3">
+<h3 class="anchored" data-anchor-id="fit-the-3pl-model">Fit the 3PL model</h3>
+<p>The 3PL adds a lower asymptote (<code>c</code>, the “guessing”) parameter per item. This is appropriate when chance-level correct responding is plausible (e.g., multiple-choice exams).</p>
+<div id="e1d93d20" class="cell" data-execution_count="7">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>fit_3pl <span class="op">=</span> fit_mirt(resp_matrix, model<span class="op">=</span><span class="st">"3PL"</span>, item_names<span class="op">=</span>item_names)</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>summary_3pl <span class="op">=</span> pd.DataFrame({</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>    <span class="st">"discrimination"</span>: fit_3pl.model.discrimination.<span class="bu">round</span>(<span class="dv">3</span>),</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">"difficulty"</span>:     fit_3pl.model.difficulty.<span class="bu">round</span>(<span class="dv">3</span>),</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">"guessing"</span>:       fit_3pl.model.guessing.<span class="bu">round</span>(<span class="dv">3</span>),</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>}, index<span class="op">=</span>item_names)</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(summary_3pl.to_string())</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>     discrimination  difficulty  guessing
+MA1           1.168      -1.149     0.500
+MA2           1.133      -0.210     0.000
+MA3           1.521      -0.037     0.000
+MA4           1.558       0.360     0.000
+MB1           1.785      -0.358     0.000
+MB2           1.436      -0.358     0.000
+MB3           2.069       0.470     0.000
+MB4           2.190       0.450     0.000
+MC1           1.510      -0.932     0.000
+MC2           1.590       0.110     0.000
+MC3           1.521      -0.508     0.000
+MC4           1.731      -0.115     0.000
+MD1           1.904      -0.495     0.000
+MD2           1.710      -0.787     0.000
+MD3           1.860      -0.254     0.000
+MD4           1.557      -0.299     0.000
+ME1           1.590      -0.618     0.000
+ME2           1.684       0.380     0.000
+MF1           1.567      -0.172     0.000
+MG1           2.793       0.256     0.006
+MG2           2.987       0.430     0.000
+MG3           3.275       0.237     0.024
+MG4           3.022       0.282     0.000
+MH1           3.176       0.743     0.357
+MH2           2.869       0.804     0.206
+MH3           2.531       0.719     0.236
+MH4           2.404       0.905     0.171
+MI1           2.592       1.226     0.247
+MI2           1.123       0.395     0.082
+MI3           2.586       1.255     0.103</code></pre>
+</div>
+</div>
+</section>
+<section id="plot-item-characteristic-curves-iccs" class="level3">
+<h3 class="anchored" data-anchor-id="plot-item-characteristic-curves-iccs">Plot item characteristic curves (ICCs)</h3>
+<p>Visualizing ICCs gives an intuitive view of how each item functions. Here we compare a selection of items across the 1PL and 2PL.</p>
+<div id="19ff744f" class="cell" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>theta_range <span class="op">=</span> np.linspace(<span class="op">-</span><span class="dv">4</span>, <span class="dv">4</span>, <span class="dv">200</span>)</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> icc_1pl(theta, b):</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span> <span class="op">/</span> (<span class="dv">1</span> <span class="op">+</span> np.exp(<span class="op">-</span>(theta <span class="op">-</span> b)))</span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> icc_2pl(theta, a, b):</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span> <span class="op">/</span> (<span class="dv">1</span> <span class="op">+</span> np.exp(<span class="op">-</span>a <span class="op">*</span> (theta <span class="op">-</span> b)))</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>difficulty_1pl     <span class="op">=</span> fit_1pl.model.difficulty</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>discrimination_2pl <span class="op">=</span> fit_2pl.model.discrimination</span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>difficulty_2pl     <span class="op">=</span> fit_2pl.model.difficulty</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a>fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">12</span>, <span class="dv">5</span>), sharey<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> idx, name <span class="kw">in</span> <span class="bu">zip</span>(<span class="bu">range</span>(<span class="dv">5</span>), item_names[:<span class="dv">5</span>]):</span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">0</span>].plot(theta_range, icc_1pl(theta_range, difficulty_1pl[idx]), label<span class="op">=</span>name)</span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>    axes[<span class="dv">1</span>].plot(theta_range, icc_2pl(theta_range, discrimination_2pl[idx], difficulty_2pl[idx]), label<span class="op">=</span>name)</span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-19"><a href="#cb14-19" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> ax, title <span class="kw">in</span> <span class="bu">zip</span>(axes, [<span class="st">"1PL (Rasch)"</span>, <span class="st">"2PL"</span>]):</span>
+<span id="cb14-20"><a href="#cb14-20" aria-hidden="true" tabindex="-1"></a>    ax.set_title(title)</span>
+<span id="cb14-21"><a href="#cb14-21" aria-hidden="true" tabindex="-1"></a>    ax.set_xlabel(<span class="st">"Ability (θ)"</span>)</span>
+<span id="cb14-22"><a href="#cb14-22" aria-hidden="true" tabindex="-1"></a>    ax.set_ylabel(<span class="st">"P(correct)"</span>)</span>
+<span id="cb14-23"><a href="#cb14-23" aria-hidden="true" tabindex="-1"></a>    ax.axhline(<span class="fl">0.5</span>, color<span class="op">=</span><span class="st">"grey"</span>, linestyle<span class="op">=</span><span class="st">"--"</span>, linewidth<span class="op">=</span><span class="fl">0.8</span>)</span>
+<span id="cb14-24"><a href="#cb14-24" aria-hidden="true" tabindex="-1"></a>    ax.legend(fontsize<span class="op">=</span><span class="dv">8</span>)</span>
+<span id="cb14-25"><a href="#cb14-25" aria-hidden="true" tabindex="-1"></a>    ax.set_ylim(<span class="dv">0</span>, <span class="dv">1</span>)</span>
+<span id="cb14-26"><a href="#cb14-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-27"><a href="#cb14-27" aria-hidden="true" tabindex="-1"></a>fig.suptitle(<span class="st">"Item Characteristic Curves"</span>, fontsize<span class="op">=</span><span class="dv">14</span>)</span>
+<span id="cb14-28"><a href="#cb14-28" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb14-29"><a href="#cb14-29" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="irt_python_files/figure-html/cell-9-output-1.png" width="1142" height="475" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<hr>
+</section>
+</section>
+<section id="part-2-polytomous-irt-graded-response-model" class="level2">
+<h2 class="anchored" data-anchor-id="part-2-polytomous-irt-graded-response-model">Part 2: Polytomous IRT (Graded Response Model)</h2>
+<p>The Graded Response Model (GRM) is appropriate for ordered polytomous items (e.g., Likert-scale survey responses). We use <code>girth</code> for the GRM, which has a stable MML implementation for polytomous models.</p>
+<section id="fetch-a-polytomous-dataset" class="level3">
+<h3 class="anchored" data-anchor-id="fetch-a-polytomous-dataset">Fetch a polytomous dataset</h3>
+<div id="a6d6b8db" class="cell" data-execution_count="9">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>df_poly <span class="op">=</span> irw.fetch(<span class="st">"5personalityfactors"</span>)</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(df_poly.head())</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Unique response categories: </span><span class="sc">{</span><span class="bu">sorted</span>(df_poly[<span class="st">'resp'</span>].dropna().unique())<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Warning: Setting the REDIVIS_API_TOKEN for interactive sessions is deprecated and highly discouraged.
+Please delete the token on Redivis and remove it from your code, and follow the authentication prompts here instead.
+
+This environment variable should only ever be set in a non-interactive environment, such as in an automated script or service.
+
+Warning: Setting the REDIVIS_API_TOKEN for interactive sessions is deprecated and highly discouraged.
+Please delete the token on Redivis and remove it from your code, and follow the authentication prompts here instead.
+
+This environment variable should only ever be set in a non-interactive environment, such as in an automated script or service.
+</code></pre>
+</div>
+<div class="cell-output cell-output-display">
+<script type="application/vnd.jupyter.widget-view+json">
+{"model_id":"169e007392b64d1791ac36fb0d66d2f0","version_major":2,"version_minor":0,"quarto_mimetype":"application/vnd.jupyter.widget-view+json"}
+</script>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>      id              item  resp  age
+0  15111  10_agreeableness   1.0   18
+1  21348  10_agreeableness   1.0   18
+2  22571  10_agreeableness   1.0   18
+3  30530  10_agreeableness   1.0   18
+4  31443  10_agreeableness   1.0   18
+
+Unique response categories: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, nan]</code></pre>
+</div>
+</div>
+</section>
+<section id="prepare-the-response-matrix-1" class="level3">
+<h3 class="anchored" data-anchor-id="prepare-the-response-matrix-1">Prepare the response matrix</h3>
+<p><code>girth</code> expects a <code>(n_items, n_persons)</code> integer array with categories coded starting from <code>0</code> and missing values encoded as <code>INVALID_RESPONSE</code> (girth’s sentinel, <code>-99999</code>). We shift the responses so the lowest observed category becomes 0, round any values produced by duplicate-response averaging, then transpose.</p>
+<div id="ca2081ea" class="cell" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>resp_wide_poly <span class="op">=</span> irw.long2resp(df_poly)</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a>resp_wide_poly <span class="op">=</span> resp_wide_poly.drop(columns<span class="op">=</span><span class="st">"id"</span>, errors<span class="op">=</span><span class="st">"ignore"</span>)</span>
+<span id="cb18-3"><a href="#cb18-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-4"><a href="#cb18-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert to numeric; shift so minimum category = 0</span></span>
+<span id="cb18-5"><a href="#cb18-5" aria-hidden="true" tabindex="-1"></a>resp_arr_poly <span class="op">=</span> resp_wide_poly.<span class="bu">apply</span>(pd.to_numeric, errors<span class="op">=</span><span class="st">"coerce"</span>).to_numpy(dtype<span class="op">=</span><span class="bu">float</span>, na_value<span class="op">=</span>np.nan)</span>
+<span id="cb18-6"><a href="#cb18-6" aria-hidden="true" tabindex="-1"></a>min_resp <span class="op">=</span> <span class="bu">int</span>(np.nanmin(resp_arr_poly))</span>
+<span id="cb18-7"><a href="#cb18-7" aria-hidden="true" tabindex="-1"></a>resp_arr_poly <span class="op">=</span> resp_arr_poly <span class="op">-</span> min_resp</span>
+<span id="cb18-8"><a href="#cb18-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-9"><a href="#cb18-9" aria-hidden="true" tabindex="-1"></a>n_categories <span class="op">=</span> <span class="bu">int</span>(np.nanmax(resp_arr_poly)) <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb18-10"><a href="#cb18-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f"Persons: </span><span class="sc">{</span>resp_arr_poly<span class="sc">.</span>shape[<span class="dv">0</span>]<span class="sc">}</span><span class="ss">, Items: </span><span class="sc">{</span>resp_arr_poly<span class="sc">.</span>shape[<span class="dv">1</span>]<span class="sc">}</span><span class="ss">, Categories: </span><span class="sc">{</span>n_categories<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb18-11"><a href="#cb18-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb18-12"><a href="#cb18-12" aria-hidden="true" tabindex="-1"></a><span class="co"># Round averaged duplicates, encode missing as INVALID_RESPONSE, transpose to (items × persons)</span></span>
+<span id="cb18-13"><a href="#cb18-13" aria-hidden="true" tabindex="-1"></a>resp_matrix_poly <span class="op">=</span> np.where(np.isnan(resp_arr_poly),</span>
+<span id="cb18-14"><a href="#cb18-14" aria-hidden="true" tabindex="-1"></a>                            INVALID_RESPONSE,</span>
+<span id="cb18-15"><a href="#cb18-15" aria-hidden="true" tabindex="-1"></a>                            np.<span class="bu">round</span>(resp_arr_poly)).astype(<span class="bu">int</span>).T</span>
+<span id="cb18-16"><a href="#cb18-16" aria-hidden="true" tabindex="-1"></a>resp_matrix_poly <span class="op">=</span> tag_missing_data(resp_matrix_poly, <span class="bu">list</span>(<span class="bu">range</span>(n_categories)))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Found 1260 responses across 1260 unique id-item pairs (0.2% of total).
+Average responses per pair: 1.0.
+Aggregating responses based on agg_method='mean'.
+Persons: 8936, Items: 70, Categories: 7</code></pre>
+</div>
+</div>
+</section>
+<section id="fit-the-graded-response-model" class="level3">
+<h3 class="anchored" data-anchor-id="fit-the-graded-response-model">Fit the Graded Response Model</h3>
+<div id="4bc06cea" class="cell" data-execution_count="11">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>grm_results <span class="op">=</span> grm_mml(resp_matrix_poly)</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-3"><a href="#cb20-3" aria-hidden="true" tabindex="-1"></a>discrimination_grm <span class="op">=</span> grm_results[<span class="st">"Discrimination"</span>]</span>
+<span id="cb20-4"><a href="#cb20-4" aria-hidden="true" tabindex="-1"></a>thresholds_grm     <span class="op">=</span> grm_results[<span class="st">"Difficulty"</span>]   <span class="co"># shape: (n_items, n_categories - 1)</span></span>
+<span id="cb20-5"><a href="#cb20-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb20-6"><a href="#cb20-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Display results for first 10 items</span></span>
+<span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a>item_names_poly <span class="op">=</span> resp_wide_poly.columns.tolist()</span>
+<span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="bu">min</span>(<span class="dv">10</span>, <span class="bu">len</span>(item_names_poly))):</span>
+<span id="cb20-9"><a href="#cb20-9" aria-hidden="true" tabindex="-1"></a>    thresh_str <span class="op">=</span> <span class="st">", "</span>.join([<span class="ss">f"</span><span class="sc">{</span>t<span class="sc">:.2f}</span><span class="ss">"</span> <span class="cf">for</span> t <span class="kw">in</span> thresholds_grm[i]])</span>
+<span id="cb20-10"><a href="#cb20-10" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(</span>
+<span id="cb20-11"><a href="#cb20-11" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"</span><span class="sc">{</span>item_names_poly[i]<span class="sc">:30s}</span><span class="ss">  "</span></span>
+<span id="cb20-12"><a href="#cb20-12" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"a = </span><span class="sc">{</span>discrimination_grm[i]<span class="sc">:.3f}</span><span class="ss">  "</span></span>
+<span id="cb20-13"><a href="#cb20-13" aria-hidden="true" tabindex="-1"></a>        <span class="ss">f"b = [</span><span class="sc">{</span>thresh_str<span class="sc">}</span><span class="ss">]"</span></span>
+<span id="cb20-14"><a href="#cb20-14" aria-hidden="true" tabindex="-1"></a>    )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Warning: invalid value encountered in log
+Warning: divide by zero encountered in log
+10_agreeableness                a = 0.769  b = [-5.95, -3.71, -1.70, -0.22, 1.28, 4.12]
+10_conscientiousness            a = 0.818  b = [-3.52, -1.11, 0.44, 1.68, 3.60, 5.91]
+10_extraversion                 a = 1.044  b = [-4.44, -2.79, -1.31, -0.29, 0.90, 2.80]
+10_neuroticism                  a = 0.778  b = [-4.01, -1.31, 0.24, 1.52, 3.55, 5.92]
+10_openness                     a = 1.044  b = [-5.89, -3.18, -1.36, 0.17, 1.99, 4.41]
+11_agreeableness                a = 1.122  b = [-4.49, -2.78, -1.65, -0.66, 0.84, 2.88]
+11_conscientiousness            a = 1.152  b = [-4.91, -2.97, -1.57, -0.48, 0.92, 2.59]
+11_extraversion                 a = 1.476  b = [-3.38, -2.13, -1.28, -0.52, 0.69, 2.26]
+11_neuroticism                  a = 0.602  b = [-5.84, -2.51, -0.56, 1.10, 3.23, 5.90]
+11_openness                     a = 1.024  b = [-5.94, -3.66, -1.94, -0.50, 1.19, 3.08]</code></pre>
+</div>
+</div>
+</section>
+<section id="plot-category-response-curves-crcs" class="level3">
+<h3 class="anchored" data-anchor-id="plot-category-response-curves-crcs">Plot category response curves (CRCs)</h3>
+<p>Category response curves show the probability of each response category as a function of ability. We plot CRCs for a single example item.</p>
+<div id="6a9e4b8a" class="cell" data-execution_count="12">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy.special <span class="im">import</span> expit</span>
+<span id="cb22-2"><a href="#cb22-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-3"><a href="#cb22-3" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> grm_crc(theta, a, thresholds):</span>
+<span id="cb22-4"><a href="#cb22-4" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""</span></span>
+<span id="cb22-5"><a href="#cb22-5" aria-hidden="true" tabindex="-1"></a><span class="co">    GRM category response curves.</span></span>
+<span id="cb22-6"><a href="#cb22-6" aria-hidden="true" tabindex="-1"></a><span class="co">    P(X=k|θ) = P*(X≥k|θ) − P*(X≥k+1|θ), where P*(X≥k|θ) = logistic(a*(θ−b_k)).</span></span>
+<span id="cb22-7"><a href="#cb22-7" aria-hidden="true" tabindex="-1"></a><span class="co">    """</span></span>
+<span id="cb22-8"><a href="#cb22-8" aria-hidden="true" tabindex="-1"></a>    cum_probs <span class="op">=</span> np.array([expit(a <span class="op">*</span> (t <span class="op">-</span> theta)) <span class="cf">for</span> t <span class="kw">in</span> thresholds])</span>
+<span id="cb22-9"><a href="#cb22-9" aria-hidden="true" tabindex="-1"></a>    cum_probs <span class="op">=</span> np.vstack([np.ones_like(theta), <span class="dv">1</span> <span class="op">-</span> cum_probs, np.zeros_like(theta)])</span>
+<span id="cb22-10"><a href="#cb22-10" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="op">-</span>np.diff(cum_probs, axis<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a>item_idx  <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb22-13"><a href="#cb22-13" aria-hidden="true" tabindex="-1"></a>item_name <span class="op">=</span> item_names_poly[item_idx]</span>
+<span id="cb22-14"><a href="#cb22-14" aria-hidden="true" tabindex="-1"></a>a_item    <span class="op">=</span> discrimination_grm[item_idx]</span>
+<span id="cb22-15"><a href="#cb22-15" aria-hidden="true" tabindex="-1"></a>b_item    <span class="op">=</span> thresholds_grm[item_idx]</span>
+<span id="cb22-16"><a href="#cb22-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-17"><a href="#cb22-17" aria-hidden="true" tabindex="-1"></a>crc <span class="op">=</span> grm_crc(theta_range, a_item, b_item)</span>
+<span id="cb22-18"><a href="#cb22-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-19"><a href="#cb22-19" aria-hidden="true" tabindex="-1"></a>fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">8</span>, <span class="dv">5</span>))</span>
+<span id="cb22-20"><a href="#cb22-20" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> k <span class="kw">in</span> <span class="bu">range</span>(crc.shape[<span class="dv">0</span>]):</span>
+<span id="cb22-21"><a href="#cb22-21" aria-hidden="true" tabindex="-1"></a>    ax.plot(theta_range, crc[k], label<span class="op">=</span><span class="ss">f"Category </span><span class="sc">{</span>k <span class="op">+</span> <span class="dv">1</span><span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb22-22"><a href="#cb22-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb22-23"><a href="#cb22-23" aria-hidden="true" tabindex="-1"></a>ax.set_title(<span class="ss">f"GRM Category Response Curves</span><span class="ch">\n</span><span class="sc">{</span>item_name<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb22-24"><a href="#cb22-24" aria-hidden="true" tabindex="-1"></a>ax.set_xlabel(<span class="st">"Trait level (θ)"</span>)</span>
+<span id="cb22-25"><a href="#cb22-25" aria-hidden="true" tabindex="-1"></a>ax.set_ylabel(<span class="st">"Response probability"</span>)</span>
+<span id="cb22-26"><a href="#cb22-26" aria-hidden="true" tabindex="-1"></a>ax.legend()</span>
+<span id="cb22-27"><a href="#cb22-27" aria-hidden="true" tabindex="-1"></a>ax.set_ylim(<span class="dv">0</span>, <span class="dv">1</span>)</span>
+<span id="cb22-28"><a href="#cb22-28" aria-hidden="true" tabindex="-1"></a>plt.tight_layout()</span>
+<span id="cb22-29"><a href="#cb22-29" aria-hidden="true" tabindex="-1"></a>plt.show()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="irt_python_files/figure-html/cell-13-output-1.png" width="758" height="471" class="figure-img"></p>
+</figure>
+</div>
+</div>
+</div>
+<hr>
+</section>
+</section>
+<section id="summary" class="level2">
+<h2 class="anchored" data-anchor-id="summary">Summary</h2>
+<p>The table below recaps the models covered and when to use each one.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Model</th>
+<th>Package</th>
+<th>Response type</th>
+<th>Parameters per item</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1PL (Rasch)</td>
+<td><code>mirt</code></td>
+<td>Dichotomous</td>
+<td>difficulty <code>b</code></td>
+<td>Equal discrimination is theoretically warranted</td>
+</tr>
+<tr class="even">
+<td>2PL</td>
+<td><code>mirt</code></td>
+<td>Dichotomous</td>
+<td><code>a</code>, <code>b</code></td>
+<td>Items vary in how well they discriminate</td>
+</tr>
+<tr class="odd">
+<td>3PL</td>
+<td><code>mirt</code></td>
+<td>Dichotomous</td>
+<td><code>a</code>, <code>b</code>, <code>c</code></td>
+<td>Multiple-choice; guessing is plausible</td>
+</tr>
+<tr class="even">
+<td>GRM</td>
+<td><code>girth</code></td>
+<td>Polytomous (ordered)</td>
+<td><code>a</code>, <code>b₁…bₖ₋₁</code></td>
+<td>Likert or partial-credit items</td>
+</tr>
+</tbody>
+</table>
+<p>For a broader exploration of 2PL discrimination parameters across many IRW datasets, see the <a href="../vignettes/2pl_across_datasets.html">2PL Across Datasets</a> vignette. To compare model fit between the 1PL and 2PL using cross-validated predictions, see the <a href="../vignettes/imv.html">IMV vignette</a>.</p>
+<hr>
+</section>
+<section id="further-reading" class="level2">
+<h2 class="anchored" data-anchor-id="further-reading">Further reading</h2>
+<ul>
+<li><a href="https://pypi.org/project/mirt/"><code>mirt</code> on PyPI</a></li>
+<li><a href="https://eribean.github.io/girth/"><code>girth</code> documentation</a></li>
+<li><a href="https://github.com/itemresponsewarehouse/Python-pkg"><code>irw</code> Python package</a></li>
+<li><a href="../getstarted.html">IRW getting started guide</a></li>
+</ul>
+
+
+</section>
+
+</main> <!-- /main -->
+<script type="application/vnd.jupyter.widget-state+json">
+{"state":{"0a0bed9cd7e0416582941610ede5ce27":{"model_module":"@jupyter-widgets/controls","model_module_version":"2.0.0","model_name":"HTMLModel","state":{"_dom_classes":[],"_model_module":"@jupyter-widgets/controls","_model_module_version":"2.0.0","_model_name":"HTMLModel","_view_count":null,"_view_module":"@jupyter-widgets/controls","_view_module_version":"2.0.0","_view_name":"HTMLView","description":"","description_allow_html":false,"layout":"IPY_MODEL_b12519ef55bc449eafd666bfcad3cd81","placeholder":"​","style":"IPY_MODEL_7e40aadd0a9146cbb56966b846afa2c5","tabbable":null,"tooltip":null,"value":" 4096/19920 [00:00&lt;00:01, 8268.14it/s]"}},"169e007392b64d1791ac36fb0d66d2f0":{"model_module":"@jupyter-widgets/controls","model_module_version":"2.0.0","model_name":"HBoxModel","state":{"_dom_classes":[],"_model_module":"@jupyter-widgets/controls","_model_module_version":"2.0.0","_model_name":"HBoxModel","_view_count":null,"_view_module":"@jupyter-widgets/controls","_view_module_version":"2.0.0","_view_name":"HBoxView","box_style":"","children":["IPY_MODEL_6c0747aca19d4ab19b8f17c485801c37","IPY_MODEL_945bf9e1e86244d989425a1fd898a932","IPY_MODEL_205c47bbfa0b4cf7b4cc70b449568be1"],"layout":"IPY_MODEL_a4b8de20142c405cacc1240c7ef2bc83","tabbable":null,"tooltip":null}},"1826f3b420594ce1914f080ed8a9fae5":{"model_module":"@jupyter-widgets/base","model_module_version":"2.0.0","model_name":"LayoutModel","state":{"_model_module":"@jupyter-widgets/base","_model_module_version":"2.0.0","_model_name":"LayoutModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"LayoutView","align_content":null,"align_items":null,"align_self":null,"border_bottom":null,"border_left":null,"border_right":null,"border_top":null,"bottom":null,"display":null,"flex":null,"flex_flow":null,"grid_area":null,"grid_auto_columns":null,"grid_auto_flow":null,"grid_auto_rows":null,"grid_column":null,"grid_gap":null,"grid_row":null,"grid_template_areas":null,"grid_template_columns":null,"grid_template_rows":null,"height":null,"justify_content":null,"justify_items":null,"left":null,"margin":null,"max_height":null,"max_width":null,"min_height":null,"min_width":null,"object_fit":null,"object_position":null,"order":null,"overflow":null,"padding":null,"right":null,"top":null,"visibility":null,"width":null}},"1e21c29baa4048809bb05ace6d30cb46":{"model_module":"@jupyter-widgets/controls","model_module_version":"2.0.0","model_name":"HBoxModel","state":{"_dom_classes":[],"_model_module":"@jupyter-widgets/controls","_model_module_version":"2.0.0","_model_name":"HBoxModel","_view_count":null,"_view_module":"@jupyter-widgets/controls","_view_module_version":"2.0.0","_view_name":"HBoxView","box_style":"","children":["IPY_MODEL_833543455a004116ae73a0864b2608c8","IPY_MODEL_a9473862dbca44cb81747374c1c95af0","IPY_MODEL_0a0bed9cd7e0416582941610ede5ce27"],"layout":"IPY_MODEL_541cea0ea0414ca7a0c0c809159b780f","tabbable":null,"tooltip":null}},"205c47bbfa0b4cf7b4cc70b449568be1":{"model_module":"@jupyter-widgets/controls","model_module_version":"2.0.0","model_name":"HTMLModel","state":{"_dom_classes":[],"_model_module":"@jupyter-widgets/controls","_model_module_version":"2.0.0","_model_name":"HTMLModel","_view_count":null,"_view_module":"@jupyter-widgets/controls","_view_module_version":"2.0.0","_view_name":"HTMLView","description":"","description_allow_html":false,"layout":"IPY_MODEL_930a9ba8097b4535b2f3bcac09b62f3e","placeholder":"​","style":"IPY_MODEL_caa6e9d6a2e34f7ea9715fab97045379","tabbable":null,"tooltip":null,"value":" 286720/626780 [00:00&lt;00:00, 588706.69it/s]"}},"541cea0ea0414ca7a0c0c809159b780f":{"model_module":"@jupyter-widgets/base","model_module_version":"2.0.0","model_name":"LayoutModel","state":{"_model_module":"@jupyter-widgets/base","_model_module_version":"2.0.0","_model_name":"LayoutModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"LayoutView","align_content":null,"align_items":null,"align_self":null,"border_bottom":null,"border_left":null,"border_right":null,"border_top":null,"bottom":null,"display":null,"flex":null,"flex_flow":null,"grid_area":null,"grid_auto_columns":null,"grid_auto_flow":null,"grid_auto_rows":null,"grid_column":null,"grid_gap":null,"grid_row":null,"grid_template_areas":null,"grid_template_columns":null,"grid_template_rows":null,"height":null,"justify_content":null,"justify_items":null,"left":null,"margin":null,"max_height":null,"max_width":null,"min_height":null,"min_width":null,"object_fit":null,"object_position":null,"order":null,"overflow":null,"padding":null,"right":null,"top":null,"visibility":"hidden","width":null}},"621d9a403d1b40d6837f9697d044df84":{"model_module":"@jupyter-widgets/base","model_module_version":"2.0.0","model_name":"LayoutModel","state":{"_model_module":"@jupyter-widgets/base","_model_module_version":"2.0.0","_model_name":"LayoutModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"LayoutView","align_content":null,"align_items":null,"align_self":null,"border_bottom":null,"border_left":null,"border_right":null,"border_top":null,"bottom":null,"display":null,"flex":null,"flex_flow":null,"grid_area":null,"grid_auto_columns":null,"grid_auto_flow":null,"grid_auto_rows":null,"grid_column":null,"grid_gap":null,"grid_row":null,"grid_template_areas":null,"grid_template_columns":null,"grid_template_rows":null,"height":null,"justify_content":null,"justify_items":null,"left":null,"margin":null,"max_height":null,"max_width":null,"min_height":null,"min_width":null,"object_fit":null,"object_position":null,"order":null,"overflow":null,"padding":null,"right":null,"top":null,"visibility":null,"width":null}},"6c0747aca19d4ab19b8f17c485801c37":{"model_module":"@jupyter-widgets/controls","model_module_version":"2.0.0","model_name":"HTMLModel","state":{"_dom_classes":[],"_model_module":"@jupyter-widgets/controls","_model_module_version":"2.0.0","_model_name":"HTMLModel","_view_count":null,"_view_module":"@jupyter-widgets/controls","_view_module_version":"2.0.0","_view_name":"HTMLView","description":"","description_allow_html":false,"layout":"IPY_MODEL_1826f3b420594ce1914f080ed8a9fae5","placeholder":"​","style":"IPY_MODEL_a2a7029cc5744283a1eece0bba5c8b37","tabbable":null,"tooltip":null,"value":" 46%"}},"6e50bc4060594f8aada85ccabe1ef292":{"model_module":"@jupyter-widgets/controls","model_module_version":"2.0.0","model_name":"HTMLStyleModel","state":{"_model_module":"@jupyter-widgets/controls","_model_module_version":"2.0.0","_model_name":"HTMLStyleModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"StyleView","background":null,"description_width":"","font_size":null,"text_color":null}},"7e40aadd0a9146cbb56966b846afa2c5":{"model_module":"@jupyter-widgets/controls","model_module_version":"2.0.0","model_name":"HTMLStyleModel","state":{"_model_module":"@jupyter-widgets/controls","_model_module_version":"2.0.0","_model_name":"HTMLStyleModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"StyleView","background":null,"description_width":"","font_size":null,"text_color":null}},"833543455a004116ae73a0864b2608c8":{"model_module":"@jupyter-widgets/controls","model_module_version":"2.0.0","model_name":"HTMLModel","state":{"_dom_classes":[],"_model_module":"@jupyter-widgets/controls","_model_module_version":"2.0.0","_model_name":"HTMLModel","_view_count":null,"_view_module":"@jupyter-widgets/controls","_view_module_version":"2.0.0","_view_name":"HTMLView","description":"","description_allow_html":false,"layout":"IPY_MODEL_b21329c43e32413db25f57312a99fb92","placeholder":"​","style":"IPY_MODEL_6e50bc4060594f8aada85ccabe1ef292","tabbable":null,"tooltip":null,"value":" 21%"}},"930a9ba8097b4535b2f3bcac09b62f3e":{"model_module":"@jupyter-widgets/base","model_module_version":"2.0.0","model_name":"LayoutModel","state":{"_model_module":"@jupyter-widgets/base","_model_module_version":"2.0.0","_model_name":"LayoutModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"LayoutView","align_content":null,"align_items":null,"align_self":null,"border_bottom":null,"border_left":null,"border_right":null,"border_top":null,"bottom":null,"display":null,"flex":null,"flex_flow":null,"grid_area":null,"grid_auto_columns":null,"grid_auto_flow":null,"grid_auto_rows":null,"grid_column":null,"grid_gap":null,"grid_row":null,"grid_template_areas":null,"grid_template_columns":null,"grid_template_rows":null,"height":null,"justify_content":null,"justify_items":null,"left":null,"margin":null,"max_height":null,"max_width":null,"min_height":null,"min_width":null,"object_fit":null,"object_position":null,"order":null,"overflow":null,"padding":null,"right":null,"top":null,"visibility":null,"width":null}},"945bf9e1e86244d989425a1fd898a932":{"model_module":"@jupyter-widgets/controls","model_module_version":"2.0.0","model_name":"FloatProgressModel","state":{"_dom_classes":[],"_model_module":"@jupyter-widgets/controls","_model_module_version":"2.0.0","_model_name":"FloatProgressModel","_view_count":null,"_view_module":"@jupyter-widgets/controls","_view_module_version":"2.0.0","_view_name":"ProgressView","bar_style":"","description":"","description_allow_html":false,"layout":"IPY_MODEL_621d9a403d1b40d6837f9697d044df84","max":626780,"min":0,"orientation":"horizontal","style":"IPY_MODEL_f109e69316d9408d9ed3cfbb2b8e103c","tabbable":null,"tooltip":null,"value":626780}},"a2a7029cc5744283a1eece0bba5c8b37":{"model_module":"@jupyter-widgets/controls","model_module_version":"2.0.0","model_name":"HTMLStyleModel","state":{"_model_module":"@jupyter-widgets/controls","_model_module_version":"2.0.0","_model_name":"HTMLStyleModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"StyleView","background":null,"description_width":"","font_size":null,"text_color":null}},"a4b8de20142c405cacc1240c7ef2bc83":{"model_module":"@jupyter-widgets/base","model_module_version":"2.0.0","model_name":"LayoutModel","state":{"_model_module":"@jupyter-widgets/base","_model_module_version":"2.0.0","_model_name":"LayoutModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"LayoutView","align_content":null,"align_items":null,"align_self":null,"border_bottom":null,"border_left":null,"border_right":null,"border_top":null,"bottom":null,"display":null,"flex":null,"flex_flow":null,"grid_area":null,"grid_auto_columns":null,"grid_auto_flow":null,"grid_auto_rows":null,"grid_column":null,"grid_gap":null,"grid_row":null,"grid_template_areas":null,"grid_template_columns":null,"grid_template_rows":null,"height":null,"justify_content":null,"justify_items":null,"left":null,"margin":null,"max_height":null,"max_width":null,"min_height":null,"min_width":null,"object_fit":null,"object_position":null,"order":null,"overflow":null,"padding":null,"right":null,"top":null,"visibility":"hidden","width":null}},"a89c5cb7140f4c2999cfa815cda4434b":{"model_module":"@jupyter-widgets/controls","model_module_version":"2.0.0","model_name":"ProgressStyleModel","state":{"_model_module":"@jupyter-widgets/controls","_model_module_version":"2.0.0","_model_name":"ProgressStyleModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"StyleView","bar_color":null,"description_width":""}},"a9473862dbca44cb81747374c1c95af0":{"model_module":"@jupyter-widgets/controls","model_module_version":"2.0.0","model_name":"FloatProgressModel","state":{"_dom_classes":[],"_model_module":"@jupyter-widgets/controls","_model_module_version":"2.0.0","_model_name":"FloatProgressModel","_view_count":null,"_view_module":"@jupyter-widgets/controls","_view_module_version":"2.0.0","_view_name":"ProgressView","bar_style":"","description":"","description_allow_html":false,"layout":"IPY_MODEL_f4cc43e0f0df4bf5beea60163ef6e980","max":19920,"min":0,"orientation":"horizontal","style":"IPY_MODEL_a89c5cb7140f4c2999cfa815cda4434b","tabbable":null,"tooltip":null,"value":19920}},"b12519ef55bc449eafd666bfcad3cd81":{"model_module":"@jupyter-widgets/base","model_module_version":"2.0.0","model_name":"LayoutModel","state":{"_model_module":"@jupyter-widgets/base","_model_module_version":"2.0.0","_model_name":"LayoutModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"LayoutView","align_content":null,"align_items":null,"align_self":null,"border_bottom":null,"border_left":null,"border_right":null,"border_top":null,"bottom":null,"display":null,"flex":null,"flex_flow":null,"grid_area":null,"grid_auto_columns":null,"grid_auto_flow":null,"grid_auto_rows":null,"grid_column":null,"grid_gap":null,"grid_row":null,"grid_template_areas":null,"grid_template_columns":null,"grid_template_rows":null,"height":null,"justify_content":null,"justify_items":null,"left":null,"margin":null,"max_height":null,"max_width":null,"min_height":null,"min_width":null,"object_fit":null,"object_position":null,"order":null,"overflow":null,"padding":null,"right":null,"top":null,"visibility":null,"width":null}},"b21329c43e32413db25f57312a99fb92":{"model_module":"@jupyter-widgets/base","model_module_version":"2.0.0","model_name":"LayoutModel","state":{"_model_module":"@jupyter-widgets/base","_model_module_version":"2.0.0","_model_name":"LayoutModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"LayoutView","align_content":null,"align_items":null,"align_self":null,"border_bottom":null,"border_left":null,"border_right":null,"border_top":null,"bottom":null,"display":null,"flex":null,"flex_flow":null,"grid_area":null,"grid_auto_columns":null,"grid_auto_flow":null,"grid_auto_rows":null,"grid_column":null,"grid_gap":null,"grid_row":null,"grid_template_areas":null,"grid_template_columns":null,"grid_template_rows":null,"height":null,"justify_content":null,"justify_items":null,"left":null,"margin":null,"max_height":null,"max_width":null,"min_height":null,"min_width":null,"object_fit":null,"object_position":null,"order":null,"overflow":null,"padding":null,"right":null,"top":null,"visibility":null,"width":null}},"caa6e9d6a2e34f7ea9715fab97045379":{"model_module":"@jupyter-widgets/controls","model_module_version":"2.0.0","model_name":"HTMLStyleModel","state":{"_model_module":"@jupyter-widgets/controls","_model_module_version":"2.0.0","_model_name":"HTMLStyleModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"StyleView","background":null,"description_width":"","font_size":null,"text_color":null}},"f109e69316d9408d9ed3cfbb2b8e103c":{"model_module":"@jupyter-widgets/controls","model_module_version":"2.0.0","model_name":"ProgressStyleModel","state":{"_model_module":"@jupyter-widgets/controls","_model_module_version":"2.0.0","_model_name":"ProgressStyleModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"StyleView","bar_color":null,"description_width":""}},"f4cc43e0f0df4bf5beea60163ef6e980":{"model_module":"@jupyter-widgets/base","model_module_version":"2.0.0","model_name":"LayoutModel","state":{"_model_module":"@jupyter-widgets/base","_model_module_version":"2.0.0","_model_name":"LayoutModel","_view_count":null,"_view_module":"@jupyter-widgets/base","_view_module_version":"2.0.0","_view_name":"LayoutView","align_content":null,"align_items":null,"align_self":null,"border_bottom":null,"border_left":null,"border_right":null,"border_top":null,"bottom":null,"display":null,"flex":null,"flex_flow":null,"grid_area":null,"grid_auto_columns":null,"grid_auto_flow":null,"grid_auto_rows":null,"grid_column":null,"grid_gap":null,"grid_row":null,"grid_template_areas":null,"grid_template_columns":null,"grid_template_rows":null,"height":null,"justify_content":null,"justify_items":null,"left":null,"margin":null,"max_height":null,"max_width":null,"min_height":null,"min_width":null,"object_fit":null,"object_position":null,"order":null,"overflow":null,"padding":null,"right":null,"top":null,"visibility":null,"width":null}}},"version_major":2,"version_minor":0}
+</script>
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp("https:\/\/itemresponsewarehouse\.org");
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>

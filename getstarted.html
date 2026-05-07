@@ -516,9 +516,9 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 <div class="cell" data-python.reticulate="false">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> math <span class="im">import</span> sqrt</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> redivis</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> irw</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> math <span class="im">import</span> sqrt</span>
 <span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>dataset_names <span class="op">=</span> [<span class="st">"4thgrade_math_sirt"</span>, <span class="st">"chess_lnirt"</span>, <span class="st">"dd_rotation"</span>]</span>
 <span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a></span>
@@ -527,28 +527,21 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 <span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>          .loc[<span class="op">~</span>df[<span class="st">'resp'</span>].isna()]</span>
 <span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>          .assign(resp<span class="op">=</span>pd.to_numeric(df[<span class="st">'resp'</span>]))</span>
 <span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>         )</span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> pd.DataFrame({</span>
-<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_responses'</span>: [<span class="bu">len</span>(df)],</span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_categories'</span>: [df[<span class="st">'resp'</span>].nunique()],</span>
-<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_participants'</span>: [df[<span class="st">'id'</span>].nunique()],</span>
-<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_items'</span>: [df[<span class="st">'item'</span>].nunique()],</span>
-<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">'responses_per_participant'</span>: [<span class="bu">len</span>(df) <span class="op">/</span> df[<span class="st">'id'</span>].nunique()],</span>
-<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">'responses_per_item'</span>: [<span class="bu">len</span>(df) <span class="op">/</span> df[<span class="st">'item'</span>].nunique()],</span>
-<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>        <span class="st">'density'</span>: [(sqrt(<span class="bu">len</span>(df)) <span class="op">/</span> df[<span class="st">'id'</span>].nunique()) <span class="op">*</span> (sqrt(<span class="bu">len</span>(df)) <span class="op">/</span> df[<span class="st">'item'</span>].nunique())]</span>
-<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>    })</span>
-<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>dataset <span class="op">=</span> redivis.user(<span class="st">'datapages'</span>).dataset(<span class="st">'item_response_warehouse'</span>)</span>
-<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> get_data_summary(dataset_name):</span>
-<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>  df <span class="op">=</span> pd.DataFrame(dataset.table(dataset_name).to_pandas_dataframe())</span>
-<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>    </span>
-<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>  summary <span class="op">=</span> compute_metadata(df)</span>
-<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>  summary.insert(<span class="dv">0</span>, <span class="st">'dataset_name'</span>, dataset_name)</span>
-<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> summary</span>
-<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>summaries_list <span class="op">=</span> [get_data_summary(name) <span class="cf">for</span> name <span class="kw">in</span> dataset_names]</span>
-<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>summaries <span class="op">=</span> pd.concat(summaries_list, ignore_index<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(summaries)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> pd.DataFrame({</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_responses'</span>: [<span class="bu">len</span>(df)],</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_categories'</span>: [df[<span class="st">'resp'</span>].nunique()],</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_participants'</span>: [df[<span class="st">'id'</span>].nunique()],</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>        <span class="st">'n_items'</span>: [df[<span class="st">'item'</span>].nunique()],</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>        <span class="st">'responses_per_participant'</span>: [<span class="bu">len</span>(df) <span class="op">/</span> df[<span class="st">'id'</span>].nunique()],</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>        <span class="st">'responses_per_item'</span>: [<span class="bu">len</span>(df) <span class="op">/</span> df[<span class="st">'item'</span>].nunique()],</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>        <span class="st">'density'</span>: [(sqrt(<span class="bu">len</span>(df)) <span class="op">/</span> df[<span class="st">'id'</span>].nunique()) <span class="op">*</span> (sqrt(<span class="bu">len</span>(df)) <span class="op">/</span> df[<span class="st">'item'</span>].nunique())]</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>    })</span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>tables <span class="op">=</span> irw.fetch(dataset_names)</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>summaries_list <span class="op">=</span> [compute_metadata(df).assign(table<span class="op">=</span>name) <span class="cf">for</span> name, df <span class="kw">in</span> tables.items()]</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>summaries <span class="op">=</span> pd.concat(summaries_list, ignore_index<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>summaries <span class="op">=</span> summaries[[<span class="st">'table'</span>] <span class="op">+</span> [c <span class="cf">for</span> c <span class="kw">in</span> summaries.columns <span class="cf">if</span> c <span class="op">!=</span> <span class="st">'table'</span>]]</span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(summaries)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
 </div>

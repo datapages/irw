@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>Item Text – Item Response Warehouse</title>
+<title>Item Text Descriptives – Item Response Warehouse</title>
 <style>
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -288,7 +288,7 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Item Text</h1>
+<h1 class="title">Item Text Descriptives</h1>
 </div>
 
 
@@ -305,58 +305,142 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </header>
 
 
-<section id="description-of-the-irw-item-text-data" class="level2">
-<h2 class="anchored" data-anchor-id="description-of-the-irw-item-text-data">Description of the IRW item text data</h2>
-<p>The below scatterplot shows the mean number of words (when <code>item_text</code> is split by ’ ’) and characters in the items for the IRW tables with associated item text (along with the name of the relevant psychometric instrument).</p>
-<div id="scatterplot" class="cell">
+<p>The IRW item text resource contains full item wording for <strong>306 tables</strong> spanning <strong>288 distinct instruments</strong>. Items have a median length of 9 words (51 characters). See the <a href="./itemtext.html">Item Text Standard</a> for a full description of the data structure.</p>
+<section id="tables-with-item-text" class="level2">
+<h2 class="anchored" data-anchor-id="tables-with-item-text">Tables with item text</h2>
+<div id="browse-table" class="cell">
 <details class="code-fold hidden">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code hidden" id="cb1" data-startfrom="38" data-source-offset="-27"><pre class="sourceCode js code-with-copy"><code class="sourceCode javascript" style="counter-reset: source-line 37;"><span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>Plot <span class="op">=</span> <span class="pp">require</span>(<span class="st">"@observablehq/plot"</span>)</span>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code hidden" id="cb1" data-startfrom="36" data-source-offset="-1"><pre class="sourceCode js code-with-copy"><code class="sourceCode javascript" style="counter-reset: source-line 35;"><span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a>plotData <span class="op">=</span> <span class="fu">transpose</span>(plot_data)</span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a>viewof search <span class="op">=</span> Inputs<span class="op">.</span><span class="fu">search</span>(plotData<span class="op">,</span> {<span class="dt">placeholder</span><span class="op">:</span> <span class="st">"Search by table or instrument…"</span>})</span>
 <span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a><span class="co">// Transpose the data from column format to row format</span></span>
-<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>plotData <span class="op">=</span> plot_data<span class="op">.</span><span class="at">table</span><span class="op">.</span><span class="fu">map</span>((d<span class="op">,</span> i) <span class="kw">=&gt;</span> ({</span>
-<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>  <span class="dt">table</span><span class="op">:</span> plot_data<span class="op">.</span><span class="at">table</span>[i]<span class="op">,</span></span>
-<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>  <span class="dt">instrument</span><span class="op">:</span> plot_data<span class="op">.</span><span class="at">instrument</span>[i]<span class="op">,</span></span>
-<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>  <span class="dt">mean_word</span><span class="op">:</span> plot_data<span class="op">.</span><span class="at">mean_word</span>[i]<span class="op">,</span></span>
-<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>  <span class="dt">mean_character</span><span class="op">:</span> plot_data<span class="op">.</span><span class="at">mean_character</span>[i]</span>
-<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>}))</span>
-<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a><span class="co">// Create scatterplot with enhanced tooltips</span></span>
-<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>Plot<span class="op">.</span><span class="fu">plot</span>({</span>
-<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>  <span class="dt">marks</span><span class="op">:</span> [</span>
-<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>    Plot<span class="op">.</span><span class="fu">dot</span>(plotData<span class="op">,</span> {</span>
-<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>      <span class="dt">x</span><span class="op">:</span> <span class="st">"mean_word"</span><span class="op">,</span></span>
-<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>      <span class="dt">y</span><span class="op">:</span> <span class="st">"mean_character"</span><span class="op">,</span></span>
-<span id="cb1-54"><a href="#cb1-54" aria-hidden="true" tabindex="-1"></a>      <span class="dt">title</span><span class="op">:</span> d <span class="kw">=&gt;</span> <span class="vs">`Table: </span><span class="sc">${</span>d<span class="op">.</span><span class="at">table</span><span class="sc">}\n</span><span class="vs">Instrument: </span><span class="sc">${</span>d<span class="op">.</span><span class="at">instrument</span><span class="sc">}\n</span><span class="vs">Mean Word: </span><span class="sc">${</span>d<span class="op">.</span><span class="at">mean_word</span><span class="op">.</span><span class="fu">toFixed</span>(<span class="dv">0</span>)<span class="sc">}\n</span><span class="vs">Mean Characters: </span><span class="sc">${</span>d<span class="op">.</span><span class="at">mean_character</span><span class="op">.</span><span class="fu">toFixed</span>(<span class="dv">0</span>)<span class="sc">}</span><span class="vs">`</span><span class="op">,</span></span>
-<span id="cb1-55"><a href="#cb1-55" aria-hidden="true" tabindex="-1"></a>      <span class="dt">tip</span><span class="op">:</span> <span class="kw">true</span></span>
-<span id="cb1-56"><a href="#cb1-56" aria-hidden="true" tabindex="-1"></a>    })</span>
-<span id="cb1-57"><a href="#cb1-57" aria-hidden="true" tabindex="-1"></a>  ]<span class="op">,</span></span>
-<span id="cb1-58"><a href="#cb1-58" aria-hidden="true" tabindex="-1"></a>  <span class="dt">x</span><span class="op">:</span> {</span>
-<span id="cb1-59"><a href="#cb1-59" aria-hidden="true" tabindex="-1"></a>    <span class="dt">label</span><span class="op">:</span> <span class="st">"Mean Word"</span></span>
-<span id="cb1-60"><a href="#cb1-60" aria-hidden="true" tabindex="-1"></a>  }<span class="op">,</span></span>
-<span id="cb1-61"><a href="#cb1-61" aria-hidden="true" tabindex="-1"></a>  <span class="dt">y</span><span class="op">:</span> {</span>
-<span id="cb1-62"><a href="#cb1-62" aria-hidden="true" tabindex="-1"></a>    <span class="dt">label</span><span class="op">:</span> <span class="st">"Mean Characters"</span></span>
-<span id="cb1-63"><a href="#cb1-63" aria-hidden="true" tabindex="-1"></a>  }</span>
-<span id="cb1-64"><a href="#cb1-64" aria-hidden="true" tabindex="-1"></a>})</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a>Inputs<span class="op">.</span><span class="fu">table</span>(search<span class="op">,</span> {</span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>  <span class="dt">columns</span><span class="op">:</span> [<span class="st">"table"</span><span class="op">,</span> <span class="st">"instrument"</span><span class="op">,</span> <span class="st">"mean_word"</span><span class="op">,</span> <span class="st">"mean_character"</span>]<span class="op">,</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a>  <span class="dt">header</span><span class="op">:</span> {</span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>    <span class="dt">table</span><span class="op">:</span> <span class="st">"Table"</span><span class="op">,</span></span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a>    <span class="dt">instrument</span><span class="op">:</span> <span class="st">"Instrument"</span><span class="op">,</span></span>
+<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mean_word</span><span class="op">:</span> <span class="st">"Mean words"</span><span class="op">,</span></span>
+<span id="cb1-46"><a href="#cb1-46" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mean_character</span><span class="op">:</span> <span class="st">"Mean characters"</span></span>
+<span id="cb1-47"><a href="#cb1-47" aria-hidden="true" tabindex="-1"></a>  }<span class="op">,</span></span>
+<span id="cb1-48"><a href="#cb1-48" aria-hidden="true" tabindex="-1"></a>  <span class="dt">format</span><span class="op">:</span> {</span>
+<span id="cb1-49"><a href="#cb1-49" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mean_word</span><span class="op">:</span> x <span class="kw">=&gt;</span> x<span class="op">.</span><span class="fu">toFixed</span>(<span class="dv">1</span>)<span class="op">,</span></span>
+<span id="cb1-50"><a href="#cb1-50" aria-hidden="true" tabindex="-1"></a>    <span class="dt">mean_character</span><span class="op">:</span> x <span class="kw">=&gt;</span> x<span class="op">.</span><span class="fu">toFixed</span>(<span class="dv">1</span>)</span>
+<span id="cb1-51"><a href="#cb1-51" aria-hidden="true" tabindex="-1"></a>  }<span class="op">,</span></span>
+<span id="cb1-52"><a href="#cb1-52" aria-hidden="true" tabindex="-1"></a>  <span class="dt">sort</span><span class="op">:</span> <span class="st">"table"</span></span>
+<span id="cb1-53"><a href="#cb1-53" aria-hidden="true" tabindex="-1"></a>})</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-display">
-<div id="scatterplot-1">
+<div id="browse-table-1">
 <div id="ojs-cell-1-1" data-nodetype="declaration">
 
 </div>
 </div>
 </div>
 <div class="cell-output cell-output-display">
-<div id="scatterplot-2">
+<div id="browse-table-2">
 <div id="ojs-cell-1-2" data-nodetype="declaration">
 
 </div>
 </div>
 </div>
 <div class="cell-output cell-output-display">
-<div id="scatterplot-3">
+<div id="browse-table-3">
 <div id="ojs-cell-1-3" data-nodetype="expression">
 
+</div>
+</div>
+</div>
+</div>
+</section>
+<section id="item-complexity" class="level2">
+<h2 class="anchored" data-anchor-id="item-complexity">Item complexity</h2>
+<p>The scatterplot shows mean words vs.&nbsp;mean characters per item for each table; the histogram summarises the distribution of item length. Hover for table and instrument details.</p>
+<div id="item-complexity" class="cell">
+<details class="code-fold hidden">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code hidden" id="cb2" data-startfrom="63" data-source-offset="-1"><pre class="sourceCode js code-with-copy"><code class="sourceCode javascript" style="counter-reset: source-line 62;"><span id="cb2-63"><a href="#cb2-63" aria-hidden="true" tabindex="-1"></a>hist <span class="op">=</span> Plot<span class="op">.</span><span class="fu">plot</span>({</span>
+<span id="cb2-64"><a href="#cb2-64" aria-hidden="true" tabindex="-1"></a>  <span class="dt">y</span><span class="op">:</span> {<span class="dt">grid</span><span class="op">:</span> <span class="kw">true</span>}<span class="op">,</span></span>
+<span id="cb2-65"><a href="#cb2-65" aria-hidden="true" tabindex="-1"></a>  <span class="dt">x</span><span class="op">:</span> {<span class="dt">label</span><span class="op">:</span> <span class="st">"Mean words per item"</span>}<span class="op">,</span></span>
+<span id="cb2-66"><a href="#cb2-66" aria-hidden="true" tabindex="-1"></a>  <span class="dt">marks</span><span class="op">:</span> [</span>
+<span id="cb2-67"><a href="#cb2-67" aria-hidden="true" tabindex="-1"></a>    Plot<span class="op">.</span><span class="fu">rectY</span>(plotData<span class="op">,</span> Plot<span class="op">.</span><span class="fu">binX</span>({<span class="dt">y</span><span class="op">:</span> <span class="st">"count"</span>}<span class="op">,</span> {<span class="dt">x</span><span class="op">:</span> <span class="st">"mean_word"</span><span class="op">,</span> <span class="dt">fill</span><span class="op">:</span> <span class="st">"steelblue"</span><span class="op">,</span> <span class="dt">tip</span><span class="op">:</span> <span class="kw">true</span>}))<span class="op">,</span></span>
+<span id="cb2-68"><a href="#cb2-68" aria-hidden="true" tabindex="-1"></a>    Plot<span class="op">.</span><span class="fu">ruleY</span>([<span class="dv">0</span>])</span>
+<span id="cb2-69"><a href="#cb2-69" aria-hidden="true" tabindex="-1"></a>  ]</span>
+<span id="cb2-70"><a href="#cb2-70" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb2-71"><a href="#cb2-71" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-72"><a href="#cb2-72" aria-hidden="true" tabindex="-1"></a>scatter <span class="op">=</span> Plot<span class="op">.</span><span class="fu">plot</span>({</span>
+<span id="cb2-73"><a href="#cb2-73" aria-hidden="true" tabindex="-1"></a>  <span class="dt">grid</span><span class="op">:</span> <span class="kw">true</span><span class="op">,</span></span>
+<span id="cb2-74"><a href="#cb2-74" aria-hidden="true" tabindex="-1"></a>  <span class="dt">marks</span><span class="op">:</span> [</span>
+<span id="cb2-75"><a href="#cb2-75" aria-hidden="true" tabindex="-1"></a>    Plot<span class="op">.</span><span class="fu">dot</span>(plotData<span class="op">,</span> {</span>
+<span id="cb2-76"><a href="#cb2-76" aria-hidden="true" tabindex="-1"></a>      <span class="dt">x</span><span class="op">:</span> <span class="st">"mean_word"</span><span class="op">,</span></span>
+<span id="cb2-77"><a href="#cb2-77" aria-hidden="true" tabindex="-1"></a>      <span class="dt">y</span><span class="op">:</span> <span class="st">"mean_character"</span><span class="op">,</span></span>
+<span id="cb2-78"><a href="#cb2-78" aria-hidden="true" tabindex="-1"></a>      <span class="dt">fill</span><span class="op">:</span> <span class="st">"steelblue"</span><span class="op">,</span></span>
+<span id="cb2-79"><a href="#cb2-79" aria-hidden="true" tabindex="-1"></a>      <span class="dt">fillOpacity</span><span class="op">:</span> <span class="fl">0.6</span><span class="op">,</span></span>
+<span id="cb2-80"><a href="#cb2-80" aria-hidden="true" tabindex="-1"></a>      <span class="dt">r</span><span class="op">:</span> <span class="dv">4</span></span>
+<span id="cb2-81"><a href="#cb2-81" aria-hidden="true" tabindex="-1"></a>    })<span class="op">,</span></span>
+<span id="cb2-82"><a href="#cb2-82" aria-hidden="true" tabindex="-1"></a>    Plot<span class="op">.</span><span class="fu">tip</span>(plotData<span class="op">,</span> Plot<span class="op">.</span><span class="fu">pointer</span>({</span>
+<span id="cb2-83"><a href="#cb2-83" aria-hidden="true" tabindex="-1"></a>      <span class="dt">x</span><span class="op">:</span> <span class="st">"mean_word"</span><span class="op">,</span></span>
+<span id="cb2-84"><a href="#cb2-84" aria-hidden="true" tabindex="-1"></a>      <span class="dt">y</span><span class="op">:</span> <span class="st">"mean_character"</span><span class="op">,</span></span>
+<span id="cb2-85"><a href="#cb2-85" aria-hidden="true" tabindex="-1"></a>      <span class="dt">title</span><span class="op">:</span> d <span class="kw">=&gt;</span> <span class="vs">`</span><span class="sc">${</span>d<span class="op">.</span><span class="at">table</span><span class="sc">}\n${</span>d<span class="op">.</span><span class="at">instrument</span><span class="sc">}\n${</span>d<span class="op">.</span><span class="at">mean_word</span><span class="op">.</span><span class="fu">toFixed</span>(<span class="dv">1</span>)<span class="sc">}</span><span class="vs"> words · </span><span class="sc">${</span>d<span class="op">.</span><span class="at">mean_character</span><span class="op">.</span><span class="fu">toFixed</span>(<span class="dv">1</span>)<span class="sc">}</span><span class="vs"> chars`</span></span>
+<span id="cb2-86"><a href="#cb2-86" aria-hidden="true" tabindex="-1"></a>    }))</span>
+<span id="cb2-87"><a href="#cb2-87" aria-hidden="true" tabindex="-1"></a>  ]<span class="op">,</span></span>
+<span id="cb2-88"><a href="#cb2-88" aria-hidden="true" tabindex="-1"></a>  <span class="dt">x</span><span class="op">:</span> {<span class="dt">label</span><span class="op">:</span> <span class="st">"Mean words per item"</span>}<span class="op">,</span></span>
+<span id="cb2-89"><a href="#cb2-89" aria-hidden="true" tabindex="-1"></a>  <span class="dt">y</span><span class="op">:</span> {<span class="dt">label</span><span class="op">:</span> <span class="st">"Mean characters per item"</span>}</span>
+<span id="cb2-90"><a href="#cb2-90" aria-hidden="true" tabindex="-1"></a>})</span>
+<span id="cb2-91"><a href="#cb2-91" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-92"><a href="#cb2-92" aria-hidden="true" tabindex="-1"></a><span class="fu">html</span><span class="vs">`&lt;div style="display:flex;gap:1.5rem;"&gt;</span></span>
+<span id="cb2-93"><a href="#cb2-93" aria-hidden="true" tabindex="-1"></a><span class="vs">  &lt;div style="flex:1"&gt;</span><span class="sc">${</span>hist<span class="sc">}</span><span class="vs">&lt;/div&gt;</span></span>
+<span id="cb2-94"><a href="#cb2-94" aria-hidden="true" tabindex="-1"></a><span class="vs">  &lt;div style="flex:1"&gt;</span><span class="sc">${</span>scatter<span class="sc">}</span><span class="vs">&lt;/div&gt;</span></span>
+<span id="cb2-95"><a href="#cb2-95" aria-hidden="true" tabindex="-1"></a><span class="vs">&lt;/div&gt;`</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output cell-output-display">
+<div id="item-complexity-1">
+<div id="ojs-cell-2-1" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div id="item-complexity-2">
+<div id="ojs-cell-2-2" data-nodetype="declaration">
+
+</div>
+</div>
+</div>
+<div class="cell-output cell-output-display">
+<div id="item-complexity-3">
+<div id="ojs-cell-2-3" data-nodetype="expression">
+
+</div>
+</div>
+</div>
+</div>
+</section>
+<section id="accessing-item-text" class="level2">
+<h2 class="anchored" data-anchor-id="accessing-item-text">Accessing item text</h2>
+<div class="tabset-margin-container"></div><div class="panel-tabset">
+<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-1-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-1" role="tab" aria-controls="tabset-1-1" aria-selected="true" href="">R</a></li><li class="nav-item" role="presentation"><a class="nav-link" id="tabset-1-2-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-2" role="tab" aria-controls="tabset-1-2" aria-selected="false" href="">Python</a></li></ul>
+<div class="tab-content">
+<div id="tabset-1-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-1-1-tab">
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(irw)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="fu">irw_list_itemtext_tables</span>()                   <span class="co"># List tables that have item text</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>items <span class="ot">&lt;-</span> <span class="fu">irw_itemtext</span>(<span class="st">"gilbert_meta_49"</span>)     <span class="co"># Fetch item text for a specific table</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+</div>
+<div id="tabset-1-2" class="tab-pane" role="tabpanel" aria-labelledby="tabset-1-2-tab">
+<div class="cell" data-python.reticulate="false">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> irw</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>irw.list_tables_with_itemtext()              <span class="co"># List tables that have item text</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>items <span class="op">=</span> irw.itemtext(<span class="st">"gilbert_meta_49"</span>)      <span class="co"># Fetch item text for a specific table</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
 </div>
 </div>
 </div>
@@ -367,7 +451,7 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 
 </main> <!-- /main -->
 <script type="ojs-module-contents">
-eyJjb250ZW50cyI6W3sibWV0aG9kTmFtZSI6ImludGVycHJldCIsImNlbGxOYW1lIjoib2pzLWNlbGwtMSIsImlubGluZSI6ZmFsc2UsInNvdXJjZSI6IlxuLy8gSW1wb3J0IE9ic2VydmFibGUgUGxvdFxuUGxvdCA9IHJlcXVpcmUoXCJAb2JzZXJ2YWJsZWhxL3Bsb3RcIilcblxuLy8gVHJhbnNwb3NlIHRoZSBkYXRhIGZyb20gY29sdW1uIGZvcm1hdCB0byByb3cgZm9ybWF0XG5wbG90RGF0YSA9IHBsb3RfZGF0YS50YWJsZS5tYXAoKGQsIGkpID0+ICh7XG4gIHRhYmxlOiBwbG90X2RhdGEudGFibGVbaV0sXG4gIGluc3RydW1lbnQ6IHBsb3RfZGF0YS5pbnN0cnVtZW50W2ldLFxuICBtZWFuX3dvcmQ6IHBsb3RfZGF0YS5tZWFuX3dvcmRbaV0sXG4gIG1lYW5fY2hhcmFjdGVyOiBwbG90X2RhdGEubWVhbl9jaGFyYWN0ZXJbaV1cbn0pKVxuXG4vLyBDcmVhdGUgc2NhdHRlcnBsb3Qgd2l0aCBlbmhhbmNlZCB0b29sdGlwc1xuUGxvdC5wbG90KHtcbiAgbWFya3M6IFtcbiAgICBQbG90LmRvdChwbG90RGF0YSwge1xuICAgICAgeDogXCJtZWFuX3dvcmRcIixcbiAgICAgIHk6IFwibWVhbl9jaGFyYWN0ZXJcIixcbiAgICAgIHRpdGxlOiBkID0+IGBUYWJsZTogJHtkLnRhYmxlfVxcbkluc3RydW1lbnQ6ICR7ZC5pbnN0cnVtZW50fVxcbk1lYW4gV29yZDogJHtkLm1lYW5fd29yZC50b0ZpeGVkKDApfVxcbk1lYW4gQ2hhcmFjdGVyczogJHtkLm1lYW5fY2hhcmFjdGVyLnRvRml4ZWQoMCl9YCxcbiAgICAgIHRpcDogdHJ1ZVxuICAgIH0pXG4gIF0sXG4gIHg6IHtcbiAgICBsYWJlbDogXCJNZWFuIFdvcmRcIlxuICB9LFxuICB5OiB7XG4gICAgbGFiZWw6IFwiTWVhbiBDaGFyYWN0ZXJzXCJcbiAgfVxufSlcbiJ9XX0=
+eyJjb250ZW50cyI6W3sibWV0aG9kTmFtZSI6ImludGVycHJldCIsImNlbGxOYW1lIjoib2pzLWNlbGwtMSIsImlubGluZSI6ZmFsc2UsInNvdXJjZSI6IlxucGxvdERhdGEgPSB0cmFuc3Bvc2UocGxvdF9kYXRhKVxuXG52aWV3b2Ygc2VhcmNoID0gSW5wdXRzLnNlYXJjaChwbG90RGF0YSwge3BsYWNlaG9sZGVyOiBcIlNlYXJjaCBieSB0YWJsZSBvciBpbnN0cnVtZW504oCmXCJ9KVxuXG5JbnB1dHMudGFibGUoc2VhcmNoLCB7XG4gIGNvbHVtbnM6IFtcInRhYmxlXCIsIFwiaW5zdHJ1bWVudFwiLCBcIm1lYW5fd29yZFwiLCBcIm1lYW5fY2hhcmFjdGVyXCJdLFxuICBoZWFkZXI6IHtcbiAgICB0YWJsZTogXCJUYWJsZVwiLFxuICAgIGluc3RydW1lbnQ6IFwiSW5zdHJ1bWVudFwiLFxuICAgIG1lYW5fd29yZDogXCJNZWFuIHdvcmRzXCIsXG4gICAgbWVhbl9jaGFyYWN0ZXI6IFwiTWVhbiBjaGFyYWN0ZXJzXCJcbiAgfSxcbiAgZm9ybWF0OiB7XG4gICAgbWVhbl93b3JkOiB4ID0+IHgudG9GaXhlZCgxKSxcbiAgICBtZWFuX2NoYXJhY3RlcjogeCA9PiB4LnRvRml4ZWQoMSlcbiAgfSxcbiAgc29ydDogXCJ0YWJsZVwiXG59KVxuIn0seyJtZXRob2ROYW1lIjoiaW50ZXJwcmV0IiwiY2VsbE5hbWUiOiJvanMtY2VsbC0yIiwiaW5saW5lIjpmYWxzZSwic291cmNlIjoiXG5oaXN0ID0gUGxvdC5wbG90KHtcbiAgeToge2dyaWQ6IHRydWV9LFxuICB4OiB7bGFiZWw6IFwiTWVhbiB3b3JkcyBwZXIgaXRlbVwifSxcbiAgbWFya3M6IFtcbiAgICBQbG90LnJlY3RZKHBsb3REYXRhLCBQbG90LmJpblgoe3k6IFwiY291bnRcIn0sIHt4OiBcIm1lYW5fd29yZFwiLCBmaWxsOiBcInN0ZWVsYmx1ZVwiLCB0aXA6IHRydWV9KSksXG4gICAgUGxvdC5ydWxlWShbMF0pXG4gIF1cbn0pXG5cbnNjYXR0ZXIgPSBQbG90LnBsb3Qoe1xuICBncmlkOiB0cnVlLFxuICBtYXJrczogW1xuICAgIFBsb3QuZG90KHBsb3REYXRhLCB7XG4gICAgICB4OiBcIm1lYW5fd29yZFwiLFxuICAgICAgeTogXCJtZWFuX2NoYXJhY3RlclwiLFxuICAgICAgZmlsbDogXCJzdGVlbGJsdWVcIixcbiAgICAgIGZpbGxPcGFjaXR5OiAwLjYsXG4gICAgICByOiA0XG4gICAgfSksXG4gICAgUGxvdC50aXAocGxvdERhdGEsIFBsb3QucG9pbnRlcih7XG4gICAgICB4OiBcIm1lYW5fd29yZFwiLFxuICAgICAgeTogXCJtZWFuX2NoYXJhY3RlclwiLFxuICAgICAgdGl0bGU6IGQgPT4gYCR7ZC50YWJsZX1cXG4ke2QuaW5zdHJ1bWVudH1cXG4ke2QubWVhbl93b3JkLnRvRml4ZWQoMSl9IHdvcmRzIMK3ICR7ZC5tZWFuX2NoYXJhY3Rlci50b0ZpeGVkKDEpfSBjaGFyc2BcbiAgICB9KSlcbiAgXSxcbiAgeDoge2xhYmVsOiBcIk1lYW4gd29yZHMgcGVyIGl0ZW1cIn0sXG4gIHk6IHtsYWJlbDogXCJNZWFuIGNoYXJhY3RlcnMgcGVyIGl0ZW1cIn1cbn0pXG5cbmh0bWxgPGRpdiBzdHlsZT1cImRpc3BsYXk6ZmxleDtnYXA6MS41cmVtO1wiPlxuICA8ZGl2IHN0eWxlPVwiZmxleDoxXCI+JHtoaXN0fTwvZGl2PlxuICA8ZGl2IHN0eWxlPVwiZmxleDoxXCI+JHtzY2F0dGVyfTwvZGl2PlxuPC9kaXY+YFxuIn0seyJtZXRob2ROYW1lIjoiaW50ZXJwcmV0UXVpZXQiLCJzb3VyY2UiOiJzaGlueUlucHV0KCdzZWFyY2gnKSJ9XX0=
 </script>
 <script type="module">
 if (window.location.protocol === "file:") { alert("The OJS runtime does not work with file:// URLs. Please use a web server to view this document."); }
