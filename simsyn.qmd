@@ -2,8 +2,48 @@
 title: "Simulated and synthetic (simsyn) data"
 ---
 
-These data are simulated (according to some statistical model) or synthetic (so that they are meant to approximate a specific real dataset) but are otherwise in the IRW data standard.
+The IRW includes a branch of **simulated and synthetic** item response datasets, collectively referred to as *simsyn*. These data follow the same [IRW data standard](standard.qmd) as the core repository and can be accessed using the same `irw` package functions, with `source = "sim"`.
+
+- **Simulated** data are generated from a statistical model (e.g., a Rasch or 2PL model) with known parameter values. They are useful for methods development, power analysis, and verifying that estimation procedures recover the true parameters.
+
+- **Synthetic** data are constructed to approximate the properties of a specific real dataset — preserving features like the number of respondents, items, and response distributions — while protecting privacy or enabling open sharing where the original cannot be released.
 
 ## Accessing the simsyn data
 
-Documentation related to the tables can be found [here](https://docs.google.com/spreadsheets/d/1_2SR1_miAqUy0HWFQqo5vrBVrIN4V1FU6RfavBc7WdA/edit?gid=1337607315#gid=1337607315).
+Documentation for the available tables can be found [here](https://docs.google.com/spreadsheets/d/1_2SR1_miAqUy0HWFQqo5vrBVrIN4V1FU6RfavBc7WdA/edit?gid=1337607315#gid=1337607315).
+
+::: panel-tabset
+## R
+
+```{r}
+#| eval: false
+#| echo: true
+library(irw)
+
+tables <- irw_list_tables(source = "sim")     # List available simsyn tables
+df <- irw_fetch(tables$name[1], source = "sim") # Fetch a simsyn table
+```
+
+## Python
+
+```{python}
+#| eval: false
+#| echo: true
+#| python.reticulate: false
+import irw
+
+tables = irw.list_tables(source="sim")        # List available simsyn tables
+df = irw.fetch(tables["name"].iloc[0], source="sim")  # Fetch a simsyn table
+```
+:::
+
+## Use cases
+
+Simsyn data are particularly useful when you want to:
+
+- **Benchmark estimation methods** against data with known ground-truth parameters
+- **Develop or test new psychometric approaches** without relying on real participants
+- **Reproduce analyses** from published work that used proprietary data, via a synthetic stand-in
+- **Teach** IRT concepts using data that behave predictably under a given model
+
+For realistic simulation of item difficulty parameters informed by the empirical IRW distribution, see the [Simulating Item Difficulties](vignettes/diffsim.qmd) vignette.
