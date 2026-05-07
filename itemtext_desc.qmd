@@ -1,12 +1,6 @@
 ---
-title: "Item Text"
+title: "Item Text Descriptives"
 ---
-
-## Description of the IRW item text data
-
-The below scatterplot shows the mean number of words (when `item_text` is split by ' ') and characters in the items for the IRW tables with associated item text (along with the name of the relevant psychometric instrument).
-
-
 
 ```{r}
 #| label: load-data
@@ -18,48 +12,112 @@ user <- redivis$user("bdomingu")
 dataset <- user$dataset("irw_meta:bdxt")
 table <- dataset$table("itemtext_metadata:drat")
 
-# Load table as tidyverse tibble
 data <- table$to_tibble()
 data <- as.data.frame(data)
 data$mean_word <- as.numeric(data$mean_word)
 data$mean_character <- as.numeric(data$mean_character)
-data$instrument <- gsub("\n","",data$instrument)
+data$instrument <- gsub("\n", "", data$instrument)
 
-print(str(data))  # Let this show
+n_tables      <- nrow(data)
+n_instruments <- length(unique(data$instrument))
+median_words  <- round(median(data$mean_word, na.rm = TRUE))
+median_chars  <- round(median(data$mean_character, na.rm = TRUE))
 
-# Pass data to Observable
 ojs_define(plot_data = data)
 ```
 
+The IRW item text resource contains full item wording for **`r n_tables` tables** spanning **`r n_instruments` distinct instruments**. Items have a median length of `r median_words` words (`r median_chars` characters). See the [Item Text Standard](itemtext.qmd) for a full description of the data structure.
+
+## Tables with item text
+
 ```{ojs}
-//| label: scatterplot
+//| label: browse-table
 
-// Import Observable Plot
-Plot = require("@observablehq/plot")
+plotData = transpose(plot_data)
 
-// Transpose the data from column format to row format
-plotData = plot_data.table.map((d, i) => ({
-  table: plot_data.table[i],
-  instrument: plot_data.instrument[i],
-  mean_word: plot_data.mean_word[i],
-  mean_character: plot_data.mean_character[i]
-}))
+viewof search = Inputs.search(plotData, {placeholder: "Search by table or instrument…"})
 
-// Create scatterplot with enhanced tooltips
-Plot.plot({
+Inputs.table(search, {
+  columns: ["table", "instrument", "mean_word", "mean_character"],
+  header: {
+    table: "Table",
+    instrument: "Instrument",
+    mean_word: "Mean words",
+    mean_character: "Mean characters"
+  },
+  format: {
+    mean_word: x => x.toFixed(1),
+    mean_character: x => x.toFixed(1)
+  },
+  sort: "table"
+})
+```
+
+## Item complexity
+
+The scatterplot shows mean words vs. mean characters per item for each table; the histogram summarises the distribution of item length. Hover for table and instrument details.
+
+```{ojs}
+//| label: item-complexity
+
+hist = Plot.plot({
+  y: {grid: true},
+  x: {label: "Mean words per item"},
+  marks: [
+    Plot.rectY(plotData, Plot.binX({y: "count"}, {x: "mean_word", fill: "steelblue", tip: true})),
+    Plot.ruleY([0])
+  ]
+})
+
+scatter = Plot.plot({
+  grid: true,
   marks: [
     Plot.dot(plotData, {
       x: "mean_word",
       y: "mean_character",
-      title: d => `Table: ${d.table}\nInstrument: ${d.instrument}\nMean Word: ${d.mean_word.toFixed(0)}\nMean Characters: ${d.mean_character.toFixed(0)}`,
-      tip: true
-    })
+      fill: "steelblue",
+      fillOpacity: 0.6,
+      r: 4
+    }),
+    Plot.tip(plotData, Plot.pointer({
+      x: "mean_word",
+      y: "mean_character",
+      title: d => `${d.table}\n${d.instrument}\n${d.mean_word.toFixed(1)} words · ${d.mean_character.toFixed(1)} chars`
+    }))
   ],
-  x: {
-    label: "Mean Word"
-  },
-  y: {
-    label: "Mean Characters"
-  }
+  x: {label: "Mean words per item"},
+  y: {label: "Mean characters per item"}
 })
+
+html`<div style="display:flex;gap:1.5rem;">
+  <div style="flex:1">${hist}</div>
+  <div style="flex:1">${scatter}</div>
+</div>`
 ```
+
+## Accessing item text
+
+::: panel-tabset
+## R
+
+```{r}
+#| eval: false
+#| echo: true
+library(irw)
+
+irw_list_itemtext_tables()                   # List tables that have item text
+items <- irw_itemtext("gilbert_meta_49")     # Fetch item text for a specific table
+```
+
+## Python
+
+```{python}
+#| eval: false
+#| echo: true
+#| python.reticulate: false
+import irw
+
+irw.list_tables_with_itemtext()              # List tables that have item text
+items = irw.itemtext("gilbert_meta_49")      # Fetch item text for a specific table
+```
+:::
