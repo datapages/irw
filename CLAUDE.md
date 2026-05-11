@@ -64,6 +64,7 @@ All code runs with `echo: false`, `message: false`, `warning: false`, `error: fa
 
 ## TODOs
 
+- [ ] Re-enable P3M in CI once `imv 0.3` is synced to Posit Package Manager — remove `RENV_CONFIG_PPM_ENABLED: "FALSE"` from `.github/workflows/quarto_publish.yaml`
 - [x] Audit all vignettes and R scripts for manual IMV calculations and replace with `imv` R package calls (currently `vignettes/imv.qmd` already uses the package; check other vignettes for any ad-hoc implementations)
 - [ ] Do more with `construct_name` (measure description) from the tags sheet — currently excluded from `tag_vals` in `_load-data-explore.qmd:96` so it never appears in filters or the table. Options: (1) add it to the info callout box in `index.qmd` (~line 378), (2) add a free-text search filter for it, (3) show it as a column in the dataset table
 - [x] Apply card layout to the vignettes index page — same two-column grid style used on `research.qmd` (`.paper-grid`, `.paper-card`, etc.)
