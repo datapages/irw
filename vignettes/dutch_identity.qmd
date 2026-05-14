@@ -123,8 +123,7 @@ $p(\mathbf{x})$.
 
 ```{r}
 #| label: fig-manifest-dist
-#| fig-cap: "Distribution of empirical manifest probabilities across all 2^J response patterns (log scale). Most patterns are never observed (grey); a few common patterns carry most of the probability mass."
-#| fig-height: 4
+#| fig-cap: "Distribution of empirical manifest probabilities across all 2^J response patterns (log scale). Most patterns are never observed (grey); a few common patterns carry most of the probability mass. Hover over a point to see its response pattern."
 
 patterns <- s1_3$patterns |>
   arrange(desc(count)) |>
@@ -132,13 +131,18 @@ patterns <- s1_3$patterns |>
     rank        = row_number(),
     p_obs       = count / s1_3$N,
     observed    = count > 0,
-    pattern_str = apply(pick(all_of(s1_3$item_cols)), 1, paste, collapse = "")
+    pattern_str = apply(pick(all_of(s1_3$item_cols)), 1, paste, collapse = ""),
+    tooltip     = paste0(
+      "Pattern: ", pattern_str,
+      "<br>p(x): ", signif(p_obs, 3),
+      "<br>Count: ", count
+    )
   )
 
 n_observed   <- sum(patterns$observed)
 n_unobserved <- sum(!patterns$observed)
 
-ggplot(patterns, aes(x = rank, y = p_obs, colour = observed)) +
+p <- ggplot(patterns, aes(x = rank, y = p_obs, colour = observed, text = tooltip)) +
   geom_point(size = 1.2, alpha = 0.7) +
   scale_colour_manual(
     values = c("TRUE" = irw_blue, "FALSE" = irw_grey),
@@ -147,12 +151,21 @@ ggplot(patterns, aes(x = rank, y = p_obs, colour = observed)) +
   ) +
   scale_y_log10(labels = scales::label_scientific()) +
   labs(
-    x       = "Pattern rank (most to least common)",
-    y       = "Empirical p(x)  [log scale]",
-    caption = paste0(
-      n_observed, " of ", 2^s1_3$J, " patterns observed; ",
-      n_unobserved, " never appeared."
-    )
+    x = "Pattern rank (most to least common)",
+    y = "Empirical p(x)  [log scale]"
+  )
+
+plotly::ggplotly(p, tooltip = "text") |>
+  plotly::layout(
+    annotations = list(list(
+      text      = paste0(n_observed, " of ", 2^s1_3$J,
+                         " patterns observed; ", n_unobserved, " never appeared."),
+      showarrow = FALSE,
+      xref = "paper", yref = "paper",
+      x = 0, y = -0.12,
+      xanchor = "left", yanchor = "top",
+      font = list(size = 11, color = "grey50")
+    ))
   )
 ```
 

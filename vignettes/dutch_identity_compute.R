@@ -450,11 +450,11 @@ fit_conservation <- function(table_name, max_n = 10000) {
 
   set.seed(42)
   imv_1v2 <- if (!is.null(m2pl)) {
-    tryCatch(as.numeric(imv(m1pl, m2pl)), error = function(e) NA_real_)
+    tryCatch(imv(m1pl, m2pl)$mean, error = function(e) NA_real_)
   } else NA_real_
 
   imv_2v3 <- if (!is.null(m3pl)) {
-    tryCatch(as.numeric(imv(m2pl, m3pl)), error = function(e) NA_real_)
+    tryCatch(imv(m2pl, m3pl)$mean, error = function(e) NA_real_)
   } else NA_real_
 
   result <- list(
