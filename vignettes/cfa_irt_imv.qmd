@@ -67,7 +67,7 @@ This vignette compares response-level predictive accuracy from a confirmatory fa
 
 The question is motivated by @cho2026, who showed via simulation that full-information estimation generally recovers item parameters more accurately than limited-information estimation. Here we ask: does that parameter-recovery advantage translate into better **out-of-sample predictive accuracy** on real data?
 
-CFA and IRT are theoretically equivalent models with interchangeable parameters [@takane1987], but they differ in how they use information during estimation. DWLS operates on pairwise item relationships (polychoric correlations); MML uses the full multivariate response pattern. We run the comparison across `r n_datasets` IRW datasets to assess consistency.
+Both models assume a **single latent dimension**: the CFA specifies one factor, and the IRT specifies a one-dimensional 2PL. Model structure is therefore held constant across the comparison — only the estimation method varies. CFA and IRT are theoretically equivalent under this shared assumption, with interchangeable parameters [@takane1987], but they differ in how they extract information from the data during estimation. DWLS operates on pairwise item relationships (polychoric correlations); MML uses the full multivariate response pattern. We run the comparison across `r n_datasets` IRW datasets to assess consistency.
 
 ::: {.callout-note}
 Results are pre-computed from `cfa_irt_imv_compute.R`
@@ -80,7 +80,7 @@ Results are pre-computed from `cfa_irt_imv_compute.R`
 
 ### CFA (DWLS)
 
-We specify a single-factor CFA model with all items loading on one latent variable. Items are treated as ordered (binary), and parameters are estimated with DWLS under the delta parameterization [@rosseel2012].
+We specify a **single-factor** CFA model with all items loading on one latent variable. Items are treated as ordered (binary), and parameters are estimated with DWLS under the delta parameterization [@rosseel2012].
 
 ```{r}
 #| eval: false
@@ -99,7 +99,7 @@ table_names <- c(
 
 ### IRT (MML)
 
-We fit a 2PL model with a lognormal prior on discrimination parameters, consistent with the existing IMV vignette on this site.
+We fit a **unidimensional** 2PL model with a lognormal prior on discrimination parameters, consistent with the existing IMV vignette on this site. Both models therefore share the same latent-variable structure; the comparison isolates estimation method, not model complexity.
 
 ---
 
@@ -276,7 +276,7 @@ Across `r n_datasets` datasets, the median IMV(CFA, IRT) is `r round(med_imv, 4)
 
 **The CFA–IRT gap is generally small.** The small IMV(CFA, IRT) values across most datasets are consistent with their theoretical equivalence [@takane1987]: once item parameters and factor scores are estimated, the prediction formula is structurally the same. The estimation advantage of MML documented by @cho2026 appears to matter more for parameter recovery than for response-level prediction at these sample sizes.
 
-**Estimation method matters when factor structure is violated.** Any dataset where CFA performs dramatically worse than IRT — despite shared theoretical structure — points to a case where DWLS's reliance on pairwise polychoric correlations breaks down. This can happen with extreme item prevalences or poor unidimensional fit.
+**Estimation method matters when the unidimensional assumption is strained.** Both models assume a single latent dimension, so any difference in predictive accuracy reflects estimation robustness, not model structure. When DWLS performs dramatically worse than MML — as with `gilbert_meta_37` — it suggests that DWLS's reliance on pairwise polychoric correlations is more brittle under the conditions that stress the unidimensional assumption (e.g., extreme item prevalences, near-zero correlations). Neither model is detecting multidimensionality; one is simply more numerically stable when a unidimensional fit is imperfect.
 
 ---
 
