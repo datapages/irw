@@ -25,6 +25,7 @@ execute:
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(ggrepel)
 
 theme_set(theme_classic(base_size = 13))
 
@@ -32,18 +33,24 @@ cache_path <- "cfairtdata/cfa_irt_imv_results.rds"
 cache_ok   <- file.exists(cache_path)
 
 if (cache_ok) {
-  .cache          <- readRDS(cache_path)
-  table_names     <- .cache$table_names
-  dataset_results <- .cache$dataset_results
-  dataset_summary <- .cache$dataset_summary
-  nfold           <- .cache$nfold
-  date_run        <- .cache$date_run
-  n_datasets      <- length(table_names)
+  .cache             <- readRDS(cache_path)
+  table_names        <- .cache$table_names
+  dataset_results    <- .cache$dataset_results
+  dataset_results_mr <- .cache$dataset_results_mr %||% list()
+  dataset_summary    <- .cache$dataset_summary
+  nfold              <- .cache$nfold
+  nfold_mr           <- .cache$nfold_mr %||% 5L
+  date_run           <- .cache$date_run
+  n_datasets         <- length(table_names)
+  has_mr             <- "scale_mr_cfa_v_irt_mean" %in% names(dataset_summary) &&
+                        any(!is.na(dataset_summary$scale_mr_cfa_v_irt_mean))
 } else {
-  table_names <- character(); dataset_results <- list()
-  dataset_summary <- data.frame(); nfold <- 5; n_datasets <- 0
-  date_run <- Sys.Date()
+  table_names <- character(); dataset_results <- list(); dataset_results_mr <- list()
+  dataset_summary <- data.frame(); nfold <- 5; nfold_mr <- 5; n_datasets <- 0
+  date_run <- Sys.Date(); has_mr <- FALSE
 }
+
+`%||%` <- function(x, y) if (is.null(x)) y else x
 
 knitr::opts_chunk$set(eval = cache_ok)
 ```
@@ -63,11 +70,17 @@ if (!cache_ok) cat(
 )
 ```
 
-This vignette compares response-level predictive accuracy from a confirmatory factor analysis (CFA) model estimated with limited-information methods (DWLS) to that of an item response theory (IRT) model estimated with full-information methods (marginal maximum likelihood; MML). We use the InterModel Vigorish [@domingue2024imv] as the comparison metric, specifically the **direct head-to-head IMV of IRT vs. CFA** — measuring how much better IRT predicts held-out responses relative to CFA as a baseline.
+This vignette compares response-level predictive accuracy from a confirmatory factor analysis (CFA) model estimated with limited-information methods (DWLS) to that of an item response theory (IRT) model estimated with full-information methods (marginal maximum likelihood; MML). We use the InterModel Vigorish [@domingue2024imv] as the comparison metric, specifically the **direct head-to-head IMV of IRT vs. CFA**.
 
 The question is motivated by @cho2026, who showed via simulation that full-information estimation generally recovers item parameters more accurately than limited-information estimation. Here we ask: does that parameter-recovery advantage translate into better **out-of-sample predictive accuracy** on real data?
 
-Both models assume a **single latent dimension**: the CFA specifies one factor, and the IRT specifies a one-dimensional 2PL. Model structure is therefore held constant across the comparison — only the estimation method varies. CFA and IRT are theoretically equivalent under this shared assumption, with interchangeable parameters [@takane1987], but they differ in how they extract information from the data during estimation. DWLS operates on pairwise item relationships (polychoric correlations); MML uses the full multivariate response pattern. We run the comparison across `r n_datasets` IRW datasets to assess consistency.
+Both models assume a **single latent dimension**. Model structure is therefore held constant — only the estimation method varies. We run the comparison under **two out-of-sample paradigms** [@stenhaug2022], which correspond to different definitions of what "new data" means for an item response matrix:
+
+- **Missing person (MP):** entire persons are held out. The model predicts a new person's full response vector, integrating over their unknown ability. This is the natural paradigm for ability estimation in traditional testing and corresponds to person-level cross-validation.
+
+- **Missing response (MR):** individual item responses are held out for persons who are otherwise observed. The model predicts a person's response to a specific item using their responses to the remaining items to pin down their ability. This is the natural paradigm for adaptive testing and item-level scoring.
+
+We run both paradigms across `r n_datasets` IRW datasets and compare the conclusions.
 
 ::: {.callout-note}
 Results are pre-computed from `cfa_irt_imv_compute.R`
@@ -123,7 +136,11 @@ A positive value means IRT predicts better than CFA; negative means CFA predicts
 
 ## Cross-validation design
 
-For each dataset, a single person-level 5-fold CV loop assigns identical fold splits to both models. Neither model has any individual-level information about test persons beyond the population-level item parameters estimated on training persons.
+We run two CV loops per dataset with identical IMV evaluation at each step.
+
+**Missing person (MP):** `r nfold`-fold person-level CV. Entire persons are withheld; item parameters are estimated from training persons; test-person ability is unknown to the model, so prediction integrates over the ability distribution $\hat{g}(\theta)$.
+
+**Missing response (MR):** `r nfold_mr`-fold item-response-level CV. Fold membership is assigned at the cell level, stratified by person (so each person contributes to every fold). Held-out cells are set to NA in the training matrix; both models are refit on that matrix; each person's held-in item responses are used to estimate their ability, which is then applied to predict the held-out items.
 
 ```{r}
 #| eval: false
@@ -181,26 +198,29 @@ for (j in seq_along(items)) {
 
 ```{r}
 #| label: tbl-dataset-summary
-#| tbl-cap: "Scale-level IMV across datasets. IMV(CFA, IRT) is the primary comparison: how much better IRT predicts than CFA. Context columns show each model's gain over a prevalence baseline."
+#| tbl-cap: "Scale-level IMV(CFA, IRT) under both prediction paradigms. MP = missing person (person-level CV); MR = missing response (item-response-level CV). Positive values indicate IRT predicts better than CFA."
 
 ds <- dataset_summary |>
   mutate(
-    ci_lo = scale_cfa_v_irt_mean - 1.96 * scale_cfa_v_irt_sd / sqrt(K),
-    ci_hi = scale_cfa_v_irt_mean + 1.96 * scale_cfa_v_irt_sd / sqrt(K),
-    imv_direct = sprintf("%.4f [%.4f, %.4f]",
-                         scale_cfa_v_irt_mean, ci_lo, ci_hi),
-    cfa_prev   = sprintf("%.4f", scale_cfa_v_prev_mean),
-    irt_prev   = sprintf("%.4f", scale_irt_v_prev_mean)
+    ci_lo_mp = scale_cfa_v_irt_mean - 1.96 * scale_cfa_v_irt_sd / sqrt(K),
+    ci_hi_mp = scale_cfa_v_irt_mean + 1.96 * scale_cfa_v_irt_sd / sqrt(K),
+    imv_mp   = sprintf("%.4f [%.4f, %.4f]",
+                       scale_cfa_v_irt_mean, ci_lo_mp, ci_hi_mp),
+    imv_mr   = if ("scale_mr_cfa_v_irt_mean" %in% names(dataset_summary) & has_mr)
+                 sprintf("%.4f [%.4f, %.4f]",
+                         scale_mr_cfa_v_irt_mean,
+                         scale_mr_cfa_v_irt_mean - 1.96 * scale_mr_cfa_v_irt_sd / sqrt(K_mr),
+                         scale_mr_cfa_v_irt_mean + 1.96 * scale_mr_cfa_v_irt_sd / sqrt(K_mr))
+               else NA_character_
   ) |>
   arrange(desc(scale_cfa_v_irt_mean)) |>
-  select(table_name, N, J, imv_direct, cfa_prev, irt_prev)
+  select(table_name, N, J, imv_mp, imv_mr)
 
 knitr::kable(ds,
              col.names = c("Dataset", "N", "J",
-                           "IMV(CFA, IRT) [95% CI]",
-                           "IMV(prev, CFA)",
-                           "IMV(prev, IRT)"),
-             align = "lrrlrr")
+                           "MP: IMV(CFA, IRT) [95% CI]",
+                           "MR: IMV(CFA, IRT) [95% CI]"),
+             align = "lrrll")
 ```
 
 ### Distribution of IMV(CFA, IRT)
@@ -268,15 +288,92 @@ Across `r n_datasets` datasets, the median IMV(CFA, IRT) is `r round(med_imv, 4)
 
 ---
 
+## Missing-response (MR) results
+
+```{r}
+#| label: fig-mp-vs-mr
+#| fig-cap: "Direct comparison of IMV(CFA, IRT) under missing-person (MP) and missing-response (MR) paradigms. Each point is one dataset. Points above the diagonal indicate stronger IRT advantage under MR than MP."
+#| fig-height: 4.5
+
+if (has_mr) {
+  both_df <- dataset_summary |>
+    filter(!is.na(scale_mr_cfa_v_irt_mean)) |>
+    mutate(pos_mp = scale_cfa_v_irt_mean >= 0,
+           pos_mr = scale_mr_cfa_v_irt_mean >= 0)
+
+  lim <- range(c(both_df$scale_cfa_v_irt_mean, both_df$scale_mr_cfa_v_irt_mean),
+               na.rm = TRUE)
+
+  ggplot(both_df, aes(x = scale_cfa_v_irt_mean, y = scale_mr_cfa_v_irt_mean,
+                      label = table_name)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey60") +
+    geom_vline(xintercept = 0, colour = "grey80") +
+    geom_hline(yintercept = 0, colour = "grey80") +
+    geom_point(size = 3, colour = "#d6604d") +
+    ggrepel::geom_text_repel(size = 3, colour = "grey30", max.overlaps = 10) +
+    coord_equal(xlim = lim, ylim = lim) +
+    labs(x = "IMV(CFA, IRT)  [missing person]",
+         y = "IMV(CFA, IRT)  [missing response]")
+}
+```
+
+```{r}
+#| label: mr-summary-stats
+#| echo: false
+
+if (has_mr) {
+  mr_valid <- dataset_summary[!is.na(dataset_summary$scale_mr_cfa_v_irt_mean), ]
+  med_mr  <- median(mr_valid$scale_mr_cfa_v_irt_mean)
+  mean_mr <- mean(mr_valid$scale_mr_cfa_v_irt_mean)
+  pct_pos_mr <- mean(mr_valid$scale_mr_cfa_v_irt_mean > 0) * 100
+}
+```
+
+`r if (has_mr) sprintf("Under the MR paradigm, the median IMV(CFA, IRT) is %.4f (mean %.4f). IRT outperforms CFA in %.0f%% of datasets.", med_mr, mean_mr, pct_pos_mr) else "*MR results pending.*"`
+
+---
+
+## Dimensionality check
+
+The models above assume a single latent dimension. The ratio of the first to second eigenvalue of the inter-item correlation matrix provides a quick signal of how dominant the first factor is: a high ratio is consistent with unidimensionality; a low ratio suggests additional structure that a single-factor model may be missing for both CFA and IRT.
+
+```{r}
+#| label: tbl-eigenvalues
+#| tbl-cap: "Eigenvalue ratio (λ₁/λ₂) and variance explained by the first factor (% of total) for each dataset. High ratios indicate a dominant first factor; values below 3–4 suggest potential multidimensionality."
+
+if (has_mr && "ev_ratio" %in% names(dataset_summary)) {
+  ev_df <- dataset_summary |>
+    filter(!is.na(ev_ratio)) |>
+    mutate(ev_pct1_pct = round(ev_pct1 * 100, 1)) |>
+    arrange(ev_ratio) |>
+    select(table_name, N, J, ev_ratio, ev_pct1_pct)
+
+  knitr::kable(ev_df,
+               col.names = c("Dataset", "N", "J", "λ₁/λ₂", "% var (F1)"),
+               digits = c(0, 0, 0, 2, 1),
+               align = "lrrrr")
+} else {
+  cat("*Eigenvalue results not yet available.*\n")
+}
+```
+
+Datasets with low λ₁/λ₂ are candidates for a multidimensional model comparison. A natural next step — using the same IMV and MR framework — is to fit a two-factor IRT (or bifactor CFA) for those datasets and test whether the additional dimension improves out-of-sample prediction.
+
+---
+
 ## Discussion
 
 **IMV(CFA, IRT) is the direct test.** Rather than comparing each model's gain over prevalence and taking the difference, `imv.binary(y, p_CFA, p_IRT)` directly measures how much additional predictive value IRT provides over CFA — expressed in the same interpretable betting-return units.
+
+**MP vs. MR can tell different stories.** The two paradigms weight model features differently [@stenhaug2022]. MP prediction requires integrating over the unknown ability of a new person, which rewards accurate marginal likelihood estimation (MML's strength). MR prediction uses the person's held-in responses to pin down their ability, which reduces the gap between the two estimation methods — both can estimate ability reliably from partial response vectors. When MP and MR conclusions agree, the finding is robust; when they diverge, the discrepancy reveals which aspect of estimation is driving the difference.
 
 **Both models substantially outperform prevalence.** The vs-prevalence IMVs confirm that knowing a person's estimated latent ability (from either model) is genuinely informative compared to predicting item means for everyone.
 
 **The CFA–IRT gap is generally small.** The small IMV(CFA, IRT) values across most datasets are consistent with their theoretical equivalence [@takane1987]: once item parameters and factor scores are estimated, the prediction formula is structurally the same. The estimation advantage of MML documented by @cho2026 appears to matter more for parameter recovery than for response-level prediction at these sample sizes.
 
 **Estimation method matters when the unidimensional assumption is strained.** Both models assume a single latent dimension, so any difference in predictive accuracy reflects estimation robustness, not model structure. When DWLS performs dramatically worse than MML — as with `gilbert_meta_37` — it suggests that DWLS's reliance on pairwise polychoric correlations is more brittle under the conditions that stress the unidimensional assumption (e.g., extreme item prevalences, near-zero correlations). Neither model is detecting multidimensionality; one is simply more numerically stable when a unidimensional fit is imperfect.
+
+**Dimensionality as a next step.** The eigenvalue ratios provide a quick filter for which datasets are robustly unidimensional and which warrant a multidimensional model comparison. For datasets with a low λ₁/λ₂, fitting a two-factor IRT and comparing it to the one-factor model using both MP and MR IMV would directly test whether additional dimensions improve predictive accuracy — and whether both paradigms agree on the answer.
 
 ---
 
