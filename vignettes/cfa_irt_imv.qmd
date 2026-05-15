@@ -3,9 +3,8 @@ title: "Comparing Predictive Performance of CFA and IRT: Limited vs. Full Inform
 description: |
   Person-level cross-validation across 10 IRW datasets comparing DWLS-estimated
   CFA to MML-estimated 2PL IRT, using the InterModel Vigorish (IMV) as a common
-  predictive metric. Motivated by Cho (2026), who showed full-information
-  estimation recovers parameters more accurately — here we ask whether that
-  advantage extends to out-of-sample prediction.
+  predictive metric. The primary comparison is the direct head-to-head IMV of
+  IRT vs. CFA, motivated by Cho (2026).
 date: today
 bibliography: cfairtdata/references.bib
 format:
@@ -64,11 +63,11 @@ if (!cache_ok) cat(
 )
 ```
 
-This vignette compares response-level predictive accuracy from a confirmatory factor analysis (CFA) model estimated with limited-information methods (DWLS) to that of an item response theory (IRT) model estimated with full-information methods (marginal maximum likelihood; MML), using the InterModel Vigorish [@domingue2024imv] as a common metric. We run the comparison across `r n_datasets` IRW datasets to assess how consistent any differences are.
+This vignette compares response-level predictive accuracy from a confirmatory factor analysis (CFA) model estimated with limited-information methods (DWLS) to that of an item response theory (IRT) model estimated with full-information methods (marginal maximum likelihood; MML). We use the InterModel Vigorish [@domingue2024imv] as the comparison metric, specifically the **direct head-to-head IMV of IRT vs. CFA** — measuring how much better IRT predicts held-out responses relative to CFA as a baseline.
 
-The contrast is motivated by @cho2026, who showed via simulation that full-information estimation generally recovers item parameters more accurately than limited-information estimation — particularly with smaller samples, more items, and skewed trait distributions. Here we ask: does that parameter-recovery advantage translate into better **out-of-sample predictive accuracy** on real data?
+The question is motivated by @cho2026, who showed via simulation that full-information estimation generally recovers item parameters more accurately than limited-information estimation. Here we ask: does that parameter-recovery advantage translate into better **out-of-sample predictive accuracy** on real data?
 
-CFA and IRT are theoretically equivalent models with interchangeable parameters [@takane1987], but they differ in how they use information during estimation. DWLS operates on pairwise item relationships (polychoric correlations); MML uses the full multivariate response pattern.
+CFA and IRT are theoretically equivalent models with interchangeable parameters [@takane1987], but they differ in how they use information during estimation. DWLS operates on pairwise item relationships (polychoric correlations); MML uses the full multivariate response pattern. We run the comparison across `r n_datasets` IRW datasets to assess consistency.
 
 ::: {.callout-note}
 Results are pre-computed from `cfa_irt_imv_compute.R`
@@ -104,7 +103,7 @@ We fit a 2PL model with a lognormal prior on discrimination parameters, consiste
 
 ---
 
-## Prediction formulas
+## IMV comparison
 
 **CFA prediction** follows Eq. 6 from @zhang2026: for a test person with factor score $\hat\theta_i$, the predicted probability for item $j$ is
 
@@ -113,6 +112,12 @@ $$\Pr(X_{ij} = 1 \mid \hat\theta_i) = \Phi\!\left(\frac{\lambda_j \hat\theta_i -
 where $\lambda_j$ is the factor loading, $\tau_j$ is the threshold, $\psi_j$ is the residual variance (delta parameterization), and $\Phi$ is the standard normal CDF.
 
 **IRT prediction** uses the 2PL ICC evaluated at the EAP-estimated $\hat\theta_i$ for each test person.
+
+The **primary metric** is the direct head-to-head IMV of IRT vs. CFA:
+
+$$\text{IMV}(\text{CFA}, \text{IRT}) = \text{imv.binary}(y, \hat p_{\text{CFA}}, \hat p_{\text{IRT}})$$
+
+A positive value means IRT predicts better than CFA; negative means CFA predicts better. We also report each model's IMV relative to a prevalence baseline for context.
 
 ---
 
@@ -154,136 +159,124 @@ predict_irt <- function(train_resp, test_resp, mirt_model) {
 }
 ```
 
-The baseline for each IMV calculation is item prevalence in the training fold.
+```{r}
+#| eval: false
+#| echo: true
+
+# Inside the CV loop — three IMV quantities per fold per item:
+for (j in seq_along(items)) {
+  y_j   <- test_df[, j]
+  prev_j <- rep(prev_train[j], length(y_j))
+  item_cfa_v_irt[j]  <- imv.binary(y_j, yprob_cfa[, j], yprob_irt[, j])  # primary
+  item_cfa_v_prev[j] <- imv.binary(y_j, prev_j, yprob_cfa[, j])           # context
+  item_irt_v_prev[j] <- imv.binary(y_j, prev_j, yprob_irt[, j])           # context
+}
+```
 
 ---
 
 ## Results
 
-### Scale-level IMV across datasets
+### IMV(CFA, IRT) across datasets
 
 ```{r}
 #| label: tbl-dataset-summary
-#| tbl-cap: "Scale-level IMV for CFA and IRT across datasets. 95% CI computed as mean ± 1.96 × sd/√K over valid folds."
+#| tbl-cap: "Scale-level IMV across datasets. IMV(CFA, IRT) is the primary comparison: how much better IRT predicts than CFA. Context columns show each model's gain over a prevalence baseline."
 
 ds <- dataset_summary |>
   mutate(
-    cfa_ci = sprintf("%.4f [%.4f, %.4f]",
-                     scale_cfa_mean,
-                     scale_cfa_mean - 1.96 * scale_cfa_sd / sqrt(K),
-                     scale_cfa_mean + 1.96 * scale_cfa_sd / sqrt(K)),
-    irt_ci = sprintf("%.4f [%.4f, %.4f]",
-                     scale_irt_mean,
-                     scale_irt_mean - 1.96 * scale_irt_sd / sqrt(K),
-                     scale_irt_mean + 1.96 * scale_irt_sd / sqrt(K)),
-    adv    = sprintf("%+.4f", advantage)
+    ci_lo = scale_cfa_v_irt_mean - 1.96 * scale_cfa_v_irt_sd / sqrt(K),
+    ci_hi = scale_cfa_v_irt_mean + 1.96 * scale_cfa_v_irt_sd / sqrt(K),
+    imv_direct = sprintf("%.4f [%.4f, %.4f]",
+                         scale_cfa_v_irt_mean, ci_lo, ci_hi),
+    cfa_prev   = sprintf("%.4f", scale_cfa_v_prev_mean),
+    irt_prev   = sprintf("%.4f", scale_irt_v_prev_mean)
   ) |>
-  select(table_name, N, J, cfa_ci, irt_ci, adv)
+  arrange(desc(scale_cfa_v_irt_mean)) |>
+  select(table_name, N, J, imv_direct, cfa_prev, irt_prev)
 
 knitr::kable(ds,
              col.names = c("Dataset", "N", "J",
-                           "CFA IMV [95% CI]", "IRT IMV [95% CI]",
-                           "IRT − CFA"),
-             align = "lrrllr")
+                           "IMV(CFA, IRT) [95% CI]",
+                           "IMV(prev, CFA)",
+                           "IMV(prev, IRT)"),
+             align = "lrrlrr")
 ```
 
-### Dataset-level comparison
+### Distribution of IMV(CFA, IRT)
 
 ```{r}
-#| label: fig-dataset-imv
-#| fig-cap: "Scale-level IMV for each dataset: CFA (blue) vs. IRT (red), with 95% fold-based confidence intervals. Datasets are ordered by CFA IMV."
-#| fig-height: 5.5
+#| label: fig-imv-direct
+#| fig-cap: "Scale-level IMV(CFA, IRT) with 95% CI across datasets, ordered by point estimate. Positive values indicate IRT predicts better than CFA."
+#| fig-height: 5
 
 plot_df <- dataset_summary |>
   mutate(
-    cfa_lo = scale_cfa_mean - 1.96 * scale_cfa_sd / sqrt(K),
-    cfa_hi = scale_cfa_mean + 1.96 * scale_cfa_sd / sqrt(K),
-    irt_lo = scale_irt_mean - 1.96 * scale_irt_sd / sqrt(K),
-    irt_hi = scale_irt_mean + 1.96 * scale_irt_sd / sqrt(K),
-    table_name = reorder(table_name, scale_cfa_mean)
-  ) |>
-  pivot_longer(
-    cols      = c(scale_cfa_mean, scale_irt_mean),
-    names_to  = "model",
-    values_to = "imv"
-  ) |>
-  mutate(
-    lo    = ifelse(model == "scale_cfa_mean", cfa_lo, irt_lo),
-    hi    = ifelse(model == "scale_cfa_mean", cfa_hi, irt_hi),
-    model = recode(model,
-                   scale_cfa_mean = "CFA (DWLS)",
-                   scale_irt_mean = "IRT (MML)")
+    ci_lo      = scale_cfa_v_irt_mean - 1.96 * scale_cfa_v_irt_sd / sqrt(K),
+    ci_hi      = scale_cfa_v_irt_mean + 1.96 * scale_cfa_v_irt_sd / sqrt(K),
+    table_name = reorder(table_name, scale_cfa_v_irt_mean),
+    pos        = scale_cfa_v_irt_mean >= 0
   )
 
-p_forest <- ggplot(plot_df,
-                   aes(x = imv, y = table_name, color = model, group = model)) +
-  geom_errorbarh(aes(xmin = lo, xmax = hi),
-                 height = 0.25, position = position_dodge(width = 0.5)) +
+p_main <- ggplot(plot_df,
+                 aes(x = scale_cfa_v_irt_mean, y = table_name, color = pos)) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
+  geom_errorbarh(aes(xmin = ci_lo, xmax = ci_hi), height = 0.3) +
+  geom_point(size = 3) +
+  scale_color_manual(values = c("TRUE" = "#d6604d", "FALSE" = "#4393c3"),
+                     guide = "none") +
+  labs(x = "IMV(CFA, IRT)  [positive = IRT better]", y = NULL)
+
+p_main
+```
+
+### Context: each model vs. prevalence baseline
+
+```{r}
+#| label: fig-vs-prev
+#| fig-cap: "Scale-level IMV of each model against a prevalence baseline, across datasets. Both models substantially outperform simple prevalence prediction."
+#| fig-height: 5
+
+prev_df <- dataset_summary |>
+  select(table_name, N, J,
+         CFA = scale_cfa_v_prev_mean,
+         IRT = scale_irt_v_prev_mean) |>
+  pivot_longer(c(CFA, IRT), names_to = "model", values_to = "imv") |>
+  mutate(table_name = reorder(table_name, imv, mean))
+
+p_prev <- ggplot(prev_df,
+                 aes(x = imv, y = table_name, color = model, group = model)) +
   geom_point(size = 2.5, position = position_dodge(width = 0.5)) +
-  scale_color_manual(values = c("CFA (DWLS)" = "#4393c3",
-                                 "IRT (MML)"  = "#d6604d"),
+  scale_color_manual(values = c("CFA" = "#4393c3", "IRT" = "#d6604d"),
                      name = NULL) +
-  labs(x = "Scale-level IMV (vs. prevalence baseline)", y = NULL) +
+  labs(x = "Scale-level IMV vs. prevalence baseline", y = NULL) +
   theme(legend.position = "bottom")
 
-p_forest
-```
-
-### CFA vs. IRT per dataset
-
-```{r}
-#| label: fig-cfa-vs-irt
-#| fig-cap: "Dataset-level scale IMV: CFA on x-axis, IRT on y-axis. Points above the diagonal favor IRT. Datasets labeled by name."
-#| fig-height: 4.5
-
-p_scatter <- ggplot(dataset_summary,
-                    aes(x = scale_cfa_mean, y = scale_irt_mean)) +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey60") +
-  geom_point(size = 3, color = "#4393c3", alpha = 0.8) +
-  ggrepel::geom_text_repel(aes(label = table_name),
-                            size = 3, color = "grey30", max.overlaps = 20) +
-  labs(x = "Scale IMV — CFA (DWLS)",
-       y = "Scale IMV — IRT (MML)",
-       subtitle = "Points above dashed line favor IRT") +
-  coord_fixed()
-
-p_scatter
+p_prev
 ```
 
 ```{r}
-#| label: fig-advantage-dist
-#| fig-cap: "Distribution of IRT − CFA IMV advantage across datasets. Positive = IRT predicts better."
-#| fig-height: 3.5
-
-p_adv <- ggplot(dataset_summary, aes(x = advantage)) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "grey60") +
-  geom_dotplot(fill = "#4393c3", color = "white", binwidth = 0.0005) +
-  labs(x = "IMV advantage (IRT − CFA)", y = NULL) +
-  scale_y_continuous(breaks = NULL)
-
-p_adv
-```
-
-```{r}
-#| label: advantage-stats
+#| label: summary-stats
 #| echo: false
 
-med_adv  <- median(dataset_summary$advantage)
-mean_adv <- mean(dataset_summary$advantage)
-pct_pos  <- mean(dataset_summary$advantage > 0) * 100
+med_imv  <- median(dataset_summary$scale_cfa_v_irt_mean)
+mean_imv <- mean(dataset_summary$scale_cfa_v_irt_mean)
+pct_pos  <- mean(dataset_summary$scale_cfa_v_irt_mean > 0) * 100
 ```
 
-Across `r n_datasets` datasets, the median IRT advantage is `r round(med_adv, 4)` IMV units (mean `r round(mean_adv, 4)`). IRT outperforms CFA in `r round(pct_pos, 0)`% of datasets.
+Across `r n_datasets` datasets, the median IMV(CFA, IRT) is `r round(med_imv, 4)` (mean `r round(mean_imv, 4)`). IRT outperforms CFA in `r round(pct_pos, 0)`% of datasets.
 
 ---
 
 ## Discussion
 
-**Both models substantially outperform the prevalence baseline.** Scale-level IMV values in the range seen here reflect meaningful gains from knowing a person's estimated latent ability, regardless of estimation method.
+**IMV(CFA, IRT) is the direct test.** Rather than comparing each model's gain over prevalence and taking the difference, `imv.binary(y, p_CFA, p_IRT)` directly measures how much additional predictive value IRT provides over CFA — expressed in the same interpretable betting-return units.
 
-**The IRT advantage is consistently small.** The narrow gap between IRT and CFA is consistent with their theoretical equivalence [@takane1987]: once item parameters and factor scores are estimated, the prediction formula is the same. The estimation advantage of MML documented by @cho2026 appears to matter more for parameter recovery than for response-level prediction, at least for the sample sizes and factor structures represented here.
+**Both models substantially outperform prevalence.** The vs-prevalence IMVs confirm that knowing a person's estimated latent ability (from either model) is genuinely informative compared to predicting item means for everyone.
 
-**Interpretive caveats.** The CV scheme is person-level — a strict test. Both models assume a single latent dimension. Results may differ for multidimensional instruments or for datasets with smaller samples where MML's efficiency advantage is larger.
+**The CFA–IRT gap is generally small.** The small IMV(CFA, IRT) values across most datasets are consistent with their theoretical equivalence [@takane1987]: once item parameters and factor scores are estimated, the prediction formula is structurally the same. The estimation advantage of MML documented by @cho2026 appears to matter more for parameter recovery than for response-level prediction at these sample sizes.
+
+**Estimation method matters when factor structure is violated.** Any dataset where CFA performs dramatically worse than IRT — despite shared theoretical structure — points to a case where DWLS's reliance on pairwise polychoric correlations breaks down. This can happen with extreme item prevalences or poor unidimensional fit.
 
 ---
 

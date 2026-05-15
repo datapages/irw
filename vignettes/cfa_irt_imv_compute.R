@@ -97,10 +97,13 @@ run_dataset <- function(table_name) {
   set.seed(seed)
   folds <- sample(rep(1:nfold, length.out = N))
 
-  imv_cfa_folds <- matrix(NA, nrow = nfold, ncol = ni + 1,
-                           dimnames = list(NULL, c(items, "scale")))
-  imv_irt_folds <- imv_cfa_folds
-  fold_errors   <- character(0)
+  # imv(cfa, irt): IRT vs. CFA as baseline — the primary comparison
+  # imv(prev, cfa) and imv(prev, irt): each model vs. prevalence — context
+  imv_cfa_v_irt_folds <- matrix(NA, nrow = nfold, ncol = ni + 1,
+                                  dimnames = list(NULL, c(items, "scale")))
+  imv_cfa_v_prev_folds <- imv_cfa_v_irt_folds
+  imv_irt_v_prev_folds <- imv_cfa_v_irt_folds
+  fold_errors <- character(0)
 
   for (k in 1:nfold) {
     cat(sprintf("  Fold %d/%d ... ", k, nfold))
@@ -128,32 +131,38 @@ run_dataset <- function(table_name) {
       cat("SKIPPED\n"); next
     }
 
-    prev_train   <- colMeans(train_df, na.rm = TRUE)
-    item_imv_cfa <- numeric(ni)
-    item_imv_irt <- numeric(ni)
+    prev_train       <- colMeans(train_df, na.rm = TRUE)
+    item_cfa_v_irt   <- numeric(ni)
+    item_cfa_v_prev  <- numeric(ni)
+    item_irt_v_prev  <- numeric(ni)
 
     for (j in seq_along(items)) {
-      y_j <- test_df[, j]
-      item_imv_cfa[j] <- imv.binary(y_j, rep(prev_train[j], length(y_j)), yprob_cfa[, j])
-      item_imv_irt[j] <- imv.binary(y_j, rep(prev_train[j], length(y_j)), yprob_irt[, j])
+      y_j              <- test_df[, j]
+      prev_j           <- rep(prev_train[j], length(y_j))
+      item_cfa_v_irt[j]  <- imv.binary(y_j, yprob_cfa[, j], yprob_irt[, j])
+      item_cfa_v_prev[j] <- imv.binary(y_j, prev_j, yprob_cfa[, j])
+      item_irt_v_prev[j] <- imv.binary(y_j, prev_j, yprob_irt[, j])
     }
 
-    imv_cfa_folds[k, ] <- c(item_imv_cfa, mean(item_imv_cfa))
-    imv_irt_folds[k, ] <- c(item_imv_irt, mean(item_imv_irt))
-    cat(sprintf("CFA=%.4f | IRT=%.4f\n",
-                mean(item_imv_cfa), mean(item_imv_irt)))
+    imv_cfa_v_irt_folds[k, ]  <- c(item_cfa_v_irt,  mean(item_cfa_v_irt))
+    imv_cfa_v_prev_folds[k, ] <- c(item_cfa_v_prev, mean(item_cfa_v_prev))
+    imv_irt_v_prev_folds[k, ] <- c(item_irt_v_prev, mean(item_irt_v_prev))
+    cat(sprintf("IMV(CFA,IRT)=%.4f | CFA vs prev=%.4f | IRT vs prev=%.4f\n",
+                mean(item_cfa_v_irt), mean(item_cfa_v_prev), mean(item_irt_v_prev)))
   }
 
-  valid_folds <- which(!is.na(imv_cfa_folds[, "scale"]))
+  valid_folds <- which(!is.na(imv_cfa_v_irt_folds[, "scale"]))
   if (length(valid_folds) == 0) {
     cat("  all folds failed\n"); return(NULL)
   }
 
   K <- length(valid_folds)
-  scale_cfa_mean <- mean(imv_cfa_folds[valid_folds, "scale"])
-  scale_irt_mean <- mean(imv_irt_folds[valid_folds, "scale"])
-  scale_cfa_sd   <- sd(imv_cfa_folds[valid_folds, "scale"])
-  scale_irt_sd   <- sd(imv_irt_folds[valid_folds, "scale"])
+  scale_cfa_v_irt_mean  <- mean(imv_cfa_v_irt_folds[valid_folds,  "scale"])
+  scale_cfa_v_prev_mean <- mean(imv_cfa_v_prev_folds[valid_folds, "scale"])
+  scale_irt_v_prev_mean <- mean(imv_irt_v_prev_folds[valid_folds, "scale"])
+  scale_cfa_v_irt_sd    <- sd(imv_cfa_v_irt_folds[valid_folds,   "scale"])
+  scale_cfa_v_prev_sd   <- sd(imv_cfa_v_prev_folds[valid_folds,  "scale"])
+  scale_irt_v_prev_sd   <- sd(imv_irt_v_prev_folds[valid_folds,  "scale"])
 
   # Discrimination parameters from full-data 2PL
   a_params <- tryCatch({
@@ -164,21 +173,24 @@ run_dataset <- function(table_name) {
   }, error = function(e) rep(NA_real_, ni))
 
   list(
-    table_name     = table_name,
-    N              = N,
-    J              = ni,
-    items          = items,
-    prev_range     = range(prev),
-    nfold          = nfold,
-    valid_folds    = valid_folds,
-    fold_errors    = fold_errors,
-    imv_cfa_folds  = imv_cfa_folds,
-    imv_irt_folds  = imv_irt_folds,
-    a_params       = a_params,
-    scale_cfa_mean = scale_cfa_mean,
-    scale_irt_mean = scale_irt_mean,
-    scale_cfa_sd   = scale_cfa_sd,
-    scale_irt_sd   = scale_irt_sd
+    table_name            = table_name,
+    N                     = N,
+    J                     = ni,
+    items                 = items,
+    prev_range            = range(prev),
+    nfold                 = nfold,
+    valid_folds           = valid_folds,
+    fold_errors           = fold_errors,
+    imv_cfa_v_irt_folds   = imv_cfa_v_irt_folds,
+    imv_cfa_v_prev_folds  = imv_cfa_v_prev_folds,
+    imv_irt_v_prev_folds  = imv_irt_v_prev_folds,
+    a_params              = a_params,
+    scale_cfa_v_irt_mean  = scale_cfa_v_irt_mean,
+    scale_cfa_v_prev_mean = scale_cfa_v_prev_mean,
+    scale_irt_v_prev_mean = scale_irt_v_prev_mean,
+    scale_cfa_v_irt_sd    = scale_cfa_v_irt_sd,
+    scale_cfa_v_prev_sd   = scale_cfa_v_prev_sd,
+    scale_irt_v_prev_sd   = scale_irt_v_prev_sd
   )
 }
 
@@ -207,22 +219,25 @@ dataset_results <- Filter(Negate(is.null), dataset_results)
 dataset_summary <- do.call(rbind, lapply(dataset_results, function(r) {
   K <- length(r$valid_folds)
   data.frame(
-    table_name     = r$table_name,
-    N              = r$N,
-    J              = r$J,
-    scale_cfa_mean = r$scale_cfa_mean,
-    scale_irt_mean = r$scale_irt_mean,
-    scale_cfa_sd   = r$scale_cfa_sd,
-    scale_irt_sd   = r$scale_irt_sd,
-    K              = K,
-    advantage      = r$scale_irt_mean - r$scale_cfa_mean,
+    table_name            = r$table_name,
+    N                     = r$N,
+    J                     = r$J,
+    scale_cfa_v_irt_mean  = r$scale_cfa_v_irt_mean,
+    scale_cfa_v_irt_sd    = r$scale_cfa_v_irt_sd,
+    scale_cfa_v_prev_mean = r$scale_cfa_v_prev_mean,
+    scale_irt_v_prev_mean = r$scale_irt_v_prev_mean,
+    scale_cfa_v_prev_sd   = r$scale_cfa_v_prev_sd,
+    scale_irt_v_prev_sd   = r$scale_irt_v_prev_sd,
+    K                     = K,
     stringsAsFactors = FALSE
   )
 }))
 
 cat("\n=== Summary across datasets ===\n")
 print(dataset_summary[, c("table_name", "N", "J",
-                           "scale_cfa_mean", "scale_irt_mean", "advantage")],
+                           "scale_cfa_v_irt_mean",
+                           "scale_cfa_v_prev_mean",
+                           "scale_irt_v_prev_mean")],
       digits = 4, row.names = FALSE)
 
 # ----- Save -----------------------------------------------------------------
