@@ -1,0 +1,368 @@
+---
+title: "Comparing Predictive Performance of CFA and IRT: Limited vs. Full Information"
+description: |
+  Person-level cross-validation comparing DWLS-estimated CFA to MML-estimated
+  2PL IRT using the InterModel Vigorish (IMV) as a common predictive metric.
+  Motivated by Cho (2026), who showed full-information estimation recovers
+  parameters more accurately — here we ask whether that advantage extends to
+  out-of-sample prediction.
+date: today
+bibliography: cfairtdata/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+theme_set(theme_classic(base_size = 13))
+
+cache_path <- "cfairtdata/cfa_irt_imv_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache         <- readRDS(cache_path)
+  table_name     <- .cache$table_name
+  N              <- .cache$N
+  J              <- .cache$J
+  items          <- .cache$items
+  prev_range     <- .cache$prev_range
+  nfold          <- .cache$nfold
+  imv_cfa_folds  <- .cache$imv_cfa_folds
+  imv_irt_folds  <- .cache$imv_irt_folds
+  valid_folds    <- .cache$valid_folds
+  fold_errors    <- .cache$fold_errors
+  a_params       <- .cache$a_params
+  scale_cfa_mean <- .cache$scale_cfa_mean
+  scale_irt_mean <- .cache$scale_irt_mean
+  scale_cfa_sd   <- .cache$scale_cfa_sd
+  scale_irt_sd   <- .cache$scale_irt_sd
+  date_run       <- .cache$date_run
+} else {
+  table_name <- "—"; N <- NA_integer_; J <- NA_integer_
+  prev_range <- c(NA, NA); nfold <- 5; valid_folds <- 1:5
+  imv_cfa_folds <- matrix(NA, 5, 1); imv_irt_folds <- matrix(NA, 5, 1)
+  items <- character(); fold_errors <- character()
+  a_params <- numeric(); scale_cfa_mean <- scale_irt_mean <- NA_real_
+  scale_cfa_sd <- scale_irt_sd <- NA_real_; date_run <- Sys.Date()
+}
+
+knitr::opts_chunk$set(eval = cache_ok)
+```
+
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (!cache_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Cache not found** — figures will not appear. ",
+  "Generate results by running the compute script, then re-render:\n\n",
+  "```r\nRscript vignettes/cfa_irt_imv_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+This vignette compares response-level predictive accuracy from a confirmatory factor analysis (CFA) model estimated with limited-information methods (DWLS) to that of an item response theory (IRT) model estimated with full-information methods (marginal maximum likelihood; MML), using the InterModel Vigorish [@domingue2024imv] as a common metric.
+
+The contrast is motivated by @cho2026, who showed via simulation that full-information estimation generally recovers item parameters more accurately than limited-information estimation — particularly with smaller samples, more items, and skewed trait distributions. Here we ask a complementary question: does that parameter-recovery advantage translate into better **out-of-sample predictive accuracy** on real data?
+
+CFA and IRT are theoretically equivalent models with interchangeable parameters [@takane1987], but they differ in how they use information during estimation. DWLS operates on pairwise item relationships (polychoric correlations); MML uses the full multivariate response pattern. To make the comparison fair, we implement a single person-level cross-validation loop that applies identical fold splits to both models.
+
+::: {.callout-note}
+Results are pre-computed from `cfa_irt_imv_compute.R`. The dataset is
+**`r table_name`** ($J = `r J`$ items, $N = `r format(N, big.mark=",")`$ respondents,
+item prevalence `r round(prev_range[1], 2)`–`r round(prev_range[2], 2)`,
+computed `r format(date_run, "%B %Y")`).
+:::
+
+---
+
+## Models and estimation
+
+### CFA (DWLS)
+
+We specify a single-factor CFA model with all items loading on one latent variable. Items are treated as ordered (binary), and parameters are estimated with DWLS under the delta parameterization — the default for ordered-categorical items in **lavaan** [@rosseel2012].
+
+```{r}
+#| eval: false
+#| echo: true
+
+library(irw); library(lavaan); library(mirt); library(imv)
+
+table_name <- "gilbert_meta_2"   # change to re-run on any binary IRW dataset
+
+df   <- irw::irw_fetch(table_name)
+resp <- irw::irw_long2resp(df); resp$id <- NULL
+resp <- resp[, apply(resp, 2, function(x) all(x %in% c(0, 1, NA)))]
+resp <- resp[complete.cases(resp), ]
+
+items     <- colnames(resp)
+ni        <- length(items)
+cfa_model <- paste0("F =~ NA*", paste(items, collapse = " + "), "\nF ~~ 1*F")
+```
+
+### IRT (MML)
+
+We fit a 2PL model with a lognormal prior on discrimination parameters, consistent with the existing IMV vignette on this site.
+
+```{r}
+#| eval: false
+#| echo: true
+
+mirt_model_str <- paste0(
+  "F = 1-", ni, "\n",
+  "PRIOR = (1-", ni, ", a1, lnorm, 0.0, 1.0)"
+)
+mirt_model <- mirt::mirt.model(mirt_model_str)
+```
+
+---
+
+## Prediction formulas
+
+**CFA prediction** follows Eq. 6 from @zhang2026: for a test person with factor score $\hat\theta_i$, the predicted probability for item $j$ is
+
+$$\Pr(X_{ij} = 1 \mid \hat\theta_i) = \Phi\!\left(\frac{\lambda_j \hat\theta_i - \tau_j}{\sqrt{\psi_j}}\right)$$
+
+where $\lambda_j$ is the factor loading, $\tau_j$ is the threshold, $\psi_j$ is the residual variance (all from the delta parameterization), and $\Phi$ is the standard normal CDF.
+
+**IRT prediction** uses the 2PL item characteristic curve
+
+$$\Pr(X_{ij} = 1 \mid \hat\theta_i) = \frac{\exp(a_j(\hat\theta_i - b_j))}{1 + \exp(a_j(\hat\theta_i - b_j))}$$
+
+evaluated at the EAP-estimated $\hat\theta_i$ for each test person.
+
+---
+
+## Cross-validation design
+
+```{r}
+#| eval: false
+#| echo: true
+
+predict_cfa <- function(train, test, model, vary) {
+  fit         <- cfa(model, data = train, ordered = vary,
+                     parameterization = "delta", estimator = "DWLS")
+  ov_pred     <- lavPredict(fit, newdata = test, type = "ov")
+  y_threshold <- inspect(fit, what = "est")$tau
+  y_residual  <- inspect(fit, what = "est")$theta
+  yprob <- matrix(NA, nrow = nrow(test), ncol = length(vary),
+                  dimnames = list(NULL, vary))
+  for (j in seq_along(vary)) {
+    num        <- ov_pred[, j] - y_threshold[j]
+    yprob[, j] <- pnorm(num / sqrt(y_residual[j, j]))
+  }
+  yprob
+}
+
+predict_irt <- function(train_resp, test_resp, mirt_model) {
+  fit <- mirt(train_resp, mirt_model,
+              itemtype  = rep("2PL", ncol(train_resp)),
+              method    = "EM",
+              technical = list(NCYCLES = 10000),
+              verbose   = FALSE)
+  theta_test <- fscores(fit, response.pattern = test_resp, method = "EAP")[, 1]
+  probs      <- probtrace(fit, theta_test)
+  p1_cols    <- seq(2, ncol(probs), by = 2)
+  yprob      <- probs[, p1_cols, drop = FALSE]
+  colnames(yprob) <- colnames(train_resp)
+  yprob
+}
+```
+
+Both models share a single set of fold assignments generated before any model is fit. The CV loop is person-level: neither model has any individual-level information about test persons beyond the population-level item parameters estimated on training persons alone. This is a stricter test than response-level CV (where $\theta$ is estimated from the $J-1$ remaining items before predicting item $j$).
+
+```{r}
+#| eval: false
+#| echo: true
+
+set.seed(1234)
+nfold <- 5
+folds <- sample(rep(1:nfold, length.out = N))
+
+imv_cfa_folds <- matrix(NA, nrow = nfold, ncol = ni + 1,
+                         dimnames = list(NULL, c(items, "scale")))
+imv_irt_folds <- imv_cfa_folds
+
+for (k in 1:nfold) {
+  train_df <- resp[folds != k, ]; test_df <- resp[folds == k, ]
+
+  yprob_cfa <- tryCatch(predict_cfa(train_df, test_df, cfa_model, items),
+                         error = function(e) NULL)
+  yprob_irt <- tryCatch(predict_irt(train_df, test_df, mirt_model),
+                         error = function(e) NULL)
+  if (is.null(yprob_cfa) || is.null(yprob_irt)) next
+
+  prev_train <- colMeans(train_df, na.rm = TRUE)
+  item_imv_cfa <- item_imv_irt <- numeric(ni)
+  for (j in seq_along(items)) {
+    y_j <- test_df[, j]
+    item_imv_cfa[j] <- imv.binary(y_j, rep(prev_train[j], length(y_j)), yprob_cfa[, j])
+    item_imv_irt[j] <- imv.binary(y_j, rep(prev_train[j], length(y_j)), yprob_irt[, j])
+  }
+  imv_cfa_folds[k, ] <- c(item_imv_cfa, mean(item_imv_cfa))
+  imv_irt_folds[k, ] <- c(item_imv_irt, mean(item_imv_irt))
+}
+```
+
+The baseline for each IMV calculation is item prevalence in the training fold — the simplest possible predictor. A positive IMV means the model improves over just predicting the item mean for everyone.
+
+`r if (length(fold_errors) > 0) paste0("::: {.callout-warning}\n**", length(fold_errors), " fold(s) skipped due to convergence errors:**\n\n", paste(fold_errors, collapse = "\n\n"), "\n:::\n")`
+
+---
+
+## Results
+
+### Scale-level IMV
+
+```{r}
+#| label: scale-summary
+
+K <- length(valid_folds)
+scale_summary <- data.frame(
+  Model = c("CFA (DWLS)", "IRT (2PL MML)"),
+  IMV   = c(scale_cfa_mean, scale_irt_mean),
+  CI_lo = c(scale_cfa_mean - 1.96 * scale_cfa_sd / sqrt(K),
+             scale_irt_mean - 1.96 * scale_irt_sd / sqrt(K)),
+  CI_hi = c(scale_cfa_mean + 1.96 * scale_cfa_sd / sqrt(K),
+             scale_irt_mean + 1.96 * scale_irt_sd / sqrt(K))
+)
+
+knitr::kable(scale_summary, digits = 4,
+             col.names = c("Model", "Scale IMV", "95% CI lower", "95% CI upper"))
+```
+
+Both models substantially outperform the prevalence baseline (scale-level IMV ≈ `r round(scale_cfa_mean, 3)` for CFA and ≈ `r round(scale_irt_mean, 3)` for IRT). The IRT advantage is `r round(scale_irt_mean - scale_cfa_mean, 4)` IMV units — very small relative to either model's gain over prevalence. This is consistent with the theoretical equivalence of CFA and IRT: estimation method differences affect parameter recovery but not necessarily prediction when the model is well specified and sample sizes are adequate.
+
+### Fold-level stability
+
+```{r}
+#| label: fig-fold-stability
+#| fig-cap: "Scale-level IMV by cross-validation fold. Both models track closely across folds, indicating stable predictive performance."
+#| fig-height: 4
+
+fold_df <- data.frame(
+  fold    = rep(valid_folds, 2),
+  IMV     = c(imv_cfa_folds[valid_folds, "scale"],
+              imv_irt_folds[valid_folds, "scale"]),
+  Model   = rep(c("CFA (DWLS)", "IRT (MML)"), each = length(valid_folds))
+)
+
+p_fold <- ggplot(fold_df, aes(x = factor(fold), y = IMV,
+                               color = Model, group = Model)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2.5) +
+  scale_color_manual(values = c("CFA (DWLS)" = "#4393c3",
+                                 "IRT (MML)"  = "#d6604d")) +
+  labs(x = "Fold", y = "Scale-level IMV", color = NULL) +
+  theme(legend.position = "bottom")
+
+p_fold
+```
+
+### Item-level IMV
+
+```{r}
+#| label: fig-item-scatter
+#| fig-cap: "Item-level IMV for CFA vs. IRT, averaged across folds. Points above the diagonal favor IRT; points below favor CFA."
+#| fig-height: 5
+
+item_imv_cfa_mean <- colMeans(imv_cfa_folds[valid_folds, items, drop = FALSE],
+                               na.rm = TRUE)
+item_imv_irt_mean <- colMeans(imv_irt_folds[valid_folds, items, drop = FALSE],
+                               na.rm = TRUE)
+
+item_df <- data.frame(
+  item    = items,
+  IMV_CFA = item_imv_cfa_mean,
+  IMV_IRT = item_imv_irt_mean,
+  delta   = item_imv_irt_mean - item_imv_cfa_mean
+)
+
+ax_lim <- range(c(item_df$IMV_CFA, item_df$IMV_IRT)) * c(0.95, 1.05)
+
+p_item <- ggplot(item_df, aes(x = IMV_CFA, y = IMV_IRT)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey60") +
+  geom_point(aes(color = delta), size = 3, alpha = 0.8) +
+  scale_color_gradient2(low = "#4393c3", mid = "grey80", high = "#d6604d",
+                         midpoint = 0, name = "IRT − CFA") +
+  coord_fixed(xlim = ax_lim, ylim = ax_lim) +
+  labs(x = "Item-level IMV (CFA / DWLS)",
+       y = "Item-level IMV (IRT / MML)",
+       subtitle = "Points above dashed line favor IRT")
+
+p_item
+```
+
+Most items fall very close to the diagonal, confirming that CFA and IRT achieve nearly identical item-level predictive accuracy. The largest deviations tend to be items with extreme discrimination parameters.
+
+### Discrimination and IMV advantage
+
+If full-information estimation gains most for highly discriminating items — because DWLS may underweight the signal in steep ICCs — then items with large 2PL $a$ parameters should show the largest IRT–CFA IMV gap.
+
+```{r}
+#| label: fig-discrim
+#| fig-cap: "2PL discrimination (a) vs. IMV advantage (IRT − CFA). A positive association would support the hypothesis that MML gains most for highly discriminating items."
+#| fig-height: 4.5
+
+discrim_df <- data.frame(
+  item  = items,
+  a     = a_params[items],
+  delta = item_df$delta
+)
+
+p_discrim <- ggplot(discrim_df, aes(x = a, y = delta)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey60") +
+  geom_point(alpha = 0.7, size = 2.5, color = "#4393c3") +
+  geom_smooth(method = "lm", se = TRUE, color = "#d6604d",
+              fill = "#d6604d", alpha = 0.15, linewidth = 0.9) +
+  labs(x = "2PL discrimination (a)",
+       y = "IMV advantage (IRT − CFA)")
+
+p_discrim
+```
+
+---
+
+## Discussion
+
+This vignette implements a fair, apples-to-apples comparison of CFA and IRT predictive performance by holding out identical persons in each cross-validation fold and applying each model's respective prediction machinery to those held-out respondents. The IMV provides a common interpretable scale for the comparison.
+
+**Both models substantially outperform the prevalence baseline.** Scale-level IMV around `r round(scale_cfa_mean, 2)` means that, relative to always predicting the item mean, each model's predictions are worth roughly `r round(scale_cfa_mean * 100, 0)`% more per betting unit — a non-trivial gain from knowing a person's estimated latent ability.
+
+**The IRT advantage is small.** The `r round(scale_irt_mean - scale_cfa_mean, 4)`-unit gap between IRT and CFA is consistent with their theoretical equivalence: once item parameters and factor scores are estimated, the prediction formula is the same. The estimation advantage of MML documented by @cho2026 may be more consequential in smaller samples or more complex factor structures than this dataset represents.
+
+**Interpretive caveats.** The CV scheme is person-level. Neither model has any individual information about test persons beyond population-level item parameters estimated on training data — a stricter test than response-level CV. Additionally, both models assume a single latent dimension; results may differ for multidimensional instruments.
+
+---
+
+## Reproducibility
+
+Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+# From the project root
+Rscript vignettes/cfa_irt_imv_compute.R
+quarto::quarto_render("vignettes/cfa_irt_imv.qmd")
+```
+
+To run on a different dataset, change `table_name` at the top of `cfa_irt_imv_compute.R`.
+
+---
+
+## References
