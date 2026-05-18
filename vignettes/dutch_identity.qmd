@@ -1,0 +1,606 @@
+---
+title: "The Dutch Identity: Manifest Probabilities and IRT Models"
+description: |
+  A tour of Holland's (1990) Dutch Identity — the result that log-manifest
+  probabilities of dichotomous response patterns are approximately log-quadratic
+  in the item responses. We ground each theoretical claim in IRW data: enumerating
+  manifest probabilities directly, fitting loglinear models, diagnosing the Rasch
+  model via total-score frequencies, assessing dimensionality from second-order
+  interactions, and testing Holland's conservation law for model complexity.
+date: today
+bibliography: dutchdata/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(purrr)
+library(ggplot2)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+
+cache_path <- "dutchdata/dutch_identity_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache   <- readRDS(cache_path)
+  s1_3     <- .cache$s1_3
+  s4       <- .cache$s4
+  s5       <- .cache$s5
+  s6       <- .cache$s6
+  date_run <- .cache$date_run
+} else {
+  # Placeholder objects so inline R expressions in prose don't crash
+  na_dataset <- list(table_name = "—", J = NA_integer_, N = NA_integer_,
+                     ll_diff = NA_real_, r2_quad = NA_real_,
+                     gamma_k_data = NULL, cor_eigval = numeric(),
+                     soe_eigval = NULL)
+  s1_3 <- c(na_dataset, list(patterns = NULL, gamma_matrix = NULL,
+                              eigenvalues = NULL, bic_table = NULL))
+  s4   <- list(good_rasch = na_dataset, poor_rasch = na_dataset,
+               rasch_meta = tibble(table_name = character()))
+  s5   <- list(unidim = na_dataset, multidim = na_dataset)
+  s6   <- tibble(table_name = character(), J = integer(),
+                 imv_1v2 = numeric(), imv_2v3 = numeric())
+  date_run <- Sys.Date()
+}
+
+# Disable all subsequent code chunks when cache is missing
+knitr::opts_chunk$set(eval = cache_ok)
+```
+
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (!cache_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Cache not found** — figures will not appear. ",
+  "Generate results by running the compute script, then re-render:\n\n",
+  "```r\nRscript vignettes/dutch_identity_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+## Background
+
+@holland1990dutch introduced the **Dutch Identity** — a result about the
+mathematical structure that any unidimensional IRT model imposes on the joint
+distribution of dichotomous item responses. The key insight is that the
+*manifest* (unconditional) probability of a response pattern $\mathbf{x} =
+(x_1, \ldots, x_J) \in \{0,1\}^J$ can be written as an exponential family
+whose sufficient statistics are functions of the item responses. For large tests
+with smooth item response functions (IRFs), this reduces to a strikingly simple
+approximation:
+
+$$\log p(\mathbf{x}) \approx \alpha + \sum_{j=1}^{J} \beta_j x_j + \frac{1}{2}\!\left(\sum_{j=1}^{J} \gamma_j x_j\right)^{\!2}$$
+
+This is log-quadratic in the $x_j$, requires only $2J + 1$ parameters regardless
+of $J$, and makes precise predictions about the structure of second-order
+interactions between items. The sections below work through the implications one
+step at a time, using IRW datasets to make each idea concrete.
+
+::: {.callout-note}
+All figures use pre-computed results from `dutch_identity_compute.R`. The
+dataset used in Sections 1–3 is **`r s1_3$table_name`**
+($J = `r s1_3$J`$ items, $N = `r format(s1_3$N, big.mark=",")`$ respondents,
+computed `r format(date_run, "%B %Y")`).
+:::
+
+---
+
+## Section 1: The manifest probabilities directly
+
+For a test of $J$ binary items, a respondent's answers define a response pattern
+$\mathbf{x} \in \{0,1\}^J$. There are $2^J$ possible patterns, each occurring
+with manifest probability $p(\mathbf{x})$. Before modeling, it is worth asking:
+what do these probabilities actually look like? Most patterns are extremely rare;
+a handful dominate. @holland1990dutch motivates the loglinear approach precisely
+because the $p(\mathbf{x})$ are too numerous and sparse to model directly for
+large $J$.
+
+For $J \leq 10$ items and $N \geq 2{,}000$ respondents the full distribution is
+enumerable. Below we tabulate every $2^J$ pattern and display the empirical
+$p(\mathbf{x})$.
+
+```{r}
+#| label: fig-manifest-dist
+#| fig-cap: "Distribution of empirical manifest probabilities across all 2^J response patterns (log scale). Most patterns are never observed (grey); a few common patterns carry most of the probability mass. Hover over a point to see its response pattern."
+
+patterns <- s1_3$patterns |>
+  arrange(desc(count)) |>
+  mutate(
+    rank        = row_number(),
+    p_obs       = count / s1_3$N,
+    observed    = count > 0,
+    pattern_str = apply(pick(all_of(s1_3$item_cols)), 1, paste, collapse = ""),
+    tooltip     = paste0(
+      "Pattern: ", pattern_str,
+      "<br>p(x): ", signif(p_obs, 3),
+      "<br>Count: ", count
+    )
+  )
+
+n_observed   <- sum(patterns$observed)
+n_unobserved <- sum(!patterns$observed)
+
+p <- ggplot(patterns, aes(x = rank, y = p_obs, colour = observed, text = tooltip)) +
+  geom_point(size = 1.2, alpha = 0.7) +
+  scale_colour_manual(
+    values = c("TRUE" = irw_blue, "FALSE" = irw_grey),
+    labels = c("TRUE" = "Observed", "FALSE" = "Never seen"),
+    name   = NULL
+  ) +
+  scale_y_log10(labels = scales::label_scientific()) +
+  labs(
+    x = "Pattern rank (most to least common)",
+    y = "Empirical p(x)  [log scale]"
+  )
+
+plotly::ggplotly(p, tooltip = "text") |>
+  plotly::layout(
+    annotations = list(list(
+      text      = paste0(n_observed, " of ", 2^s1_3$J,
+                         " patterns observed; ", n_unobserved, " never appeared."),
+      showarrow = FALSE,
+      xref = "paper", yref = "paper",
+      x = 0, y = -0.12,
+      xanchor = "left", yanchor = "top",
+      font = list(size = 11, color = "grey50")
+    ))
+  )
+```
+
+```{r}
+#| label: fig-score-dist
+#| fig-cap: "Total probability mass at each sum score k = Σ xⱼ. Patterns within each score group contribute additively."
+#| fig-height: 4
+
+patterns |>
+  filter(observed) |>
+  ggplot(aes(x = factor(total), y = p_obs, fill = p_obs)) +
+  geom_col(width = 0.7, show.legend = FALSE) +
+  scale_fill_gradient(low = "#d1e5f0", high = irw_blue) +
+  labs(
+    x       = "Total score k",
+    y       = "p(x)",
+    caption = "Each bar is the total probability mass at that score level."
+  )
+```
+
+**What to notice.** Probability mass is extremely concentrated: the most common
+pattern can account for a large share of the total. The long tail of near-zero
+patterns means a $2^J$-parameter saturated model is hopeless — most cells have
+zero or one observation. This motivates the loglinear parameterisation in
+Section 2.
+
+---
+
+## Section 2: Log-manifest probabilities and the independence baseline
+
+Under item *independence* — no latent variable, no associations — $\log
+p(\mathbf{x})$ is a linear function of the item responses:
+
+$$\log p(\mathbf{x}) = \alpha + \sum_{j=1}^{J} \beta_j x_j$$
+
+This **independence loglinear model** has $J + 1$ parameters. It is equivalent
+to a Poisson regression of pattern counts on the $J$ binary item predictors.
+When it fits, all structure in the data is captured by item marginals alone.
+
+Any IRT model implies that $\log p(\mathbf{x})$ *deviates* from this baseline —
+the latent variable induces positive associations among items that the
+main-effects model misses. Plotting observed versus fitted $\log p(\mathbf{x})$
+makes those deviations visible.
+
+```{r}
+#| label: fig-independence-fit
+#| fig-cap: "Observed vs. fitted log p(x) under the independence loglinear model. Points on the diagonal are fully explained by item marginals; points below the line are more probable than independence predicts (positive local dependence)."
+#| fig-height: 4.5
+
+plot_dat <- patterns |>
+  filter(observed) |>
+  mutate(residual = log_p_obs - log_p_ind)
+
+r2_ind <- cor(plot_dat$log_p_obs, plot_dat$log_p_ind, use = "complete.obs")^2
+
+ggplot(plot_dat, aes(x = log_p_ind, y = log_p_obs)) +
+  geom_abline(slope = 1, intercept = 0, colour = irw_grey, linetype = "dashed") +
+  geom_point(aes(size = p_obs), colour = irw_blue, alpha = 0.6) +
+  scale_size_continuous(range = c(1, 5), name = "p(x)", guide = "none") +
+  annotate(
+    "text", x = -Inf, y = Inf, hjust = -0.1, vjust = 1.4,
+    label = paste0("R² = ", round(r2_ind, 3)),
+    size = 4, colour = "grey30"
+  ) +
+  labs(
+    x = "Fitted log p(x)  [independence model]",
+    y = "Observed log p(x)"
+  )
+```
+
+**What to notice.** Systematic curvature away from the diagonal — especially
+for extreme total-score patterns — signals that main effects alone are not
+enough. The points that deviate most are those where all or nearly all items are
+answered the same way: item correlation inflates these relative to the
+independence prediction. This is exactly the second-order structure that
+@holland1990dutch formalises.
+
+---
+
+## Section 3: Fitting the second-order exponential model
+
+The full **second-order exponential (SOE) model** augments the independence
+model with all $\binom{J}{2}$ pairwise interaction terms:
+
+$$\log p(\mathbf{x}) = \alpha + \sum_j \beta_j x_j + \sum_{j < k} \gamma_{jk}\, x_j x_k$$
+
+This is still a Poisson GLM, now with $1 + J + \binom{J}{2}$ parameters. The
+$J \times J$ matrix $\boldsymbol{\Gamma}$ (with $\Gamma_{jk} = \gamma_{jk}$ and
+$\Gamma_{jj} = 0$) encodes all pairwise item associations after removing main
+effects.
+
+The Dutch Identity [@holland1990dutch, Theorem 1] predicts that
+$\boldsymbol{\Gamma}$ is *approximately rank-1*: $\Gamma_{jk} \approx \gamma_j
+\gamma_k$. Under this constraint, the interaction structure collapses to:
+
+$$\log p(\mathbf{x}) \approx \alpha + \sum_j \beta_j' x_j + \frac{1}{2}\!\left(\sum_j \gamma_j x_j\right)^{\!2}$$
+
+the **restricted log-quadratic** model ($1 + 2J$ parameters). We fit all three
+models and compare.
+
+### Model comparison
+
+```{r}
+#| label: tbl-bic
+#| tbl-cap: "Log-likelihood and BIC for three nested loglinear models. The restricted log-quadratic uses 2J + 1 parameters; the full SOE uses 1 + J + J(J-1)/2."
+
+s1_3$bic_table |>
+  mutate(
+    across(c(Log_lik, BIC), \(x) round(x, 1)),
+    BIC_delta = round(BIC - min(BIC), 1)
+  ) |>
+  rename(`ΔBIC vs. best` = BIC_delta, `Log-lik` = Log_lik) |>
+  knitr::kable(align = "lrrr")
+```
+
+### Structure of the Γ matrix
+
+```{r}
+#| label: fig-gamma-heatmap
+#| fig-cap: "Heatmap of the J×J interaction matrix Γ from the full SOE model. Under the Dutch Identity, off-diagonal entries should follow a rank-1 pattern γⱼγₖ — all rows should look like rescaled versions of each other."
+#| fig-height: 4
+
+gmat      <- s1_3$gamma_matrix
+gmat_long <- as.data.frame(as.table(gmat)) |>
+  rename(item1 = Var1, item2 = Var2, gamma = Freq) |>
+  filter(item1 != item2)
+
+ggplot(gmat_long, aes(x = item2, y = item1, fill = gamma)) +
+  geom_tile(colour = "white") +
+  scale_fill_gradient2(
+    low = irw_red, mid = "white", high = irw_blue,
+    midpoint = 0, name = "γⱼₖ"
+  ) +
+  labs(x = NULL, y = NULL) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid  = element_blank()
+  )
+```
+
+### Eigenvalue decay of Γ
+
+```{r}
+#| label: fig-gamma-scree
+#| fig-cap: "Eigenvalue scree plot of the SOE interaction matrix Γ. The Dutch Identity predicts a single dominant eigenvalue (Γ is approximately rank-1)."
+#| fig-height: 3.5
+
+eig_df <- tibble(
+  component  = seq_along(s1_3$eigenvalues),
+  eigenvalue = s1_3$eigenvalues,
+  pct_var    = abs(s1_3$eigenvalues) / sum(abs(s1_3$eigenvalues))
+)
+
+ggplot(eig_df, aes(x = component, y = eigenvalue)) +
+  geom_col(fill = irw_blue, alpha = 0.7, width = 0.6) +
+  geom_hline(yintercept = 0, colour = irw_grey) +
+  scale_x_continuous(breaks = seq_len(s1_3$J)) +
+  labs(
+    x       = "Component",
+    y       = "Eigenvalue of Γ",
+    caption = paste0(
+      "Leading eigenvalue explains ",
+      round(eig_df$pct_var[1] * 100, 1),
+      "% of |eigenvalue| sum."
+    )
+  )
+```
+
+**What to notice.** If the Dutch Identity holds, the restricted log-quadratic
+model ($1 + 2J$ parameters) should close most of the gap between the independence
+model and the full SOE ($1 + J + \binom{J}{2}$ parameters), despite using far
+fewer parameters. The eigenvalue plot shows how nearly rank-1 $\boldsymbol{\Gamma}$
+is: one dominant positive eigenvalue with the rest near zero is the hallmark of
+a unidimensional instrument.
+
+---
+
+## Section 4: The γₖ diagnostic for the Rasch model
+
+@holland1990dutch Corollary 2 gives a striking prediction about the Rasch model.
+If ability $\theta \sim N(\mu, \sigma^2)$, the probability of obtaining total
+score $k$ is:
+
+$$\log \pi_k \approx C + \mu(k - \bar{y}_+) + \frac{\sigma^2}{2}(k - \bar{y}_+)^2$$
+
+where $\bar{y}_+ = \sum_j \bar{p}_j$ is the expected total score at the mean
+ability. In other words, $\log \pi_k$ is a *quadratic* function of $k$, centred
+on $\bar{y}_+$. Systematic deviations indicate either non-normality of the
+ability distribution or Rasch misfit.
+
+We compare two IRW datasets: one where the Rasch model fits well
+(**`r s4$good_rasch$table_name`**, $J = `r s4$good_rasch$J`$,
+$N = `r format(s4$good_rasch$N, big.mark=",")`$,
+$\Delta\ell = `r round(s4$good_rasch$ll_diff, 1)`$ 2PL vs. Rasch),
+and one where it does not
+(**`r s4$poor_rasch$table_name`**, $J = `r s4$poor_rasch$J`$,
+$N = `r format(s4$poor_rasch$N, big.mark=",")`$,
+$\Delta\ell = `r round(s4$poor_rasch$ll_diff, 1)`$).
+
+```{r}
+#| label: plot-gk-fn
+#| echo: false
+
+plot_gk <- function(gk_data) {
+  ggplot(gk_data, aes(x = k, y = gamma_k)) +
+    geom_point(colour = irw_blue, size = 2.5) +
+    geom_line(aes(y = gamma_k_fitted), colour = irw_red,
+              linewidth = 0.9) +
+    labs(
+      x       = "Total score k",
+      y       = expression(log~pi[k]),
+      caption = "Red curve: fitted quadratic."
+    )
+}
+```
+
+```{r}
+#| label: fig-gamma-k-good
+#| fig-cap: "Total-score log-frequencies for the dataset where Rasch fits well. Points follow a smooth quadratic, consistent with Holland's Corollary 2."
+#| fig-height: 4
+
+plot_gk(s4$good_rasch$gamma_k_data)
+```
+
+The quadratic $R^2$ is `r round(s4$good_rasch$r2_quad, 3)` for this dataset.
+
+```{r}
+#| label: fig-gamma-k-poor
+#| fig-cap: "Total-score log-frequencies for the dataset where Rasch fits poorly. Deviations from the quadratic suggest non-constant discrimination or a non-normal ability distribution."
+#| fig-height: 4
+
+plot_gk(s4$poor_rasch$gamma_k_data)
+```
+
+The quadratic $R^2$ is `r round(s4$poor_rasch$r2_quad, 3)` for this dataset.
+
+**What to notice.** When Rasch holds, $\log \pi_k$ traces a clean inverted
+parabola. Deviations can take two forms: (1) a sharp peak at the mode with thin
+tails, suggesting a more leptokurtic ability distribution; or (2) asymmetry or a
+kink, consistent with varying item discriminations. The $R^2$ from the quadratic
+regression is a quick, model-free diagnostic: values above 0.99 are consistent
+with Rasch; lower values flag something worth investigating.
+
+---
+
+## Section 5: Dimensionality via second-order interaction matrices
+
+Holland ([-@holland1990dutch], Section 3.3) shows that for a $D$-dimensional IRT
+model, the matrix $\boldsymbol{\Gamma}$ of pairwise SOE interactions has rank at
+most $D$. This gives a direct route to dimensionality assessment: fit the SOE
+loglinear model, extract $\boldsymbol{\Gamma}$, and read off the number of
+non-negligible eigenvalues. We compare this to the standard approach of examining
+eigenvalues of the inter-item correlation matrix.
+
+We use **`r s5$unidim$table_name`** ($J = `r s5$unidim$J`$) as the
+unidimensional candidate and **`r s5$multidim$table_name`**
+($J = `r s5$multidim$J`$) as the more complex one.
+
+```{r}
+#| label: fig-scree-comparison
+#| fig-cap: "Scree plots of inter-item correlation matrix eigenvalues. A sharply dominant first eigenvalue indicates unidimensionality; multiple eigenvalues above 1 indicate multidimensionality."
+#| fig-height: 5.5
+
+make_scree_df <- function(dim_result, label) {
+  tibble(
+    label      = label,
+    component  = seq_along(dim_result$cor_eigval),
+    eigenvalue = dim_result$cor_eigval,
+    pct_var    = dim_result$cor_eigval / sum(dim_result$cor_eigval)
+  )
+}
+
+scree_df <- bind_rows(
+  make_scree_df(
+    s5$unidim,
+    paste0("Unidimensional: ", s5$unidim$table_name, " (J=", s5$unidim$J, ")")
+  ),
+  make_scree_df(
+    s5$multidim,
+    paste0("Complex: ", s5$multidim$table_name, " (J=", s5$multidim$J, ")")
+  )
+) |> filter(component <= 10)
+
+ggplot(scree_df, aes(x = component, y = eigenvalue)) +
+  geom_col(fill = irw_blue, alpha = 0.7, width = 0.6) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = irw_grey) +
+  scale_x_continuous(breaks = 1:10) +
+  facet_wrap(~label, ncol = 1, scales = "free_y") +
+  labs(
+    x       = "Component",
+    y       = "Eigenvalue",
+    caption = "Dashed line at 1 (Kaiser criterion)."
+  )
+```
+
+```{r}
+#| label: fig-gamma-scree-dim
+#| fig-cap: "Eigenvalue scree plot of the SOE interaction matrix Γ for the unidimensional dataset. A single dominant eigenvalue is consistent with D = 1."
+#| fig-height: 3.5
+
+if (!is.null(s5$unidim$soe_eigval)) {
+  tibble(
+    component  = seq_along(s5$unidim$soe_eigval),
+    eigenvalue = s5$unidim$soe_eigval
+  ) |>
+    ggplot(aes(x = component, y = eigenvalue)) +
+    geom_col(fill = irw_blue, alpha = 0.7, width = 0.6) +
+    geom_hline(yintercept = 0, colour = irw_grey) +
+    scale_x_continuous(breaks = seq_len(s5$unidim$J)) +
+    labs(x = "Component", y = "Eigenvalue of Γ  (SOE model)")
+} else {
+  message("SOE eigenvalues not available for this dataset (J too large for pattern enumeration).")
+}
+```
+
+**What to notice.** A clearly unidimensional instrument shows one eigenvalue
+well above the rest, with a sharp elbow. A multidimensional instrument shows
+multiple eigenvalues above 1, with a more gradual decline. The SOE
+$\boldsymbol{\Gamma}$ scree plot makes a stronger theoretical claim: the number
+of non-trivial eigenvalues *equals* the number of latent dimensions, not just the
+number that exceed an arbitrary threshold.
+
+---
+
+## Section 6: How many parameters does a long test support?
+
+@holland1990dutch establishes a **conservation law**: a $D$-dimensional test of
+$J$ items supports at most $(D+1)J$ parameters as $J \to \infty$. For $D = 1$
+this means at most $2J$ parameters — exactly what the 2PL provides. The 3PL has
+$3J$ parameters, exceeding the limit. Holland's prediction is therefore that
+**the marginal gain from 2PL → 3PL should shrink as $J$ grows**, and may
+become negative (overfitting) for long tests.
+
+We test this using the InterModel Vigorish [IMV; see also @holland1990dutch] — a
+log-score measure of predictive improvement — across IRW datasets spanning a
+range of test lengths.
+
+```{r}
+#| label: fig-conservation
+#| fig-cap: "IMV gain from 1PL → 2PL (blue) and 2PL → 3PL (red) as a function of test length J. Holland's conservation law predicts the 2PL → 3PL gain shrinks toward zero as J grows."
+#| fig-height: 4.5
+
+cons_df <- s6 |>
+  filter(!is.na(imv_1v2)) |>
+  pivot_longer(
+    cols      = c(imv_1v2, imv_2v3),
+    names_to  = "comparison",
+    values_to = "imv"
+  ) |>
+  filter(!is.na(imv)) |>
+  mutate(
+    comparison = recode(
+      comparison,
+      imv_1v2 = "1PL → 2PL  (free discrimination)",
+      imv_2v3 = "2PL → 3PL  (add guessing)"
+    )
+  )
+
+ggplot(cons_df, aes(x = J, y = imv, colour = comparison)) +
+  geom_jitter(width = 0.3, height = 0, alpha = 0.6, size = 2) +
+  geom_smooth(method = "loess", se = TRUE, alpha = 0.15, linewidth = 0.9) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = irw_grey) +
+  scale_colour_manual(
+    values = c(
+      "1PL → 2PL  (free discrimination)" = irw_blue,
+      "2PL → 3PL  (add guessing)"        = irw_red
+    ),
+    name = NULL
+  ) +
+  labs(
+    x       = "Number of items (J)",
+    y       = "IMV gain",
+    caption = paste0(
+      "Based on ", n_distinct(s6$table_name[!is.na(s6$imv_1v2)]),
+      " IRW datasets. 3PL fitted for J ≤ 20 only."
+    )
+  ) +
+  theme(legend.position = "bottom")
+```
+
+**What to notice.** The 1PL → 2PL gain (blue) is typically positive and stable
+across $J$: freeing discrimination improves fit regardless of test length,
+consistent with real variation in item discriminations. The 2PL → 3PL gain (red)
+should, if Holland is right, trend toward zero as $J$ grows. If it remains
+positive at large $J$, that suggests genuine multidimensionality or pervasive
+guessing. The pattern across the IRW is the empirical verdict.
+
+---
+
+::: {.callout-warning}
+## Limitations
+
+**Pattern sparsity.** Sections 1–3 require $J \leq 10$ for pattern enumeration
+to be feasible. The SOE loglinear approach does not generalise to large $J$.
+
+**Normal ability assumption.** The quadratic $\log \pi_k$ result (Section 4)
+holds asymptotically under normality; skewed or multimodal ability distributions
+can mimic the pattern for the wrong reasons.
+
+**3PL instability.** The 3PL is difficult to estimate for short tests and small
+samples. IMV values for 2PL → 3PL should be interpreted cautiously for $J < 10$.
+
+**Dataset selection.** `irw_filter()` conditions are heuristic. The
+"unidimensional" and "complex" candidates in Section 5 were selected on
+eigenvalue structure alone. Users with substantive knowledge of specific IRW
+tables should override the automatic selection.
+:::
+
+---
+
+## Reproducibility
+
+Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+# 1. Re-run the compute script (from the project root)
+source("vignettes/dutch_identity_compute.R")
+
+# 2. Re-render this page
+quarto::quarto_render("vignettes/dutch_identity.qmd")
+```
+
+::: {.callout-tip}
+To cite the IRW datasets used, run:
+
+```r
+for (tbl in unique(c(s1_3$table_name, s4$rasch_meta$table_name,
+                      s5$unidim$table_name, s5$multidim$table_name,
+                      s6$table_name))) {
+  irw_save_bibtex(tbl, output_file = "vignettes/dutchdata/irw_references.bib",
+                  append = TRUE)
+}
+```
+:::
+
+---
+
+## References
