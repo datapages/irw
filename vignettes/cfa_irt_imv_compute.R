@@ -58,7 +58,7 @@ determine_k <- function(resp) {
     )),
     error = function(e) list(nfact = 1L)
   )
-  max(1L, as.integer(pa$nfact %||% 1L))
+  min(3L, max(1L, as.integer(pa$nfact %||% 1L)))
 }
 
 # ----- K=1 prediction helpers -----------------------------------------------
@@ -206,11 +206,18 @@ predict_cfa_kfactor <- function(train, test, items, K) {
   probs
 }
 
-# IRT MP (K>1): exploratory K-dimensional 2PL.
+# IRT MP (K>1): exploratory K-dimensional 2PL with lognormal priors on slopes.
+# Uses the EFA identification constraint (factor k covers items k..ni) so that
+# the mirt.model matches what integer-K exploratory mirt does internally, while
+# allowing PRIOR statements for regularization.
 predict_irt_kfactor <- function(train, test, items, K) {
+  ni <- length(items)
+  factor_lines <- paste(sapply(seq_len(K), function(k) paste0("F", k, " = ", k, "-", ni)), collapse = "\n")
+  prior_lines  <- paste(sapply(seq_len(K), function(k) paste0("PRIOR = (", k, "-", ni, ", a", k, ", lnorm, 0.0, 1.0)")), collapse = "\n")
+  mirt_model   <- mirt::mirt.model(paste(factor_lines, prior_lines, sep = "\n"))
   fit <- tryCatch(
-    mirt(as.data.frame(train), K,
-         itemtype  = rep("2PL", length(items)),
+    mirt(as.data.frame(train), mirt_model,
+         itemtype  = rep("2PL", ni),
          method    = "EM",
          technical = list(NCYCLES = 10000),
          verbose   = FALSE),
@@ -267,11 +274,15 @@ predict_cfa_mr_kfactor <- function(data_with_nas, items, K) {
   probs
 }
 
-# IRT MR (K>1): K-dim exploratory mirt with NA data.
+# IRT MR (K>1): K-dim exploratory mirt with NA data, lognormal priors on slopes.
 predict_irt_mr_kfactor <- function(data_with_nas, items, K) {
+  ni <- length(items)
+  factor_lines <- paste(sapply(seq_len(K), function(k) paste0("F", k, " = ", k, "-", ni)), collapse = "\n")
+  prior_lines  <- paste(sapply(seq_len(K), function(k) paste0("PRIOR = (", k, "-", ni, ", a", k, ", lnorm, 0.0, 1.0)")), collapse = "\n")
+  mirt_model   <- mirt::mirt.model(paste(factor_lines, prior_lines, sep = "\n"))
   fit <- tryCatch(
-    mirt(as.data.frame(data_with_nas), K,
-         itemtype  = rep("2PL", length(items)),
+    mirt(as.data.frame(data_with_nas), mirt_model,
+         itemtype  = rep("2PL", ni),
          method    = "EM",
          technical = list(NCYCLES = 10000),
          verbose   = FALSE),
