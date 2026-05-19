@@ -300,6 +300,46 @@ s1_3$bic_table |>
   knitr::kable(align = "lrrr")
 ```
 
+The key question is whether the restricted log-quadratic — which enforces rank-1
+structure on $\boldsymbol{\Gamma}$ — captures most of the association signal
+while using only $1 + 2J$ parameters instead of $1 + J + \binom{J}{2}$. If the
+Dutch Identity holds, its ΔBIC relative to the full SOE should be small compared
+to the gap between the independence model and the SOE.
+
+```{r}
+#| label: fig-model-fit
+#| fig-cap: "Observed vs. fitted log-probability for each of the three loglinear models across all observed response patterns. Points on the dashed diagonal indicate perfect fit; scatter above the diagonal means the model over-predicts that pattern."
+#| fig-height: 3.5
+
+fit_df <- s1_3$patterns |>
+  filter(!is.na(log_p_obs)) |>
+  select(log_p_obs, log_p_ind, log_p_rq, log_p_soe) |>
+  pivot_longer(
+    cols      = c(log_p_ind, log_p_rq, log_p_soe),
+    names_to  = "model",
+    values_to = "log_p_fit"
+  ) |>
+  filter(!is.na(log_p_fit)) |>
+  mutate(model = factor(recode(model,
+    log_p_ind = "Independence",
+    log_p_rq  = "Log-quadratic\n(rank-1 Γ)",
+    log_p_soe = "Full SOE"
+  ), levels = c("Independence", "Log-quadratic\n(rank-1 Γ)", "Full SOE")))
+
+ggplot(fit_df, aes(x = log_p_obs, y = log_p_fit)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_point(alpha = 0.6, size = 1.5, colour = irw_blue) +
+  facet_wrap(~ model, nrow = 1) +
+  labs(
+    x       = "Observed log-probability",
+    y       = "Fitted log-probability",
+    caption = paste0(
+      nrow(s1_3$patterns |> filter(!is.na(log_p_obs))),
+      " observed response patterns from ", s1_3$table_name, "."
+    )
+  )
+```
+
 ### Structure of the Γ matrix
 
 ```{r}
@@ -324,6 +364,11 @@ ggplot(gmat_long, aes(x = item2, y = item1, fill = gamma)) +
     panel.grid  = element_blank()
   )
 ```
+
+Under a rank-1 $\boldsymbol{\Gamma}$, every row is a scalar multiple of every
+other — the color profile across columns should look identical up to intensity.
+Systematic blocks or rows that deviate from the common pattern signal local
+dependence that a single latent factor cannot absorb.
 
 ### Eigenvalue decay of Γ
 
