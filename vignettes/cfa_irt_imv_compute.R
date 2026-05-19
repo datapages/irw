@@ -171,6 +171,7 @@ predict_cfa_kfactor <- function(train, test, items, K) {
     error = function(e) NULL
   )
   if (is.null(fit)) return(NULL)
+  if (inherits(fit, "efaList")) fit <- fit[[1L]]
   est <- tryCatch(inspect(fit, "est"), error = function(e) NULL)
   if (is.null(est)) return(NULL)
 
@@ -206,17 +207,12 @@ predict_cfa_kfactor <- function(train, test, items, K) {
   probs
 }
 
-# IRT MP (K>1): exploratory K-dimensional 2PL with lognormal priors on slopes.
-# Uses the EFA identification constraint (factor k covers items k..ni) so that
-# the mirt.model matches what integer-K exploratory mirt does internally, while
-# allowing PRIOR statements for regularization.
+# IRT MP (K>1): fit on train; score test via fixed-parameter re-fit to avoid
+# fscores(response.pattern) returning wrong shape for K>1 models.
 predict_irt_kfactor <- function(train, test, items, K) {
   ni <- length(items)
-  factor_lines <- paste(sapply(seq_len(K), function(k) paste0("F", k, " = ", k, "-", ni)), collapse = "\n")
-  prior_lines  <- paste(sapply(seq_len(K), function(k) paste0("PRIOR = (", k, "-", ni, ", a", k, ", lnorm, 0.0, 1.0)")), collapse = "\n")
-  mirt_model   <- mirt::mirt.model(paste(factor_lines, prior_lines, sep = "\n"))
   fit <- tryCatch(
-    mirt(as.data.frame(train), mirt_model,
+    mirt(as.data.frame(train), K,
          itemtype  = rep("2PL", ni),
          method    = "EM",
          technical = list(NCYCLES = 10000),
@@ -224,8 +220,13 @@ predict_irt_kfactor <- function(train, test, items, K) {
     error = function(e) NULL
   )
   if (is.null(fit)) return(NULL)
-  theta_test <- fscores(fit, response.pattern = as.matrix(test), method = "EAP")
-  probs_all  <- probtrace(fit, theta_test)
+  fit_test <- tryCatch(
+    mirt(as.data.frame(test), K, pars = coef(fit), TOL = NaN, verbose = FALSE),
+    error = function(e) NULL
+  )
+  if (is.null(fit_test)) return(NULL)
+  theta_test <- fscores(fit_test, method = "EAP")
+  probs_all  <- probtrace(fit_test, theta_test)
   p1_cols    <- seq(2, ncol(probs_all), by = 2)
   yprob      <- probs_all[, p1_cols, drop = FALSE]
   colnames(yprob) <- items
@@ -242,6 +243,7 @@ predict_cfa_mr_kfactor <- function(data_with_nas, items, K) {
     error = function(e) NULL
   )
   if (is.null(fit)) return(NULL)
+  if (inherits(fit, "efaList")) fit <- fit[[1L]]
   est <- tryCatch(inspect(fit, "est"), error = function(e) NULL)
   if (is.null(est)) return(NULL)
 
@@ -274,14 +276,12 @@ predict_cfa_mr_kfactor <- function(data_with_nas, items, K) {
   probs
 }
 
-# IRT MR (K>1): K-dim exploratory mirt with NA data, lognormal priors on slopes.
+# IRT MR (K>1): fit with NA data; score via fscores() directly (no response.pattern)
+# since data is already in the fit object — avoids K>1 shape issue.
 predict_irt_mr_kfactor <- function(data_with_nas, items, K) {
   ni <- length(items)
-  factor_lines <- paste(sapply(seq_len(K), function(k) paste0("F", k, " = ", k, "-", ni)), collapse = "\n")
-  prior_lines  <- paste(sapply(seq_len(K), function(k) paste0("PRIOR = (", k, "-", ni, ", a", k, ", lnorm, 0.0, 1.0)")), collapse = "\n")
-  mirt_model   <- mirt::mirt.model(paste(factor_lines, prior_lines, sep = "\n"))
   fit <- tryCatch(
-    mirt(as.data.frame(data_with_nas), mirt_model,
+    mirt(as.data.frame(data_with_nas), K,
          itemtype  = rep("2PL", ni),
          method    = "EM",
          technical = list(NCYCLES = 10000),
@@ -289,7 +289,7 @@ predict_irt_mr_kfactor <- function(data_with_nas, items, K) {
     error = function(e) NULL
   )
   if (is.null(fit)) return(NULL)
-  theta     <- fscores(fit, response.pattern = as.matrix(data_with_nas), method = "EAP")
+  theta     <- fscores(fit, method = "EAP")
   probs_all <- probtrace(fit, theta)
   p1_cols   <- seq(2, ncol(probs_all), by = 2)
   probs     <- probs_all[, p1_cols, drop = FALSE]
@@ -436,6 +436,7 @@ run_dataset_kfactor <- function(table_name, K) {
                 mean(imv_f$cfa_v_irt), mean(imv_f$cfa_v_prev), mean(imv_f$irt_v_prev)))
   }
 
+  if (length(fold_errors) > 0) cat("  errors:", paste(fold_errors, collapse = " | "), "\n")
   vf <- which(!is.na(imv_cfa_v_irt_folds[, "scale"]))
   if (length(vf) == 0) { cat("  all folds failed\n"); return(NULL) }
 
@@ -580,6 +581,7 @@ run_dataset_mr_kfactor <- function(table_name, K) {
                 mean(item_mr_cfa_v_irt), mean(item_mr_cfa_v_prev), mean(item_mr_irt_v_prev)))
   }
 
+  if (length(fold_errors) > 0) cat("  errors:", paste(fold_errors, collapse = " | "), "\n")
   vf <- which(!is.na(imv_mr_cfa_v_irt_folds[, "scale"]))
   if (length(vf) == 0) { cat("  all MR folds failed\n"); return(NULL) }
   n_vf <- length(vf)
