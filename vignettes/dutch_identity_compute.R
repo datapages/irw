@@ -468,7 +468,7 @@ fit_conservation <- function(table_name, max_n = 10000) {
   result
 }
 
-cons_raw <- map(head(range_tables, 10), safely(fit_conservation)) |>
+cons_raw <- map(head(range_tables, 40), safely(fit_conservation)) |>
   map("result") |> compact()
 
 s6_result <- map_dfr(cons_raw, \(r) tibble(
