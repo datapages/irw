@@ -1,0 +1,180 @@
+---
+title: "Response Time and Accuracy: An IMV Analysis"
+description: |
+  How much does knowing how fast a person responded improve predictions of
+  whether they answered correctly? We fit Rasch IRT to binary accuracy data
+  from IRW datasets with response times, then quantify the gain from adding
+  within-item-centered log(RT) using the InterModel Vigorish (IMV).
+  Motivated by Domingue et al. (2022, JEBS).
+date: today
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+
+cache_path <- "rtimvdata/rt_imv_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache   <- readRDS(cache_path)
+  results  <- .cache$results
+  date_run <- .cache$date_run
+} else {
+  results  <- tibble(table_name = character(), N = integer(), J = integer(),
+                     n_obs = integer(), imv_linear = numeric(),
+                     imv_spline = numeric(), imv_flex = numeric())
+  date_run <- Sys.Date()
+}
+
+n_datasets <- nrow(results)
+```
+
+## Overview
+
+IRT models predict binary accuracy from a latent ability estimate — but they
+ignore *when* a person responded. Response time (RT) carries its own signal
+about item-person fit: very fast incorrect responses may reflect guessing, while
+slow correct responses may reflect effortful retrieval. The question is whether
+RT adds *predictive* value over and above the IRT probability.
+
+We answer this using the **InterModel Vigorish** [IMV; @domingue2022speed], a
+log-score measure of how much one model's predictions improve on another's. For
+each IRW dataset with RT and binary accuracy, we compare three nested models:
+
+- **M0**: `resp ~ p0` — IRT-predicted probability only (Rasch)
+- **M1**: `resp ~ p0 + rt_cwi` — IRT plus within-item-centered log(RT)
+- **M2**: `resp ~ p0 + bs(rt_cwi, df=4)` — IRT plus flexible spline RT
+
+`rt_cwi = log(rt) − mean_item(log(rt))` centers RT within items, isolating
+the *micro-speed–accuracy tradeoff*: is this person faster or slower than
+average on this item, and does that predict correctness?
+
+## Datasets
+
+```{r}
+#| label: tbl-datasets
+#| tbl-cap: "IRW datasets used in this analysis. All have binary accuracy responses and response times."
+
+results |>
+  select(table_name, N, J, n_obs) |>
+  arrange(desc(n_obs)) |>
+  knitr::kable(
+    col.names = c("Dataset", "N persons", "J items", "Obs."),
+    format.args = list(big.mark = ",")
+  )
+```
+
+## Results
+
+### Does RT improve predictions over IRT?
+
+```{r}
+#| label: fig-imv-main
+#| fig-cap: "IMV gain from adding RT to IRT predictions. Blue = linear RT (M0→M1); red = spline RT (M0→M2). Positive values indicate RT improves predictions. Datasets ordered by spline IMV."
+#| fig-height: 4.5
+
+plot_df <- results |>
+  mutate(table_name = reorder(table_name, imv_spline)) |>
+  pivot_longer(c(imv_linear, imv_spline),
+               names_to = "comparison", values_to = "imv") |>
+  mutate(comparison = recode(comparison,
+    imv_linear = "Linear RT  (M0 → M1)",
+    imv_spline = "Spline RT  (M0 → M2)"
+  ))
+
+ggplot(plot_df, aes(x = imv, y = table_name, colour = comparison)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_point(size = 3, position = position_dodge(width = 0.4)) +
+  scale_colour_manual(
+    values = c("Linear RT  (M0 → M1)" = irw_blue,
+               "Spline RT  (M0 → M2)" = irw_red),
+    name = NULL
+  ) +
+  labs(x = "IMV gain over IRT-only baseline", y = NULL) +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+#| label: fig-imv-flex
+#| fig-cap: "Marginal gain from spline over linear RT (M1→M2) — i.e., how much additional predictive value comes from allowing a non-linear RT effect."
+#| fig-height: 3.5
+
+results |>
+  mutate(table_name = reorder(table_name, imv_flex)) |>
+  ggplot(aes(x = imv_flex, y = table_name)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_point(size = 3, colour = irw_blue) +
+  labs(x = "IMV gain  (M1 → M2, linear → spline)", y = NULL)
+```
+
+```{r}
+#| label: summary-stats
+#| echo: false
+
+med_linear <- median(results$imv_linear)
+med_spline <- median(results$imv_spline)
+pct_pos_linear <- mean(results$imv_linear > 0) * 100
+pct_pos_spline <- mean(results$imv_spline > 0) * 100
+```
+
+Across `r n_datasets` datasets, the median IMV gain from adding linear RT is
+`r round(med_linear, 4)` (`r round(pct_pos_linear, 0)`% of datasets positive);
+the spline gain is `r round(med_spline, 4)`
+(`r round(pct_pos_spline, 0)`% positive). The additional gain from spline over
+linear (flex) is consistently small, suggesting the RT effect is approximately
+log-linear once RT is within-item centered.
+
+---
+
+## Discussion
+
+**RT adds modest but consistent predictive value.** All datasets show positive
+IMV for both linear and spline RT, consistent with a genuine micro-speed–accuracy
+relationship: respondents who are faster (or slower) than average on a given
+item differ systematically in accuracy, over and above their IRT-estimated
+ability.
+
+**The gain is small in absolute terms.** IMV values in the 0.001–0.02 range
+correspond to small improvements in predictive log-score per observation. For
+most practical purposes, Rasch-based ability estimates capture the bulk of
+predictable variance in accuracy.
+
+**Flexible RT rarely adds over linear.** The `imv_flex` (spline vs. linear)
+values are near zero in most datasets, suggesting the relationship between
+within-item-centered log(RT) and accuracy is approximately monotone and does
+not require a flexible basis.
+
+---
+
+## Reproducibility
+
+Results computed `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+Rscript vignettes/rt_imv_compute.R
+quarto::quarto_render("vignettes/rt_imv.qmd")
+```
+
+---
+
+## References
