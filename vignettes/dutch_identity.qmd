@@ -221,22 +221,37 @@ makes those deviations visible.
 
 plot_dat <- patterns |>
   filter(observed) |>
-  mutate(residual = log_p_obs - log_p_ind)
+  mutate(
+    residual = log_p_obs - log_p_ind,
+    tooltip  = paste0(
+      "Pattern: ", pattern_str,
+      "<br>Observed log p(x): ",  round(log_p_obs, 3),
+      "<br>Fitted log p(x): ",    round(log_p_ind, 3),
+      "<br>Residual: ",           round(residual,  3)
+    )
+  )
 
 r2_ind <- cor(plot_dat$log_p_obs, plot_dat$log_p_ind, use = "complete.obs")^2
 
-ggplot(plot_dat, aes(x = log_p_ind, y = log_p_obs)) +
+p <- ggplot(plot_dat, aes(x = log_p_ind, y = log_p_obs, text = tooltip)) +
   geom_abline(slope = 1, intercept = 0, colour = irw_grey, linetype = "dashed") +
   geom_point(aes(size = p_obs), colour = irw_blue, alpha = 0.6) +
   scale_size_continuous(range = c(1, 5), name = "p(x)", guide = "none") +
-  annotate(
-    "text", x = -Inf, y = Inf, hjust = -0.1, vjust = 1.4,
-    label = paste0("R² = ", round(r2_ind, 3)),
-    size = 4, colour = "grey30"
-  ) +
   labs(
     x = "Fitted log p(x)  [independence model]",
     y = "Observed log p(x)"
+  )
+
+plotly::ggplotly(p, tooltip = "text") |>
+  plotly::layout(
+    annotations = list(list(
+      text      = paste0("R² = ", round(r2_ind, 3), ". Hover to see the response pattern for each point."),
+      showarrow = FALSE,
+      xref = "paper", yref = "paper",
+      x = 0, y = -0.12,
+      xanchor = "left", yanchor = "top",
+      font = list(size = 11, color = "grey50")
+    ))
   )
 ```
 

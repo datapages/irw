@@ -21,6 +21,7 @@ execute:
 
 library(dplyr)
 library(ggplot2)
+library(plotly)
 
 # Load precomputed results (produced by 2pl_across_datasets_compute.R)
 .cache           <- readRDS("2pldata/2pl_across_datasets_results.rds")
@@ -177,9 +178,16 @@ dataset_summary <- all_results |>
     .groups  = "drop"
   ) |>
   arrange(median_a) |>
-  mutate(rank = row_number())
+  mutate(
+    rank    = row_number(),
+    tooltip = paste0(
+      "Dataset: ", table,
+      "<br>Median a: ", round(median_a, 3),
+      "<br>Items: ", n_items
+    )
+  )
 
-ggplot(dataset_summary, aes(x = rank, y = median_a)) +
+p <- ggplot(dataset_summary, aes(x = rank, y = median_a, text = tooltip)) +
   geom_point(aes(size = n_items), colour = "#2166ac", alpha = 0.7) +
   geom_hline(yintercept = 1, linetype = "dashed", colour = "grey40") +
   scale_size_continuous(range = c(2, 7), name = "# items") +
@@ -188,6 +196,18 @@ ggplot(dataset_summary, aes(x = rank, y = median_a)) +
     y = "Median discrimination (a)"
   ) +
   theme_minimal(base_size = 13)
+
+ggplotly(p, tooltip = "text") |>
+  layout(
+    annotations = list(list(
+      text      = paste0(nrow(dataset_summary), " datasets; dashed line at a = 1 (Rasch assumption). Hover to identify datasets."),
+      showarrow = FALSE,
+      xref = "paper", yref = "paper",
+      x = 0, y = -0.12,
+      xanchor = "left", yanchor = "top",
+      font = list(size = 11, color = "grey50")
+    ))
+  )
 ```
 
 ### Summary statistics
