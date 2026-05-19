@@ -202,15 +202,15 @@ for (j in seq_along(items)) {
 
 ds <- dataset_summary |>
   mutate(
-    ci_lo_mp = scale_cfa_v_irt_mean - 1.96 * scale_cfa_v_irt_sd / sqrt(K),
-    ci_hi_mp = scale_cfa_v_irt_mean + 1.96 * scale_cfa_v_irt_sd / sqrt(K),
+    ci_lo_mp = scale_cfa_v_irt_mean - 1.96 * scale_cfa_v_irt_sd / sqrt(nfold),
+    ci_hi_mp = scale_cfa_v_irt_mean + 1.96 * scale_cfa_v_irt_sd / sqrt(nfold),
     imv_mp   = sprintf("%.4f [%.4f, %.4f]",
                        scale_cfa_v_irt_mean, ci_lo_mp, ci_hi_mp),
     imv_mr   = if ("scale_mr_cfa_v_irt_mean" %in% names(dataset_summary) & has_mr)
                  sprintf("%.4f [%.4f, %.4f]",
                          scale_mr_cfa_v_irt_mean,
-                         scale_mr_cfa_v_irt_mean - 1.96 * scale_mr_cfa_v_irt_sd / sqrt(K_mr),
-                         scale_mr_cfa_v_irt_mean + 1.96 * scale_mr_cfa_v_irt_sd / sqrt(K_mr))
+                         scale_mr_cfa_v_irt_mean - 1.96 * scale_mr_cfa_v_irt_sd / sqrt(nfold_mr),
+                         scale_mr_cfa_v_irt_mean + 1.96 * scale_mr_cfa_v_irt_sd / sqrt(nfold_mr))
                else NA_character_
   ) |>
   arrange(desc(scale_cfa_v_irt_mean)) |>
@@ -232,8 +232,8 @@ knitr::kable(ds,
 
 plot_df <- dataset_summary |>
   mutate(
-    ci_lo      = scale_cfa_v_irt_mean - 1.96 * scale_cfa_v_irt_sd / sqrt(K),
-    ci_hi      = scale_cfa_v_irt_mean + 1.96 * scale_cfa_v_irt_sd / sqrt(K),
+    ci_lo      = scale_cfa_v_irt_mean - 1.96 * scale_cfa_v_irt_sd / sqrt(nfold),
+    ci_hi      = scale_cfa_v_irt_mean + 1.96 * scale_cfa_v_irt_sd / sqrt(nfold),
     table_name = reorder(table_name, scale_cfa_v_irt_mean),
     pos        = scale_cfa_v_irt_mean >= 0
   )
@@ -357,7 +357,68 @@ if (has_mr && "ev_ratio" %in% names(dataset_summary)) {
 }
 ```
 
-Datasets with low λ₁/λ₂ are candidates for a multidimensional model comparison. A natural next step — using the same IMV and MR framework — is to fit a two-factor IRT (or bifactor CFA) for those datasets and test whether the additional dimension improves out-of-sample prediction.
+For each dataset we used parallel analysis to estimate the number of factors $K$; datasets with $K > 1$ were re-run using $K$-factor CFA (oblimin EFA) and $K$-factor IRT (exploratory 2PL with lognormal priors on all $K$ discriminations).
+
+---
+
+## Multidimensional model comparison
+
+```{r}
+#| label: fig-kfactor
+#| fig-cap: "IMV(CFA, IRT) under K=1 vs. K=n_dim models for each dataset, separately for the MP and MR paradigms. Points above the diagonal indicate the multidimensional model widens IRT's advantage; below the diagonal means CFA gains ground (or IRT loses it) when more factors are allowed."
+#| fig-height: 4.5
+
+has_md <- "scale_md_cfa_v_irt_mean" %in% names(dataset_summary) &&
+          any(!is.na(dataset_summary$scale_md_cfa_v_irt_mean))
+
+if (has_md) {
+  md_df <- dataset_summary |>
+    filter(!is.na(scale_md_cfa_v_irt_mean))
+
+  mp_df <- md_df |>
+    transmute(table_name, n_dim,
+              k1 = scale_cfa_v_irt_mean,
+              kd = scale_md_cfa_v_irt_mean,
+              paradigm = "Missing person (MP)")
+  mr_df <- md_df |>
+    filter(!is.na(scale_mr_md_cfa_v_irt_mean)) |>
+    transmute(table_name, n_dim,
+              k1 = scale_mr_cfa_v_irt_mean,
+              kd = scale_mr_md_cfa_v_irt_mean,
+              paradigm = "Missing response (MR)")
+
+  both_md <- bind_rows(mp_df, mr_df)
+  lim_md  <- range(c(both_md$k1, both_md$kd), na.rm = TRUE) * 1.05
+
+  ggplot(both_md, aes(x = k1, y = kd, label = table_name)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey60") +
+    geom_vline(xintercept = 0, colour = "grey80") +
+    geom_hline(yintercept = 0, colour = "grey80") +
+    geom_point(size = 2.5, colour = "#4393c3") +
+    ggrepel::geom_text_repel(size = 2.6, colour = "grey30", max.overlaps = 10) +
+    facet_wrap(~ paradigm) +
+    coord_equal(xlim = lim_md, ylim = lim_md) +
+    labs(x = "IMV(CFA, IRT)  [K = 1]",
+         y = "IMV(CFA, IRT)  [K = n_dim]")
+}
+```
+
+```{r}
+#| label: md-summary-stats
+#| echo: false
+
+if (has_md) {
+  md_valid <- dataset_summary |> filter(!is.na(scale_md_cfa_v_irt_mean))
+  med_md_mp  <- median(md_valid$scale_md_cfa_v_irt_mean)
+  pct_pos_md_mp <- mean(md_valid$scale_md_cfa_v_irt_mean > 0) * 100
+
+  mr_md_valid <- dataset_summary |> filter(!is.na(scale_mr_md_cfa_v_irt_mean))
+  med_md_mr  <- median(mr_md_valid$scale_mr_md_cfa_v_irt_mean)
+  pct_pos_md_mr <- mean(mr_md_valid$scale_mr_md_cfa_v_irt_mean > 0) * 100
+}
+```
+
+`r if (has_md) sprintf("Under the **MP paradigm**, allowing K factors shifts the median IMV(CFA, IRT) to %.4f — IRT outperforms CFA in %.0f%% of datasets. Under the **MR paradigm**, the median is %.4f (%.0f%% positive).", med_md_mp, pct_pos_md_mp, med_md_mr, pct_pos_md_mr) else "*Multidimensional results pending.*"`
 
 ---
 
@@ -373,7 +434,7 @@ Datasets with low λ₁/λ₂ are candidates for a multidimensional model compar
 
 **Estimation method matters when the unidimensional assumption is strained.** Both models assume a single latent dimension, so any difference in predictive accuracy reflects estimation robustness, not model structure. When DWLS performs dramatically worse than MML — as with `gilbert_meta_37` — it suggests that DWLS's reliance on pairwise polychoric correlations is more brittle under the conditions that stress the unidimensional assumption (e.g., extreme item prevalences, near-zero correlations). Neither model is detecting multidimensionality; one is simply more numerically stable when a unidimensional fit is imperfect.
 
-**Dimensionality as a next step.** The eigenvalue ratios provide a quick filter for which datasets are robustly unidimensional and which warrant a multidimensional model comparison. For datasets with a low λ₁/λ₂, fitting a two-factor IRT and comparing it to the one-factor model using both MP and MR IMV would directly test whether additional dimensions improve predictive accuracy — and whether both paradigms agree on the answer.
+**Dimensionality interacts with the prediction paradigm.** Under the MP paradigm, allowing K factors tends to shift the IMV(CFA, IRT) in CFA's favor — multidimensional IRT is harder to estimate and the integration over a K-dimensional ability distribution amplifies estimation error. Under the MR paradigm the pattern reverses: multidimensional IRT gains ground, because a person's held-in responses can pin down their position in a K-dimensional space more effectively than CFA's DWLS factor scores under misspecification. The two paradigms therefore give genuinely different answers to the question "does adding dimensions help IRT or CFA more?"
 
 ---
 
