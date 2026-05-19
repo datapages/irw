@@ -207,12 +207,26 @@ predict_cfa_kfactor <- function(train, test, items, K) {
   probs
 }
 
+# Build a mirt.model with lognormal priors on all K discrimination parameters.
+make_irt_model <- function(ni, K) {
+  factor_str <- if (K == 1L) {
+    paste0("F = 1-", ni)
+  } else {
+    paste(paste0("F", seq_len(K), " = 1-", ni), collapse = "\n")
+  }
+  prior_str <- paste(
+    paste0("(1-", ni, ", a", seq_len(K), ", lnorm, 0.0, 1.0)"),
+    collapse = ", "
+  )
+  mirt::mirt.model(paste0(factor_str, "\nPRIOR = ", prior_str))
+}
+
 # IRT MP (K>1): fit on train; score test via fixed-parameter re-fit to avoid
 # fscores(response.pattern) returning wrong shape for K>1 models.
 predict_irt_kfactor <- function(train, test, items, K) {
   ni <- length(items)
   fit <- tryCatch(
-    mirt(as.data.frame(train), K,
+    mirt(as.data.frame(train), make_irt_model(ni, K),
          itemtype  = rep("2PL", ni),
          method    = "EM",
          technical = list(NCYCLES = 10000),
@@ -281,7 +295,7 @@ predict_cfa_mr_kfactor <- function(data_with_nas, items, K) {
 predict_irt_mr_kfactor <- function(data_with_nas, items, K) {
   ni <- length(items)
   fit <- tryCatch(
-    mirt(as.data.frame(data_with_nas), K,
+    mirt(as.data.frame(data_with_nas), make_irt_model(ni, K),
          itemtype  = rep("2PL", ni),
          method    = "EM",
          technical = list(NCYCLES = 10000),
