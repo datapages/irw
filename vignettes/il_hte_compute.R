@@ -12,6 +12,7 @@ library(irw)
 library(lme4)
 library(dplyr)
 library(purrr)
+library(furrr)
 library(tibble)
 
 set.seed(20240601)
@@ -20,8 +21,9 @@ out_dir  <- "vignettes/ilhtedata"
 fits_dir <- file.path(out_dir, "fits")
 dir.create(fits_dir, recursive = TRUE, showWarnings = FALSE)
 
-# Tables selected from the reference script (Gilbert et al., 2025, JPAM)
-rct_tables <- paste0("gilbert_meta_", c(1, 9, 17, 20, 37, 41, 69, 74))
+# All IRW tables with a treatment indicator
+rct_tables <- irw_filter(var = "treat", density = NULL, n_participants = c(100, Inf))
+message("Tables with treat column: ", length(rct_tables))
 
 ctrl <- glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5))
 
@@ -195,7 +197,9 @@ fit_one <- function(tab) {
 # Run over all tables
 # ------------------------------------------------------------------------------
 
-raw <- map(rct_tables, safely(fit_one))
+plan(multisession, workers = min(4, parallel::detectCores() %/% 2))
+raw <- future_map(rct_tables, safely(fit_one), .options = furrr_options(seed = 42))
+plan(sequential)
 results_list <- map(raw, \(x) {
   if (!is.null(x$error)) message("ERROR: ", conditionMessage(x$error))
   x$result
