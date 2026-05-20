@@ -259,12 +259,11 @@ cat(
   file = bib_file
 )
 
-for (tab in summary_df$tab) {
-  tryCatch(
-    irw_save_bibtex(tab, output_file = bib_file, append = TRUE),
-    error = function(e) message("bibtex failed for ", tab, ": ", e$message)
-  )
-}
+tmp_bib <- tempfile(fileext = ".bib")
+tryCatch({
+  irw_save_bibtex(summary_df$tab, output_file = tmp_bib)
+  cat(readLines(tmp_bib), sep = "\n", file = bib_file, append = TRUE)
+}, error = function(e) message("bibtex failed: ", e$message))
 
 # ------------------------------------------------------------------------------
 # Save
