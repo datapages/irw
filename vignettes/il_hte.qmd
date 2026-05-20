@@ -1,0 +1,218 @@
+---
+title: "Item-Level Heterogeneous Treatment Effects"
+description: |
+  When an RCT uses a psychometric instrument as its outcome, different items
+  may respond differently to treatment. We fit item-level HTE models across
+  IRW datasets and show how ignoring this variation can bias
+  treatment-by-covariate interaction estimates.
+date: today
+bibliography: ilhtedata/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+
+cache_path <- "ilhtedata/il_hte_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache     <- readRDS(cache_path)
+  summary_df <- .cache$summary
+  item_df    <- .cache$item_df
+  date_run   <- .cache$date_run
+} else {
+  summary_df <- tibble(tab = character(), n_items = integer(), n_persons = integer(),
+                       ate_std = numeric(), sigma_zeta_std = numeric(), rho = numeric(),
+                       sig_il_hte = logical(), sd_ratio = numeric(),
+                       beta3_b = numeric(), beta3_c = numeric(), delta_beta3 = numeric())
+  item_df    <- tibble(tab = character(), item = character(), total_std = numeric(),
+                       ate_std = numeric())
+  date_run   <- Sys.Date()
+}
+```
+
+## Overview
+
+Many RCTs in education, economics, and health research use psychometric
+instruments — tests, surveys, symptom checklists — as outcome measures. A
+standard analysis sums responses into a single score and estimates the average
+treatment effect (ATE) on that score. But the individual items of the
+instrument may not respond equally to treatment. An item that directly targets
+the intervention's content may show a large positive effect while an unrelated
+item shows none.
+
+This item-level variation is called **item-level heterogeneous treatment
+effects** (IL-HTE) [@gilbert2025estimating]. Formally, if the log-odds of a
+correct response for item $i$ by person $j$ follows
+
+$$\text{logit}\,P(Y_{ij} = 1) = \theta_j + b_i + \zeta_i\, T_j,$$
+
+then $\zeta_i$ is the residual treatment effect on item $i$ above and beyond
+the overall ATE $\beta_1$. When the variance $\sigma_\zeta^2 > 0$, items
+respond heterogeneously to treatment. In `lme4` notation this is:
+
+```r
+glmer(resp ~ treat + (1|id) + (treat|item), family = binomial)
+```
+
+Beyond masking item-level variation, IL-HTE has a less obvious consequence
+for causal identification. When $\zeta_i$ is correlated with item difficulty
+$b_i$ (parameterized as $\rho \ne 0$), a conventional treatment-by-covariate
+interaction model — the standard tool for asking "who benefits most?" — can
+produce biased estimates even when no true person-level heterogeneity exists.
+@gilbert2024disentangling prove this analytically and demonstrate it through
+simulation. We illustrate both insights below using RCT datasets from the IRW.
+
+## Item-level treatment effects
+
+We fit the IL-HTE model to each dataset, extract empirical Bayes estimates of
+the item-specific effects $\hat\beta_1 + \hat\zeta_i$, and standardize by
+$\hat\sigma_\theta$ — the person-level SD from the baseline random-intercepts
+model — so that effects are comparable across datasets. The ATE $\hat\beta_1$
+is shown as a large point; individual item effects as small points. Datasets
+are ordered by ATE. Color encodes whether the IL-HTE variance $\sigma_\zeta$
+is statistically significant (likelihood ratio test, $p < 0.05$, with the
+boundary correction of dividing the reported $p$-value by 2).
+
+```{r}
+#| label: fig-item-effects
+#| fig-cap: "Empirical Bayes estimates of item-specific treatment effects, standardized by σ_θ. Large points: overall ATE. Small points: individual item effects (β₁ + ζ̂ᵢ)/σ_θ. Color indicates significance of IL-HTE variance at p < 0.05."
+#| fig-height: 5.5
+
+plot_df <- item_df |>
+  left_join(summary_df |> select(tab, ate_std, sig_il_hte), by = "tab") |>
+  mutate(
+    tab       = reorder(tab, ate_std),
+    sig_label = if_else(sig_il_hte, "Significant IL-HTE", "Not significant")
+  )
+
+ate_df <- summary_df |>
+  mutate(
+    tab       = factor(tab, levels = levels(plot_df$tab)),
+    sig_label = if_else(sig_il_hte, "Significant IL-HTE", "Not significant")
+  )
+
+ggplot(plot_df, aes(x = total_std, y = tab)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_point(aes(colour = sig_label), size = 1.5, alpha = 0.55) +
+  geom_point(data = ate_df, aes(x = ate_std, y = tab, colour = sig_label),
+             size = 4) +
+  scale_colour_manual(
+    values = c("Significant IL-HTE" = irw_blue, "Not significant" = irw_red),
+    name   = NULL
+  ) +
+  labs(x = "Item-specific treatment effect (SDs)", y = NULL) +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+#| label: il-hte-summary
+#| echo: false
+
+n_sig <- sum(summary_df$sig_il_hte, na.rm = TRUE)
+n_tot <- nrow(summary_df)
+```
+
+Across `r n_tot` datasets, `r n_sig` show statistically significant IL-HTE
+($p < 0.05$). In datasets with wide spreads of item effects, a single-number
+ATE obscures meaningful variation in which aspects of the outcome respond to
+the intervention — information that would be invisible in a sum-score analysis.
+
+## The identification problem
+
+A more subtle consequence of IL-HTE concerns the estimation of
+treatment-by-covariate interactions. @gilbert2024disentangling show
+analytically that when $\rho \ne 0$, the two distinct data-generating
+processes — (1) true person-level HTE via a treatment × pretest interaction,
+and (2) item-level HTE correlated with item difficulty — produce *identical*
+patterns in sum-score outcomes. A model that omits IL-HTE therefore cannot
+distinguish between these processes and will produce biased estimates of the
+treatment-by-covariate interaction.
+
+Specifically, when $\rho > 0$ (easier items respond more strongly to
+treatment), treatment "stretches" the item difficulty distribution — the ratio
+$\sigma_b^\text{treat}/\sigma_b^\text{ctrl}$ exceeds 1 — and the
+constant-item model attributes this variation to a spurious negative
+treatment-by-pretest interaction.
+
+We illustrate this empirically by fitting two additional models per dataset:
+
+- **M_B** (constant item effects + person HTE):
+  `resp ~ treat + cov + treat:cov + (1|item) + (1|id)`
+- **M_C** (flexible EIRM — IL-HTE + person HTE):
+  `resp ~ treat + cov + treat:cov + (treat|item) + (1|id)`
+
+where `cov` is the standardized pretest score. The $\hat\beta_3$ coefficient
+on `treat:cov` represents the treatment-by-covariate interaction; M_B
+estimates it without allowing for IL-HTE, M_C estimates it alongside IL-HTE.
+
+```{r}
+#| label: fig-identification
+#| fig-cap: "Difference in treatment-by-covariate interaction estimates between M_B (constant item effects) and M_C (with IL-HTE), as a function of the ratio of item-difficulty SDs in treatment vs. control groups. Color encodes ρ; point size encodes number of items. Datasets with ratio > 1 and ρ > 0 show negative differences, consistent with the theoretical prediction."
+#| fig-height: 4.5
+
+label_df <- summary_df |>
+  mutate(tab_short = sub("gilbert_meta_", "", tab))
+
+ggplot(label_df, aes(x = sd_ratio, y = delta_beta3, colour = rho)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_vline(xintercept = 1, linetype = "dashed", colour = irw_grey) +
+  geom_point(aes(size = n_items)) +
+  geom_text(aes(label = tab_short), vjust = -0.9, size = 3, show.legend = FALSE) +
+  scale_colour_gradient2(
+    low      = irw_blue,
+    mid      = "grey80",
+    high     = irw_red,
+    midpoint = 0,
+    name     = expression(rho)
+  ) +
+  scale_size_continuous(name = "Items", range = c(3, 8)) +
+  labs(
+    x = expression(sigma[b]^{treat} / sigma[b]^{ctrl}),
+    y = expression(hat(beta)[3](M[B]) - hat(beta)[3](M[C]))
+  )
+```
+
+Datasets to the right of the vertical reference line (ratio > 1) tend to show
+negative $\hat\beta_3(M_B) - \hat\beta_3(M_C)$: the conventional model
+produces a more negative interaction estimate than the flexible model,
+consistent with the theoretical predictions of @gilbert2024disentangling.
+This pattern arises because the correlation between item easiness and
+item-specific treatment effects ($\rho$) creates the appearance of
+heterogeneity by pretest score in a sum-score analysis, even if none exists
+at the person level.
+
+---
+
+## Reproducibility
+
+Results computed `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+Rscript vignettes/il_hte_compute.R
+quarto::quarto_render("vignettes/il_hte.qmd")
+```
+
+---
+
+## References
