@@ -47,12 +47,15 @@ fit_one <- function(tab) {
   # Require treat column
   if (!"treat" %in% names(df)) { message("  no treat column"); return(NULL) }
 
-  # Find pretest covariate (cov_ prefix) — optional; needed for M_B / M_C only.
-  # When multiple cov_ columns exist, pick the one most correlated with resp
-  # in the control group, since the pretest score is typically the strongest predictor.
+  # Find pretest covariate — optional; needed for M_B / M_C only.
+  # Preference order: (1) std_baseline, (2) most-correlated cov_ column in controls.
   cov_cols <- grep("^cov_", names(df), value = TRUE)
-  has_cov  <- length(cov_cols) > 0
-  if (has_cov) {
+  if ("std_baseline" %in% names(df)) {
+    cov_col <- "std_baseline"
+    has_cov <- TRUE
+    message("  covariate: std_baseline")
+  } else if (length(cov_cols) > 0) {
+    has_cov <- TRUE
     if (length(cov_cols) == 1) {
       cov_col <- cov_cols[1]
     } else {
@@ -67,7 +70,8 @@ fit_one <- function(tab) {
     message("  covariate: ", cov_col)
   } else {
     cov_col <- NULL
-    message("  no cov_ column — skipping identification analysis")
+    has_cov <- FALSE
+    message("  no pretest covariate — skipping identification analysis")
   }
 
   df$resp  <- as.integer(as.numeric(df$resp))
