@@ -96,33 +96,72 @@ boundary correction of dividing the reported $p$-value by 2).
 
 ```{r}
 #| label: fig-item-effects
-#| fig-cap: "Empirical Bayes estimates of item-specific treatment effects, standardized by σ_θ. Large points: overall ATE. Small points: individual item effects (β₁ + ζ̂ᵢ)/σ_θ. Color indicates significance of IL-HTE variance at p < 0.05."
-#| fig-height: 5.5
+#| fig-cap: "Empirical Bayes estimates of item-specific treatment effects, standardized by σ_θ. Small points: individual item effects (β₁ + ζ̂ᵢ)/σ_θ. Hover over the large dot to see dataset details."
+
+library(plotly)
+
+tab_order <- summary_df |> arrange(ate_std) |> pull(tab)
 
 plot_df <- item_df |>
   left_join(summary_df |> select(tab, ate_std, sig_il_hte), by = "tab") |>
   mutate(
-    tab       = reorder(tab, ate_std),
-    sig_label = if_else(sig_il_hte, "Significant IL-HTE", "Not significant")
+    y_pos     = as.integer(factor(tab, levels = tab_order)),
+    sig_label = if_else(sig_il_hte, "Significant", "Not significant"),
+    color_val = if_else(sig_il_hte, irw_blue, irw_red)
   )
 
 ate_df <- summary_df |>
   mutate(
-    tab       = factor(tab, levels = levels(plot_df$tab)),
-    sig_label = if_else(sig_il_hte, "Significant IL-HTE", "Not significant")
+    y_pos     = as.integer(factor(tab, levels = tab_order)),
+    sig_label = if_else(sig_il_hte, "Significant", "Not significant"),
+    color_val = if_else(sig_il_hte, irw_blue, irw_red),
+    hover_text = paste0(
+      "<b>", tab, "</b><br>",
+      "ATE: ", round(ate_std, 3), " SD<br>",
+      "σζ: ", round(sigma_zeta_std, 3), " SD<br>",
+      "ρ: ", round(rho, 2), "<br>",
+      "Items: ", n_items, "<br>",
+      "N: ", n_persons, "<br>",
+      "Sig. IL-HTE: ", sig_il_hte
+    )
   )
 
-ggplot(plot_df, aes(x = total_std, y = tab)) +
-  geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
-  geom_point(aes(colour = sig_label), size = 1.5, alpha = 0.55) +
-  geom_point(data = ate_df, aes(x = ate_std, y = tab, colour = sig_label),
-             size = 4) +
-  scale_colour_manual(
-    values = c("Significant IL-HTE" = irw_blue, "Not significant" = irw_red),
-    name   = NULL
-  ) +
-  labs(x = "Item-specific treatment effect (SDs)", y = NULL) +
-  theme(legend.position = "bottom")
+fig <- plot_ly() |>
+  add_trace(
+    data       = plot_df,
+    x          = ~total_std,
+    y          = ~y_pos,
+    type       = "scatter",
+    mode       = "markers",
+    marker     = list(size = 4, opacity = 0.4),
+    color      = ~sig_label,
+    colors     = c("Significant" = irw_blue, "Not significant" = irw_red),
+    hoverinfo  = "none",
+    showlegend = TRUE
+  ) |>
+  add_trace(
+    data       = ate_df,
+    x          = ~ate_std,
+    y          = ~y_pos,
+    type       = "scatter",
+    mode       = "markers",
+    marker     = list(size = 10, line = list(width = 1, color = "white")),
+    color      = ~sig_label,
+    colors     = c("Significant" = irw_blue, "Not significant" = irw_red),
+    text       = ~hover_text,
+    hoverinfo  = "text",
+    showlegend = FALSE
+  ) |>
+  layout(
+    height = max(400, nrow(summary_df) * 14),
+    xaxis = list(title = "Item-specific treatment effect (SDs)",
+                 zeroline = TRUE, zerolinecolor = "#aaa", zerolinewidth = 1),
+    yaxis = list(title = "", showticklabels = FALSE, showgrid = FALSE),
+    legend = list(orientation = "h", x = 0, y = -0.05),
+    margin = list(l = 20)
+  )
+
+fig
 ```
 
 ```{r}
