@@ -193,6 +193,11 @@ fit_one <- function(tab) {
     item_tbl        = item_tbl
   )
 
+  if (!is.finite(result$ate_std) || !is.finite(result$sigma_zeta_std)) {
+    message("  non-finite estimates — skipping")
+    return(NULL)
+  }
+
   saveRDS(result, out_file)
   result
 }

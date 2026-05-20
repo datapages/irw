@@ -37,8 +37,8 @@ cache_ok   <- file.exists(cache_path)
 
 if (cache_ok) {
   .cache     <- readRDS(cache_path)
-  summary_df <- .cache$summary
-  item_df    <- .cache$item_df
+  summary_df <- .cache$summary |> filter(is.finite(ate_std), is.finite(sigma_zeta_std))
+  item_df    <- .cache$item_df |> filter(tab %in% summary_df$tab)
   date_run   <- .cache$date_run
 } else {
   summary_df <- tibble(tab = character(), n_items = integer(), n_persons = integer(),
@@ -207,29 +207,50 @@ estimates it without allowing for IL-HTE, M_C estimates it alongside IL-HTE.
 
 ```{r}
 #| label: fig-identification
-#| fig-cap: "Difference in treatment-by-covariate interaction estimates between M_B (constant item effects) and M_C (with IL-HTE), as a function of the ratio of item-difficulty SDs in treatment vs. control groups. Color encodes ρ; point size encodes number of items. Datasets with ratio > 1 and ρ > 0 show negative differences, consistent with the theoretical prediction."
-#| fig-height: 4.5
+#| fig-cap: "Difference in treatment-by-covariate interaction estimates between M_B (constant item effects) and M_C (with IL-HTE), as a function of the ratio of item-difficulty SDs in treatment vs. control groups. Hover over a point for dataset details."
 
-label_df <- summary_df |>
-  mutate(tab_short = sub("gilbert_meta_", "", tab))
-
-ggplot(label_df, aes(x = sd_ratio, y = delta_beta3, colour = rho)) +
-  geom_hline(yintercept = 0, linetype = "dashed", colour = irw_grey) +
-  geom_vline(xintercept = 1, linetype = "dashed", colour = irw_grey) +
-  geom_point(aes(size = n_items)) +
-  geom_text(aes(label = tab_short), vjust = -0.9, size = 3, show.legend = FALSE) +
-  scale_colour_gradient2(
-    low      = irw_blue,
-    mid      = "grey80",
-    high     = irw_red,
-    midpoint = 0,
-    name     = expression(rho)
-  ) +
-  scale_size_continuous(name = "Items", range = c(3, 8)) +
-  labs(
-    x = expression(sigma[b]^{treat} / sigma[b]^{ctrl}),
-    y = expression(hat(beta)[3](M[B]) - hat(beta)[3](M[C]))
+id_df <- summary_df |>
+  filter(!is.na(delta_beta3)) |>
+  mutate(
+    hover_text = paste0(
+      "<b>", tab, "</b><br>",
+      "Δβ₃: ", round(delta_beta3, 3), "<br>",
+      "SD ratio: ", round(sd_ratio, 3), "<br>",
+      "ρ: ", round(rho, 2), "<br>",
+      "Items: ", n_items, "<br>",
+      "N: ", n_persons
+    )
   )
+
+plot_ly(id_df,
+  x         = ~sd_ratio,
+  y         = ~delta_beta3,
+  type      = "scatter",
+  mode      = "markers",
+  marker    = list(
+    size        = ~sqrt(n_items) * 2,
+    color       = ~rho,
+    colorscale  = list(c(0, irw_blue), c(0.5, "#d3d3d3"), c(1, irw_red)),
+    cmin        = -1, cmax = 1,
+    colorbar    = list(title = "ρ"),
+    line        = list(width = 0.5, color = "white")
+  ),
+  text      = ~hover_text,
+  hoverinfo = "text"
+) |>
+layout(
+  xaxis = list(title = "σ_b(treat) / σ_b(ctrl)",
+               zeroline = FALSE,
+               zerolinecolor = "#aaa",
+               showline = TRUE),
+  yaxis = list(title = "β₃(M_B) − β₃(M_C)",
+               zeroline = TRUE, zerolinecolor = "#aaa", zerolinewidth = 1),
+  shapes = list(
+    list(type = "line", x0 = 1, x1 = 1,
+         y0 = ~min(delta_beta3, na.rm=TRUE), y1 = ~max(delta_beta3, na.rm=TRUE),
+         line = list(dash = "dash", color = "#aaa"))
+  )
+)
 ```
 
 Datasets to the right of the vertical reference line (ratio > 1) tend to show
