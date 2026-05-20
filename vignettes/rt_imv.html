@@ -7,9 +7,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="dcterms.date" content="2026-05-20">
-<meta name="description" content="A Tier 2 IRW vignette linking item text to empirical difficulty. We extract simple linguistic features from item text and ask how well they predict proportion correct across cognitive datasets.">
+<meta name="description" content="How much does knowing how fast a person responded improve predictions of whether they answered correctly? We fit Rasch IRT to binary accuracy data from IRW datasets with response times, then quantify the gain from adding within-item-centered log(RT) using the InterModel Vigorish (IMV). Motivated by Domingue et al.&nbsp;(2022).">
 
-<title>Does Item Language Predict Difficulty? Text Features Across Cognitive Datasets – Item Response Warehouse</title>
+<title>Response Time and Accuracy: An IMV Analysis – Item Response Warehouse</title>
 <style>
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -60,7 +60,26 @@ div.sourceCode
 @media screen {
 pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
-</style>
+/* CSS for citations */
+div.csl-bib-body { }
+div.csl-entry {
+  clear: both;
+}
+.hanging-indent div.csl-entry {
+  margin-left:2em;
+  text-indent:-2em;
+}
+div.csl-left-margin {
+  min-width:2em;
+  float:left;
+}
+div.csl-right-inline {
+  margin-left:2em;
+  padding-left:1em;
+}
+div.csl-indent {
+  margin-left: 2em;
+}</style>
 
 
 <script src="../site_libs/quarto-nav/quarto-nav.js"></script>
@@ -284,13 +303,12 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
     <h2 id="toc-title">On this page</h2>
    
   <ul class="collapse">
-  <li><a href="#research-question" id="toc-research-question" class="nav-link active" data-scroll-target="#research-question">Research question</a></li>
-  <li><a href="#step-1-select-datasets-with-item-text" id="toc-step-1-select-datasets-with-item-text" class="nav-link" data-scroll-target="#step-1-select-datasets-with-item-text">Step 1: Select datasets with item text</a></li>
-  <li><a href="#step-2-compute-proportion-correct-and-extract-text-features" id="toc-step-2-compute-proportion-correct-and-extract-text-features" class="nav-link" data-scroll-target="#step-2-compute-proportion-correct-and-extract-text-features">Step 2: Compute proportion correct and extract text features</a></li>
-  <li><a href="#step-3-distributions-of-features-and-outcome" id="toc-step-3-distributions-of-features-and-outcome" class="nav-link" data-scroll-target="#step-3-distributions-of-features-and-outcome">Step 3: Distributions of features and outcome</a></li>
-  <li><a href="#step-4-within-dataset-relationships" id="toc-step-4-within-dataset-relationships" class="nav-link" data-scroll-target="#step-4-within-dataset-relationships">Step 4: Within-dataset relationships</a></li>
-  <li><a href="#what-to-notice" id="toc-what-to-notice" class="nav-link" data-scroll-target="#what-to-notice">What to notice</a></li>
+  <li><a href="#overview" id="toc-overview" class="nav-link active" data-scroll-target="#overview">Overview</a></li>
+  <li><a href="#datasets" id="toc-datasets" class="nav-link" data-scroll-target="#datasets">Datasets</a></li>
+  <li><a href="#results" id="toc-results" class="nav-link" data-scroll-target="#results">Results</a></li>
+  <li><a href="#discussion" id="toc-discussion" class="nav-link" data-scroll-target="#discussion">Discussion</a></li>
   <li><a href="#reproducibility" id="toc-reproducibility" class="nav-link" data-scroll-target="#reproducibility">Reproducibility</a></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
   </ul>
 </nav>
     </div>
@@ -299,12 +317,12 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Does Item Language Predict Difficulty? Text Features Across Cognitive Datasets</h1>
+<h1 class="title">Response Time and Accuracy: An IMV Analysis</h1>
 </div>
 
 <div>
   <div class="description">
-    <p>A Tier 2 IRW vignette linking item text to empirical difficulty. We extract simple linguistic features from item text and ask how well they predict proportion correct across cognitive datasets.</p>
+    <p>How much does knowing how fast a person responded improve predictions of whether they answered correctly? We fit Rasch IRT to binary accuracy data from IRW datasets with response times, then quantify the gain from adding within-item-centered log(RT) using the InterModel Vigorish (IMV). Motivated by Domingue et al.&nbsp;(2022).</p>
   </div>
 </div>
 
@@ -327,326 +345,236 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </header>
 
 
-<section id="research-question" class="level2">
-<h2 class="anchored" data-anchor-id="research-question">Research question</h2>
-<p>Cognitive items vary enormously in difficulty. Some of that variation is substantive — harder content is harder to answer. But some may be linguistic: items written in more complex language, or containing negation, may be harder to process independent of their content. Can simple text features extracted from item wording predict how often respondents answer correctly?</p>
-<p>The IRW’s item text layer makes this question tractable. For tables where both response data and item text are available, we can compute proportion correct per item, extract linguistic features, and ask how much variance those features explain.</p>
-<hr>
+<section id="overview" class="level2">
+<h2 class="anchored" data-anchor-id="overview">Overview</h2>
+<p>IRT models predict binary accuracy from a latent ability estimate — but they ignore <em>when</em> a person responded. Response time (RT) carries its own signal about item-person fit: very fast incorrect responses may reflect guessing, while slow correct responses may reflect effortful retrieval. The question is whether RT adds <em>predictive</em> value over and above the IRT probability.</p>
+<p>We answer this using the <strong>InterModel Vigorish</strong> [IMV; <span class="citation" data-cites="domingue2022speed">Domingue et al. (<a href="#ref-domingue2022speed" role="doc-biblioref">2022</a>)</span>], a log-score measure of how much one model’s predictions improve on another’s. For each IRW dataset with RT and binary accuracy, we compare three nested models:</p>
+<ul>
+<li><strong>M0</strong>: <code>resp ~ (1|item) + (1|id)</code> — a random-item Rasch model <span class="citation" data-cites="deboeck2011lmer">(<a href="#ref-deboeck2011lmer" role="doc-biblioref">De Boeck et al. 2011</a>)</span> with crossed random effects for item difficulty and person ability, no RT</li>
+<li><strong>M1</strong>: <code>resp ~ rt_cwi + (1|item) + (1|id)</code> — add within-item-centered log(RT), linear</li>
+<li><strong>M2</strong>: <code>resp ~ spl1 + spl2 + spl3 + spl4 + (1|item) + (1|id)</code> — add flexible spline RT</li>
+</ul>
+<p><code>rt_cwi = log(rt) − mean_item(log(rt))</code> centers RT within items, isolating the <em>micro-speed–accuracy tradeoff</em>: is this person faster or slower than average on this item, and does that predict correctness? The random effects for item and person replace a separately-fitted Rasch model, estimating item difficulty and person ability jointly with the RT effect.</p>
+<p><code>spl1</code>–<code>spl4</code> are the four columns of a B-spline basis (<code>bs(rt_cwi, df=4)</code>) computed from <code>rt_cwi</code> on the full dataset and stored as pre-computed columns. Precomputing the basis (rather than evaluating <code>bs()</code> inline) ensures that <code>imv()</code>’s internal model updates operate on the same feature matrix.</p>
 </section>
-<section id="step-1-select-datasets-with-item-text" class="level2">
-<h2 class="anchored" data-anchor-id="step-1-select-datasets-with-item-text">Step 1: Select datasets with item text</h2>
-<p>We restrict to cognitive/educational dichotomous English tables that have item text available via <code>irw_itemtext()</code>. Not all IRW tables have item text — this analysis uses only those that do.</p>
+<section id="datasets" class="level2">
+<h2 class="anchored" data-anchor-id="datasets">Datasets</h2>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>text_tables <span class="ot">&lt;-</span> <span class="fu">irw_list_itemtext_tables</span>()</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>meta <span class="ot">&lt;-</span> <span class="fu">irw_filter</span>(</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">construct_type   =</span> <span class="st">"Cognitive/educational"</span>,</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_categories     =</span> <span class="dv">2</span>,</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_participants   =</span> <span class="fu">c</span>(<span class="dv">200</span>, <span class="cn">Inf</span>),</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">primary_language =</span> <span class="st">"eng"</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>eligible_tables <span class="ot">&lt;-</span> <span class="fu">intersect</span>(text_tables, meta)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>results <span class="sc">|&gt;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(table_name, N, J, n_obs) <span class="sc">|&gt;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="fu">desc</span>(n_obs)) <span class="sc">|&gt;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>(</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">col.names =</span> <span class="fu">c</span>(<span class="st">"Dataset"</span>, <span class="st">"N persons"</span>, <span class="st">"J items"</span>, <span class="st">"Obs."</span>),</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">format.args =</span> <span class="fu">list</span>(<span class="at">big.mark =</span> <span class="st">","</span>)</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
-</div>
-<p>This yielded 18 tables (as of May 2026), covering 15 tables with usable item text after joining.</p>
-<hr>
-</section>
-<section id="step-2-compute-proportion-correct-and-extract-text-features" class="level2">
-<h2 class="anchored" data-anchor-id="step-2-compute-proportion-correct-and-extract-text-features">Step 2: Compute proportion correct and extract text features</h2>
-<p>For each table we (1) fetch response data, (2) fetch item text, (3) compute proportion correct per item, and (4) join the two on the <code>item</code> identifier.</p>
-<div class="cell">
-<details class="code-fold">
-<summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>process_table <span class="ot">&lt;-</span> <span class="cf">function</span>(table_name) {</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  df        <span class="ot">&lt;-</span> <span class="fu">irw_fetch</span>(table_name)</span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  item_text <span class="ot">&lt;-</span> <span class="fu">irw_itemtext</span>(table_name)</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  prop_correct <span class="ot">&lt;-</span> df <span class="sc">|&gt;</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">resp =</span> <span class="fu">as.numeric</span>(resp), <span class="at">item =</span> <span class="fu">as.character</span>(item)) <span class="sc">|&gt;</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">group_by</span>(item) <span class="sc">|&gt;</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">summarise</span>(</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>      <span class="at">prop_correct =</span> <span class="fu">mean</span>(resp <span class="sc">==</span> <span class="dv">1</span>, <span class="at">na.rm =</span> <span class="cn">TRUE</span>),</span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>      <span class="at">n_resp       =</span> <span class="fu">sum</span>(<span class="sc">!</span><span class="fu">is.na</span>(resp)),</span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>      <span class="at">.groups      =</span> <span class="st">"drop"</span></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    )</span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">inner_join</span>(prop_correct, item_text, <span class="at">by =</span> <span class="st">"item"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="fu">mutate</span>(<span class="at">table =</span> table_name)</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
-</div>
-<p>We then extract two simple text features using base R:</p>
-<table class="caption-top table">
-<colgroup>
-<col style="width: 50%">
-<col style="width: 50%">
-</colgroup>
+<div id="tbl-datasets" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-datasets-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;1: IRW datasets used in this analysis. All have binary accuracy responses and response times.
+</figcaption>
+<div aria-describedby="tbl-datasets-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
 <thead>
 <tr class="header">
-<th>Feature</th>
-<th>Description</th>
+<th style="text-align: left;">Dataset</th>
+<th style="text-align: right;">N persons</th>
+<th style="text-align: right;">J items</th>
+<th style="text-align: right;">Obs.</th>
 </tr>
 </thead>
 <tbody>
 <tr class="odd">
-<td><code>word_count</code></td>
-<td>Number of words</td>
+<td style="text-align: left;">credentialform_lnirt</td>
+<td style="text-align: right;">556</td>
+<td style="text-align: right;">200</td>
+<td style="text-align: right;">99,992</td>
 </tr>
 <tr class="even">
-<td><code>avg_word_len</code></td>
-<td>Mean character length per word (excluding punctuation)</td>
-</tr>
-</tbody>
-</table>
-<hr>
-</section>
-<section id="step-3-distributions-of-features-and-outcome" class="level2">
-<h2 class="anchored" data-anchor-id="step-3-distributions-of-features-and-outcome">Step 3: Distributions of features and outcome</h2>
-<section id="proportion-correct" class="level3">
-<h3 class="anchored" data-anchor-id="proportion-correct">Proportion correct</h3>
-<div class="cell">
-<details class="code-fold">
-<summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(all_data, <span class="fu">aes</span>(<span class="at">x =</span> prop_correct)) <span class="sc">+</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_histogram</span>(<span class="at">bins =</span> <span class="dv">40</span>, <span class="at">fill =</span> <span class="st">"#2166ac"</span>, <span class="at">colour =</span> <span class="st">"white"</span>, <span class="at">alpha =</span> <span class="fl">0.8</span>) <span class="sc">+</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Proportion correct"</span>, <span class="at">y =</span> <span class="st">"Count"</span>) <span class="sc">+</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="dv">13</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
-<div class="cell-output-display">
-<div id="fig-propcorrect" class="quarto-float quarto-figure quarto-figure-center anchored">
-<figure class="quarto-float quarto-float-fig figure">
-<div aria-describedby="fig-propcorrect-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="item_text_difficulty_files/figure-html/fig-propcorrect-1.png" class="img-fluid figure-img" width="672">
-</div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-propcorrect-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;1: Distribution of proportion correct across items. Each observation is one item.
-</figcaption>
-</figure>
-</div>
-</div>
-</div>
-</section>
-<section id="text-features" class="level3">
-<h3 class="anchored" data-anchor-id="text-features">Text features</h3>
-<div class="cell">
-<details class="code-fold">
-<summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>all_data <span class="sc">|&gt;</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="fu">c</span>(word_count, avg_word_len),</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>               <span class="at">names_to =</span> <span class="st">"feature"</span>, <span class="at">values_to =</span> <span class="st">"value"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">feature =</span> <span class="fu">recode</span>(feature,</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">word_count   =</span> <span class="st">"Word count"</span>,</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_word_len =</span> <span class="st">"Avg word length"</span></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>  )) <span class="sc">|&gt;</span></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> value)) <span class="sc">+</span></span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_histogram</span>(<span class="at">bins =</span> <span class="dv">40</span>, <span class="at">fill =</span> <span class="st">"#2166ac"</span>, <span class="at">colour =</span> <span class="st">"white"</span>, <span class="at">alpha =</span> <span class="fl">0.8</span>) <span class="sc">+</span></span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>feature, <span class="at">scales =</span> <span class="st">"free_x"</span>) <span class="sc">+</span></span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">"Count"</span>) <span class="sc">+</span></span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="dv">13</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
-<div class="cell-output-display">
-<div id="fig-features" class="quarto-float quarto-figure quarto-figure-center anchored">
-<figure class="quarto-float quarto-float-fig figure">
-<div aria-describedby="fig-features-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="item_text_difficulty_files/figure-html/fig-features-1.png" class="img-fluid figure-img" width="672">
-</div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-features-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;2: Distributions of word count and average word length across items.
-</figcaption>
-</figure>
-</div>
-</div>
-</div>
-<hr>
-</section>
-</section>
-<section id="step-4-within-dataset-relationships" class="level2">
-<h2 class="anchored" data-anchor-id="step-4-within-dataset-relationships">Step 4: Within-dataset relationships</h2>
-<p>Pooling all items together can be misleading — overall correlations between text features and difficulty are heavily influenced by which datasets happen to have longer or shorter items, not by within-instrument variation. Instead, we compute the correlation between each feature and proportion correct <em>separately per dataset</em>, then look at the distribution of those correlations across the 15 datasets.</p>
-<div class="cell">
-<details class="code-fold">
-<summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>within_cors <span class="ot">&lt;-</span> all_data <span class="sc">|&gt;</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">group_by</span>(table) <span class="sc">|&gt;</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">summarise</span>(</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">n_items      =</span> <span class="fu">n</span>(),</span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">r_word_count =</span> <span class="fu">round</span>(<span class="fu">cor</span>(word_count,   prop_correct, <span class="at">use =</span> <span class="st">"complete.obs"</span>), <span class="dv">2</span>),</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">r_avg_wlen   =</span> <span class="fu">round</span>(<span class="fu">cor</span>(avg_word_len, prop_correct, <span class="at">use =</span> <span class="st">"complete.obs"</span>), <span class="dv">2</span>),</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">.groups =</span> <span class="st">"drop"</span></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>within_cors</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
-<div class="cell-output-display">
-<div class="kable-table">
-<table class="caption-top table table-sm table-striped small">
-<thead>
-<tr class="header">
-<th style="text-align: left;">table</th>
-<th style="text-align: right;">n_items</th>
-<th style="text-align: right;">r_word_count</th>
-<th style="text-align: right;">r_avg_wlen</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td style="text-align: left;">florida_twins_auth</td>
-<td style="text-align: right;">100</td>
-<td style="text-align: right;">-0.15</td>
-<td style="text-align: right;">-0.45</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">frac20</td>
-<td style="text-align: right;">20</td>
-<td style="text-align: right;">-0.21</td>
-<td style="text-align: right;">0.04</td>
+<td style="text-align: left;">nomt_hooper_2024_study2</td>
+<td style="text-align: right;">393</td>
+<td style="text-align: right;">144</td>
+<td style="text-align: right;">56,587</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">gilbert_meta_11</td>
-<td style="text-align: right;">24</td>
-<td style="text-align: right;">-0.30</td>
-<td style="text-align: right;">-0.06</td>
+<td style="text-align: left;">himmelstein-impossible_question-2025</td>
+<td style="text-align: right;">766</td>
+<td style="text-align: right;">90</td>
+<td style="text-align: right;">44,996</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gilbert_meta_2</td>
-<td style="text-align: right;">20</td>
-<td style="text-align: right;">0.30</td>
-<td style="text-align: right;">0.12</td>
+<td style="text-align: left;">vocab_assessment_3_to_8_year_old_children</td>
+<td style="text-align: right;">500</td>
+<td style="text-align: right;">47</td>
+<td style="text-align: right;">23,500</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">gilbert_meta_37</td>
-<td style="text-align: right;">21</td>
-<td style="text-align: right;">-0.29</td>
-<td style="text-align: right;">0.16</td>
+<td style="text-align: left;">wilmer-mrmet-normative-data-set-2022</td>
+<td style="text-align: right;">500</td>
+<td style="text-align: right;">37</td>
+<td style="text-align: right;">18,498</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gilbert_meta_7</td>
+<td style="text-align: left;">gilbert_meta_102</td>
+<td style="text-align: right;">502</td>
 <td style="text-align: right;">36</td>
-<td style="text-align: right;">-0.39</td>
-<td style="text-align: right;">-0.29</td>
+<td style="text-align: right;">18,055</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">gilbert_meta_78</td>
-<td style="text-align: right;">189</td>
-<td style="text-align: right;">NA</td>
-<td style="text-align: right;">-0.39</td>
+<td style="text-align: left;">mgkt</td>
+<td style="text-align: right;">2,095</td>
+<td style="text-align: right;">32</td>
+<td style="text-align: right;">16,098</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">gilbert_meta_8</td>
+<td style="text-align: left;">roar_gijbels2024</td>
+<td style="text-align: right;">260</td>
+<td style="text-align: right;">57</td>
+<td style="text-align: right;">14,715</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">gilbert_meta_103</td>
+<td style="text-align: right;">519</td>
 <td style="text-align: right;">29</td>
-<td style="text-align: right;">-0.11</td>
-<td style="text-align: right;">-0.03</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">mpsycho_rwdq</td>
-<td style="text-align: right;">18</td>
-<td style="text-align: right;">0.04</td>
-<td style="text-align: right;">-0.20</td>
+<td style="text-align: right;">14,436</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">polca_cheating</td>
-<td style="text-align: right;">4</td>
-<td style="text-align: right;">-0.45</td>
-<td style="text-align: right;">0.92</td>
+<td style="text-align: left;">test_taking_much_2025_mr</td>
+<td style="text-align: right;">502</td>
+<td style="text-align: right;">27</td>
+<td style="text-align: right;">13,495</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">preschool_sel_akt</td>
-<td style="text-align: right;">17</td>
-<td style="text-align: right;">-0.42</td>
-<td style="text-align: right;">0.04</td>
+<td style="text-align: left;">chess_lnirt</td>
+<td style="text-align: right;">256</td>
+<td style="text-align: right;">40</td>
+<td style="text-align: right;">10,240</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">preschool_sel_box</td>
+<td style="text-align: left;">much_tte_2025_matrixreasoning</td>
+<td style="text-align: right;">502</td>
 <td style="text-align: right;">20</td>
-<td style="text-align: right;">-0.63</td>
-<td style="text-align: right;">-0.59</td>
+<td style="text-align: right;">10,004</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">preschool_sel_dn</td>
-<td style="text-align: right;">14</td>
-<td style="text-align: right;">NA</td>
-<td style="text-align: right;">0.61</td>
+<td style="text-align: left;">zhang-eye-2022</td>
+<td style="text-align: right;">202</td>
+<td style="text-align: right;">36</td>
+<td style="text-align: right;">7,272</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">preschool_sel_htks</td>
+<td style="text-align: left;">himmelstein-admc_raw-2025</td>
+<td style="text-align: right;">645</td>
 <td style="text-align: right;">10</td>
-<td style="text-align: right;">NA</td>
-<td style="text-align: right;">NA</td>
+<td style="text-align: right;">5,012</td>
 </tr>
 <tr class="odd">
-<td style="text-align: left;">preschool_sel_pl</td>
-<td style="text-align: right;">39</td>
-<td style="text-align: right;">-0.33</td>
-<td style="text-align: right;">-0.23</td>
+<td style="text-align: left;">gilbert_meta_104</td>
+<td style="text-align: right;">511</td>
+<td style="text-align: right;">9</td>
+<td style="text-align: right;">4,518</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">himmelstein-number_series-2025</td>
+<td style="text-align: right;">584</td>
+<td style="text-align: right;">9</td>
+<td style="text-align: right;">4,513</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">fullscaleiq_mentalrotation</td>
+<td style="text-align: right;">682</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">2,182</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">fullscaleiq_vocab</td>
+<td style="text-align: right;">252</td>
+<td style="text-align: right;">7</td>
+<td style="text-align: right;">735</td>
 </tr>
 </tbody>
 </table>
 </div>
 </div>
+</figure>
 </div>
+</div>
+</section>
+<section id="results" class="level2">
+<h2 class="anchored" data-anchor-id="results">Results</h2>
+<section id="does-rt-improve-predictions-over-irt" class="level3">
+<h3 class="anchored" data-anchor-id="does-rt-improve-predictions-over-irt">Does RT improve predictions over IRT?</h3>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(all_data, <span class="fu">aes</span>(<span class="at">x =</span> word_count, <span class="at">y =</span> prop_correct)) <span class="sc">+</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.4</span>, <span class="at">size =</span> <span class="fl">0.9</span>, <span class="at">colour =</span> <span class="st">"#2166ac"</span>) <span class="sc">+</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_smooth</span>(<span class="at">method =</span> <span class="st">"lm"</span>, <span class="at">se =</span> <span class="cn">FALSE</span>, <span class="at">colour =</span> <span class="st">"#d6604d"</span>, <span class="at">linewidth =</span> <span class="fl">0.7</span>) <span class="sc">+</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>table, <span class="at">scales =</span> <span class="st">"free"</span>) <span class="sc">+</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Word count"</span>, <span class="at">y =</span> <span class="st">"Proportion correct"</span>) <span class="sc">+</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="dv">10</span>) <span class="sc">+</span></span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">strip.text =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">7</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>plot_df <span class="ot">&lt;-</span> results <span class="sc">|&gt;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">table_name =</span> <span class="fu">reorder</span>(table_name, imv_spline)) <span class="sc">|&gt;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="fu">c</span>(imv_linear, imv_spline),</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>               <span class="at">names_to =</span> <span class="st">"comparison"</span>, <span class="at">values_to =</span> <span class="st">"imv"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">comparison =</span> <span class="fu">recode</span>(comparison,</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">imv_linear =</span> <span class="st">"Linear RT  (M0 → M1)"</span>,</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">imv_spline =</span> <span class="st">"Spline RT  (M0 → M2)"</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  ))</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(plot_df, <span class="fu">aes</span>(<span class="at">x =</span> imv, <span class="at">y =</span> table_name, <span class="at">colour =</span> comparison)) <span class="sc">+</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="dv">0</span>, <span class="at">linetype =</span> <span class="st">"dashed"</span>, <span class="at">colour =</span> irw_grey) <span class="sc">+</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="dv">3</span>, <span class="at">position =</span> <span class="fu">position_dodge</span>(<span class="at">width =</span> <span class="fl">0.4</span>)) <span class="sc">+</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_colour_manual</span>(</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">values =</span> <span class="fu">c</span>(<span class="st">"Linear RT  (M0 → M1)"</span> <span class="ot">=</span> irw_blue,</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>               <span class="st">"Spline RT  (M0 → M2)"</span> <span class="ot">=</span> irw_red),</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="at">name =</span> <span class="cn">NULL</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"IMV gain over IRT-only baseline"</span>, <span class="at">y =</span> <span class="cn">NULL</span>) <span class="sc">+</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"bottom"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
-<div id="fig-scatter-facet" class="quarto-float quarto-figure quarto-figure-center anchored">
+<div id="fig-imv-main" class="quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
-<div aria-describedby="fig-scatter-facet-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="item_text_difficulty_files/figure-html/fig-scatter-facet-1.png" class="img-fluid figure-img" width="672">
+<div aria-describedby="fig-imv-main-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="rt_imv_files/figure-html/fig-imv-main-1.png" class="img-fluid figure-img" width="672">
 </div>
-<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-scatter-facet-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;3: Word count vs.&nbsp;proportion correct, separately per dataset. Lines are OLS fits.
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-imv-main-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;1: IMV gain from adding RT to IRT predictions. Blue = linear RT (M0→M1); red = spline RT (M0→M2). Positive values indicate RT improves predictions. Datasets ordered by spline IMV.
 </figcaption>
 </figure>
 </div>
 </div>
 </div>
+<p>Across 18 datasets, the median IMV gain from adding linear RT is 0.0054 (78% of datasets positive); the spline gain is 0.0091 (94% positive).</p>
 <hr>
 </section>
-<section id="what-to-notice" class="level2">
-<h2 class="anchored" data-anchor-id="what-to-notice">What to notice</h2>
-<p><strong>Heterogeneity across datasets.</strong> If the within-dataset correlations are scattered around zero (some positive, some negative), that suggests any overall pooled relationship is an artifact of dataset-level confounds rather than a genuine text-difficulty signal.</p>
-<p><strong>Direction of word count effect.</strong> Longer items could be harder (more to parse) or easier (more context provided). Looking within datasets avoids the confound that some instruments simply use longer items throughout.</p>
-<p><strong>Limitations.</strong> Proportion correct conflates item difficulty with sample ability. The natural next step is to use <em>b</em> parameters from the 2PL vignette instead, which are ability-adjusted.</p>
+</section>
+<section id="discussion" class="level2">
+<h2 class="anchored" data-anchor-id="discussion">Discussion</h2>
+<p><strong>RT adds modest but consistent predictive value.</strong> Positive IMV for both linear and spline RT indicates that response time generally adds value in prediction of accuracy.</p>
+<p><strong>In some cases, the gains come from adding RT nonlinearly.</strong> RT can be a highly nonlinear predictor of response time. Indeed, the relationship between response time and accuracy may even be nonmonotonic.</p>
 <hr>
 </section>
 <section id="reproducibility" class="level2">
 <h2 class="anchored" data-anchor-id="reproducibility">Reproducibility</h2>
-<p>Results computed on May 05, 2026 using 18 IRW tables. To reproduce:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="st">"vignettes/item_text_difficulty_compute.R"</span>)</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>quarto<span class="sc">::</span><span class="fu">quarto_render</span>(<span class="st">"vignettes/item_text_difficulty.qmd"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="callout callout-style-default callout-tip no-icon callout-titled">
-<div class="callout-header d-flex align-content-center">
-<div class="callout-icon-container">
-<i class="callout-icon no-icon"></i>
-</div>
-<div class="callout-title-container flex-fill">
-Tip
-</div>
-</div>
-<div class="callout-body-container callout-body">
-<p>To cite datasets used:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (tbl <span class="cf">in</span> eligible_tables) {</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">irw_save_bibtex</span>(tbl, <span class="at">output_file =</span> <span class="st">"itemtextdata/irw_references.bib"</span>,</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>                  <span class="at">append =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</div>
-</div>
+<p>Results computed May 20, 2026. To regenerate:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>Rscript vignettes<span class="sc">/</span>rt_imv_compute.R</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>quarto<span class="sc">::</span><span class="fu">quarto_render</span>(<span class="st">"vignettes/rt_imv.qmd"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<hr>
+</section>
+<section id="references" class="level2">
+
+
 
 
 </section>
 
-</main> <!-- /main -->
+<div id="quarto-appendix" class="default"><section class="quarto-appendix-contents" role="doc-bibliography" id="quarto-bibliography"><h2 class="anchored quarto-appendix-heading">References</h2><div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-deboeck2011lmer" class="csl-entry" role="listitem">
+De Boeck, Paul, Marjan Bakker, Robert Zwitser, et al. 2011. <span>“The Estimation of Item Response Models with the Lmer Function from the Lme4 Package in <span>R</span>.”</span> <em>Journal of Statistical Software</em> 39 (12): 1–28. <a href="https://doi.org/10.18637/jss.v039.i12">https://doi.org/10.18637/jss.v039.i12</a>.
+</div>
+<div id="ref-domingue2022speed" class="csl-entry" role="listitem">
+Domingue, Benjamin W., Klint Kanopka, Ben Stenhaug, et al. 2022. <span>“Speed–Accuracy Trade-Off? <span>Not</span> so Fast: <span>Marginal</span> Changes in Speed Have Inconsistent Relationships with Accuracy in Real Data.”</span> <em>Journal of Educational and Behavioral Statistics</em> 47 (5): 576–602. <a href="https://doi.org/10.3102/10769986221099115">https://doi.org/10.3102/10769986221099115</a>.
+</div>
+</div></section></div></main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
   window.document.addEventListener("DOMContentLoaded", function (event) {
     const icon = "";
