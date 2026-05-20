@@ -36,9 +36,14 @@ fit_one <- function(tab) {
   out_file <- file.path(fits_dir, paste0(tab, ".rds"))
   if (file.exists(out_file)) { message("  cached"); return(readRDS(out_file)) }
 
-  df <- tryCatch(irw_fetch(tab), error = function(e) {
-    message("  fetch failed: ", conditionMessage(e)); NULL
-  })
+  df <- NULL
+  for (attempt in 1:3) {
+    df <- tryCatch(irw_fetch(tab), error = function(e) {
+      message("  fetch attempt ", attempt, " failed: ", conditionMessage(e)); NULL
+    })
+    if (!is.null(df)) break
+    Sys.sleep(5 * attempt)
+  }
   if (is.null(df)) return(NULL)
 
   # Filter to wave 1 if wave column is present
