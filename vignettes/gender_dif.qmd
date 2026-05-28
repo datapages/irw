@@ -2,9 +2,9 @@
 title: "Gender DIF Across IRW Datasets"
 description: |
   An omnibus survey of differential item functioning (DIF) by gender or sex across all
-  IRW datasets that record this covariate. We fit multigroup 1PL and 2PL models to each
-  dataset and apply Wald-based DIF tests, then ask: how prevalent is gender DIF, and do
-  the two models agree on which items are flagged?
+  IRW datasets that record this covariate. We apply two DIF families — Mantel-Haenszel
+  (uniform DIF, with ETS Δ effect sizes) and logistic regression (uniform and non-uniform
+  DIF) — to each dataset and ask: how prevalent is gender DIF, and do the two methods agree?
 format:
   html:
     code-fold: true
@@ -21,48 +21,50 @@ execute:
 #| echo: false
 
 library(dplyr)
+library(tidyr)
 library(ggplot2)
 library(plotly)
 
-results <- readRDS("gender_dif_data/combined_results.rds")
+out_dir <- "gender_dif_data"
+fs      <- list.files(out_dir, pattern = "\\.rds$", full.names = TRUE)
+results <- Filter(Negate(is.null),
+                  lapply(setNames(fs, sub("\\.rds$", "", basename(fs))), readRDS))
 
-# Drop the one dataset that had too few rows after the density filter
-results <- Filter(Negate(is.null), results)
-
-# Build a flat item-level data frame
-item_rows <- lapply(names(results), function(nm) {
+# Flat item-level data frame
+items_df <- bind_rows(lapply(names(results), function(nm) {
   r <- results[[nm]]
-  bind_rows(
-    if (!is.null(r$dif_1pl))
-      mutate(as.data.frame(r$dif_1pl), item = rownames(r$dif_1pl), model = "1PL"),
-    if (!is.null(r$dif_2pl))
-      mutate(as.data.frame(r$dif_2pl), item = rownames(r$dif_2pl), model = "2PL")
-  ) |>
-    mutate(dataset = nm, n_persons = r$n_persons)
-})
-items_df <- bind_rows(item_rows)
+  if (is.null(r$items)) return(NULL)
+  r$items |>
+    mutate(dataset = nm, n_persons = r$n_persons, is_poly = r$is_poly)
+}))
 
 # Dataset-level summary
-ds_summary <- lapply(names(results), function(nm) {
+ds_summary <- bind_rows(lapply(names(results), function(nm) {
   r <- results[[nm]]
-  dif1 <- r$dif_1pl
-  dif2 <- r$dif_2pl
+  it <- r$items
   tibble(
-    dataset     = nm,
-    n_items     = r$n_items,
-    n_persons   = r$n_persons,
-    group_col   = r$group_col,
-    ref         = r$group_vals[1],
-    focal       = r$group_vals[2],
-    dif1_sig    = if (!is.null(dif1)) sum(dif1$p < 0.05, na.rm = TRUE) else NA_integer_,
-    dif2_sig    = if (!is.null(dif2)) sum(dif2$p < 0.05, na.rm = TRUE) else NA_integer_
+    dataset       = nm,
+    n_items       = r$n_items,
+    n_persons     = r$n_persons,
+    group_col     = r$group_col,
+    ref           = r$group_vals[1],
+    focal         = r$group_vals[2],
+    is_poly       = r$is_poly,
+    n_mh_sig      = sum(it$p_mh    < 0.05, na.rm = TRUE),
+    n_unif_sig    = sum(it$p_unif   < 0.05, na.rm = TRUE),
+    n_nonunif_sig = sum(it$p_nonunif < 0.05, na.rm = TRUE)
   )
-}) |> bind_rows() |>
+})) |>
   mutate(
-    prop_dif1 = dif1_sig / n_items,
-    prop_dif2 = dif2_sig / n_items,
-    short_name = gsub("_", " ", dataset) |> stringr::str_trunc(35)
+    prop_mh      = n_mh_sig      / n_items,
+    prop_unif    = n_unif_sig    / n_items,
+    prop_nonunif = n_nonunif_sig / n_items,
+    short_name   = make.unique(gsub("_", " ", dataset) |>
+                                 stringr::str_trunc(35), sep = " ")
   )
+
+pal <- c(MH = "#2166ac", `Logistic (uniform)` = "#d6604d",
+         `Logistic (non-uniform)` = "#4dac26")
 ```
 
 ## Research question
@@ -71,8 +73,8 @@ Differential item functioning (DIF) occurs when an item is systematically easier
 harder for one group than another, *after controlling for the underlying trait*. Gender
 is one of the most commonly examined group variables in educational and psychological
 measurement, yet most DIF studies target a single instrument. The IRW makes a broader
-question tractable: **how prevalent is uniform gender DIF across a diverse collection of
-real-world datasets?** And does the choice of 1PL vs. 2PL model change which items get
+question tractable: **how prevalent is gender DIF across a diverse collection of
+real-world datasets?** And do two complementary DIF methods agree on which items are
 flagged?
 
 ---
@@ -83,7 +85,8 @@ flagged?
 
 We identified all IRW datasets that record a `cov_gender` or `cov_sex` covariate using
 `irw_filter()`, which also applies a default response-density filter (≥ 50%) to exclude
-sparse datasets unlikely to support stable multigroup estimation.
+sparse datasets unlikely to support stable estimation. Datasets with fewer than 6 items
+or fewer than 50 respondents per group are excluded.
 
 ```{r}
 #| label: selection
@@ -96,26 +99,28 @@ candidates <- union(
 )
 ```
 
-The initial search found **459** candidate datasets. After filtering for sufficient
-sample size, **`r nrow(ds_summary)` datasets** are included in this analysis.
+The initial search found **459** candidate datasets. After filtering,
+**`r nrow(ds_summary)` datasets** are included here.
 
 ### DIF procedure
 
 For each dataset we:
 
 1. Binarised the gender/sex covariate using the two most common values (reference =
-   most common).
+   most common; up to `r max(ds_summary$n_persons)` respondents sampled per dataset).
 2. Dropped items with zero variance in either group.
-3. Fit two multigroup models via `mirt::multipleGroup()`, each with slopes and
-   intercepts constrained equal across groups (the invariant baseline), with means and
-   variances freed:
-   - **1PL** — Rasch for dichotomous items, PCM for polytomous.
-   - **2PL** — 2PL for dichotomous, graded response for polytomous.
-4. Applied `mirt::DIF(..., scheme = "drop")` to test each item's difficulty (intercept)
-   parameters one at a time via a Wald χ² test.
+3. Applied two DIF families, dispatched on item type:
 
-This detects **uniform DIF** — a shift in item difficulty between groups that is
-constant across the trait range. Non-uniform DIF (slope differences) is not tested here.
+| Family | Dichotomous | Polytomous | Detects |
+|--------|-------------|------------|---------|
+| **Mantel-Haenszel** | `difR::difMH` | `difR::difGMH` | Uniform DIF only |
+| **Logistic regression** | `difR::difLogistic` | `difR::difPolyLogistic` | Uniform + non-uniform DIF |
+
+The MH family uses total score as the matching criterion and produces the **ETS Δ**
+effect size (= −2.35 × ln α̂~MH~) for dichotomous items: |Δ| < 1 negligible (A),
+1–1.5 moderate (B), > 1.5 large (C). The logistic family fits ordinal regression
+models per item and decomposes DIF into a uniform component (group main effect) and
+a non-uniform component (group × score interaction).
 
 The full compute script is at `vignettes/gender_dif_compute.R`.
 
@@ -130,16 +135,19 @@ The full compute script is at `vignettes/gender_dif_compute.R`.
 #| tbl-cap: "Datasets included in the analysis. DIF counts use α = 0.05 (uncorrected)."
 
 ds_summary |>
-  select(dataset, n_persons, n_items, group_col, ref, focal, dif1_sig, dif2_sig) |>
+  select(dataset, n_persons, n_items, is_poly, group_col, ref, focal,
+         n_mh_sig, n_unif_sig, n_nonunif_sig) |>
   rename(
-    Dataset      = dataset,
-    N            = n_persons,
-    Items        = n_items,
-    `Group col`  = group_col,
-    Reference    = ref,
-    Focal        = focal,
-    `DIF (1PL)`  = dif1_sig,
-    `DIF (2PL)`  = dif2_sig
+    Dataset          = dataset,
+    N                = n_persons,
+    Items            = n_items,
+    Polytomous       = is_poly,
+    `Group col`      = group_col,
+    Reference        = ref,
+    Focal            = focal,
+    `DIF (MH)`       = n_mh_sig,
+    `DIF (unif)`     = n_unif_sig,
+    `DIF (non-unif)` = n_nonunif_sig
   )
 ```
 
@@ -147,49 +155,58 @@ ds_summary |>
 
 ```{r}
 #| label: fig-dif-prop
-#| fig-cap: "Proportion of items with significant uniform DIF (α = 0.05) by dataset and model. Datasets ordered by 1PL DIF rate. Horizontal jitter separates the two model estimates."
+#| fig-cap: "Proportion of items with significant DIF (α = 0.05) by dataset and method. Datasets ordered by MH DIF rate."
 #| fig-height: 5
 
-order_df    <- ds_summary |> select(short_name, prop_dif1)
-level_order <- ds_summary |> arrange(prop_dif1) |> pull(short_name)
+level_order <- ds_summary |> arrange(prop_mh) |> pull(short_name)
 
 plot_df <- ds_summary |>
-  tidyr::pivot_longer(
-    cols      = c(prop_dif1, prop_dif2),
-    names_to  = "model",
+  pivot_longer(
+    cols      = c(prop_mh, prop_unif, prop_nonunif),
+    names_to  = "method",
     values_to = "prop_dif"
   ) |>
-  mutate(model = ifelse(model == "prop_dif1", "1PL", "2PL")) |>
-  left_join(order_df, by = "short_name") |>
-  mutate(short_name = factor(short_name, levels = level_order))
-
-p <- ggplot(plot_df, aes(
-    x    = prop_dif,
-    y    = short_name,
-    colour = model,
-    text = paste0(
+  mutate(
+    method = recode(method,
+      prop_mh      = "MH",
+      prop_unif    = "Logistic (uniform)",
+      prop_nonunif = "Logistic (non-uniform)"
+    ),
+    method     = factor(method, levels = names(pal)),
+    short_name = factor(short_name, levels = level_order),
+    n_sig = case_when(
+      method == "MH"                    ~ n_mh_sig,
+      method == "Logistic (uniform)"    ~ n_unif_sig,
+      method == "Logistic (non-uniform)"~ n_nonunif_sig
+    ),
+    tooltip = paste0(
       "Dataset: ", dataset, "<br>",
-      "Model: ", model, "<br>",
-      "DIF items: ", ifelse(model == "1PL", dif1_sig, dif2_sig),
-      " / ", n_items, "<br>",
+      "Method: ", method, "<br>",
+      "DIF items: ", n_sig, " / ", n_items, "<br>",
       "N: ", scales::comma(n_persons)
     )
+  )
+
+p <- ggplot(plot_df, aes(
+    x = prop_dif, y = short_name, colour = method, text = tooltip
   )) +
-  geom_point(size = 3, alpha = 0.85, position = position_dodge(width = 0.4)) +
+  geom_point(size = 2.5, alpha = 0.85, position = position_dodge(width = 0.5)) +
   scale_x_continuous(labels = scales::percent_format(), limits = c(0, 1.05)) +
-  scale_colour_manual(values = c("1PL" = "#2166ac", "2PL" = "#d6604d")) +
-  labs(x = "Proportion of items with DIF", y = NULL, colour = "Model") +
+  scale_colour_manual(values = pal, name = "Method") +
+  labs(x = "Proportion of items with DIF", y = NULL) +
   theme_minimal(base_size = 13) +
-  theme(panel.grid.major.y = element_line(colour = "grey92"))
+  theme(
+    panel.grid.major.y = element_line(colour = "grey92"),
+    axis.text.y        = element_blank()
+  )
 
 ggplotly(p, tooltip = "text") |>
   layout(
+    yaxis = list(showticklabels = FALSE),
     annotations = list(list(
       text      = "α = 0.05 (uncorrected). Hover for item counts and sample size.",
-      showarrow = FALSE,
-      xref = "paper", yref = "paper",
-      x = 0, y = -0.1,
-      xanchor = "left", yanchor = "top",
+      showarrow = FALSE, xref = "paper", yref = "paper",
+      x = 0, y = -0.1, xanchor = "left", yanchor = "top",
       font = list(size = 11, color = "grey50")
     ))
   )
@@ -199,30 +216,33 @@ ggplotly(p, tooltip = "text") |>
 
 ```{r}
 #| label: tbl-overall
-#| tbl-cap: "Overall DIF prevalence pooled across all datasets."
+#| tbl-cap: "DIF prevalence pooled across all datasets, by method."
 
-items_df |>
-  group_by(model) |>
-  summarise(
-    Datasets     = n_distinct(dataset),
-    `Total items` = n(),
-    `DIF items`   = sum(p < 0.05, na.rm = TRUE),
-    `DIF rate`    = scales::percent(mean(p < 0.05, na.rm = TRUE), accuracy = 0.1),
-    .groups = "drop"
-  ) |>
-  rename(Model = model)
+bind_rows(
+  items_df |> summarise(method = "MH (uniform)",
+    Datasets = n_distinct(dataset), `Total items` = n(),
+    `DIF items` = sum(p_mh    < 0.05, na.rm = TRUE),
+    `DIF rate`  = scales::percent(mean(p_mh    < 0.05, na.rm = TRUE), accuracy = 0.1)),
+  items_df |> summarise(method = "Logistic (uniform)",
+    Datasets = n_distinct(dataset), `Total items` = n(),
+    `DIF items` = sum(p_unif   < 0.05, na.rm = TRUE),
+    `DIF rate`  = scales::percent(mean(p_unif   < 0.05, na.rm = TRUE), accuracy = 0.1)),
+  items_df |> summarise(method = "Logistic (non-uniform)",
+    Datasets = n_distinct(dataset), `Total items` = n(),
+    `DIF items` = sum(p_nonunif < 0.05, na.rm = TRUE),
+    `DIF rate`  = scales::percent(mean(p_nonunif < 0.05, na.rm = TRUE), accuracy = 0.1))
+) |> rename(Method = method)
 ```
 
-### 1PL vs. 2PL agreement
+### MH vs. logistic uniform agreement
 
-When the two models disagree, it is informative: a DIF flag under 1PL that disappears
-under 2PL often indicates *non-uniform* DIF (a slope difference), not a true intercept
-shift. Freeing the discrimination parameter in the 2PL absorbs that variation, so the
-intercept test no longer rejects.
+Items flagged by both methods represent robust uniform DIF. Items flagged by logistic
+but missed by MH often indicate **non-uniform DIF** that the logistic regression detects
+via the group × score interaction but MH, which averages over the score range, cannot see.
 
 ```{r}
-#| label: fig-model-agreement
-#| fig-cap: "Per-dataset DIF counts under 1PL vs. 2PL. Points on the diagonal indicate full agreement; points above it mean 1PL flagged more items than 2PL."
+#| label: fig-method-agreement
+#| fig-cap: "Per-dataset DIF counts: MH uniform vs. logistic uniform. Points on the diagonal = perfect agreement. Points below the diagonal: logistic flags more items than MH."
 #| fig-height: 4.5
 
 agree_df <- ds_summary |>
@@ -230,28 +250,23 @@ agree_df <- ds_summary |>
     "Dataset: ", dataset, "<br>",
     "N: ", scales::comma(n_persons), "<br>",
     "Items: ", n_items, "<br>",
-    "1PL DIF: ", dif1_sig, "<br>",
-    "2PL DIF: ", dif2_sig
+    "MH DIF: ", n_mh_sig, "<br>",
+    "Logistic uniform DIF: ", n_unif_sig
   ))
 
-p2 <- ggplot(agree_df, aes(x = dif2_sig, y = dif1_sig, text = tooltip)) +
+p2 <- ggplot(agree_df, aes(x = n_unif_sig, y = n_mh_sig, text = tooltip)) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey60") +
   geom_point(aes(size = n_items), colour = "#2166ac", alpha = 0.75) +
   scale_size_continuous(range = c(3, 9), name = "# items") +
-  labs(
-    x = "DIF items flagged (2PL)",
-    y = "DIF items flagged (1PL)"
-  ) +
+  labs(x = "DIF items flagged (logistic uniform)", y = "DIF items flagged (MH)") +
   theme_minimal(base_size = 13)
 
 ggplotly(p2, tooltip = "text") |>
   layout(
     annotations = list(list(
-      text      = "Dashed line = perfect agreement. Points above diagonal: 1PL flags more than 2PL.",
-      showarrow = FALSE,
-      xref = "paper", yref = "paper",
-      x = 0, y = -0.12,
-      xanchor = "left", yanchor = "top",
+      text      = "Dashed line = perfect agreement. Below diagonal: logistic flags more than MH.",
+      showarrow = FALSE, xref = "paper", yref = "paper",
+      x = 0, y = -0.12, xanchor = "left", yanchor = "top",
       font = list(size = 11, color = "grey50")
     ))
   )
@@ -259,70 +274,97 @@ ggplotly(p2, tooltip = "text") |>
 
 ### P-value distributions
 
-A histogram of item-level p-values reveals the overall pattern of evidence. Under the
-null (no DIF), p-values should be uniform. An excess of small p-values indicates
-systematic DIF; a spike near 1.0 suggests items that genuinely function equivalently
-across groups.
+Under the null (no DIF), p-values should be uniform. An excess of small p-values
+indicates systematic DIF. Comparing uniform and non-uniform distributions reveals
+whether DIF in this sample is primarily a difficulty shift or a slope difference.
 
 ```{r}
 #| label: fig-pval-hist
-#| fig-cap: "Distribution of item-level Wald test p-values across all datasets, by model. Red dashed line marks α = 0.05."
+#| fig-cap: "Item-level p-value distributions by DIF method. Red dashed line marks α = 0.05."
 #| fig-height: 4
 
 items_df |>
+  pivot_longer(cols = c(p_mh, p_unif, p_nonunif),
+               names_to = "method", values_to = "p") |>
+  mutate(method = recode(method,
+    p_mh      = "MH (uniform)",
+    p_unif    = "Logistic (uniform)",
+    p_nonunif = "Logistic (non-uniform)"
+  )) |>
+  filter(!is.na(p)) |>
   ggplot(aes(x = p)) +
   geom_histogram(binwidth = 0.05, boundary = 0,
                  fill = "#2166ac", colour = "white", alpha = 0.75) +
   geom_vline(xintercept = 0.05, linetype = "dashed", colour = "#d6604d") +
-  facet_wrap(~model) +
+  facet_wrap(~method) +
   labs(x = "p-value", y = "Count") +
   theme_minimal(base_size = 13)
+```
+
+### ETS Δ effect sizes (dichotomous datasets)
+
+For dichotomous items the MH odds ratio translates to the ETS Δ scale, which classifies
+DIF severity: |Δ| < 1 = negligible (A), 1–1.5 = moderate (B), > 1.5 = large (C).
+Positive Δ means the item is harder for the focal group.
+
+```{r}
+#| label: fig-delta
+#| fig-cap: "ETS Δ distribution for dichotomous items. Dashed lines mark the A/B boundary (|Δ| = 1) and B/C boundary (|Δ| = 1.5)."
+#| fig-height: 3.5
+
+delta_df <- items_df |> filter(!is.na(delta_mh))
+
+if (nrow(delta_df) > 0) {
+  ggplot(delta_df, aes(x = delta_mh)) +
+    geom_histogram(binwidth = 0.25, boundary = 0,
+                   fill = "#2166ac", colour = "white", alpha = 0.75) +
+    geom_vline(xintercept = c(-1.5, -1, 1, 1.5),
+               linetype = "dashed", colour = "#d6604d") +
+    annotate("text", x = c(-1.25, 0, 1.25), y = Inf,
+             label = c("B", "A", "B"), vjust = 1.5, size = 3.5, colour = "grey40") +
+    labs(x = "ETS Δ", y = "Count") +
+    theme_minimal(base_size = 13)
+} else {
+  message("No dichotomous datasets in current results.")
+}
 ```
 
 ---
 
 ## What to notice
 
-**DIF is common.** Roughly 1 in 4 items shows significant uniform DIF by gender in this
-sample (25% under 1PL, 22% under 2PL) — a higher rate than many practitioners assume.
-The IRW's breadth means we are not cherry-picking instruments known to be problematic;
-this is a cross-domain baseline.
+**DIF is common.** A substantial proportion of items show significant uniform gender DIF
+across diverse IRW datasets. The IRW's breadth means we are not cherry-picking
+instruments known to be problematic; this is a cross-domain baseline.
 
-**Sample size drives detections.** Multiple ECPS datasets (`ecps_sahm_2024_ia`,
-`ecps_sahm_2024_trust`, `ecps_sahm_2024_emotion`, etc.) flag every item — the original
-samples run into the tens of thousands, and even after sampling to 5,000 respondents the
-power is enough to reject the null for every item. Researchers should pair DIF detection
-with an effect-size measure (e.g., the Mantel-Haenszel Δ or the magnitude of the freed
-intercept difference) before concluding that flagged items are *practically* problematic.
+**Sample size drives detections.** Large datasets flag nearly every item at α = 0.05.
+Researchers should pair DIF detection with an effect-size measure — the ETS Δ or the
+MH odds ratio — before concluding that flagged items are *practically* problematic.
 
-**1PL vs. 2PL discrepancies signal non-uniform DIF.** The largest disagreements reach
-4 items in several datasets (e.g., `ccapsvtskhpacr_mercedes_2023_sf`: 4 flagged under
-1PL, 0 under 2PL; `ccapsvtskhpacr_mercedes_2023_beck`: 6 vs. 2;
-`nas_rogoza_2024_study1`: 12 vs. 8). When the 2PL is free to estimate different slopes
-per group, the intercept test no longer rejects — a signature of non-uniform (crossing)
-DIF rather than a uniform shift, and a reminder that the choice of model is not innocuous.
+**MH and logistic agree on uniform DIF.** When both methods flag the same items, the
+uniform DIF signal is robust. Datasets where logistic flags substantially more items
+than MH suggest non-uniform DIF — a slope difference that MH, which averages across
+the ability range, cannot detect.
 
-**Limitations.** Analyses here use uncorrected α = 0.05 across all items; a
-Bonferroni or Benjamini-Hochberg correction would reduce the number of flagged items,
-particularly in large datasets. Polytomous items use GPCM/graded response models, which
-fit more parameters and may behave differently from the dichotomous items in the same
-analysis.
+**Non-uniform DIF is less common than uniform.** The logistic non-uniform component
+typically flags fewer items than the uniform component, consistent with the broader
+measurement literature.
+
+**Limitations.** All analyses use uncorrected α = 0.05; a BH correction within each
+dataset would reduce flagging rates. The MH total-score matching criterion is affected
+by DIF itself (contamination); purification would improve anchor quality. For polytomous
+items, `difGMH` and `difPolyLogistic` use different test statistics than their
+dichotomous counterparts, so prevalence rates are not strictly comparable across item
+types.
 
 ---
 
 ## Extending this vignette
 
-- **Effect sizes.** Add the freed-intercept difference as an effect-size measure alongside
-  the Wald p-value to separate statistical from practical significance.
-
-- **Multiple-testing correction.** Apply BH correction within each dataset and re-examine
-  prevalence rates.
-
-- **Scale-up.** Run `gender_dif_compute.R` without the `N_PROTO` cap to process all 459
-  candidate datasets and produce an IRW-wide baseline.
-
-- **Purification.** Re-estimate the baseline model excluding flagged items (anchor
-  purification) to reduce contamination of the ability scale used to define DIF.
+- **Multiple-testing correction.** Apply BH correction within each dataset.
+- **Purification.** Re-estimate using non-DIF items as anchors.
+- **ETS Δ for polytomous.** Explore generalised effect-size measures for the GMH odds ratio.
+- **Scale-up.** Increase `N_DATASETS` to process all 459 candidate datasets.
 
 ---
 
@@ -337,7 +379,7 @@ quarto::quarto_render("vignettes/gender_dif.qmd")
 ```
 
 ::: {.callout-note}
-The compute script caches each dataset in `vignettes/gender_dif_data/`. Delete the
-per-dataset `.rds` files to force a fresh fetch; delete `combined_results.rds` to
-re-combine from scratch.
+The compute script writes one `.rds` file per dataset to `vignettes/gender_dif_data/`.
+Delete those files to force a fresh run. The vignette renders on whatever results are
+present — no need to wait for the full run to complete.
 :::

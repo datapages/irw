@@ -1,7 +1,7 @@
 ---
-title: "Polytomous IRT: Binomial vs. Native Models"
+title: "Polytomous IRT: Binomial vs. Standard Polytomous Models"
 description: |
-  How do parsimonious binomial IRT models compare to native polytomous IRT models
+  How do parsimonious binomial IRT models compare to standard polytomous IRT models
   (GPCM, GRM, PCM, sequential) when evaluated by cross-validated prediction error?
   We fit seven models to each of a diverse set of IRW polytomous datasets and compare
   out-of-sample RMSE.
@@ -27,7 +27,11 @@ suppressPackageStartupMessages({
   library(plotly)
 })
 
-results  <- readRDS("poly_compare_data/multi_results.rds")
+fs       <- list.files("poly_compare_data", pattern = "^multi_.+\\.rds$", full.names = TRUE)
+fs       <- fs[!grepl("multi_(results|summary)\\.rds$", fs)]
+results  <- Filter(Negate(is.null), lapply(fs, readRDS))
+names(results) <- sub("^multi_", "", sub("\\.rds$", "", basename(fs)))
+results  <- Filter(function(r) r$K_range >= 2, results)  # drop K_range=1 (dichotomous) that slipped through
 all_rmse <- do.call(rbind, lapply(results, `[[`, "rmse"))
 
 meta <- do.call(rbind, lapply(names(results), function(nm) {
@@ -38,7 +42,7 @@ meta <- do.call(rbind, lapply(names(results), function(nm) {
 
 # Model ordering for plots
 model_levels <- c("PCM", "GPCM", "GRM", "Tutz", "1PL+logit", "2PL+logit", "1PL+cloglog")
-model_type   <- c(PCM = "Native", GPCM = "Native", GRM = "Native", Tutz = "Native",
+model_type   <- c(PCM = "Standard", GPCM = "Standard", GRM = "Standard", Tutz = "Standard",
                   `1PL+logit` = "Binomial", `2PL+logit` = "Binomial",
                   `1PL+cloglog` = "Binomial")
 
@@ -48,6 +52,14 @@ all_rmse <- all_rmse |>
     mod_type  = model_type[as.character(model)],
     short_name = gsub("_", " ", dataset) |> stringr::str_trunc(35)
   )
+
+# ensure short_name is unique per dataset (truncation can collapse distinct names)
+sn_map <- all_rmse |>
+  distinct(dataset, short_name) |>
+  mutate(short_name = make.unique(short_name, sep = " "))
+all_rmse <- all_rmse |>
+  select(-short_name) |>
+  left_join(sn_map, by = "dataset")
 
 # Dataset-level: median RMSE across models for ordering
 ds_med <- all_rmse |>
@@ -74,6 +86,13 @@ mean_ranks <- ranks |>
   group_by(model, mod_type) |>
   summarise(mean_rank = mean(rank), .groups = "drop") |>
   arrange(mean_rank)
+
+# Head-to-head: GPCM vs 2PL+logit
+h2h <- all_rmse |>
+  filter(model %in% c("GPCM", "2PL+logit")) |>
+  select(dataset, model, rmse) |>
+  tidyr::pivot_wider(names_from = model, values_from = rmse)
+n_gpcm_beats_2pl <- sum(h2h$GPCM < h2h$`2PL+logit`, na.rm = TRUE)
 ```
 
 ## Research question
@@ -86,7 +105,7 @@ parameters per item regardless of *K*) and can use different link functions (log
 log-log).
 
 The IRW makes a large-scale empirical test straightforward: **do binomial models match
-or beat native polytomous IRT when evaluated by out-of-sample prediction error?** And
+or beat standard polytomous IRT when evaluated by out-of-sample prediction error?** And
 does the choice of link function matter?
 
 ---
@@ -97,7 +116,7 @@ does the choice of link function matter?
 
 We compare seven models across two families:
 
-**Native polytomous** (one set of parameters per response category):
+**Standard polytomous** (one set of parameters per response category):
 
 - **PCM** — Partial Credit Model (Rasch-constrained GPCM; discrimination fixed at 1)
 - **GPCM** — Generalized Partial Credit Model (free discrimination)
@@ -126,12 +145,33 @@ library(irw)
 candidates <- irw_filter(n_categories = c(3, 6))
 ```
 
+### Parameter counts
+
+The two families differ substantially in how many parameters they use per item:
+
+| Model | Params per item | Grows with K? |
+|---|---|---|
+| PCM | K−1 | yes |
+| GPCM | K | yes |
+| GRM | K | yes |
+| Tutz | K | yes |
+| 1PL+logit | 1 | no |
+| **2PL+logit** | **2** | **no** |
+| 1PL+cloglog | 1 | no |
+
+PCM fixes discrimination at 1, leaving only K−1 threshold parameters free. GPCM, GRM,
+and Tutz each add a free discrimination parameter for K total. At K = 4 (the most common
+case in our data), GPCM uses 4 parameters per item vs. 2 for 2PL+logit. The binomial
+models' competitiveness despite this parsimony advantage is the central question.
+
 ### Cross-validation
 
-Each dataset was split 80/20 by person. Models were fit on the training set; predictions
-were generated on the held-out test set using expected scores E[*Y*|θ̂] / (*K*−1),
-putting all models on a common [0, 1] scale. RMSE was computed over person–item
-pairs with non-missing test responses.
+20% of observed responses were randomly held out at the **cell level** — individual
+person–item pairs, not whole persons. Models were fit on the remaining 80% of responses
+(held-out cells treated as missing). Each person was then scored via EAP using only
+their observed training responses, and held-out cells were predicted as expected scores
+E[*Y*|θ̂] / (*K*−1), putting all models on a common [0, 1] scale. RMSE was computed
+over the held-out cells.
 
 The full compute script is at `vignettes/poly_compare_multi_compute.R`.
 
@@ -159,10 +199,10 @@ meta |>
 
 ```{r}
 #| label: fig-rmse-dot
-#| fig-cap: "Cross-validated RMSE for each model on each dataset. Datasets ordered by median RMSE across models. Native models in blue, binomial models in orange."
+#| fig-cap: "Cross-validated RMSE for each model on each dataset. Datasets ordered by median RMSE across models. Standard polytomous models in blue, binomial models in orange."
 #| fig-height: 6.5
 
-pal <- c(Native = "#2166ac", Binomial = "#d6604d")
+pal <- c(Standard = "#2166ac", Binomial = "#d6604d")
 
 p <- ggplot(all_rmse, aes(
     x    = rmse,
@@ -184,10 +224,14 @@ p <- ggplot(all_rmse, aes(
   scale_shape_manual(values = c(16, 17, 15, 3, 1, 2, 4), name = "Model") +
   labs(x = "CV RMSE (rescaled response)", y = NULL) +
   theme_minimal(base_size = 12) +
-  theme(panel.grid.major.y = element_line(colour = "grey92"))
+  theme(
+    panel.grid.major.y = element_line(colour = "grey92"),
+    axis.text.y        = element_blank()
+  )
 
 ggplotly(p, tooltip = "text") |>
   layout(
+    yaxis = list(showticklabels = FALSE),
     annotations = list(list(
       text      = "80/20 train/test split. Lower RMSE = better prediction.",
       showarrow = FALSE,
@@ -225,43 +269,111 @@ ggplot(rank_se, aes(
   theme_minimal(base_size = 13)
 ```
 
-### GPCM vs. 2PL+logit
+### Best standard polytomous vs. best binomial (and their constrained counterparts)
 
-The two best-performing models — GPCM (best mean rank) and 2PL+logit (most wins) — are
-the flexible members of each family. How closely do they track each other?
+GPCM is the best-performing standard polytomous model and 2PL+logit the best binomial
+model; PCM and 1PL+logit are their discrimination-constrained counterparts. The two
+panels show how each flexible model compares to its constrained analogue from the other
+family.
 
 ```{r}
-#| label: fig-gpcm-vs-2pl
-#| fig-cap: "Per-dataset RMSE for GPCM vs. 2PL+logit. Points above the diagonal: GPCM fits better; below: 2PL+logit fits better. Point size reflects number of items."
+#| label: fig-model-pairs
+#| fig-cap: "Left: GPCM vs. 2PL+logit (flexible models). Right: PCM vs. 1PL+logit (constrained models). Points above the diagonal: standard polytomous model fits better. Coloured dotted lines show the mean RMSE for the two featured models (orange = binomial, blue = standard); grey dotted lines show the means for the corresponding constrained/flexible counterpart."
 #| fig-height: 4.5
 
-comp <- all_rmse |>
+make_scatter <- function(mod_x, mod_y, col, other_x = NULL, other_y = NULL) {
+  d <- all_rmse |>
+    filter(model %in% c(mod_x, mod_y)) |>
+    select(dataset, model, rmse) |>
+    pivot_wider(names_from = model, values_from = rmse) |>
+    left_join(meta, by = "dataset") |>
+    mutate(tooltip = paste0(
+      "Dataset: ", dataset, "<br>",
+      mod_y, ": ", round(.data[[mod_y]], 4), "<br>",
+      mod_x, ": ", round(.data[[mod_x]], 4), "<br>",
+      "K: ", K_range, "  items: ", ni, "  N: ", N
+    ))
+  mean_x <- mean(d[[mod_x]], na.rm = TRUE)
+  mean_y <- mean(d[[mod_y]], na.rm = TRUE)
+  other_mean_x <- if (!is.null(other_x))
+    mean(all_rmse$rmse[all_rmse$model == other_x], na.rm = TRUE) else NULL
+  other_mean_y <- if (!is.null(other_y))
+    mean(all_rmse$rmse[all_rmse$model == other_y], na.rm = TRUE) else NULL
+  p <- ggplot(d, aes(x = .data[[mod_x]], y = .data[[mod_y]],
+                size = ni, text = tooltip)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey60") +
+    geom_vline(xintercept = mean_x, linetype = "dotted", colour = "#d6604d", linewidth = 0.8) +
+    geom_hline(yintercept = mean_y, linetype = "dotted", colour = "#2166ac", linewidth = 0.8)
+  if (!is.null(other_mean_x))
+    p <- p + geom_vline(xintercept = other_mean_x, linetype = "dotted", colour = "grey50", linewidth = 0.8)
+  if (!is.null(other_mean_y))
+    p <- p + geom_hline(yintercept = other_mean_y, linetype = "dotted", colour = "grey50", linewidth = 0.8)
+  p +
+    geom_point(colour = col, alpha = 0.75) +
+    scale_size_continuous(range = c(3, 9), name = "# items") +
+    labs(x = paste("CV RMSE —", mod_x), y = paste("CV RMSE —", mod_y)) +
+    theme_minimal(base_size = 12)
+}
+
+p_flex  <- make_scatter("2PL+logit", "GPCM", "#2166ac", other_x = "1PL+logit", other_y = "PCM")
+p_const <- make_scatter("1PL+logit", "PCM",  "#2166ac", other_x = "2PL+logit", other_y = "GPCM")
+
+subplot(
+  ggplotly(p_flex,  tooltip = "text"),
+  ggplotly(p_const, tooltip = "text"),
+  nrows = 1, shareY = FALSE, titleX = TRUE, titleY = TRUE
+) |>
+  layout(
+    annotations = list(list(
+      text      = "Above diagonal: standard polytomous model better.",
+      showarrow = FALSE, xref = "paper", yref = "paper",
+      x = 0, y = -0.1, xanchor = "left", yanchor = "top",
+      font = list(size = 11, color = "grey50")
+    ))
+  )
+```
+
+### Performance gap vs. number of response categories
+
+With more categories, standard polytomous models gain parameters while binomial models
+stay at 2 — does the prediction gap widen with *K*?
+
+```{r}
+#| label: fig-by-k
+#| fig-cap: "RMSE difference (2PL+logit minus GPCM) by number of response categories K. Positive values mean GPCM predicts better. Each point is one dataset; the trend line is a loess smooth."
+#| fig-height: 4
+
+gap_k <- all_rmse |>
   filter(model %in% c("GPCM", "2PL+logit")) |>
   select(dataset, model, rmse) |>
   pivot_wider(names_from = model, values_from = rmse) |>
-  left_join(meta, by = "dataset") |>
-  mutate(tooltip = paste0(
-    "Dataset: ", dataset, "<br>",
-    "GPCM: ", round(GPCM, 4), "<br>",
-    "2PL+logit: ", round(`2PL+logit`, 4), "<br>",
-    "K: ", K_range, "  items: ", ni, "  N: ", N
-  ))
+  left_join(meta |> select(dataset, K_range, ni, N), by = "dataset") |>
+  mutate(
+    gap     = `2PL+logit` - GPCM,
+    K       = factor(K_range + 1L),
+    tooltip = paste0(
+      "Dataset: ", dataset, "<br>",
+      "K: ", K_range + 1L, "<br>",
+      "Gap: ", round(gap, 4), "<br>",
+      "items: ", ni, "  N: ", N
+    )
+  )
 
-p3 <- ggplot(comp, aes(x = `2PL+logit`, y = GPCM, size = ni, text = tooltip)) +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey60") +
-  geom_point(colour = "#2166ac", alpha = 0.75) +
-  scale_size_continuous(range = c(3, 10), name = "# items") +
-  labs(x = "CV RMSE — 2PL+logit", y = "CV RMSE — GPCM") +
+p_gap <- ggplot(gap_k, aes(x = K_range + 1L, y = gap, text = tooltip)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey60") +
+  geom_jitter(width = 0.08, size = 3, colour = "#2166ac", alpha = 0.75) +
+  geom_smooth(method = "loess", se = TRUE, colour = "#d6604d", fill = "#d6604d",
+              alpha = 0.15, linewidth = 0.8) +
+  scale_x_continuous(breaks = 3:7) +
+  labs(x = "K (number of response categories)", y = "RMSE(2PL+logit) − RMSE(GPCM)") +
   theme_minimal(base_size = 13)
 
-ggplotly(p3, tooltip = "text") |>
+ggplotly(p_gap, tooltip = "text") |>
   layout(
     annotations = list(list(
-      text      = "Dashed line = equal performance. Above diagonal: GPCM better.",
-      showarrow = FALSE,
-      xref = "paper", yref = "paper",
-      x = 0, y = -0.12,
-      xanchor = "left", yanchor = "top",
+      text      = "Above zero: GPCM better. Trend line: loess smooth.",
+      showarrow = FALSE, xref = "paper", yref = "paper",
+      x = 0, y = -0.1, xanchor = "left", yanchor = "top",
       font = list(size = 11, color = "grey50")
     ))
   )
@@ -271,28 +383,27 @@ ggplotly(p3, tooltip = "text") |>
 
 ## What to notice
 
-**Discrimination matters more than the model family.** The clearest pattern in the
-rankings is the within-family split: GPCM (rank 2.5) substantially beats PCM (rank 4.1),
-and 2PL+logit (rank 2.8) substantially beats 1PL+logit (rank 4.9). Freeing the
-discrimination parameter consistently improves predictions — whether you are inside the
-native polytomous family or the binomial family.
+**Discrimination matters — and so does model family.** The clearest within-family
+pattern is that freeing discrimination helps substantially: GPCM (mean rank
+`r round(mean_ranks$mean_rank[mean_ranks$model=="GPCM"],2)`) beats PCM
+(`r round(mean_ranks$mean_rank[mean_ranks$model=="PCM"],2)`), and 2PL+logit
+(`r round(mean_ranks$mean_rank[mean_ranks$model=="2PL+logit"],2)`) beats 1PL+logit
+(`r round(mean_ranks$mean_rank[mean_ranks$model=="1PL+logit"],2)`). But across families,
+the standard polytomous models take the top three spots — GPCM, GRM, Tutz all rank
+ahead of 2PL+logit. The per-category parameterisation carries predictive value beyond
+what a two-parameter binomial model can capture.
 
-**Binomial models are competitive.** 2PL+logit wins on `r sum(winners$model == "2PL+logit")`
-of `r nrow(winners)` datasets, compared with `r sum(winners$model == "GPCM")` for
-GPCM. The two models track each other closely across datasets (see the scatter above),
-with neither dominating. Given that the binomial model uses just 2 parameters per item
-regardless of *K*, this is a favorable result for parsimony.
+**GPCM dominates.** GPCM wins on `r sum(winners$model == "GPCM")` of
+`r nrow(winners)` datasets and beats 2PL+logit head-to-head on `r n_gpcm_beats_2pl` of
+`r nrow(h2h)`. 2PL+logit wins on only `r sum(winners$model == "2PL+logit")` datasets
+despite using fewer parameters. The parsimony advantage of the binomial model does not
+translate to better out-of-sample prediction at this scale.
 
-**The cloglog link sometimes wins.** 1PL+cloglog takes top spot on
-`r sum(winners$model == "1PL+cloglog")` datasets despite being a constrained 1-parameter
-model. This is unexpected and may reflect an asymmetric response distribution in those
-instruments — the cloglog link has a longer right tail than the logistic, so it fits
-well when low-category responses are rare.
-
-**GRM lags GPCM.** Among the native polytomous models, GRM (mean rank 3.9) trails
-GPCM (2.5) despite also estimating discrimination. The cumulative logit parameterisation
-appears to be less competitive in practice on these datasets than the adjacent-category
-approach.
+**Constrained binomial models perform poorly.** 1PL+logit and 1PL+cloglog rank last,
+well below even PCM. Fixing discrimination hurts far more in the binomial family than
+in the standard polytomous family — PCM at least captures per-category thresholds
+precisely, while 1PL+logit reduces the entire response distribution to a single location
+parameter.
 
 ---
 
