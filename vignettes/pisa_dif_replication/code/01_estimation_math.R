@@ -19,7 +19,7 @@ library(MASS)
 library(foreach)
 library(doParallel)
 
-N_CORES <- max(1, detectCores() - 1)
+N_CORES <- 2 ##max(1, min(4, detectCores() - 1))
 registerDoParallel(cores = N_CORES)
 message("Using ", N_CORES, " cores")
 
@@ -216,6 +216,7 @@ EM_2PL_inference <- function(a, b, g, x, dat, weights, z, mu, sigma, w, ite, tol
 
     # Parallelize over items — each item's parameters are independent given quadrature
     phi1_rows <- foreach(j = seq_len(J), .combine = rbind,
+                         .errorhandling = "stop",
                          .export = c("tran", "evaluate_prod",
                                      "target_function1", "target_function_ab",
                                      "target_function_g", "target_function_g1",

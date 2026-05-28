@@ -1,0 +1,329 @@
+---
+title: "Polytomous IRT: Binomial vs. Native Models"
+description: |
+  How do parsimonious binomial IRT models compare to native polytomous IRT models
+  (GPCM, GRM, PCM, sequential) when evaluated by cross-validated prediction error?
+  We fit seven models to each of a diverse set of IRW polytomous datasets and compare
+  out-of-sample RMSE.
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+  library(plotly)
+})
+
+results  <- readRDS("poly_compare_data/multi_results.rds")
+all_rmse <- do.call(rbind, lapply(results, `[[`, "rmse"))
+
+meta <- do.call(rbind, lapply(names(results), function(nm) {
+  r <- results[[nm]]
+  data.frame(dataset = nm, K_range = r$K_range, ni = r$ni, N = r$N,
+             stringsAsFactors = FALSE)
+}))
+
+# Model ordering for plots
+model_levels <- c("PCM", "GPCM", "GRM", "Tutz", "1PL+logit", "2PL+logit", "1PL+cloglog")
+model_type   <- c(PCM = "Native", GPCM = "Native", GRM = "Native", Tutz = "Native",
+                  `1PL+logit` = "Binomial", `2PL+logit` = "Binomial",
+                  `1PL+cloglog` = "Binomial")
+
+all_rmse <- all_rmse |>
+  mutate(
+    model     = factor(model, levels = model_levels),
+    mod_type  = model_type[as.character(model)],
+    short_name = gsub("_", " ", dataset) |> stringr::str_trunc(35)
+  )
+
+# Dataset-level: median RMSE across models for ordering
+ds_med <- all_rmse |>
+  group_by(dataset, short_name) |>
+  summarise(med_rmse = median(rmse), .groups = "drop") |>
+  arrange(med_rmse)
+
+all_rmse <- all_rmse |>
+  mutate(short_name = factor(short_name, levels = ds_med$short_name))
+
+# Winner per dataset
+winners <- all_rmse |>
+  group_by(dataset) |>
+  slice_min(rmse, n = 1, with_ties = FALSE) |>
+  ungroup()
+
+# Mean rank
+ranks <- all_rmse |>
+  group_by(dataset) |>
+  mutate(rank = rank(rmse, ties.method = "min")) |>
+  ungroup()
+
+mean_ranks <- ranks |>
+  group_by(model, mod_type) |>
+  summarise(mean_rank = mean(rank), .groups = "drop") |>
+  arrange(mean_rank)
+```
+
+## Research question
+
+Polytomous IRT models (GPCM, GRM, PCM, sequential) are the standard tools for ordered
+responses with three or more categories. But an alternative strategy is to treat the
+response as a **binomial count** — fitting a binomial distribution B(*K*−1, *p*) where
+*p* is a function of the latent trait. Binomial IRT models are parsimonious (two
+parameters per item regardless of *K*) and can use different link functions (logit,
+log-log).
+
+The IRW makes a large-scale empirical test straightforward: **do binomial models match
+or beat native polytomous IRT when evaluated by out-of-sample prediction error?** And
+does the choice of link function matter?
+
+---
+
+## Approach
+
+### Models
+
+We compare seven models across two families:
+
+**Native polytomous** (one set of parameters per response category):
+
+- **PCM** — Partial Credit Model (Rasch-constrained GPCM; discrimination fixed at 1)
+- **GPCM** — Generalized Partial Credit Model (free discrimination)
+- **GRM** — Graded Response Model (cumulative logistic)
+- **Tutz** — Sequential (adjacent-category) model
+
+**Binomial IRT** (two parameters per item; response treated as B(*K*−1, *p*)):
+
+- **1PL+logit** — logistic link, discrimination fixed
+- **2PL+logit** — logistic link, free discrimination
+- **1PL+cloglog** — complementary log-log link, discrimination fixed
+
+All models are fit with `mirt`. The custom binomial items use `mirt::createItem()`.
+
+### Datasets
+
+We used `irw_filter(n_categories = c(3, 6))` to identify IRW datasets with 3–6
+ordered response categories. Additional filters: N ≥ 200, ≥ 3 items, all items share
+the same *K*. Datasets larger than 5,000 respondents were downsampled.
+
+```{r}
+#| label: selection
+#| eval: false
+
+library(irw)
+candidates <- irw_filter(n_categories = c(3, 6))
+```
+
+### Cross-validation
+
+Each dataset was split 80/20 by person. Models were fit on the training set; predictions
+were generated on the held-out test set using expected scores E[*Y*|θ̂] / (*K*−1),
+putting all models on a common [0, 1] scale. RMSE was computed over person–item
+pairs with non-missing test responses.
+
+The full compute script is at `vignettes/poly_compare_multi_compute.R`.
+
+---
+
+## Results
+
+### Dataset overview
+
+```{r}
+#| label: tbl-datasets
+#| tbl-cap: "Polytomous datasets included in the analysis."
+
+meta |>
+  left_join(
+    winners |> select(dataset, best_model = model),
+    by = "dataset"
+  ) |>
+  rename(Dataset = dataset, `K range` = K_range, Items = ni,
+         `N (train+test)` = N, `Best model` = best_model) |>
+  arrange(`K range`, Items)
+```
+
+### RMSE by dataset and model
+
+```{r}
+#| label: fig-rmse-dot
+#| fig-cap: "Cross-validated RMSE for each model on each dataset. Datasets ordered by median RMSE across models. Native models in blue, binomial models in orange."
+#| fig-height: 6.5
+
+pal <- c(Native = "#2166ac", Binomial = "#d6604d")
+
+p <- ggplot(all_rmse, aes(
+    x    = rmse,
+    y    = short_name,
+    colour = mod_type,
+    shape  = model,
+    text = paste0(
+      "Dataset: ", dataset, "<br>",
+      "Model: ", model, "<br>",
+      "RMSE: ", round(rmse, 4), "<br>",
+      "K: ", meta$K_range[match(dataset, meta$dataset)],
+      "  items: ", meta$ni[match(dataset, meta$dataset)],
+      "  N: ", meta$N[match(dataset, meta$dataset)]
+    )
+  )) +
+  geom_point(size = 2.5, alpha = 0.85,
+             position = position_dodge(width = 0.5)) +
+  scale_colour_manual(values = pal, name = "Family") +
+  scale_shape_manual(values = c(16, 17, 15, 3, 1, 2, 4), name = "Model") +
+  labs(x = "CV RMSE (rescaled response)", y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.major.y = element_line(colour = "grey92"))
+
+ggplotly(p, tooltip = "text") |>
+  layout(
+    annotations = list(list(
+      text      = "80/20 train/test split. Lower RMSE = better prediction.",
+      showarrow = FALSE,
+      xref = "paper", yref = "paper",
+      x = 0, y = -0.07,
+      xanchor = "left", yanchor = "top",
+      font = list(size = 11, color = "grey50")
+    ))
+  )
+```
+
+### Model rankings
+
+```{r}
+#| label: fig-ranks
+#| fig-cap: "Mean rank across all datasets (rank 1 = best). Error bars show ±1 SE."
+#| fig-height: 3.5
+
+rank_se <- ranks |>
+  group_by(model, mod_type) |>
+  summarise(mean_rank = mean(rank), se = sd(rank) / sqrt(n()), .groups = "drop")
+
+ggplot(rank_se, aes(
+    x = reorder(model, mean_rank),
+    y = mean_rank,
+    fill = mod_type,
+    ymin = mean_rank - se,
+    ymax = mean_rank + se
+  )) +
+  geom_col(width = 0.6, alpha = 0.85) +
+  geom_errorbar(width = 0.25, colour = "grey40") +
+  scale_fill_manual(values = pal, name = "Family") +
+  coord_flip() +
+  labs(x = NULL, y = "Mean rank (lower = better)") +
+  theme_minimal(base_size = 13)
+```
+
+### GPCM vs. 2PL+logit
+
+The two best-performing models — GPCM (best mean rank) and 2PL+logit (most wins) — are
+the flexible members of each family. How closely do they track each other?
+
+```{r}
+#| label: fig-gpcm-vs-2pl
+#| fig-cap: "Per-dataset RMSE for GPCM vs. 2PL+logit. Points above the diagonal: GPCM fits better; below: 2PL+logit fits better. Point size reflects number of items."
+#| fig-height: 4.5
+
+comp <- all_rmse |>
+  filter(model %in% c("GPCM", "2PL+logit")) |>
+  select(dataset, model, rmse) |>
+  pivot_wider(names_from = model, values_from = rmse) |>
+  left_join(meta, by = "dataset") |>
+  mutate(tooltip = paste0(
+    "Dataset: ", dataset, "<br>",
+    "GPCM: ", round(GPCM, 4), "<br>",
+    "2PL+logit: ", round(`2PL+logit`, 4), "<br>",
+    "K: ", K_range, "  items: ", ni, "  N: ", N
+  ))
+
+p3 <- ggplot(comp, aes(x = `2PL+logit`, y = GPCM, size = ni, text = tooltip)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey60") +
+  geom_point(colour = "#2166ac", alpha = 0.75) +
+  scale_size_continuous(range = c(3, 10), name = "# items") +
+  labs(x = "CV RMSE — 2PL+logit", y = "CV RMSE — GPCM") +
+  theme_minimal(base_size = 13)
+
+ggplotly(p3, tooltip = "text") |>
+  layout(
+    annotations = list(list(
+      text      = "Dashed line = equal performance. Above diagonal: GPCM better.",
+      showarrow = FALSE,
+      xref = "paper", yref = "paper",
+      x = 0, y = -0.12,
+      xanchor = "left", yanchor = "top",
+      font = list(size = 11, color = "grey50")
+    ))
+  )
+```
+
+---
+
+## What to notice
+
+**Discrimination matters more than the model family.** The clearest pattern in the
+rankings is the within-family split: GPCM (rank 2.5) substantially beats PCM (rank 4.1),
+and 2PL+logit (rank 2.8) substantially beats 1PL+logit (rank 4.9). Freeing the
+discrimination parameter consistently improves predictions — whether you are inside the
+native polytomous family or the binomial family.
+
+**Binomial models are competitive.** 2PL+logit wins on `r sum(winners$model == "2PL+logit")`
+of `r nrow(winners)` datasets, compared with `r sum(winners$model == "GPCM")` for
+GPCM. The two models track each other closely across datasets (see the scatter above),
+with neither dominating. Given that the binomial model uses just 2 parameters per item
+regardless of *K*, this is a favorable result for parsimony.
+
+**The cloglog link sometimes wins.** 1PL+cloglog takes top spot on
+`r sum(winners$model == "1PL+cloglog")` datasets despite being a constrained 1-parameter
+model. This is unexpected and may reflect an asymmetric response distribution in those
+instruments — the cloglog link has a longer right tail than the logistic, so it fits
+well when low-category responses are rare.
+
+**GRM lags GPCM.** Among the native polytomous models, GRM (mean rank 3.9) trails
+GPCM (2.5) despite also estimating discrimination. The cumulative logit parameterisation
+appears to be less competitive in practice on these datasets than the adjacent-category
+approach.
+
+---
+
+## Extending this vignette
+
+- **Effect sizes.** The RMSE differences are often small. Pair them with a permutation
+  test or bootstrap CI to assess whether GPCM's edge over 2PL+logit is reliable.
+
+- **More link functions.** Add probit and cauchit binomial variants to map out the full
+  link-function landscape.
+
+- **IMV.** Replace (or supplement) RMSE with Inter-Model Vigorish to directly quantify
+  how much each model gains over a reference baseline.
+
+- **Scale-up.** Bump `N_DATASETS` in `poly_compare_multi_compute.R` and re-run to
+  cover more of the IRW polytomous catalogue.
+
+---
+
+## Reproducibility
+
+Results were computed on 2026-05-28 using `r nrow(meta)` IRW tables. To reproduce:
+
+```r
+# From project root
+Rscript vignettes/poly_compare_multi_compute.R
+quarto::quarto_render("vignettes/poly_compare.qmd")
+```
+
+::: {.callout-note}
+The compute script caches each dataset in `vignettes/poly_compare_data/`. Delete the
+per-dataset `.rds` files to force a fresh run; delete `multi_results.rds` to
+re-combine from scratch.
+:::
