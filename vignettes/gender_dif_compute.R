@@ -17,7 +17,7 @@ suppressPackageStartupMessages({
 
 set.seed(20260527)
 
-N_DATASETS        <- 100
+N_DATASETS        <- 250
 N_CORES           <- 5L
 MIN_GROUP         <- 50
 MIN_ITEMS         <- 6

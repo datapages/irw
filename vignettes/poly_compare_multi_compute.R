@@ -10,6 +10,7 @@
 
 suppressPackageStartupMessages({
   library(irw)
+  library(imv)
   library(mirt)
   library(dplyr)
   library(parallel)
@@ -55,12 +56,58 @@ custom_items <- list(
   binom_1pl_cll = binom_1pl_cll
 )
 
+# ── 2. imv_c and imv_t (from intermodelvigorish/shinysite collapse.qmd) ───────
+# imv.binary is imported from the imv package.
+# y must have: $resp (integer 0..K-1), columns p1{k} and p2{k} for each k.
+# pctt.tab: category proportions (length K), used as weights.
+
+imv_c <- function(y, pctt.tab, p1, p2) {
+  nn  <- length(pctt.tab)
+  om  <- numeric(nn)
+  iis <- 0:(nn - 1)
+  for (ii in iis) {
+    ns <- om.tmp <- numeric()
+    jjs <- iis[-match(ii, iis)]
+    for (jj in jjs) {
+      y2   <- y[y$resp %in% c(ii, jj), ]
+      resp <- ifelse(y2$resp == ii, 1, 0)
+      p1.ii <- y2[[paste0(p1, ii)]]; p1.jj <- y2[[paste0(p1, jj)]]
+      p2.ii <- y2[[paste0(p2, ii)]]; p2.jj <- y2[[paste0(p2, jj)]]
+      z <- data.frame(resp = resp,
+                      p1   = p1.ii / (p1.ii + p1.jj),
+                      p2   = p2.ii / (p2.ii + p2.jj))
+      om.tmp[as.character(jj)] <- imv.binary(z$resp, z$p1, z$p2)
+      ns[as.character(jj)]     <- nrow(z)
+    }
+    om[ii + 1] <- sum(om.tmp * ns) / sum(ns)
+  }
+  sum(om * pctt.tab) / sum(pctt.tab)
+}
+
+imv_t <- function(y, pctt.tab, p1, p2) {
+  nn <- length(pctt.tab)
+  om <- numeric(nn - 1)
+  for (ii in 0:(nn - 2)) {
+    resp <- ifelse(y$resp <= ii, 1, 0)
+    pr1  <- rowSums(y[, paste0(p1, 0:ii), drop = FALSE])
+    pr2  <- rowSums(y[, paste0(p2, 0:ii), drop = FALSE])
+    z    <- data.frame(resp = resp, p1 = pr1, p2 = pr2)
+    om[ii + 1] <- imv.binary(z$resp, z$p1, z$p2)
+  }
+  wts <- pctt.tab[1:(nn - 1)] / (1 - pctt.tab[nn])
+  sum(om * wts) / sum(wts)
+}
+
 # ── 2. Process one dataset (fetch → preprocess → fit → write) ─────────────────
 process_one <- function(tab) {
   cache <- file.path(out_dir, paste0("multi_", tab, ".rds"))
   if (file.exists(cache)) {
-    message("=== ", tab, " === (cached)")
-    return(readRDS(cache))
+    cached <- readRDS(cache)
+    if (!is.null(cached[["imv"]]) && !is.null(cached[["pair_imv"]])) {
+      message("=== ", tab, " === (cached)")
+      return(cached)
+    }
+    message("=== ", tab, " === (re-running: cache missing IMV or pair_imv)")
   }
 
   message("\n=== ", tab, " ===")
@@ -132,20 +179,53 @@ process_one <- function(tab) {
   test_cells  <- non_missing[holdout_idx, , drop = FALSE]
   obs_vals    <- resp_mat[test_cells]
 
+  # Returns list(pred = rescaled expected scores, probs = n_test x K matrix)
   predict_rescaled <- function(mod) {
     theta <- fscores(mod, response.pattern = train_mat, method = "EAP")[, 1]
     pred  <- numeric(nrow(test_cells))
+    probs <- matrix(NA_real_, nrow(test_cells), K)
     for (j in seq_len(ni)) {
       rows_j <- which(test_cells[, 2] == j)
       if (length(rows_j) == 0L) next
       Theta_j <- matrix(theta[test_cells[rows_j, 1]], ncol = 1)
       pr      <- probtrace(extract.item(mod, j), Theta_j)
+      if (ncol(pr) != K) next
       cats    <- 0:(ncol(pr) - 1L)
-      pred[rows_j] <- as.numeric(pr %*% cats) / (K - 1L)
+      pred[rows_j]    <- as.numeric(pr %*% cats) / (K - 1L)
+      probs[rows_j, ] <- pr
     }
-    pred
+    list(pred = pred, probs = probs)
   }
   compute_rmse <- function(pred) sqrt(mean((pred - obs_vals / (K - 1L))^2, na.rm = TRUE))
+
+  # Training category proportions used as the prevalence baseline for IMV
+  train_obs <- as.integer(train_mat[!is.na(train_mat)])
+  pctt.tab  <- as.numeric(table(factor(train_obs, levels = 0L:(K - 1L)))) / length(train_obs)
+
+  compute_imv <- function(probs) {
+    y_imv      <- as.data.frame(probs)
+    colnames(y_imv) <- paste0("p2", 0L:(K - 1L))
+    y_imv$resp <- obs_vals
+    for (k in 0L:(K - 1L)) y_imv[[paste0("p1", k)]] <- pctt.tab[k + 1L]
+    y_imv <- y_imv[complete.cases(y_imv), ]
+    list(
+      imv_c = tryCatch(imv_c(y_imv, pctt.tab, p1 = "p1", p2 = "p2"), error = function(e) NA_real_),
+      imv_t = tryCatch(imv_t(y_imv, pctt.tab, p1 = "p1", p2 = "p2"), error = function(e) NA_real_)
+    )
+  }
+
+  # Pairwise: how much does probs_enh improve over probs_base?
+  compute_imv_pair <- function(probs_base, probs_enh) {
+    y_imv <- as.data.frame(probs_base)
+    colnames(y_imv) <- paste0("p1", 0L:(K - 1L))
+    y_imv$resp <- obs_vals
+    for (k in 0L:(K - 1L)) y_imv[[paste0("p2", k)]] <- probs_enh[, k + 1L]
+    y_imv <- y_imv[complete.cases(y_imv), ]
+    list(
+      imv_c = tryCatch(imv_c(y_imv, pctt.tab, p1 = "p1", p2 = "p2"), error = function(e) NA_real_),
+      imv_t = tryCatch(imv_t(y_imv, pctt.tab, p1 = "p1", p2 = "p2"), error = function(e) NA_real_)
+    )
+  }
 
   fit_eval <- function(label, itemtypes, custom = NULL, pars = NULL) {
     message("    ", label, " ...")
@@ -156,12 +236,16 @@ process_one <- function(tab) {
     mod <- tryCatch(do.call(mirt, args),
                     error = function(e) { message("      FAILED: ", e$message); NULL })
     if (is.null(mod)) return(NULL)
-    pred <- tryCatch(predict_rescaled(mod),
-                     error = function(e) { message("      PREDICT FAILED: ", e$message); NULL })
-    if (is.null(pred)) return(NULL)
-    rmse <- compute_rmse(pred)
-    message("      RMSE = ", round(rmse, 4))
-    list(label = label, rmse = rmse)
+    out <- tryCatch(predict_rescaled(mod),
+                    error = function(e) { message("      PREDICT FAILED: ", e$message); NULL })
+    if (is.null(out)) return(NULL)
+    rmse     <- compute_rmse(out$pred)
+    imv_vals <- compute_imv(out$probs)
+    message("      RMSE=", round(rmse, 4),
+            "  imv_c=", round(imv_vals$imv_c, 4),
+            "  imv_t=", round(imv_vals$imv_t, 4))
+    list(label = label, rmse = rmse, imv_c = imv_vals$imv_c, imv_t = imv_vals$imv_t,
+         probs = out$probs)
   }
 
   pcm_pars <- tryCatch(
@@ -191,8 +275,29 @@ process_one <- function(tab) {
     data.frame(dataset = tab, model = r$label, rmse = round(r$rmse, 4),
                stringsAsFactors = FALSE)
   }))
+  imv_df <- do.call(rbind, lapply(res, function(r) {
+    if (is.null(r)) return(NULL)
+    data.frame(dataset = tab, model = r$label,
+               imv_c = round(r$imv_c, 4), imv_t = round(r$imv_t, 4),
+               stringsAsFactors = FALSE)
+  }))
 
-  out <- list(tab = tab, K = K, ni = ni, N = N, rmse = rmse_df)
+  safe_pair <- function(r_base, r_enh) {
+    if (is.null(r_base) || is.null(r_enh)) return(list(imv_c = NA_real_, imv_t = NA_real_))
+    compute_imv_pair(r_base$probs, r_enh$probs)
+  }
+  p1 <- safe_pair(res$binom_1pl,  res$pcm)
+  p2 <- safe_pair(res$binom_2pl,  res$gpcm)
+  pair_imv_df <- data.frame(
+    dataset    = tab,
+    comparison = c("1PL+logit→PCM", "2PL+logit→GPCM"),
+    imv_c      = round(c(p1$imv_c, p2$imv_c), 4),
+    imv_t      = round(c(p1$imv_t, p2$imv_t), 4),
+    stringsAsFactors = FALSE
+  )
+
+  out <- list(tab = tab, K = K, ni = ni, N = N, rmse = rmse_df, imv = imv_df,
+              pair_imv = pair_imv_df)
   saveRDS(out, cache)
   out
 }
@@ -208,7 +313,7 @@ done_before <- already_done()
 candidates  <- setdiff(irw_filter(n_categories = c(3, 7)), done_before)
 candidates  <- sample(candidates)
 n_needed    <- max(0L, N_DATASETS - length(done_before))
-candidates  <- head(candidates, n_needed * 3L)  # over-provision to absorb skips
+candidates  <- head(candidates, n_needed)
 
 message(length(done_before), " datasets already cached; running up to ",
         length(candidates), " candidates on ", N_CORES, " cores")
