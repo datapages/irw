@@ -17,7 +17,7 @@ suppressPackageStartupMessages({
 
 set.seed(20260527)
 
-N_DATASETS        <- 50
+N_DATASETS        <- 100
 N_CORES           <- 5L
 MIN_GROUP         <- 50
 MIN_ITEMS         <- 6
@@ -54,29 +54,30 @@ run_dif <- function(resp_mat, group_vec, is_poly) {
   ni      <- ncol(resp_mat)
   items   <- colnames(resp_mat)
 
-  # MH family
+  # MH family with purification
   mh <- tryCatch(
-    if (is_poly) difGMH(resp_df, group = group_vec, focal.names = 1)
-    else         difMH(resp_mat, group = group_vec, focal.name  = 1),
+    if (is_poly) difGMH(resp_df, group = group_vec, focal.names = 1, purify = TRUE)
+    else         difMH(resp_mat, group = group_vec, focal.name  = 1, purify = TRUE),
     error = function(e) { message("  MH failed: ", e$message); NULL }
   )
 
   # Logistic family — skip difPolyLogistic for large polytomous datasets
   use_poly_log <- is_poly && ni <= MAX_ITEMS_POLYLOG
-  log_fn <- if (use_poly_log) difPolyLogistic
-            else if (!is_poly) difLogistic
-            else NULL
+  log_fn       <- if (use_poly_log) difPolyLogistic
+                  else if (!is_poly) difLogistic
+                  else NULL
+  logistic_run <- !is.null(log_fn)
 
-  if (is.null(log_fn))
+  if (!logistic_run)
     message("  logistic skipped (poly items > ", MAX_ITEMS_POLYLOG, ")")
 
-  log_u <- if (!is.null(log_fn)) tryCatch(
-    log_fn(Data = resp_df, group = group_vec, focal.name = 1, type = "udif"),
+  log_u <- if (logistic_run) tryCatch(
+    log_fn(Data = resp_df, group = group_vec, focal.name = 1, type = "udif",  purify = TRUE),
     error = function(e) { message("  logistic (udif) failed: ", e$message); NULL }
   )
 
-  log_nu <- if (!is.null(log_fn)) tryCatch(
-    log_fn(Data = resp_df, group = group_vec, focal.name = 1, type = "nudif"),
+  log_nu <- if (logistic_run) tryCatch(
+    log_fn(Data = resp_df, group = group_vec, focal.name = 1, type = "nudif", purify = TRUE),
     error = function(e) { message("  logistic (nudif) failed: ", e$message); NULL }
   )
 
@@ -92,12 +93,14 @@ run_dif <- function(resp_mat, group_vec, is_poly) {
               else rep(NA_real_, ni)
 
   data.frame(
-    item      = items,
-    p_mh      = p_mh,
-    alpha_mh  = alpha_mh,
-    delta_mh  = delta_mh,
-    p_unif    = safe_vec(log_u$p.value),
-    p_nonunif = safe_vec(log_nu$p.value),
+    item          = items,
+    p_mh          = p_mh,
+    alpha_mh      = alpha_mh,
+    delta_mh      = delta_mh,
+    p_unif        = safe_vec(log_u$p.value),
+    p_nonunif     = safe_vec(log_nu$p.value),
+    delta_r2_unif = safe_vec(log_u$deltaR2),
+    logistic_run  = logistic_run,
     stringsAsFactors = FALSE
   )
 }

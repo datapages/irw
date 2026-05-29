@@ -25,18 +25,24 @@ suppressPackageStartupMessages({
   library(tidyr)
   library(ggplot2)
   library(plotly)
+  library(mirt)
 })
 
 fs       <- list.files("poly_compare_data", pattern = "^multi_.+\\.rds$", full.names = TRUE)
 fs       <- fs[!grepl("multi_(results|summary)\\.rds$", fs)]
 results  <- Filter(Negate(is.null), lapply(fs, readRDS))
 names(results) <- sub("^multi_", "", sub("\\.rds$", "", basename(fs)))
-results  <- Filter(function(r) r$K_range >= 2, results)  # drop K_range=1 (dichotomous) that slipped through
+# backward compat: old files store K_range, new files store K
+results  <- lapply(results, function(r) {
+  if (is.null(r[["K"]])) r$K <- r$K_range + 1L
+  r
+})
+results  <- Filter(function(r) r$K >= 3, results)  # drop binary (K < 3)
 all_rmse <- do.call(rbind, lapply(results, `[[`, "rmse"))
 
 meta <- do.call(rbind, lapply(names(results), function(nm) {
   r <- results[[nm]]
-  data.frame(dataset = nm, K_range = r$K_range, ni = r$ni, N = r$N,
+  data.frame(dataset = nm, K = r$K, ni = r$ni, N = r$N,
              stringsAsFactors = FALSE)
 }))
 
@@ -133,7 +139,7 @@ All models are fit with `mirt`. The custom binomial items use `mirt::createItem(
 
 ### Datasets
 
-We used `irw_filter(n_categories = c(3, 6))` to identify IRW datasets with 3–6
+We used `irw_filter(n_categories = c(3, 7))` to identify IRW datasets with 3–7
 ordered response categories. Additional filters: N ≥ 200, ≥ 3 items, all items share
 the same *K*. Datasets larger than 5,000 respondents were downsampled.
 
@@ -142,7 +148,7 @@ the same *K*. Datasets larger than 5,000 respondents were downsampled.
 #| eval: false
 
 library(irw)
-candidates <- irw_filter(n_categories = c(3, 6))
+candidates <- irw_filter(n_categories = c(3, 7))
 ```
 
 ### Parameter counts
@@ -177,6 +183,42 @@ The full compute script is at `vignettes/poly_compare_multi_compute.R`.
 
 ---
 
+```{r}
+#| label: sim-ref
+#| echo: false
+
+sim_cache <- "poly_compare_data/sim_gpcm_k5.rds"
+if (!file.exists(sim_cache)) {
+  set.seed(20260528)
+  ni <- 25L; N_sim <- 1000L; ncat <- 5L
+  a <- matrix(rlnorm(ni, 0, 0.5), ni, 1)
+  d <- matrix(rnorm(ni * (ncat - 1L)), ni, ncat - 1L)
+  sim_dat <- simdata(a = a, d = d, N = N_sim, itemtype = "gpcm")
+
+  non_missing <- which(!is.na(sim_dat), arr.ind = TRUE)
+  holdout_idx <- sample(nrow(non_missing), floor(0.2 * nrow(non_missing)))
+  train_mat   <- sim_dat
+  train_mat[non_missing[holdout_idx, , drop = FALSE]] <- NA
+  test_cells  <- non_missing[holdout_idx, , drop = FALSE]
+  obs_vals    <- sim_dat[test_cells]
+
+  mod   <- mirt(train_mat, 1, itemtype = rep("gpcm", ni),
+                verbose = FALSE, technical = list(NCYCLES = 2000))
+  theta <- fscores(mod, response.pattern = train_mat, method = "EAP")[, 1]
+  K <- ncat
+  pred <- numeric(nrow(test_cells))
+  for (j in seq_len(ni)) {
+    rows_j <- which(test_cells[, 2] == j)
+    if (length(rows_j) == 0L) next
+    Theta_j <- matrix(theta[test_cells[rows_j, 1]], ncol = 1)
+    pr      <- probtrace(extract.item(mod, j), Theta_j)
+    pred[rows_j] <- as.numeric(pr %*% 0:(ncol(pr) - 1L)) / (K - 1L)
+  }
+  saveRDS(sqrt(mean((pred - obs_vals / (K - 1L))^2)), sim_cache)
+}
+sim_rmse_gpcm <- readRDS(sim_cache)
+```
+
 ## Results
 
 ### Dataset overview
@@ -190,16 +232,16 @@ meta |>
     winners |> select(dataset, best_model = model),
     by = "dataset"
   ) |>
-  rename(Dataset = dataset, `K range` = K_range, Items = ni,
+  rename(Dataset = dataset, `K` = K, Items = ni,
          `N (train+test)` = N, `Best model` = best_model) |>
-  arrange(`K range`, Items)
+  arrange(K, Items)
 ```
 
 ### RMSE by dataset and model
 
 ```{r}
 #| label: fig-rmse-dot
-#| fig-cap: "Cross-validated RMSE for each model on each dataset. Datasets ordered by median RMSE across models. Standard polytomous models in blue, binomial models in orange."
+#| fig-cap: "Cross-validated RMSE for each model on each dataset. Datasets ordered by median RMSE across models. Standard polytomous models in blue, binomial models in orange. Vertical dashed line: GPCM RMSE on simulated data (N=1000, 25 items, K=5; discriminations ~ LogNormal(0, 0.5), thresholds ~ Normal(0, 1), generated via `mirt::simdata()`)."
 #| fig-height: 6.5
 
 pal <- c(Standard = "#2166ac", Binomial = "#d6604d")
@@ -213,11 +255,13 @@ p <- ggplot(all_rmse, aes(
       "Dataset: ", dataset, "<br>",
       "Model: ", model, "<br>",
       "RMSE: ", round(rmse, 4), "<br>",
-      "K: ", meta$K_range[match(dataset, meta$dataset)],
+      "K: ", meta$K[match(dataset, meta$dataset)],
       "  items: ", meta$ni[match(dataset, meta$dataset)],
       "  N: ", meta$N[match(dataset, meta$dataset)]
     )
   )) +
+  geom_vline(xintercept = sim_rmse_gpcm, linetype = "dashed",
+             colour = "grey30", linewidth = 0.7) +
   geom_point(size = 2.5, alpha = 0.85,
              position = position_dodge(width = 0.5)) +
   scale_colour_manual(values = pal, name = "Family") +
@@ -291,7 +335,7 @@ make_scatter <- function(mod_x, mod_y, col, other_x = NULL, other_y = NULL) {
       "Dataset: ", dataset, "<br>",
       mod_y, ": ", round(.data[[mod_y]], 4), "<br>",
       mod_x, ": ", round(.data[[mod_x]], 4), "<br>",
-      "K: ", K_range, "  items: ", ni, "  N: ", N
+      "K: ", K, "  items: ", ni, "  N: ", N
     ))
   mean_x <- mean(d[[mod_x]], na.rm = TRUE)
   mean_y <- mean(d[[mod_y]], na.rm = TRUE)
@@ -340,38 +384,38 @@ stay at 2 — does the prediction gap widen with *K*?
 
 ```{r}
 #| label: fig-by-k
-#| fig-cap: "RMSE difference (2PL+logit minus GPCM) by number of response categories K. Positive values mean GPCM predicts better. Each point is one dataset; the trend line is a loess smooth."
+#| fig-cap: "RMSE difference (2PL+logit minus GPCM) by number of response categories K. Positive values mean GPCM predicts better. Each point is one dataset; black diamonds are per-K means."
 #| fig-height: 4
 
 gap_k <- all_rmse |>
   filter(model %in% c("GPCM", "2PL+logit")) |>
   select(dataset, model, rmse) |>
   pivot_wider(names_from = model, values_from = rmse) |>
-  left_join(meta |> select(dataset, K_range, ni, N), by = "dataset") |>
+  left_join(meta |> select(dataset, K, ni, N), by = "dataset") |>
   mutate(
     gap     = `2PL+logit` - GPCM,
-    K       = factor(K_range + 1L),
     tooltip = paste0(
       "Dataset: ", dataset, "<br>",
-      "K: ", K_range + 1L, "<br>",
+      "K: ", K, "<br>",
       "Gap: ", round(gap, 4), "<br>",
       "items: ", ni, "  N: ", N
     )
   )
 
-p_gap <- ggplot(gap_k, aes(x = K_range + 1L, y = gap, text = tooltip)) +
+p_gap <- ggplot(gap_k, aes(x = K, y = gap, text = tooltip)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey60") +
   geom_jitter(width = 0.08, size = 3, colour = "#2166ac", alpha = 0.75) +
-  geom_smooth(method = "loess", se = TRUE, colour = "#d6604d", fill = "#d6604d",
-              alpha = 0.15, linewidth = 0.8) +
-  scale_x_continuous(breaks = 3:7) +
+  stat_summary(aes(x = K, y = gap), fun = mean,
+               geom = "point", shape = 18, size = 5, colour = "black",
+               inherit.aes = FALSE) +
+  scale_x_continuous(breaks = 3:8) +
   labs(x = "K (number of response categories)", y = "RMSE(2PL+logit) − RMSE(GPCM)") +
   theme_minimal(base_size = 13)
 
 ggplotly(p_gap, tooltip = "text") |>
   layout(
     annotations = list(list(
-      text      = "Above zero: GPCM better. Trend line: loess smooth.",
+      text      = "Above zero: GPCM better. Black diamonds: per-K means.",
       showarrow = FALSE, xref = "paper", yref = "paper",
       x = 0, y = -0.1, xanchor = "left", yanchor = "top",
       font = list(size = 11, color = "grey50")

@@ -1,10 +1,8 @@
 # poly_compare_multi_compute.R
 #
 # Compare polytomous IRT models vs binomial IRT across IRW datasets.
-# Each dataset is processed in parallel via mclapply and written to its own
-# cache file. After each batch, completed results are collected from the
-# directory (not from mclapply return values, so a crashed worker that still
-# wrote its file doesn't block progress).
+# Each worker is self-contained: fetch → preprocess → fit → write result.
+# Re-running skips already-cached results (multi_<tab>.rds).
 #
 # Run poly_compare_multi_combine.R separately to assemble multi_results.rds.
 #
@@ -19,11 +17,11 @@ suppressPackageStartupMessages({
 
 set.seed(20260527)
 
-N_DATASETS <- 250
+N_DATASETS <- 500
 MIN_N      <- 200
 MIN_ITEMS  <- 3
 MAX_ITEMS  <- 60L
-N_CORES    <- 2L
+N_CORES    <- 4L
 out_dir    <- "vignettes/poly_compare_data"
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -57,12 +55,16 @@ custom_items <- list(
   binom_1pl_cll = binom_1pl_cll
 )
 
-# ── 2a. Sequential fetch + preprocess (one fetch per dataset, no race) ────────
-fetch_one <- function(tab) {
-  data_cache <- file.path(out_dir, paste0("data_", tab, ".rds"))
-  if (file.exists(data_cache)) return(readRDS(data_cache))
+# ── 2. Process one dataset (fetch → preprocess → fit → write) ─────────────────
+process_one <- function(tab) {
+  cache <- file.path(out_dir, paste0("multi_", tab, ".rds"))
+  if (file.exists(cache)) {
+    message("=== ", tab, " === (cached)")
+    return(readRDS(cache))
+  }
 
-  message("  fetching ", tab, " ...")
+  message("\n=== ", tab, " ===")
+
   df <- NULL
   for (attempt in 1:3) {
     df <- tryCatch(irw_fetch(tab), error = function(e) {
@@ -72,10 +74,6 @@ fetch_one <- function(tab) {
     Sys.sleep(5 * attempt)
   }
   if (is.null(df)) return(NULL)
-
-  K_range <- max(df$resp, na.rm = TRUE) - min(df$resp, na.rm = TRUE)
-  if (K_range < 2)  { message("  skip: K_range=", K_range, " < 2"); return(NULL) }
-  if (K_range > 5)  { message("  skip: K_range=", K_range, " > 5"); return(NULL) }
 
   K_min    <- min(df$resp, na.rm = TRUE)
   df$resp0 <- df$resp - K_min
@@ -97,19 +95,21 @@ fetch_one <- function(tab) {
   if (N < MIN_N)     { message("  skip: N=", N, " < ", MIN_N);          return(NULL) }
   if (ni < MIN_ITEMS){ message("  skip: ", ni, " items < ", MIN_ITEMS); return(NULL) }
 
-  item_max <- apply(resp_mat, 2, max, na.rm = TRUE)
-  target_K <- as.integer(names(sort(table(item_max), decreasing = TRUE))[1])
-  if (target_K != K_range || !all(item_max == target_K)) {
-    drop <- sum(item_max != target_K)
-    message("  keeping ", sum(item_max == target_K), " items with K_range=", target_K,
+  # K = number of unique response categories (excluding NA), enforced to be
+  # consistent across items by keeping only items with the modal K.
+  item_K   <- apply(resp_mat, 2, function(x) length(unique(na.omit(x))))
+  target_K <- as.integer(names(sort(table(item_K), decreasing = TRUE))[1])
+  if (!all(item_K == target_K)) {
+    drop <- sum(item_K != target_K)
+    message("  keeping ", sum(item_K == target_K), " items with K=", target_K,
             " (dropping ", drop, " items with different K)")
-    keep_K   <- item_max == target_K
-    resp_mat <- resp_mat[, keep_K, drop = FALSE]
-    K_range  <- target_K
+    resp_mat <- resp_mat[, item_K == target_K, drop = FALSE]
     ni       <- ncol(resp_mat)
     if (ni < MIN_ITEMS) { message("  skip: ", ni, " items < ", MIN_ITEMS, " after K filter"); return(NULL) }
-    if (K_range < 2)    { message("  skip: K_range=", K_range, " < 2 after K filter");       return(NULL) }
   }
+  K <- target_K
+  if (K < 3) { message("  skip: K=", K, " < 3"); return(NULL) }
+  if (K > 7) { message("  skip: K=", K, " > 7"); return(NULL) }
 
   if (ni > MAX_ITEMS) {
     message("  sampling ", MAX_ITEMS, " items from ni=", ni)
@@ -122,37 +122,9 @@ fetch_one <- function(tab) {
     N        <- 5000L
   }
 
-  out <- list(tab = tab, K_range = K_range, ni = ni, N = N, resp_mat = resp_mat)
-  saveRDS(out, data_cache)
-  out
-}
-
-# ── 2b. Parallel model fitting (reads preloaded data, no irw_fetch) ───────────
-process_one <- function(tab) {
-  cache <- file.path(out_dir, paste0("multi_", tab, ".rds"))
-  if (file.exists(cache)) {
-    message("=== ", tab, " === (cached)")
-    return(readRDS(cache))
-  }
-
-  data_cache <- file.path(out_dir, paste0("data_", tab, ".rds"))
-  if (!file.exists(data_cache)) {
-    message("=== ", tab, " === (no data cache, skipping)")
-    return(NULL)
-  }
-  d <- readRDS(data_cache)
-
-  message("\n=== ", tab, " ===")
-  K_range  <- d$K_range
-  ni       <- d$ni
-  N        <- d$N
-  resp_mat <- d$resp_mat
-
-  message("  N=", N, "  items=", ni, "  K_range=", K_range)
+  message("  N=", N, "  items=", ni, "  K=", K)
 
   # Response-level 80/20 holdout: mask 20% of observed cells.
-  # Models fit on training matrix; persons scored on their training responses
-  # only; held-out cells predicted from those scores.
   non_missing <- which(!is.na(resp_mat), arr.ind = TRUE)
   holdout_idx <- sample(nrow(non_missing), floor(0.2 * nrow(non_missing)))
   train_mat   <- resp_mat
@@ -160,7 +132,6 @@ process_one <- function(tab) {
   test_cells  <- non_missing[holdout_idx, , drop = FALSE]
   obs_vals    <- resp_mat[test_cells]
 
-  # Vectorized: group held-out cells by item, one probtrace call per item.
   predict_rescaled <- function(mod) {
     theta <- fscores(mod, response.pattern = train_mat, method = "EAP")[, 1]
     pred  <- numeric(nrow(test_cells))
@@ -170,11 +141,11 @@ process_one <- function(tab) {
       Theta_j <- matrix(theta[test_cells[rows_j, 1]], ncol = 1)
       pr      <- probtrace(extract.item(mod, j), Theta_j)
       cats    <- 0:(ncol(pr) - 1L)
-      pred[rows_j] <- as.numeric(pr %*% cats) / K_range
+      pred[rows_j] <- as.numeric(pr %*% cats) / (K - 1L)
     }
     pred
   }
-  compute_rmse <- function(pred) sqrt(mean((pred - obs_vals / K_range)^2, na.rm = TRUE))
+  compute_rmse <- function(pred) sqrt(mean((pred - obs_vals / (K - 1L))^2, na.rm = TRUE))
 
   fit_eval <- function(label, itemtypes, custom = NULL, pars = NULL) {
     message("    ", label, " ...")
@@ -221,7 +192,7 @@ process_one <- function(tab) {
                stringsAsFactors = FALSE)
   }))
 
-  out <- list(tab = tab, K_range = K_range, ni = ni, N = N, rmse = rmse_df)
+  out <- list(tab = tab, K = K, ni = ni, N = N, rmse = rmse_df)
   saveRDS(out, cache)
   out
 }
@@ -234,28 +205,15 @@ already_done <- function() {
 }
 
 done_before <- already_done()
-candidates  <- setdiff(irw_filter(n_categories = c(3, 6)), done_before)
-candidates  <- sample(candidates)               # randomize so runs aren't alphabetical
+candidates  <- setdiff(irw_filter(n_categories = c(3, 7)), done_before)
+candidates  <- sample(candidates)
 n_needed    <- max(0L, N_DATASETS - length(done_before))
 candidates  <- head(candidates, n_needed * 3L)  # over-provision to absorb skips
 
 message(length(done_before), " datasets already cached; running up to ",
         length(candidates), " candidates on ", N_CORES, " cores")
 
-# ── 4. Sequential fetch pass (one irw_fetch per dataset, no race condition) ───
-message("\nFetching data sequentially ...")
-already_data <- {
-  fs <- list.files(out_dir, pattern = "^data_.+\\.rds$", full.names = FALSE)
-  sub("^data_", "", sub("\\.rds$", "", fs))
-}
-to_fetch <- setdiff(candidates, already_data)
-message(length(already_data), " datasets already fetched; fetching ",
-        length(to_fetch), " new datasets")
-for (tab in to_fetch) fetch_one(tab)
-
-# ── 5. Parallel model fitting (workers read local data caches, no irw_fetch) ──
-# mc.preschedule = FALSE: each worker picks up the next candidate immediately
-# when it finishes — no batch barrier.
+# ── 4. Parallel run ───────────────────────────────────────────────────────────
 mclapply(candidates, process_one,
          mc.cores       = N_CORES,
          mc.preschedule = FALSE)
