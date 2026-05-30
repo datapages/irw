@@ -1,0 +1,356 @@
+---
+title: "Binomial Approximations to the GPCM: A Simulation"
+format:
+  html:
+    self-contained: true
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    fig-width: 10
+    fig-height: 8
+execute:
+  echo: false
+  message: false
+  warning: false
+---
+
+```{r setup}
+suppressPackageStartupMessages({
+  library(ggplot2)
+  library(ggrepel)
+  library(dplyr)
+  library(mgcv)
+})
+
+res <- readRDS("gpcm_binomial_results.rds")
+
+# ── Model probability helpers (used for ERF illustration) ─────────────────────
+gpcm_pr_fn <- function(theta, a, b) {
+  K <- length(b) + 1L; ln <- matrix(0, nrow = length(theta), ncol = K)
+  for (k in seq_len(K - 1L)) ln[, k + 1L] <- ln[, k] + a * (theta - b[k])
+  ln <- ln - apply(ln, 1, max); ex <- exp(ln); ex / rowSums(ex)
+}
+grm_pr_fn <- function(theta, a, b) {
+  K <- length(b) + 1L
+  cum <- cbind(1, plogis(outer(theta, b, function(th, bk) a * (th - bk))), 0)
+  pmax(cum[, 1:K] - cum[, 2:(K + 1L)], 1e-15)
+}
+binom_pr_fn <- function(theta, a, b, K, link) {
+  eta <- a * theta - b
+  p <- switch(link, logit = plogis(eta), probit = pnorm(eta),
+              cloglog = 1 - exp(-exp(eta)), cauchit = 0.5 + atan(eta) / pi)
+  p <- pmin(pmax(p, 1e-10), 1 - 1e-10)
+  outer(p, 0:(K - 1L), function(pp, k) dbinom(k, K - 1L, pp))
+}
+es_fn <- function(pr, K) as.numeric(pr %*% 0:(K - 1L))
+
+model_labels <- c(
+  gpcm              = "GPCM",
+  pcm               = "PCM",
+  grm               = "GRM",
+  binom_2pl_logit   = "Binom 2PL (logit)",
+  binom_1pl_logit   = "Binom 1PL (logit)",
+  binom_1pl_cloglog = "Binom 1PL (cloglog)",
+  binom_1pl_cauchit = "Binom 1PL (cauchit)",
+  binom_1pl_probit  = "Binom 1PL (probit)"
+)
+model_colors <- c(
+  "GPCM"               = "#1b7837",
+  "PCM"                = "#762a83",
+  "GRM"                = "#2166ac",
+  "Binom 2PL (logit)"  = "#d6604d",
+  "Binom 1PL (logit)"  = "#f4a582",
+  "Binom 1PL (cloglog)"= "#c2a5cf",
+  "Binom 1PL (cauchit)"= "#a6dba0",
+  "Binom 1PL (probit)" = "#bababa"
+)
+
+res <- res |>
+  mutate(
+    model_label = factor(model_labels[as.character(model)], levels = model_labels),
+    K_label     = paste0("K = ", K),
+    a_label     = paste0("a = ", a_true)
+  )
+
+lpos_fn <- function(data, y_var) {
+  data |>
+    group_by(model_label, K_label, a_label) |>
+    filter(asym >= quantile(asym, 0.9)) |>
+    summarise(asym = mean(asym),
+              y_val      = mean(.data[[y_var]], na.rm = TRUE),
+              .groups    = "drop")
+}
+
+theme_set(
+  theme_bw(base_size = 11) +
+    theme(strip.background = element_rect(fill = "grey92"),
+          legend.position  = "none",
+          plot.margin      = margin(5, 5, 5, 5))
+)
+
+make_plot <- function(data, y_var, y_lab) {
+  lpos <- lpos_fn(data, y_var)
+  ggplot(data, aes(x = asym, y = .data[[y_var]],
+                   colour = model_label, group = model_label)) +
+    annotate("segment", x = -log(8), xend = log(8), y = 0, yend = 0,
+             linetype = "dashed", colour = "grey60") +
+    geom_smooth(data = function(d) filter(d, model_label != "GPCM"),
+                method = "gam", formula = y ~ s(x, bs = "cs"),
+                se = TRUE, linewidth = 0.8, alpha = 0.12) +
+    annotate("rect", xmin = log(8), xmax = log(8) + 3, ymin = -Inf, ymax = Inf,
+             fill = "white", colour = NA) +
+    geom_label_repel(
+      data          = lpos,
+      aes(x = asym, y = y_val, label = model_label),
+      size          = 2.6, hjust = 0,
+      nudge_x       = log(8) + 0.3 - lpos$asym,
+      direction     = "y", segment.size = 0.3, segment.color = "grey50",
+      box.padding   = 0.2, label.padding = 0.15,
+      show.legend   = FALSE, xlim = c(log(8), log(8) + 3)
+    ) +
+    facet_grid(K_label ~ a_label) +
+    scale_colour_manual(values = model_colors) +
+    scale_x_continuous(
+      name   = "Gap asymmetry  (0 = equal gaps;  negative = wider lower;  positive = wider upper)",
+      limits = c(-log(8), log(8) + 3),
+      breaks = round(c(-log(8), -1, 0, 1, log(8)), 2),
+      labels = c("-ln8\n(wider lower)", "-1", "0\n(symmetric)", "1",
+                 "ln8\n(wider upper)"),
+      expand = expansion(mult = c(0.02, 0))
+    ) +
+    coord_cartesian(clip = "off") +
+    ylab(y_lab)
+}
+```
+
+## Overview
+
+The Generalized Partial Credit Model (GPCM) is a natural choice for polytomous item response data, but simpler *binomial approximations* are sometimes used instead: the polytomous response $X \in \{0,\ldots,K{-}1\}$ is modeled as if it were the outcome of $K{-}1$ independent Bernoulli trials, i.e., $X \sim \text{Binomial}(K{-}1,\, p)$, where $p$ is a function of the latent trait through a chosen link function.
+
+This simulation asks: **when do binomial approximations pay a meaningful cost relative to the true GPCM?** We quantify that cost using IMV(model, GPCM) — the InterModel Vigorish of GPCM over each alternative — where GPCM's fitted probabilities serve as the reference. Positive IMV means GPCM predicts better; negative means the alternative wins.
+
+---
+
+## Simulation Setup
+
+### Data generating model
+
+Responses are generated from the GPCM. For a $K$-category item with discrimination $a$ and ordered thresholds $b_1 < \cdots < b_{K-1}$, the probability of response $k$ given latent trait $\theta$ is
+
+$$
+P(X = k \mid \theta) = \frac{\exp\!\left(\sum_{j=1}^{k} a(\theta - b_j)\right)}{\sum_{h=0}^{K-1} \exp\!\left(\sum_{j=1}^{h} a(\theta - b_j)\right)},
+$$
+
+with the empty sum defined as zero for $k=0$. When $a=1$ this reduces to the PCM.
+
+Latent abilities $\theta_i \sim \mathcal{N}(0,1)$ are drawn once per replication and treated as **known** throughout, isolating item-level misspecification from ability estimation noise.
+
+### Conditions
+
+| Factor | Levels |
+|---|---|
+| Discrimination $a$ | 1.0 (PCM), 1.5 |
+| Categories $K$ | 5, 7 |
+| Gap asymmetry | Uniform($-\ln 8$, $\ln 8$) per replication |
+| Items per condition | 10 (locations shifted uniformly in $[-1,1]$) |
+| Persons per replication | 1000 |
+| Replications | 100 |
+
+**Threshold shape** is controlled by a gap asymmetry parameter $s$, drawn independently for each replication from Uniform($-\ln 8$, $\ln 8$). All threshold vectors span the same total range $[-1.5, 1.5]$. When $s=0$ the $K-1$ thresholds are evenly spaced. When $s>0$ gaps widen toward the upper end (higher categories are more spread out); when $s<0$ gaps widen toward the lower end. The max/min gap ratio equals $e^{|s|}$ and is comparable across $K$ values. Results are summarized with a GAM smooth over the continuous $s$ values.
+
+```{r fig-thresholds, fig.height=4, fig.cap="Threshold locations for K=5 and K=7 across the full asymmetry range. Coloured segments connect consecutive thresholds; colour encodes gap width (yellow = wide, purple = narrow). Dots mark threshold positions. All vectors span the same total range [-1.5, 1.5]."}
+make_thresholds <- function(K, asym = 0) {
+  n           <- K - 1L
+  total_range <- 3.0
+  sym         <- seq(-total_range / 2, total_range / 2, length.out = n)
+  if (asym == 0 || n <= 2L) return(sym)
+  k_idx       <- 0:(n - 2L)
+  gap_weights <- exp(asym * k_idx / (n - 2L))
+  gaps        <- gap_weights / sum(gap_weights) * total_range
+  b           <- cumsum(c(-total_range / 2, gaps[-length(gaps)]))
+  c(b, b[n - 1L] + gaps[n - 1L])
+}
+
+asym_ex <- c(-log(8), -1, 0, 1, log(8))
+asym_labels <- c("-ln8\n(wider lower)", "-1", "0\n(symmetric)", "1",
+                 "ln8\n(wider upper)")
+K_vals  <- c(5, 7)
+
+thresh_df <- do.call(rbind, lapply(K_vals, function(K) {
+  do.call(rbind, lapply(seq_along(asym_ex), function(i) {
+    b <- make_thresholds(K, asym_ex[i])
+    data.frame(K = K, asym = asym_ex[i], asym_lab = asym_labels[i],
+               threshold = seq_along(b), value = b)
+  }))
+}))
+thresh_df$K_label   <- paste0("K = ", thresh_df$K)
+thresh_df$asym_lab  <- factor(thresh_df$asym_lab, levels = asym_labels)
+
+gaps_df <- thresh_df |>
+  arrange(K, asym, threshold) |>
+  group_by(K_label, asym_lab) |>
+  mutate(val_next = lead(value), gap = val_next - value) |>
+  filter(!is.na(gap))
+
+ggplot() +
+  annotate("rect", xmin = -1.5, xmax = 1.5, ymin = -Inf, ymax = Inf,
+           fill = "grey95") +
+  geom_segment(data = gaps_df,
+               aes(x = value, xend = val_next, y = asym_lab, yend = asym_lab,
+                   colour = gap),
+               linewidth = 5) +
+  geom_point(data = thresh_df, aes(x = value, y = asym_lab),
+             shape = 21, fill = "white", colour = "grey30", size = 2.2) +
+  scale_colour_viridis_c(name = "gap", option = "plasma", direction = -1) +
+  facet_wrap(~ K_label, ncol = 2) +
+  scale_x_continuous(name = "Threshold location", limits = c(-2, 2),
+                     breaks = seq(-1.5, 1.5, by = 0.5)) +
+  scale_y_discrete(name = "Gap asymmetry (s)") +
+  theme_bw(base_size = 11) +
+  theme(strip.background = element_rect(fill = "grey92"),
+        panel.grid.minor = element_blank(),
+        legend.position  = "right")
+```
+
+### Models compared
+
+The figure shows expected response functions (ERF: $E[X|\theta]$ vs $\theta$) for each model at K=5, $a=1.5$, $s=\ln 8$ (maximum upper asymmetry). Each model uses its best-fitting single parameters; the GPCM ERF (black) is the target.
+
+:::: {.columns}
+
+::: {.column width="52%"}
+
+| Model | Parameters | Description |
+|---|---|---|
+| **GPCM** | $a$, $b_1,\ldots,b_{K-1}$ | True generating model |
+| **PCM** | $b_1,\ldots,b_{K-1}$ | GPCM with $a=1$ fixed |
+| **GRM** | $a$, $b_1,\ldots,b_{K-1}$ | Cumulative logit; $P(X \ge k) = \text{logis}(a(\theta-b_k))$ |
+| **Binom 2PL (logit)** | $a$, $b$ | $X \sim \text{Binom}(K{-}1, \text{logis}(a\theta - b))$ |
+| **Binom 1PL** | $b$ | Same with $a=1$, four link functions |
+
+:::
+
+::: {.column width="48%"}
+
+```{r fig-erf, fig.height=3.8, fig.width=4.5}
+K_ex <- 5L; a_ex <- 1.5; s_ex <- log(8)   # high asymmetry, wider upper gaps
+b_ex <- make_thresholds(K_ex, s_ex)
+theta_g <- seq(-3, 3, by = 0.05)
+
+gpcm_es <- es_fn(gpcm_pr_fn(theta_g, a_ex, b_ex), K_ex)
+pcm_es  <- es_fn(gpcm_pr_fn(theta_g, 1.0,   b_ex), K_ex)
+grm_es  <- es_fn(grm_pr_fn( theta_g, a_ex,  b_ex), K_ex)
+
+# Best-fit single parameters for each binomial model
+opt1 <- function(link) {
+  optim(0, function(b) mean((gpcm_es - es_fn(binom_pr_fn(theta_g,1,b,K_ex,link),K_ex))^2),
+        method = "Brent", lower = -3, upper = 3)$par
+}
+opt2 <- function() {
+  optim(c(a_ex, 0),
+        function(p) mean((gpcm_es - es_fn(binom_pr_fn(theta_g,p[1],p[2],K_ex,"logit"),K_ex))^2),
+        method = "BFGS")$par
+}
+p2   <- opt2()
+
+erf_df <- rbind(
+  data.frame(model="GPCM",               theta=theta_g, es=gpcm_es),
+  data.frame(model="PCM",                theta=theta_g, es=pcm_es),
+  data.frame(model="GRM",                theta=theta_g, es=grm_es),
+  data.frame(model="Binom 2PL\n(logit)", theta=theta_g,
+             es=es_fn(binom_pr_fn(theta_g,p2[1],p2[2],K_ex,"logit"),K_ex)),
+  data.frame(model="Binom 1PL\n(logit)", theta=theta_g,
+             es=es_fn(binom_pr_fn(theta_g,1,opt1("logit"),  K_ex,"logit"),  K_ex)),
+  data.frame(model="Binom 1PL\n(probit)",theta=theta_g,
+             es=es_fn(binom_pr_fn(theta_g,1,opt1("probit"), K_ex,"probit"), K_ex)),
+  data.frame(model="Binom 1PL\n(cloglog)",theta=theta_g,
+             es=es_fn(binom_pr_fn(theta_g,1,opt1("cloglog"),K_ex,"cloglog"),K_ex)),
+  data.frame(model="Binom 1PL\n(cauchit)",theta=theta_g,
+             es=es_fn(binom_pr_fn(theta_g,1,opt1("cauchit"),K_ex,"cauchit"),K_ex))
+)
+
+erf_df$is_gpcm <- erf_df$model == "GPCM"
+
+ggplot(erf_df, aes(x = theta, y = es, group = model,
+                   colour = model, linewidth = is_gpcm)) +
+  geom_line() +
+  scale_linewidth_manual(values = c("TRUE" = 1.2, "FALSE" = 0.55),
+                         guide = "none") +
+  scale_colour_manual(values = c(
+    "GPCM"              = "black",
+    "PCM"               = "#762a83",
+    "GRM"               = "#2166ac",
+    "Binom 2PL\n(logit)"  = "#d6604d",
+    "Binom 1PL\n(logit)"  = "#f4a582",
+    "Binom 1PL\n(probit)" = "#bababa",
+    "Binom 1PL\n(cloglog)"= "#c2a5cf",
+    "Binom 1PL\n(cauchit)"= "#a6dba0"
+  ), name = NULL) +
+  scale_x_continuous(breaks = -3:3) +
+  labs(x = expression(theta), y = "E[X | θ]") +
+  theme_bw(base_size = 10) +
+  theme(legend.key.size  = unit(0.5, "lines"),
+        legend.text      = element_text(size = 7),
+        legend.position  = "right",
+        panel.grid.minor = element_blank())
+```
+
+:::
+
+::::
+
+Each model is fit to each item with $\theta$ held fixed; item parameters are recovered by MLE, and predicted probabilities are formed at the true $\theta$ values.
+
+---
+
+## Results
+
+### IMV_c
+
+```{r fig-imv-c, fig.cap="IMV_c(model, GPCM): GAM smooth over 100 replications with gap asymmetry s drawn from Uniform(-ln8, ln8). Positive = GPCM predicts better. The dashed line marks zero at s=0 (symmetric)."}
+make_plot(res, "imv_c",
+          "IMV_c(model, GPCM)  [positive = GPCM wins]")
+```
+
+At $s=0$ (symmetric thresholds) the alternatives are close to or below zero — the constrained models match or slightly beat the GPCM, as the extra GPCM parameters gain little when the gap structure is simple. As $|s|$ increases in either direction the binomial approximations diverge upward, with GPCM's advantage growing more sharply for K=7 than K=5.
+
+The two directions of asymmetry are not symmetric in their effect. Wider-upper gaps ($s > 0$) push more IMV disadvantage onto the binomial models than wider-lower gaps ($s < 0$) of the same magnitude. This makes sense: upper-category scarcity is harder for a single $b$ parameter to track than lower-category scarcity, because the binomial mean is sensitive to the center of the distribution, not its tails.
+
+A notable finding is that the asymmetric link functions (cloglog, probit) do *not* benefit under asymmetric thresholds — they perform worse than logit regardless of direction. For wider-upper gaps ($s > 0$): the cloglog link rises slowly at low $\theta$ and saturates quickly at high $\theta$, opposite to the GPCM pattern where the expected score plateaus as high categories remain rare even at high ability. For wider-lower gaps ($s < 0$): the cloglog's fast initial rise is also a poor match. The ERF figure illustrates this directly. The logit link, despite its symmetry, provides a more neutral approximation across the full ability range.
+
+The GRM tracks GPCM closely near $s=0$ (same number of threshold parameters, different parameterization) and diverges at both extremes, more so for K=7.
+
+---
+
+### IMV_t
+
+```{r fig-imv-t, fig.cap="IMV_t(model, GPCM): threshold-based IMV variant. The pattern mirrors IMV_c but at smaller scale; IMV_t averages over K-1 cumulative binary thresholds rather than all pairwise category comparisons."}
+make_plot(res, "imv_t",
+          "IMV_t(model, GPCM)  [positive = GPCM wins]")
+```
+
+IMV_t tells the same directional story. Values near zero at $s=0$ grow steadily in both directions as asymmetry increases, with the wider-upper side showing a steeper rise.
+
+---
+
+### RMSE
+
+```{r fig-rmse, fig.cap="Expected-score RMSE (rescaled 0-1). Lower is better. RMSE differences are compressed relative to IMV but rank models consistently."}
+make_plot(res, "rmse",
+          "RMSE (expected score, 0-1 scale)")
+```
+
+RMSE rankings are consistent with IMV. GPCM and GRM converge near $s=0$; binomial models add meaningful RMSE as $|s|$ grows, with the effect larger on the wider-upper side.
+
+---
+
+## Summary
+
+| Condition | Key finding |
+|---|---|
+| $s=0$ (symmetric) | Alternatives match or beat GPCM; constrained models act as implicit regularization |
+| $|s| \uparrow$, either direction | GPCM advantage grows; binomial single-$b$ can't track the asymmetric gap structure |
+| $s > 0$ vs $s < 0$ | Wider-upper gaps hurt binomial models more than wider-lower gaps of equal magnitude |
+| Best binomial link | Logit most competitive across all conditions; cloglog and probit degrade fastest |
+| GRM | Tracks GPCM closely near $s=0$; diverges at both extremes, more so for K=7 |
+| Discrimination $a$ | Scales IMV magnitude; asymmetry effect qualitatively the same at $a=1$ and $a=1.5$ |
