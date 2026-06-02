@@ -6,6 +6,7 @@ format:
     toc: true
     toc-depth: 3
     code-fold: true
+    number-sections: true
     fig-width: 10
     fig-height: 8
 execute:
@@ -50,9 +51,10 @@ model_labels <- c(
   grm               = "GRM",
   binom_2pl_logit   = "Binom 2PL (logit)",
   binom_1pl_logit   = "Binom 1PL (logit)",
+  binom_1pl_scobit  = "Binom 1PL (scobit)",
   binom_1pl_cloglog = "Binom 1PL (cloglog)",
   binom_1pl_cauchit = "Binom 1PL (cauchit)",
-  binom_1pl_probit  = "Binom 1PL (probit)"
+  np_spline         = "NP spline"
 )
 model_colors <- c(
   "GPCM"               = "#1b7837",
@@ -60,25 +62,35 @@ model_colors <- c(
   "GRM"                = "#2166ac",
   "Binom 2PL (logit)"  = "#d6604d",
   "Binom 1PL (logit)"  = "#f4a582",
+  "Binom 1PL (scobit)" = "#f1a340",
   "Binom 1PL (cloglog)"= "#c2a5cf",
   "Binom 1PL (cauchit)"= "#a6dba0",
-  "Binom 1PL (probit)" = "#bababa"
+  "NP spline"          = "#e7298a"
 )
 
 res <- res |>
+  filter(K == 5) |>
   mutate(
     model_label = factor(model_labels[as.character(model)], levels = model_labels),
-    K_label     = paste0("K = ", K),
-    a_label     = paste0("a = ", a_true)
+    K_label     = paste0("K = ", K)
   )
 
 lpos_fn <- function(data, y_var) {
-  data |>
-    group_by(model_label, K_label, a_label) |>
-    filter(asym >= quantile(asym, 0.9)) |>
-    summarise(asym = mean(asym),
-              y_val      = mean(.data[[y_var]], na.rm = TRUE),
-              .groups    = "drop")
+  grps <- split(data, list(as.character(data$model_label),
+                           as.character(data$K_label)), drop = TRUE)
+  do.call(rbind, lapply(grps, function(g) {
+    x_anch <- mean(g$asym[g$asym >= quantile(g$asym, 0.9)])
+    fit    <- tryCatch(
+      mgcv::gam(as.formula(paste(y_var, "~ s(asym, bs='cs')")), data = g),
+      error = function(e) NULL
+    )
+    y_anch <- if (!is.null(fit))
+      as.numeric(predict(fit, newdata = data.frame(asym = x_anch)))
+    else
+      mean(g[[y_var]][g$asym >= quantile(g$asym, 0.9)], na.rm = TRUE)
+    data.frame(model_label = g$model_label[1], K_label = g$K_label[1],
+               asym = x_anch, y_val = y_anch, stringsAsFactors = FALSE)
+  }))
 }
 
 theme_set(
@@ -88,13 +100,72 @@ theme_set(
           plot.margin      = margin(5, 5, 5, 5))
 )
 
-make_plot <- function(data, y_var, y_lab) {
+# Plots two IMV metrics side-by-side in facets (replaces separate imv_c/imv_t figures).
+make_plot_imv_pair <- function(data, v1, v2, l1, l2,
+                               y_lab = "IMV(model, GPCM)  [positive = GPCM wins]",
+                               exclude_smooth = "GPCM") {
+  long <- dplyr::bind_rows(
+    dplyr::mutate(data, y = .data[[v1]], metric = l1),
+    dplyr::mutate(data, y = .data[[v2]], metric = l2)
+  ) |> dplyr::mutate(metric = factor(metric, levels = c(l1, l2)))
+
+  lpos <- do.call(rbind, lapply(
+    split(long, list(as.character(long$model_label),
+                     as.character(long$metric)), drop = TRUE),
+    function(g) {
+      x_anch <- mean(g$asym[g$asym >= quantile(g$asym, 0.9)])
+      fit    <- tryCatch(mgcv::gam(y ~ s(asym, bs = "cs"), data = g),
+                         error = function(e) NULL)
+      y_anch <- if (!is.null(fit))
+        as.numeric(predict(fit, newdata = data.frame(asym = x_anch)))
+      else
+        mean(g$y[g$asym >= quantile(g$asym, 0.9)], na.rm = TRUE)
+      data.frame(model_label = g$model_label[1], metric = g$metric[1],
+                 asym = x_anch, y_val = y_anch, stringsAsFactors = FALSE)
+    }
+  ))
+  lpos$metric <- factor(lpos$metric, levels = c(l1, l2))
+
+  ggplot(long, aes(x = asym, y = y, colour = model_label, group = model_label)) +
+    annotate("segment", x = -log(8), xend = log(8), y = 0, yend = 0,
+             linetype = "dashed", colour = "grey60") +
+    geom_smooth(
+      data = function(d) if (is.null(exclude_smooth)) d
+                         else filter(d, !model_label %in% exclude_smooth),
+      method = "gam", formula = y ~ s(x, bs = "cs"),
+      se = TRUE, linewidth = 0.8, alpha = 0.12) +
+    annotate("rect", xmin = log(8), xmax = log(8) + 3, ymin = -Inf, ymax = Inf,
+             fill = "white", colour = NA) +
+    geom_label_repel(
+      data          = lpos,
+      aes(x = asym, y = y_val, label = model_label),
+      size          = 2.6, hjust = 0,
+      nudge_x       = log(8) + 0.3 - lpos$asym,
+      direction     = "y", segment.size = 0.3, segment.color = "grey50",
+      box.padding   = 0.2, label.padding = 0.15,
+      show.legend   = FALSE, xlim = c(log(8), log(8) + 3)
+    ) +
+    facet_wrap(~ metric) +
+    scale_colour_manual(values = model_colors) +
+    scale_x_continuous(
+      name   = "Gap asymmetry  (0 = equal gaps;  negative = wider lower;  positive = wider upper)",
+      limits = c(-log(8), log(8) + 3),
+      breaks = round(c(-log(8), -1, 0, 1, log(8)), 2),
+      labels = c("-ln8\n(wider lower)", "-1", "0\n(symmetric)", "1",
+                 "ln8\n(wider upper)"),
+      expand = expansion(mult = c(0.02, 0))
+    ) +
+    coord_cartesian(clip = "off") +
+    ylab(y_lab)
+}
+
+make_plot <- function(data, y_var, y_lab, exclude_smooth = "GPCM") {
   lpos <- lpos_fn(data, y_var)
   ggplot(data, aes(x = asym, y = .data[[y_var]],
                    colour = model_label, group = model_label)) +
     annotate("segment", x = -log(8), xend = log(8), y = 0, yend = 0,
              linetype = "dashed", colour = "grey60") +
-    geom_smooth(data = function(d) filter(d, model_label != "GPCM"),
+    geom_smooth(data = function(d) if (is.null(exclude_smooth)) d else filter(d, !model_label %in% exclude_smooth),
                 method = "gam", formula = y ~ s(x, bs = "cs"),
                 se = TRUE, linewidth = 0.8, alpha = 0.12) +
     annotate("rect", xmin = log(8), xmax = log(8) + 3, ymin = -Inf, ymax = Inf,
@@ -108,7 +179,7 @@ make_plot <- function(data, y_var, y_lab) {
       box.padding   = 0.2, label.padding = 0.15,
       show.legend   = FALSE, xlim = c(log(8), log(8) + 3)
     ) +
-    facet_grid(K_label ~ a_label) +
+    facet_wrap(~ K_label) +
     scale_colour_manual(values = model_colors) +
     scale_x_continuous(
       name   = "Gap asymmetry  (0 = equal gaps;  negative = wider lower;  positive = wider upper)",
@@ -125,9 +196,237 @@ make_plot <- function(data, y_var, y_lab) {
 
 ## Overview
 
-The Generalized Partial Credit Model (GPCM) is a natural choice for polytomous item response data, but simpler *binomial approximations* are sometimes used instead: the polytomous response $X \in \{0,\ldots,K{-}1\}$ is modeled as if it were the outcome of $K{-}1$ independent Bernoulli trials, i.e., $X \sim \text{Binomial}(K{-}1,\, p)$, where $p$ is a function of the latent trait through a chosen link function.
+### Models
 
-This simulation asks: **when do binomial approximations pay a meaningful cost relative to the true GPCM?** We quantify that cost using IMV(model, GPCM) — the InterModel Vigorish of GPCM over each alternative — where GPCM's fitted probabilities serve as the reference. Positive IMV means GPCM predicts better; negative means the alternative wins.
+The Generalized Partial Credit Model (GPCM) and Graded Response Model (GRM) are the standard tools for polytomous item response data. Both devote $K-1$ free threshold parameters to shaping the $K-1$ category boundary functions — the GPCM through adjacent-category logits, the GRM through $K-1$ independent cumulative logits $P(X \geq k \mid \theta) = \text{logis}(a(\theta - b_k))$. Each threshold $b_k$ can be placed freely on the $\theta$ axis, giving the model one independent degree of freedom per boundary.
+
+A simpler alternative collapses those $K-1$ knobs to one: model the response as $X \sim \text{Binomial}(K-1,\, p)$, where $p = f(\theta)$ through a chosen link function. This *binomial approximation* trades threshold flexibility for parsimony — the full category distribution is determined by a single probability $p$, and calibration requires only one or two parameters per item.
+
+```{r fig-erf-overview, fig.height=3.5, fig.width=5, fig.cap="Expected response function (K = 5, a = 1.5) under upper-wider thresholds (s = ln8; see Simulation Setup for the threshold parameterisation). Black: GPCM. Dashed red: best-fitting Binom 2PL (logit), parameters optimised to minimise MSE against the GPCM ERF."}
+make_thresholds_ov <- function(K, asym = 0) {
+  n <- K - 1L; total_range <- 3.0
+  if (asym == 0 || n <= 2L) return(seq(-total_range/2, total_range/2, length.out = n))
+  k_idx <- 0:(n - 2L)
+  gaps  <- exp(asym * k_idx / (n - 2L))
+  gaps  <- gaps / sum(gaps) * total_range
+  b     <- cumsum(c(-total_range / 2, gaps[-length(gaps)]))
+  c(b, b[n - 1L] + gaps[n - 1L])
+}
+
+K_ov <- 5L; a_ov <- 1.5
+theta_ov <- seq(-3, 3, by = 0.05)
+
+b        <- make_thresholds_ov(K_ov, log(8))
+gpcm_es  <- es_fn(gpcm_pr_fn(theta_ov, a_ov, b), K_ov)
+p2       <- optim(c(a_ov, 0),
+                  function(p) mean((gpcm_es -
+                    es_fn(binom_pr_fn(theta_ov, p[1], p[2], K_ov, "logit"), K_ov))^2),
+                  method = "BFGS")$par
+binom_es <- es_fn(binom_pr_fn(theta_ov, p2[1], p2[2], K_ov, "logit"), K_ov)
+
+erf_ov <- rbind(
+  data.frame(theta = theta_ov, es = gpcm_es,  model = "GPCM"),
+  data.frame(theta = theta_ov, es = binom_es, model = "Binom 2PL (logit)")
+)
+erf_ov$model <- factor(erf_ov$model, levels = c("GPCM", "Binom 2PL (logit)"))
+
+ggplot(erf_ov, aes(x = theta, y = es, colour = model, linetype = model)) +
+  geom_line(linewidth = 1.0) +
+  scale_colour_manual(values = c("GPCM" = "black", "Binom 2PL (logit)" = "#d6604d"), name = NULL) +
+  scale_linetype_manual(values = c("GPCM" = "solid", "Binom 2PL (logit)" = "dashed"), name = NULL) +
+  scale_x_continuous(name = expression(theta), breaks = -2:2) +
+  scale_y_continuous(name = expression(E*"["*X*"|"*theta*"]"), limits = c(0, K_ov - 1L)) +
+  theme_bw(base_size = 11) +
+  theme(panel.grid.minor = element_blank(),
+        legend.position  = "bottom")
+```
+
+### Threshold spacing and boundary constraints
+
+Under symmetric threshold spacing the approximation can be close: the logistic link is nearly symmetric, and its free parameters can align the binomial S-curve with the GPCM ERF well. But the binomial carries a structural price. Because all $K-1$ boundary functions are determined by the single proportion $p(\theta)$, they cannot be adjusted independently — moving the location parameter shifts all boundaries in lockstep. The GPCM and GRM each place their $b_k$ freely; the binomial cannot replicate configurations that require boundaries to be spaced unevenly, regardless of what parameter values are chosen. The widget below makes this concrete: switch between GRM, GPCM, and Binomial and drag the threshold sliders to compare how much independent control each model has over its boundaries.
+
+```{ojs}
+//| echo: false
+viewof activeModel = Inputs.radio(["GRM", "GPCM", "Binomial"], {
+  label: "Model",
+  value: "GRM"
+})
+
+viewof bs_raw = Inputs.form({
+  b1: Inputs.range([-3, 3], { label: "b₁", step: 0.05, value: -1.5 }),
+  b2: Inputs.range([-3, 3], { label: "b₂", step: 0.05, value: -0.5 }),
+  b3: Inputs.range([-3, 3], { label: "b₃", step: 0.05, value:  0.5 }),
+  b4: Inputs.range([-3, 3], { label: "b₄", step: 0.05, value:  1.5 }),
+  a:  Inputs.range([0.25, 3], { label: "a", step: 0.05, value: 1.2 })
+})
+```
+
+```{ojs}
+//| echo: false
+GAP = 0.05
+
+bs = {
+  let { b1, b2, b3, b4 } = bs_raw;
+  if (activeModel === "GRM") {
+    b2 = Math.max(b2, b1 + GAP);
+    b3 = Math.max(b3, b2 + GAP);
+    b4 = Math.max(b4, b3 + GAP);
+  }
+  return [b1, b2, b3, b4];
+}
+
+a_val = bs_raw.a
+
+function logis(x) { return 1 / (1 + Math.exp(-x)); }
+
+function bc(n, k) {
+  if (k > n) return 0;
+  let r = 1;
+  for (let i = 0; i < k; i++) r = r * (n - i) / (i + 1);
+  return r;
+}
+
+K2 = 5
+TH = Array.from({ length: 201 }, (_, i) => -4 + i * 8 / 200)
+COLORS = ["#2166ac", "#1b7837", "#d6604d", "#762a83", "#e6550d"]
+
+function grmCRF(th, a, b) {
+  const bounds = [1, ...b.map(bk => logis(a * (th - bk))), 0];
+  return Array.from({ length: K2 }, (_, k) => bounds[k] - bounds[k + 1]);
+}
+
+function gpcmCRF(th, a, b) {
+  let terms = [1], denom = 1;
+  for (let k = 0; k < K2 - 1; k++) {
+    let cum = 0;
+    for (let j = 0; j <= k; j++) cum += a * (th - b[j]);
+    const e = Math.exp(cum);
+    terms.push(e);
+    denom += e;
+  }
+  return terms.map(t => t / denom);
+}
+
+function binomCRF(th, a, b) {
+  const p = logis(a * (th - b[0]));
+  return Array.from({ length: K2 }, (_, k) => bc(K2 - 1, k) * Math.pow(p, k) * Math.pow(1 - p, K2 - 1 - k));
+}
+
+function getCRF(th, a, b) {
+  if (activeModel === "GRM")  return grmCRF(th, a, b);
+  if (activeModel === "GPCM") return gpcmCRF(th, a, b);
+  return binomCRF(th, a, b);
+}
+
+function getBound(th, ki, a, b) {
+  if (activeModel === "GRM")  return logis(a * (th - b[ki]));
+  if (activeModel === "GPCM") {
+    const ps = gpcmCRF(th, a, b);
+    return ps.slice(ki + 1).reduce((s, p) => s + p, 0);
+  }
+  const p = logis(a * (th - b[0]));
+  let s = 0;
+  for (let j = ki + 1; j < K2; j++) s += bc(K2 - 1, j) * Math.pow(p, j) * Math.pow(1 - p, K2 - 1 - j);
+  return s;
+}
+
+gridData2 = TH.map(th => {
+  const crf = getCRF(th, a_val, bs);
+  return {
+    th,
+    erf: crf.reduce((s, p, k) => s + k * p, 0),
+    ...Object.fromEntries(crf.map((p, k) => [`crf${k}`, p])),
+    ...Object.fromEntries(Array.from({ length: K2 - 1 }, (_, ki) => [`bound${ki}`, getBound(th, ki, a_val, bs)]))
+  };
+})
+
+crossings2 = (activeModel !== "Binomial")
+  ? bs.map((b, ki) => ({ th: b, prob: 0.5, ki }))
+  : []
+
+boundPlot2 = {
+  const marks = [
+    Plot.ruleY([0.5], { stroke: "#bbb", strokeDasharray: "3,2" }),
+    ...Array.from({ length: K2 - 1 }, (_, ki) =>
+      Plot.line(gridData2, {
+        x: "th", y: `bound${ki}`,
+        stroke: COLORS[ki], strokeWidth: 2,
+        strokeDasharray: activeModel === "Binomial" && ki > 0 ? "5,3" : null
+      })
+    ),
+    ...(crossings2.length
+      ? [Plot.dot(crossings2, {
+          x: "th", y: "prob",
+          symbol: "times", r: 5, strokeWidth: 2,
+          stroke: d => COLORS[d.ki]
+        })]
+      : [])
+  ];
+  return Plot.plot({
+    width: 320, height: 200, marginLeft: 48,
+    x: { label: "θ", tickValues: [-2, -1, 0, 1, 2] },
+    y: { label: "P(X ≥ k | θ)", domain: [0, 1] },
+    marks
+  });
+}
+
+crfPlot2 = Plot.plot({
+  width: 320, height: 200, marginLeft: 48,
+  x: { label: "θ", tickValues: [-2, -1, 0, 1, 2] },
+  y: { label: "P(X = k | θ)", domain: [0, 1] },
+  marks: Array.from({ length: K2 }, (_, k) =>
+    Plot.line(gridData2, { x: "th", y: `crf${k}`, stroke: COLORS[k], strokeWidth: 2 })
+  )
+})
+
+erfPlot2 = Plot.plot({
+  width: 320, height: 200, marginLeft: 48,
+  x: { label: "θ", tickValues: [-2, -1, 0, 1, 2] },
+  y: { label: "E[X | θ]", domain: [0, K2 - 1] },
+  marks: [
+    Plot.line(gridData2, { x: "th", y: "erf", stroke: "#333", strokeWidth: 2.5 })
+  ]
+})
+```
+
+```{ojs}
+//| echo: false
+caption2 = ({
+  "GRM":     "× marks the b_k where each boundary P(X≥k|θ) = 0.5 — the free threshold location. GRM thresholds must stay ordered (b₁ < b₂ < b₃ < b₄); sliders clamp at their neighbours. Slide any b_k to shift only that boundary independently.",
+  "GPCM":    "GPCM step difficulties: the b_k where adjacent category probability curves intersect. All four can be moved freely and independently — including past each other (disordered thresholds are allowed under the GPCM).",
+  "Binomial":"Only b₁ is free. The other boundary curves (dashed) are fully determined by the binomial CDF given the single location b₁ — they cannot be moved independently regardless of how b₁ is set."
+})[activeModel]
+
+html`
+<div style="font-family:inherit">
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:1rem;align-items:start">
+    <div>
+      <p style="font-size:0.8em;font-weight:600;color:#555;margin:0 0 4px">Boundary / threshold functions</p>
+      ${boundPlot2}
+    </div>
+    <div>
+      <p style="font-size:0.8em;font-weight:600;color:#555;margin:0 0 4px">Category response functions</p>
+      ${crfPlot2}
+    </div>
+    <div>
+      <p style="font-size:0.8em;font-weight:600;color:#555;margin:0 0 4px">Expected response function</p>
+      ${erfPlot2}
+    </div>
+  </div>
+  <p style="font-size:0.78em;color:#666;margin:0;line-height:1.5">${caption2}</p>
+</div>
+`
+```
+
+### What this simulation asks
+
+This simulation asks two questions. The first: **when do binomial approximations pay a meaningful cost relative to the true GPCM?** The second: **which of the two structural assumptions a binomial model makes is the bigger source of that cost?**
+
+A binomial model fails in two distinct ways. First, the **link function**: a fixed functional form (logistic, cloglog, etc.) maps $\theta$ to a success probability $p$ — there is no freedom to adapt the curve's shape to the data. The GPCM places no such constraint: the shape of $E[X|\theta]$ emerges from the configuration of $K-1$ free threshold parameters and can take qualitatively different profiles depending on how those thresholds are spaced (Figure 1). Second, the **category distribution**: Binomial($K-1$, $p$) locks all $K-1$ category boundaries to shapes determined by a single number $p$ — there is no freedom to place each boundary independently. Under the GPCM each category boundary is governed by its own threshold $b_k$, so the $K-1$ boundaries can be located anywhere along $\theta$ independently of one another. These two assumptions can fail for independent reasons, and their relative cost is not obvious.
+
+We isolate each with a dedicated comparison. For the **link-function cost**: a nonparametric spline replaces the logistic with a monotone data-driven curve while keeping the binomial category distribution. Any residual gap between the NP spline and GPCM must then come from the category distribution, not the link shape. For the **category-distribution cost**: the GRM keeps the logistic link but frees all $K-1$ threshold parameters. The gap between Binom 2PL (logit) and GRM — same link, different category structure — directly measures what collapsing $K-1$ boundaries to a single $p$ costs.
+
+We quantify comparisons using IMV and RMSE. For any pair, IMV(model1, model2) > 0 means model2 is the superior predictor. We report two reference comparisons: GPCM as a ceiling and Binom 1PL (logit) as a floor. RMSE on rescaled expected scores provides a complementary metric, though it compresses model differences relative to IMV.
 
 ---
 
@@ -143,20 +442,24 @@ $$
 
 with the empty sum defined as zero for $k=0$. When $a=1$ this reduces to the PCM.
 
-Latent abilities $\theta_i \sim \mathcal{N}(0,1)$ are drawn once per replication and treated as **known** throughout, isolating item-level misspecification from ability estimation noise.
+Latent abilities $\theta_i \sim \mathcal{N}(0,1)$ are drawn once per replication. Rather than a person-level train/test split, **20% of person–item response cells are randomly held out** as the evaluation set; the remaining 80% form the training data. Item parameters are estimated on training data only. GPCM, PCM, and GRM are estimated jointly via marginal maximum likelihood using `mirt`. Binomial and NP spline models are estimated item-by-item, treating EAP $\hat\theta$ from the `mirt` GPCM fit as a fixed predictor during calibration — a proxy for the latent trait that makes item-level regression tractable for these simpler models.
+
+Predictions are then generated using a common scoring procedure for all models: given a model's fitted item parameters, each person's $\hat\theta$ is estimated by maximum-likelihood grid search over 101 equally-spaced points in $[-4, 4]$, using only that person's non-held-out training responses. Category probabilities at $\hat\theta$ are computed from the model and evaluated against the held-out cells.
 
 ### Conditions
 
-| Factor | Levels |
+| Factor | Levels / Distribution |
 |---|---|
-| Discrimination $a$ | 1.0 (PCM), 1.5 |
-| Categories $K$ | 5, 7 |
-| Gap asymmetry | Uniform($-\ln 8$, $\ln 8$) per replication |
-| Items per condition | 10 (locations shifted uniformly in $[-1,1]$) |
+| Categories $K$ | 5 |
+| Gap asymmetry $s$ | Uniform($-\ln 8$, $\ln 8$) per replication |
+| Item discrimination $a_j$ | $\text{LogNormal}(0,\, 0.5^2)$ per item — median 1, 90th percentile $\approx 1.9$ |
+| Items per replication | 10 |
 | Persons per replication | 1000 |
 | Replications | 100 |
 
-**Threshold shape** is controlled by a gap asymmetry parameter $s$, drawn independently for each replication from Uniform($-\ln 8$, $\ln 8$). All threshold vectors span the same total range $[-1.5, 1.5]$. When $s=0$ the $K-1$ thresholds are evenly spaced. When $s>0$ gaps widen toward the upper end (higher categories are more spread out); when $s<0$ gaps widen toward the lower end. The max/min gap ratio equals $e^{|s|}$ and is comparable across $K$ values. Results are summarized with a GAM smooth over the continuous $s$ values.
+**Threshold shape** is controlled by a gap asymmetry parameter $s$, drawn independently for each replication from Uniform($-\ln 8$, $\ln 8$). All threshold vectors span the same total range $[-1.5, 1.5]$. When $s=0$ the $K-1$ thresholds are evenly spaced; when $s>0$ gaps widen toward the upper end; when $s<0$ toward the lower end. The max/min gap ratio equals $e^{|s|}$. Results are summarized with a GAM smooth over the continuous $s$ values.
+
+Each item draws its own discrimination $a_j \sim \text{LogNormal}(0, 0.5^2)$ independently, and its thresholds are $\mathbf{b}^{(j)} = \mathbf{b}(s) + \delta_j + \boldsymbol{\epsilon}^{(j)}$, where $\delta_j \sim \text{Uniform}(-1,1)$ is a location shift and $\boldsymbol{\epsilon}^{(j)} \sim \mathcal{N}(\mathbf{0},\, 0.3^2 \mathbf{I})$ adds per-threshold noise. Items therefore share the asymmetry direction but vary in difficulty location, threshold spacing, and discrimination.
 
 ```{r fig-thresholds, fig.height=4, fig.cap="Threshold locations for K=5 and K=7 across the full asymmetry range. Coloured segments connect consecutive thresholds; colour encodes gap width (yellow = wide, purple = narrow). Dots mark threshold positions. All vectors span the same total range [-1.5, 1.5]."}
 make_thresholds <- function(K, asym = 0) {
@@ -214,122 +517,153 @@ ggplot() +
 
 ### Models compared
 
-The figure shows expected response functions (ERF: $E[X|\theta]$ vs $\theta$) for each model at K=5, $a=1.5$, $s=\ln 8$ (maximum upper asymmetry). Each model uses its best-fitting single parameters; the GPCM ERF (black) is the target.
-
-:::: {.columns}
-
-::: {.column width="52%"}
+The nine models differ in how many parameters they use and what functional form they impose on $E[X|\theta]$:
 
 | Model | Parameters | Description |
 |---|---|---|
-| **GPCM** | $a$, $b_1,\ldots,b_{K-1}$ | True generating model |
+| **GPCM** | $a_j$, $b_1,\ldots,b_{K-1}$ | True generating model; correctly specified for all items |
 | **PCM** | $b_1,\ldots,b_{K-1}$ | GPCM with $a=1$ fixed |
 | **GRM** | $a$, $b_1,\ldots,b_{K-1}$ | Cumulative logit; $P(X \ge k) = \text{logis}(a(\theta-b_k))$ |
 | **Binom 2PL (logit)** | $a$, $b$ | $X \sim \text{Binom}(K{-}1, \text{logis}(a\theta - b))$ |
-| **Binom 1PL** | $b$ | Same with $a=1$, four link functions |
+| **Binom 1PL (logit)** | $b$ | $X \sim \text{Binom}(K{-}1, \text{logis}(\theta - b))$ |
+| **Binom 1PL (scobit)** | $b$, $\alpha$ | $X \sim \text{Binom}(K{-}1, \text{logis}(\theta - b)^\alpha)$; $\alpha$ adapts the skew of the link |
+| **Binom 1PL (cloglog)** | $b$ | $X \sim \text{Binom}(K{-}1, 1 - \exp(-\exp(\theta - b)))$ |
+| **Binom 1PL (cauchit)** | $b$ | $X \sim \text{Binom}(K{-}1, \tfrac{1}{2} + \tfrac{1}{\pi}\arctan(\theta - b))$ |
+| **NP spline** | spline knots | $X \sim \text{Binom}(K{-}1, f(\theta))$ where $f$ is a monotone data-driven spline; same category distribution as binomial models, flexible link |
 
-:::
+The figures below show the expected response function (ERF: $E[X|\theta]$ vs.\ $\theta$) at K=5, $a=1.5$, for three threshold conditions. In each panel the black line is the true GPCM ERF and the coloured line is the best-fitting ERF for that model — all models have their free parameters optimised to minimise mean squared error against the GPCM ERF. For PCM, the K−1 thresholds are optimised with $a=1$ fixed. For GRM, both $a$ and the K−1 thresholds are optimised. For binomial models, a single location $b$ (and optionally $a$ for 2PL) is optimised. The **NP spline panel** is different: rather than optimising parameters, a monotone Gaussian-likelihood spline is fitted directly to the GPCM ERF values — an oracle fit with no sampling noise. The NP spline therefore shows a near-perfect match in all conditions, which is the point: any residual gap it has in the simulation results (where data are noisy and discrete) reflects estimation noise and the binomial category distribution assumption, not shape misspecification. The residual gap for all other panels reflects irreducible functional-form misspecification.
 
-::: {.column width="48%"}
-
-```{r fig-erf, fig.height=3.8, fig.width=4.5}
-K_ex <- 5L; a_ex <- 1.5; s_ex <- log(8)   # high asymmetry, wider upper gaps
-b_ex <- make_thresholds(K_ex, s_ex)
+```{r erf-fns}
+K_ex <- 5L; a_ex <- 1.5
 theta_g <- seq(-3, 3, by = 0.05)
 
-gpcm_es <- es_fn(gpcm_pr_fn(theta_g, a_ex, b_ex), K_ex)
-pcm_es  <- es_fn(gpcm_pr_fn(theta_g, 1.0,   b_ex), K_ex)
-grm_es  <- es_fn(grm_pr_fn( theta_g, a_ex,  b_ex), K_ex)
-
-# Best-fit single parameters for each binomial model
-opt1 <- function(link) {
-  optim(0, function(b) mean((gpcm_es - es_fn(binom_pr_fn(theta_g,1,b,K_ex,link),K_ex))^2),
-        method = "Brent", lower = -3, upper = 3)$par
-}
-opt2 <- function() {
-  optim(c(a_ex, 0),
-        function(p) mean((gpcm_es - es_fn(binom_pr_fn(theta_g,p[1],p[2],K_ex,"logit"),K_ex))^2),
-        method = "BFGS")$par
-}
-p2   <- opt2()
-
-erf_df <- rbind(
-  data.frame(model="GPCM",               theta=theta_g, es=gpcm_es),
-  data.frame(model="PCM",                theta=theta_g, es=pcm_es),
-  data.frame(model="GRM",                theta=theta_g, es=grm_es),
-  data.frame(model="Binom 2PL\n(logit)", theta=theta_g,
-             es=es_fn(binom_pr_fn(theta_g,p2[1],p2[2],K_ex,"logit"),K_ex)),
-  data.frame(model="Binom 1PL\n(logit)", theta=theta_g,
-             es=es_fn(binom_pr_fn(theta_g,1,opt1("logit"),  K_ex,"logit"),  K_ex)),
-  data.frame(model="Binom 1PL\n(probit)",theta=theta_g,
-             es=es_fn(binom_pr_fn(theta_g,1,opt1("probit"), K_ex,"probit"), K_ex)),
-  data.frame(model="Binom 1PL\n(cloglog)",theta=theta_g,
-             es=es_fn(binom_pr_fn(theta_g,1,opt1("cloglog"),K_ex,"cloglog"),K_ex)),
-  data.frame(model="Binom 1PL\n(cauchit)",theta=theta_g,
-             es=es_fn(binom_pr_fn(theta_g,1,opt1("cauchit"),K_ex,"cauchit"),K_ex))
+panel_levels <- c("PCM","GRM","NP spline","Binom 2PL (logit)","Binom 1PL (logit)",
+                  "Binom 1PL (scobit)","Binom 1PL (cloglog)","Binom 1PL (cauchit)")
+panel_color  <- "#e6550d"   # all model curves: vivid orange; GPCM reference stays black
+panel_colors <- setNames(
+  c(rep(panel_color, 2), "#e7298a", rep(panel_color, 5)),
+  panel_levels
 )
 
-erf_df$is_gpcm <- erf_df$model == "GPCM"
+make_erf_grid <- function(s_val) {
+  b_ex    <- make_thresholds(K_ex, s_val)
+  gpcm_es <- es_fn(gpcm_pr_fn(theta_g, a_ex, b_ex), K_ex)
+  mse     <- function(es) mean((gpcm_es - es)^2)
 
-ggplot(erf_df, aes(x = theta, y = es, group = model,
-                   colour = model, linewidth = is_gpcm)) +
-  geom_line() +
-  scale_linewidth_manual(values = c("TRUE" = 1.2, "FALSE" = 0.55),
-                         guide = "none") +
-  scale_colour_manual(values = c(
-    "GPCM"              = "black",
-    "PCM"               = "#762a83",
-    "GRM"               = "#2166ac",
-    "Binom 2PL\n(logit)"  = "#d6604d",
-    "Binom 1PL\n(logit)"  = "#f4a582",
-    "Binom 1PL\n(probit)" = "#bababa",
-    "Binom 1PL\n(cloglog)"= "#c2a5cf",
-    "Binom 1PL\n(cauchit)"= "#a6dba0"
-  ), name = NULL) +
-  scale_x_continuous(breaks = -3:3) +
-  labs(x = expression(theta), y = "E[X | θ]") +
-  theme_bw(base_size = 10) +
-  theme(legend.key.size  = unit(0.5, "lines"),
-        legend.text      = element_text(size = 7),
-        legend.position  = "right",
-        panel.grid.minor = element_blank())
+  # PCM: optimise K-1 thresholds with a=1 fixed
+  pcm_b  <- optim(b_ex,
+                  function(b) mse(es_fn(gpcm_pr_fn(theta_g, 1.0, sort(b)), K_ex)),
+                  method = "BFGS")$par
+
+  # GRM: optimise a and K-1 thresholds
+  grm_p  <- optim(c(a_ex, b_ex),
+                  function(p) {
+                    if (p[1] <= 0) return(1e9)
+                    mse(es_fn(grm_pr_fn(theta_g, p[1], sort(p[-1])), K_ex))
+                  },
+                  method = "BFGS")$par
+
+  # Binom 2PL: optimise a and b
+  p2     <- optim(c(a_ex, 0),
+                  function(p) mse(es_fn(binom_pr_fn(theta_g,p[1],p[2],K_ex,"logit"),K_ex)),
+                  method = "BFGS")$par
+
+  # Binom 1PL: optimise single location b per link
+  opt1   <- function(link)
+    optim(0, function(b) mse(es_fn(binom_pr_fn(theta_g,1,b,K_ex,link),K_ex)),
+          method = "Brent", lower = -3, upper = 3)$par
+
+  # Binom 1PL scobit: optimise b and log(alpha); p = logis(theta - b)^alpha
+  scobit_es_fn <- function(b, log_alpha)
+    es_fn(outer(pmin(pmax(plogis(theta_g - b)^exp(log_alpha), 1e-10), 1-1e-10),
+                0:(K_ex-1L), function(pp, k) dbinom(k, K_ex-1L, pp)), K_ex)
+  sc_p <- optim(c(0, 0), function(p) mse(scobit_es_fn(p[1], p[2])), method = "BFGS")$par
+
+  # NP spline: fit monotone scam to the GPCM ERF itself (noiseless oracle fit).
+  # Shows the irreducible gap from the binomial category distribution assumption
+  # independent of any ERF shape misspecification.
+  df_np  <- data.frame(y = gpcm_es / (K_ex - 1L), th = theta_g)
+  fit_np <- scam::scam(y ~ s(th, bs = "mpi"), data = df_np)
+  p_np   <- pmin(pmax(as.numeric(predict(fit_np)), 0), 1)
+  es_np  <- es_fn(outer(p_np, 0:(K_ex - 1L), function(p, k) dbinom(k, K_ex - 1L, p)), K_ex)
+
+  models_df <- rbind(
+    data.frame(panel="PCM",                 theta=theta_g, es=es_fn(gpcm_pr_fn(theta_g,1.0,sort(pcm_b)),K_ex)),
+    data.frame(panel="GRM",                 theta=theta_g, es=es_fn(grm_pr_fn(theta_g,grm_p[1],sort(grm_p[-1])),K_ex)),
+    data.frame(panel="NP spline",           theta=theta_g, es=es_np),
+    data.frame(panel="Binom 2PL (logit)",   theta=theta_g, es=es_fn(binom_pr_fn(theta_g,p2[1],p2[2],K_ex,"logit"),K_ex)),
+    data.frame(panel="Binom 1PL (logit)",   theta=theta_g, es=es_fn(binom_pr_fn(theta_g,1,opt1("logit"),  K_ex,"logit"),  K_ex)),
+    data.frame(panel="Binom 1PL (scobit)",  theta=theta_g, es=scobit_es_fn(sc_p[1], sc_p[2])),
+    data.frame(panel="Binom 1PL (cloglog)", theta=theta_g, es=es_fn(binom_pr_fn(theta_g,1,opt1("cloglog"),K_ex,"cloglog"),K_ex)),
+    data.frame(panel="Binom 1PL (cauchit)", theta=theta_g, es=es_fn(binom_pr_fn(theta_g,1,opt1("cauchit"),K_ex,"cauchit"),K_ex))
+  )
+  models_df$panel <- factor(models_df$panel, levels = panel_levels)
+
+  ref_df <- do.call(rbind, lapply(panel_levels, function(m)
+    data.frame(panel = factor(m, levels = panel_levels), theta = theta_g, es = gpcm_es)
+  ))
+
+  ggplot() +
+    geom_line(data = ref_df,    aes(x = theta, y = es),
+              colour = "black", linewidth = 1.3, linetype = "dashed") +
+    geom_line(data = models_df, aes(x = theta, y = es, colour = panel),
+              linewidth = 0.9) +
+    facet_wrap(~ panel, ncol = 4) +
+    scale_colour_manual(values = panel_colors, guide = "none") +
+    scale_x_continuous(name = expression(theta), breaks = -2:2) +
+    scale_y_continuous(name = "E[X | θ]", limits = c(0, K_ex - 1)) +
+    theme_bw(base_size = 10) +
+    theme(strip.background  = element_rect(fill = "grey92"),
+          panel.grid.minor  = element_blank())
+}
 ```
 
-:::
+#### Symmetric thresholds ($s = 0$)
 
-::::
+```{r fig-erf-sym, fig.height=5, fig.width=10, fig.cap="ERF for each model vs. the true GPCM (dashed black) under symmetric thresholds (s = 0). Each non-GPCM model's parameters are optimised to best match the GPCM ERF. Exception: the NP spline panel shows an oracle fit — the spline is fitted directly to the noiseless GPCM ERF, so its near-perfect match is by design, not estimation."}
+make_erf_grid(0)
+```
 
-Each model is fit to each item with $\theta$ held fixed; item parameters are recovered by MLE, and predicted probabilities are formed at the true $\theta$ values.
+With evenly-spaced thresholds the GPCM ERF is a smooth, nearly symmetric S-curve. **GRM** nearly overlaps the GPCM throughout — the cumulative logit and adjacent-category logit formulations produce very similar expected scores when thresholds are symmetric. **PCM** is visibly shallower because it fixes $a = 1$ while the true discrimination is $a = 1.5$; it tracks the right shape but with a less steep ascent. **Binom 2PL (logit)** tracks closely because its free discrimination can match the GPCM slope. The **1PL logit** is slightly shallower (fixed $a = 1$) but follows the shape well. **1PL scobit** here estimates $\alpha \approx 1$, effectively collapsing to the logit, so its ERF nearly coincides with logit — this is the expected baseline behaviour. **1PL cloglog** and **1PL cauchit** show systematic departures even here: cloglog rises too steeply and plateaus early (Gumbel-shaped CDF), while cauchit is too flat through the middle (heavy Cauchy tails).
+
+#### Upper-wider thresholds ($s = \ln 8$)
+
+```{r fig-erf-upper, fig.height=5, fig.width=10, fig.cap="ERF for each model vs. the true GPCM (dashed black) under upper-wider thresholds (s = ln8). Widely-spaced upper thresholds create a steep early rise followed by a slow plateau. NP spline panel: oracle fit; near-perfect match is by design."}
+make_erf_grid(log(8))
+```
+
+When upper thresholds are wide the GPCM ERF becomes markedly asymmetric: persons quickly ascend through the closely-spaced lower thresholds (steep early rise) and then slowly approach the top categories (gradual plateau). **GRM** tracks this shape well — its cumulative logit formulation can represent the same threshold-driven asymmetry. **PCM** again misses on slope and now also fails to capture the asymmetry fully. The **1PL logit** is constrained to a symmetric S-curve that cannot match the early-steep / late-gradual profile. The **1PL scobit** with $\alpha < 1$ produces a left-skewed ERF (faster initial rise), which is the right direction for this scenario — watch whether its panel shows a closer match than logit. The **cloglog** performs worse, not better: its Gumbel CDF rises steeply toward the middle from the left, the opposite of what upper-wider thresholds require.
+
+#### Lower-wider thresholds ($s = -\ln 8$)
+
+```{r fig-erf-lower, fig.height=5, fig.width=10, fig.cap="ERF for each model vs. the true GPCM (dashed black) under lower-wider thresholds (s = -ln8). Widely-spaced lower thresholds produce a slow initial rise followed by a steep ascent. NP spline panel: oracle fit; near-perfect match is by design."}
+make_erf_grid(-log(8))
+```
+
+Lower-wider thresholds reverse the asymmetry: the GPCM ERF rises slowly at first (widely-spaced lower thresholds) and then steeply before reaching the maximum (closely-spaced upper thresholds). Here the **1PL scobit** with $\alpha > 1$ produces a right-skewed ERF (slower initial rise, steeper ascent) — the correct direction for this scenario. Whether it materially closes the gap on logit is the key question. The **cloglog** also rises gradually at the left tail and steeply in the middle, which seems directionally right — but it still tends to lose to logit because the Gumbel CDF's specific curvature does not match the curvature that GPCM threshold spacing produces. The scobit's advantage, if any, comes from its logistic base: it shares the right functional family and only adds a power transformation, rather than switching to a structurally different distribution.
+
+**A tempting forecast — and why it misleads.** Across all three figures, the NP spline panel stands out: in every threshold condition it nearly overlaps the GPCM reference. The natural conclusion is that the NP spline, having recovered the ERF perfectly, should be nearly as good a predictor as the GPCM itself. Resist that conclusion. The results show the NP spline performing almost identically to Binom 2PL (logit), not GPCM. The reason is that ERF accuracy ($E[X|\theta]$ matching) is not the same as distributional accuracy ($P(X=k|\theta)$ matching): even a perfect ERF recovery cannot rescue the binomial category distribution assumption. Prediction accuracy depends on individual category probabilities, and the binomial's structurally bell-shaped distribution produces systematic errors on extreme categories ($k=0$ and $k=K-1$) regardless of how well the link function is calibrated. The oracle ERF panels establish that the logistic link is adequate for recovering the mean; the simulation results establish that recovering the mean is not enough.
 
 ---
 
 ## Results
 
-### IMV_c
+All results use $K=5$ categories, 10 items, 1000 persons, and 100 replications. Asymmetry $s$ varies continuously across replications; model comparisons are summarized with GAM smooths over $s$. IMV(model, reference) > 0 means the reference is the superior predictor.
 
-```{r fig-imv-c, fig.cap="IMV_c(model, GPCM): GAM smooth over 100 replications with gap asymmetry s drawn from Uniform(-ln8, ln8). Positive = GPCM predicts better. The dashed line marks zero at s=0 (symmetric)."}
-make_plot(res, "imv_c",
-          "IMV_c(model, GPCM)  [positive = GPCM wins]")
+### IMV vs. GPCM
+
+```{r fig-imv, fig.cap="IMV_c (left) and IMV_t (right) of each model vs. GPCM, as a function of gap asymmetry s. GAM smooths over 100 replications; K = 5. Positive = GPCM predicts better. Dashed line marks zero.", fig.height=5}
+make_plot_imv_pair(res, "imv_c", "imv_t",
+                   "ω_c (category)", "ω_t (threshold)")
 ```
 
-At $s=0$ (symmetric thresholds) the alternatives are close to or below zero — the constrained models match or slightly beat the GPCM, as the extra GPCM parameters gain little when the gap structure is simple. As $|s|$ increases in either direction the binomial approximations diverge upward, with GPCM's advantage growing more sharply for K=7 than K=5.
+The expected hierarchy holds: GPCM wins. IMV(model, GPCM) is positive for all alternatives, growing with $|s|$ as larger threshold asymmetry becomes harder for misspecified models to track.
 
-The two directions of asymmetry are not symmetric in their effect. Wider-upper gaps ($s > 0$) push more IMV disadvantage onto the binomial models than wider-lower gaps ($s < 0$) of the same magnitude. This makes sense: upper-category scarcity is harder for a single $b$ parameter to track than lower-category scarcity, because the binomial mean is sensitive to the center of the distribution, not its tails.
+**GRM nearly matches GPCM** throughout — IMV(GRM, GPCM) is small across the full asymmetry range, sometimes marginally negative (GRM edges out GPCM in a few conditions). With item discriminations varying across items, the GRM's free discrimination parameter per item means it is only mildly misspecified relative to the GPCM.
 
-A notable finding is that the asymmetric link functions (cloglog, probit) do *not* benefit under asymmetric thresholds — they perform worse than logit regardless of direction. For wider-upper gaps ($s > 0$): the cloglog link rises slowly at low $\theta$ and saturates quickly at high $\theta$, opposite to the GPCM pattern where the expected score plateaus as high categories remain rare even at high ability. For wider-lower gaps ($s < 0$): the cloglog's fast initial rise is also a poor match. The ERF figure illustrates this directly. The logit link, despite its symmetry, provides a more neutral approximation across the full ability range.
+**PCM pays a visible price** for its equal-discrimination assumption. IMV(PCM, GPCM) is roughly an order of magnitude larger than the GRM gap, illustrating what misspecifying discrimination costs.
 
-The GRM tracks GPCM closely near $s=0$ (same number of threshold parameters, different parameterization) and diverges at both extremes, more so for K=7.
-
----
-
-### IMV_t
-
-```{r fig-imv-t, fig.cap="IMV_t(model, GPCM): threshold-based IMV variant. The pattern mirrors IMV_c but at smaller scale; IMV_t averages over K-1 cumulative binary thresholds rather than all pairwise category comparisons."}
-make_plot(res, "imv_t",
-          "IMV_t(model, GPCM)  [positive = GPCM wins]")
-```
-
-IMV_t tells the same directional story. Values near zero at $s=0$ grow steadily in both directions as asymmetry increases, with the wider-upper side showing a steeper rise.
+**NP spline** sits almost exactly on top of 2PL+logit — the two curves are nearly indistinguishable throughout the asymmetry range. This is the key finding of the decomposition: under a GPCM DGP, the logistic link is already the right functional form, so replacing it with a flexible spline adds estimation noise rather than signal. The link-function cost of the logistic constraint is negligible when the true relationship is logistic. The full gap between 2PL+logit (or NP spline) and GRM/GPCM is therefore almost entirely **category-distribution loss** — what using a single binomial proportion costs relative to $K-1$ free thresholds. The **1PL binomials** cluster further below, with the gap to GPCM growing steadily with $|s|$. ω_t and ω_c tell the same story at different scales.
 
 ---
 
@@ -340,17 +674,707 @@ make_plot(res, "rmse",
           "RMSE (expected score, 0-1 scale)")
 ```
 
-RMSE rankings are consistent with IMV. GPCM and GRM converge near $s=0$; binomial models add meaningful RMSE as $|s|$ grows, with the effect larger on the wider-upper side.
+RMSE rankings are consistent with IMV. GPCM and GRM are nearly indistinguishable; PCM sits slightly above them (higher RMSE); binomial models sit higher still. The gap between GPCM and the 1PL binomial models grows with $|s|$. Differences are modest in absolute terms but systematic across all 100 replications. Note that RMSE compresses the model separation visible in IMV: the IMV plots resolve finer distinctions between models that RMSE largely obscures.
+
+---
+
+### IMV vs. Binom 1PL (logit)
+
+The figures above use oracle GPCM as the reference — a theoretical ceiling. Here we use the simplest binomial model, Binom 1PL (logit), as the floor reference instead. IMV(1PL-logit, model) > 0 means the model beats 1PL-logit; < 0 means the model is worse than 1PL-logit.
+
+```{r fig-imv-1pl, fig.cap="IMV_c (left) and IMV_t (right) of each model vs. Binom 1PL (logit) as the floor. Positive = model beats 1PL-logit. K = 5.", fig.height=5}
+res_1pl <- filter(res, model_label != "Binom 1PL (logit)")
+make_plot_imv_pair(res_1pl, "imv_c_1pl", "imv_t_1pl",
+                   "ω_c (category)", "ω_t (threshold)",
+                   y_lab = "IMV(1PL-logit, model)  [positive = model wins]",
+                   exclude_smooth = NULL)
+```
+
+GPCM, GRM, and PCM all beat 1PL-logit (positive IMV), with GPCM and GRM showing the largest advantage. The NP spline also beats 1PL-logit — its flexible link adds value over the fixed logistic. The gap grows with $|s|$: as threshold asymmetry increases, richer models gain more. The asymmetric link functions (cloglog, cauchit) are consistently below zero, confirming that a fixed skew direction is worse than the neutral logit baseline.
+
+---
+
+### NP spline: reading the loss decomposition
+
+The results above include the NP spline — a monotone spline (fitted via `scam`, `bs = "mpi"`, binomial likelihood) on the logit of $p(\theta)$, using GPCM's EAP $\hat\theta$ as the calibration predictor. Category probabilities are formed as Binomial($K-1$, $p̂$) where $\hat{p}(\theta)$ comes from the fitted spline. This shares the binomial category distribution with 2PL+logit but relaxes the logistic link to any monotone function.
+
+This design isolates two separable sources of loss in the binomial family:
+
+- **Link-function loss** — the logistic may not match the true $p(\theta)$ curve; the NP spline eliminates this by fitting the shape freely
+- **Category-distribution loss** — even with a correctly-shaped $p(\theta)$, the Binomial($K-1$, $p$) probability model differs from the true GPCM category distribution; this residual gap persists in the NP spline regardless of how well the ERF is recovered
+
+The ERF panels in the setup section showed the NP spline's oracle fit (spline fitted directly to the noiseless GPCM ERF): it nearly overlaps the black reference in all asymmetry conditions. This tells us the spline *can* recover the ERF shape — so any gap between the NP spline and GPCM in the IMV plots above reflects category-distribution loss, not residual shape misspecification.
+
+Reading the decomposition from the IMV plots: the NP spline and 2PL+logit nearly coincide, meaning the **link-function cost** of the logistic constraint is negligible — under the GPCM DGP the logistic link is already the right shape, and the spline's additional flexibility only introduces estimation noise. The full gap from 2PL+logit (and NP spline) up to GPCM is therefore almost entirely **category-distribution cost** — what using a single binomial proportion instead of $K-1$ free thresholds costs. The decomposition collapses to a single dominant term: it is the per-category threshold structure, not the link function, that drives the GPCM and GRM advantage.
+
+But where does that category-distribution loss fall? The binomial penalty is not spread evenly across response categories. Under asymmetric thresholds the GPCM concentrates probability mass at the extreme categories ($k=0$ and $k=K-1$) in ways a single proportion cannot match — the binomial is structurally constrained to a bell-shaped distribution that underweights the tails. The log-likelihood penalty therefore lands disproportionately on extreme responses. The figure below shows one example — $K=5$, $a=1.5$, comparing symmetric and upper-wider thresholds — integrating the per-category gap analytically over $\theta \sim \mathcal{N}(0,1)$.
+
+```{r fig-kl-by-category, fig.height=3.5, fig.width=8, fig.cap="Expected log-likelihood advantage of GPCM over NP spline, decomposed by response category k (K = 5, a = 1.5). Computed analytically using the oracle NP spline (p(theta) = E_GPCM[X|theta] / (K-1), so ERFs match exactly), integrated over theta ~ N(0,1). Left: symmetric thresholds. Right: upper-wider thresholds (s = ln8). The loss concentrates at the extreme categories under asymmetry because the binomial cannot place probability mass at the tails as freely as the GPCM."}
+theta_kl <- seq(-4, 4, by = 0.02)
+K_kl <- 5L; a_kl <- 1.5
+w_kl <- dnorm(theta_kl); w_kl <- w_kl / sum(w_kl)
+
+kl_by_k <- function(asym) {
+  b    <- make_thresholds(K_kl, asym)
+  gpr  <- gpcm_pr_fn(theta_kl, a_kl, b)
+  p_np <- es_fn(gpr, K_kl) / (K_kl - 1L)
+  bpr  <- outer(p_np, 0:(K_kl - 1L), function(p, k) dbinom(k, K_kl - 1L, p))
+  sapply(seq_len(K_kl), function(ki) {
+    sum(w_kl * gpr[, ki] *
+          (log(pmax(gpr[, ki], 1e-15)) - log(pmax(bpr[, ki], 1e-15))))
+  })
+}
+
+conds <- list(
+  list(asym = 0,      lab = "Symmetric  (s = 0)"),
+  list(asym = log(8), lab = "Upper-wider  (s = ln8)")
+)
+kl_df <- do.call(rbind, lapply(conds, function(cond) {
+  data.frame(k = 0:(K_kl - 1L), ll_gap = kl_by_k(cond$asym), panel = cond$lab)
+}))
+kl_df$panel <- factor(kl_df$panel, levels = sapply(conds, `[[`, "lab"))
+
+ggplot(kl_df, aes(x = factor(k), y = ll_gap)) +
+  geom_col(fill = "#2166ac", width = 0.6) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
+  facet_wrap(~ panel, ncol = 2) +
+  scale_x_discrete(name = "Response category k") +
+  scale_y_continuous(name = "E[log P(GPCM) − log P(NP spline) | X = k] × P(X = k)") +
+  theme_bw(base_size = 11) +
+  theme(strip.background = element_rect(fill = "grey92"),
+        panel.grid.minor = element_blank())
+```
+
+Under symmetric thresholds (left) the loss is spread fairly evenly across categories — the binomial is only mildly wrong everywhere, and no single category dominates. Under upper-wider thresholds (right) the picture shifts dramatically: virtually all of the log-likelihood gap concentrates at $k = 0$ and $k = K-1$. The binomial systematically underpredicts the probability of the most extreme responses, because the GPCM's threshold structure can stack probability at the tails in ways a single proportion cannot. Middle categories contribute little — there the binomial approximation is adequate.
+
+The widget below extends this to any combination of $\theta$, asymmetry $s$, categories $K$, and discrimination $a$, adding the full ERF and category probability panels so the connection between threshold spacing and distributional mismatch is directly visible.
+
+```{ojs}
+viewof theta = Inputs.range([-3, 3], {label: "θ (ability)", step: 0.05, value: 0.5})
+viewof asym  = Inputs.range([-Math.log(8), Math.log(8)],
+                 {label: "s (asymmetry)", step: 0.05, value: Math.log(8)})
+viewof K     = Inputs.range([3, 7], {label: "K (categories)", step: 1, value: 5})
+viewof a     = Inputs.range([0.5, 2.5], {label: "a (discrimination)", step: 0.05, value: 1.5})
+```
+
+```{ojs}
+function makeThresholds(K, asym) {
+  const n = K - 1, range = 3.0;
+  if (Math.abs(asym) < 1e-9 || n <= 2)
+    return Array.from({length: n}, (_, i) => -range/2 + i * range / (n - 1));
+  const weights = Array.from({length: n - 1}, (_, i) => Math.exp(asym * i / (n - 2)));
+  const ws = weights.reduce((a, b) => a + b, 0);
+  const gaps = weights.map(w => w / ws * range);
+  const b = [-range / 2];
+  for (let i = 0; i < n - 2; i++) b.push(b[b.length - 1] + gaps[i]);
+  b.push(b[n - 2] + gaps[n - 2]);
+  return b;
+}
+
+function gpcmPr(theta, a, b) {
+  const Kl = b.length + 1;
+  const ln = new Array(Kl).fill(0);
+  for (let k = 1; k < Kl; k++) ln[k] = ln[k-1] + a * (theta - b[k-1]);
+  const mx = Math.max(...ln);
+  const ex = ln.map(v => Math.exp(v - mx));
+  const sm = ex.reduce((a, b) => a + b, 0);
+  return ex.map(v => v / sm);
+}
+
+function dbinom(k, n, p) {
+  if (p <= 0) return k === 0 ? 1 : 0;
+  if (p >= 1) return k === n ? 1 : 0;
+  let lc = 0;
+  for (let i = 0; i < k; i++) lc += Math.log(n - i) - Math.log(i + 1);
+  return Math.exp(lc + k * Math.log(p) + (n - k) * Math.log(1 - p));
+}
+
+function npBinomPr(theta, a, b, K) {
+  const gp = gpcmPr(theta, a, b);
+  const mean = gp.reduce((s, p, k) => s + p * k, 0);
+  const phat = mean / (K - 1);
+  return Array.from({length: K}, (_, k) => dbinom(k, K-1, phat));
+}
+
+function safeLog(p) { return p > 1e-15 ? Math.log(p) : -35; }
+
+thetaGrid = Array.from({length: 121}, (_, i) => -3 + i * 0.05)
+thresholds = makeThresholds(K, asym)
+
+gridData = thetaGrid.map(th => {
+  const gp = gpcmPr(th, a, thresholds);
+  const np = npBinomPr(th, a, thresholds, K);
+  return { th, gp, np,
+           erfG: gp.reduce((s, p, k) => s + p * k, 0),
+           erfN: np.reduce((s, p, k) => s + p * k, 0) };
+})
+
+pointData = {
+  const gp = gpcmPr(theta, a, thresholds);
+  const np = npBinomPr(theta, a, thresholds, K);
+  const meanG = gp.reduce((s, p, k) => s + p * k, 0);
+  const meanN = np.reduce((s, p, k) => s + p * k, 0);
+  const dll   = gp.reduce((s, p, k) => s + p * (safeLog(gp[k]) - safeLog(np[k])), 0);
+  const dllK  = gp.map((_, k) => safeLog(gp[k]) - safeLog(np[k]));
+  return { gp, np, meanG, meanN, dll, dllK };
+}
+
+CRF_COLORS = ["#185FA5","#1D9E75","#BA7517","#C53A35","#7F77DD","#5DCAA5","#E24B4A"]
+CRF_DASH   = [null,[4,3],[2,3],[4,2,2,2],[6,2],[3,3],[5,2]]
+
+erfPlot = Plot.plot({
+  width: 340, height: 200, marginLeft: 45,
+  x: {label: "θ", tickValues: [-2,-1,0,1,2]},
+  y: {label: "E[X | θ]", domain: [0, K - 1]},
+  marks: [
+    Plot.ruleX([theta], {stroke: "#888", strokeDasharray: "3,2", strokeWidth: 1.2}),
+    Plot.line(gridData, {x: "th", y: "erfG", stroke: "#333", strokeWidth: 2}),
+    Plot.line(gridData, {x: "th", y: "erfN", stroke: "#C53A35",
+                         strokeWidth: 2, strokeDasharray: "5,3"})
+  ]
+})
+
+crfPlot = {
+  const marks = [Plot.ruleX([theta], {stroke:"#888", strokeDasharray:"3,2", strokeWidth:1.2})];
+  for (let k = 0; k < K; k++) {
+    marks.push(Plot.line(gridData, {x:"th", y: d => d.gp[k],
+      stroke: CRF_COLORS[k % CRF_COLORS.length], strokeWidth: 1.8}));
+    marks.push(Plot.line(gridData, {x:"th", y: d => d.np[k],
+      stroke: CRF_COLORS[k % CRF_COLORS.length], strokeWidth: 1.5,
+      strokeDasharray: (CRF_DASH[k % CRF_DASH.length] ?? [4,3]).join(",")}));
+  }
+  return Plot.plot({width:340, height:210, marginLeft:45,
+    x:{label:"θ", tickValues:[-2,-1,0,1,2]},
+    y:{label:"P(X = k | θ)", domain:[0,1]}, marks});
+}
+
+probPlot = {
+  const rows = Array.from({length: K}, (_, k) => k).flatMap(k => [
+    {k: String(k), prob: pointData.gp[k], model: "GPCM"},
+    {k: String(k), prob: pointData.np[k], model: "NP spline"}
+  ]);
+  return Plot.plot({
+    width: 300, height: 230, marginLeft: 45,
+    fx: {label: "k", tickFormat: d => d},
+    x: {axis: null},
+    y: {label: "P(X = k | θ)"},
+    color: {domain: ["GPCM", "NP spline"], range: ["#444", "#C53A35"], legend: true},
+    marks: [
+      Plot.barY(rows, {x: "model", y: "prob", fill: "model", fx: "k"}),
+      Plot.ruleY([0])
+    ]
+  });
+}
+
+dllPlot = Plot.plot({
+  width: 300, height: 230, marginLeft: 50,
+  x: {label: "k", domain: Array.from({length:K}, (_,k) => String(k))},
+  y: {label: "log P_GPCM(k) − log P_NP(k)"},
+  color: {domain:["GPCM wins","NP wins"], range:["#185FA5","#9E2A2A"], legend:true},
+  marks: [
+    Plot.barY(
+      Array.from({length:K}, (_,k) => ({
+        k: String(k), dll: pointData.dllK[k],
+        sign: pointData.dllK[k] >= 0 ? "GPCM wins" : "NP wins"
+      })),
+      {x:"k", y:"dll", fill:"sign", insetLeft:2, insetRight:2}
+    ),
+    Plot.ruleY([0])
+  ]
+})
+```
+
+```{ojs}
+html`<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:24px; align-items:start;">
+  <div>
+    <p style="font-size:0.8em;font-weight:500;color:#555;margin:0 0 4px;">Expected response functions</p>
+    ${erfPlot}
+    <p style="font-size:0.8em;font-weight:500;color:#555;margin:16px 0 4px;">Category response functions</p>
+    ${crfPlot}
+    <p style="font-size:0.75em;color:#777;margin:4px 0 0;">Solid = GPCM &nbsp;·&nbsp; Dashed = NP spline &nbsp;·&nbsp; Colours index k</p>
+  </div>
+  <div>
+    <p style="font-size:0.8em;font-weight:500;color:#555;margin:0 0 4px;">P(X = k | θ = ${theta.toFixed(2)})</p>
+    ${probPlot}
+    <table style="font-size:0.78em;border-collapse:collapse;margin-top:8px;width:100%">
+      <tr><td style="padding:2px 8px 2px 0;color:#555;">E[X|θ] GPCM</td>
+          <td style="padding:2px 0;font-variant-numeric:tabular-nums;">${pointData.meanG.toFixed(3)}</td></tr>
+      <tr><td style="padding:2px 8px 2px 0;color:#555;">E[X|θ] NP spline</td>
+          <td style="padding:2px 0;font-variant-numeric:tabular-nums;">${pointData.meanN.toFixed(3)}</td></tr>
+      <tr><td style="padding:2px 8px 2px 0;color:#555;">Avg ΔLL (GPCM − NP)</td>
+          <td style="padding:2px 0;font-variant-numeric:tabular-nums;">${(pointData.dll >= 0 ? "+" : "") + pointData.dll.toFixed(3)}</td></tr>
+      <tr><td style="padding:2px 8px 2px 0;color:#555;">Thresholds</td>
+          <td style="padding:2px 0;">${thresholds.map(b => b.toFixed(2)).join(", ")}</td></tr>
+    </table>
+  </div>
+  <div>
+    <p style="font-size:0.8em;font-weight:500;color:#555;margin:0 0 4px;">Per-category ΔLL at θ = ${theta.toFixed(2)}</p>
+    ${dllPlot}
+  </div>
+</div>`
+```
+
+---
+
+## Section 2: Nonparametric DGP
+
+In Section 1 the GPCM was both the true data-generating model and the reference for IMV comparisons, so GPCM was guaranteed to win. Section 2 asks a harder question: **what happens when no parametric model is correctly specified?**
+
+We generate responses from a *nonparametric cumulative model*: each item's $K-1$ category boundary functions $g_k(\theta) = P(X \geq k \mid \theta)$ are a convex mixture of a GPCM logistic baseline and an independent random monotone spline,
+
+$$g_k(\theta) = (1 - \delta)\,g^{\text{GPCM}}_k(\theta) + \delta\,s_k(\theta),$$
+
+where $\delta$ (**flex**) $\sim \text{Uniform}(0, 1)$ per replication and each $s_k$ is a monotone Hermite spline through random control points drawn uniformly on $[0, 1]$. At $\delta = 0$ the DGP is pure GPCM; at $\delta = 1$ the boundaries are unconstrained smooth monotone functions. The boundaries are sorted at each $\theta$ to preserve the ordering $g_1 > g_2 > \cdots > g_{K-1}$. All fitting models, holdout design, and metrics are identical to Section 1; GPCM remains the reference for IMV comparisons (now also misspecified, but the most flexible parametric model available).
+
+### What the NP DGP looks like
+
+The figures below show boundary functions $P(X \geq k \mid \theta)$ and expected score functions $E[X \mid \theta]$ at three flex values, for a single illustrative item ($K=5$, $a=1.5$, symmetric base thresholds). Each model's ERF is optimised to minimise MSE against the NP ERF (black).
+
+```{r np-erf-setup}
+# ── NP DGP helpers for illustration ──────────────────────────────────────────
+rand_mono_spline_illus <- function(seed_k) {
+  set.seed(seed_k)
+  x_k <- seq(-4, 4, length.out = 7L)
+  y_k <- sort(runif(7L))
+  splinefun(x_k, y_k, method = "monoH.FC")
+}
+
+np_probs_illus <- function(theta, a, b, K, flex, splines) {
+  n <- K - 1L
+  gpcm_cat <- gpcm_pr_fn(theta, a, b)
+  gpcm_cum <- matrix(NA_real_, length(theta), n)
+  for (k in seq_len(n))
+    gpcm_cum[, k] <- 1 - rowSums(gpcm_cat[, seq_len(k), drop = FALSE])
+  rand_cum <- matrix(NA_real_, length(theta), n)
+  for (k in seq_len(n))
+    rand_cum[, k] <- pmin(pmax(splines[[k]](pmin(pmax(theta, -4), 4)), 0), 1)
+  cum <- (1 - flex) * gpcm_cum + flex * rand_cum
+  if (n > 1L) cum <- t(apply(cum, 1, sort, decreasing = TRUE))
+  probs <- cbind(1 - cum[, 1],
+                 if (n > 1L) cum[, seq_len(n-1), drop=FALSE] -
+                              cum[, seq_len(n-1)+1L, drop=FALSE],
+                 cum[, n])
+  pmax(probs, 1e-10)
+}
+
+K_np <- 5L; a_np <- 1.5; b_np <- make_thresholds(K_np, 0)
+ITEM_SEED <- 99L
+flex_vals <- c(0, 0.5, 1)
+flex_labs <- c("flex = 0  (GPCM)", "flex = 0.5  (mixed)", "flex = 1  (fully NP)")
+```
+
+```{r fig-np-boundaries, fig.height=4, fig.width=10, fig.cap="Category boundary functions P(X >= k | theta) for k=1,...,4 (K=5) at three flex values. At flex=0 the boundaries are logistic (GPCM); at flex=1 they are unconstrained monotone splines. Each coloured line is one boundary."}
+suppressPackageStartupMessages(library(RColorBrewer))
+bound_pal <- brewer.pal(4, "RdYlBu")
+
+bound_df <- do.call(rbind, lapply(seq_along(flex_vals), function(fi) {
+  fv  <- flex_vals[fi]
+  spl <- lapply(seq_len(K_np - 1L), function(k)
+                  rand_mono_spline_illus(ITEM_SEED * 100L + k))
+  pr  <- np_probs_illus(theta_g, a_np, b_np, K_np, fv, spl)
+  # cumulative boundaries from category probs
+  cum_mat <- 1 - t(apply(pr, 1, cumsum))[, seq_len(K_np - 1L), drop = FALSE]
+  do.call(rbind, lapply(seq_len(K_np - 1L), function(k)
+    data.frame(theta = theta_g, prob = cum_mat[, k],
+               boundary = paste0("k = ", k),
+               panel = flex_labs[fi])))
+}))
+bound_df$panel <- factor(bound_df$panel, levels = flex_labs)
+
+ggplot(bound_df, aes(x = theta, y = prob, colour = boundary)) +
+  geom_line(linewidth = 0.9) +
+  facet_wrap(~ panel, ncol = 3) +
+  scale_colour_manual(values = bound_pal, name = "Boundary") +
+  scale_x_continuous(breaks = -3:3, name = expression(theta)) +
+  scale_y_continuous(name = expression(P(X >= k ~ "|" ~ theta)), limits = c(0, 1)) +
+  theme_bw(base_size = 10) +
+  theme(strip.background  = element_rect(fill = "grey92"),
+        panel.grid.minor  = element_blank(),
+        legend.position   = "right")
+```
+
+At **flex = 0** the boundaries are the familiar logistic curves. At **flex = 0.5** the shapes begin to deviate — some boundaries are steeper or flatter in certain $\theta$ regions, and the spacing between adjacent boundaries is no longer governed purely by logistic differences. At **flex = 1** the boundaries are fully unconstrained: they may have irregular curvature and the spacing between adjacent boundaries can vary non-monotonically across $\theta$.
+
+### Model ERF approximation under the NP DGP
+
+The figures below repeat the structure of Figures 2–4 but now the black reference curve is the **NP expected score** (not GPCM). Each model's ERF is the best-fit approximation to this reference.
+
+```{r np-erf-grid-fn}
+make_np_erf_grid <- function(flex_val) {
+  spl     <- lapply(seq_len(K_np - 1L), function(k)
+                      rand_mono_spline_illus(ITEM_SEED * 100L + k))
+  np_pr   <- np_probs_illus(theta_g, a_np, b_np, K_np, flex_val, spl)
+  np_es   <- es_fn(np_pr, K_np)
+  mse_np  <- function(es) mean((np_es - es)^2)
+
+  pcm_b  <- optim(b_np,
+                  function(b) mse_np(es_fn(gpcm_pr_fn(theta_g, 1.0, sort(b)), K_np)),
+                  method = "BFGS")$par
+  grm_p  <- optim(c(a_np, b_np),
+                  function(p) {
+                    if (p[1] <= 0) return(1e9)
+                    mse_np(es_fn(grm_pr_fn(theta_g, p[1], sort(p[-1])), K_np))
+                  }, method = "BFGS")$par
+  p2     <- optim(c(a_np, 0),
+                  function(p) mse_np(es_fn(binom_pr_fn(theta_g,p[1],p[2],K_np,"logit"),K_np)),
+                  method = "BFGS")$par
+  opt1   <- function(link)
+    optim(0, function(b) mse_np(es_fn(binom_pr_fn(theta_g,1,b,K_np,link),K_np)),
+          method = "Brent", lower = -3, upper = 3)$par
+  scobit_es_np <- function(b, log_alpha)
+    es_fn(outer(pmin(pmax(plogis(theta_g - b)^exp(log_alpha), 1e-10), 1-1e-10),
+                0:(K_np-1L), function(pp,k) dbinom(k, K_np-1L, pp)), K_np)
+  sc_p   <- optim(c(0, 0), function(p) mse_np(scobit_es_np(p[1], p[2])),
+                  method = "BFGS")$par
+
+  df_np_np  <- data.frame(y = np_es / (K_np - 1L), th = theta_g)
+  fit_np_np <- scam::scam(y ~ s(th, bs = "mpi"), data = df_np_np)
+  p_np_np   <- pmin(pmax(as.numeric(predict(fit_np_np)), 0), 1)
+  es_np_np  <- es_fn(outer(p_np_np, 0:(K_np - 1L), function(p, k) dbinom(k, K_np - 1L, p)), K_np)
+
+  models_df <- rbind(
+    data.frame(panel="PCM",                 theta=theta_g, es=es_fn(gpcm_pr_fn(theta_g,1.0,sort(pcm_b)),K_np)),
+    data.frame(panel="GRM",                 theta=theta_g, es=es_fn(grm_pr_fn(theta_g,grm_p[1],sort(grm_p[-1])),K_np)),
+    data.frame(panel="NP spline",           theta=theta_g, es=es_np_np),
+    data.frame(panel="Binom 2PL (logit)",   theta=theta_g, es=es_fn(binom_pr_fn(theta_g,p2[1],p2[2],K_np,"logit"),K_np)),
+    data.frame(panel="Binom 1PL (logit)",   theta=theta_g, es=es_fn(binom_pr_fn(theta_g,1,opt1("logit"),K_np,"logit"),K_np)),
+    data.frame(panel="Binom 1PL (scobit)",  theta=theta_g, es=scobit_es_np(sc_p[1], sc_p[2])),
+    data.frame(panel="Binom 1PL (cloglog)", theta=theta_g, es=es_fn(binom_pr_fn(theta_g,1,opt1("cloglog"),K_np,"cloglog"),K_np)),
+    data.frame(panel="Binom 1PL (cauchit)", theta=theta_g, es=es_fn(binom_pr_fn(theta_g,1,opt1("cauchit"),K_np,"cauchit"),K_np))
+  )
+  models_df$panel <- factor(models_df$panel, levels = panel_levels)
+  ref_df <- do.call(rbind, lapply(panel_levels, function(m)
+    data.frame(panel = factor(m, levels = panel_levels), theta = theta_g, es = np_es)))
+
+  ggplot() +
+    geom_line(data = ref_df,    aes(x = theta, y = es), colour = "black", linewidth = 1.3, linetype = "dashed") +
+    geom_line(data = models_df, aes(x = theta, y = es, colour = panel), linewidth = 0.9) +
+    facet_wrap(~ panel, ncol = 4) +
+    scale_colour_manual(values = panel_colors, guide = "none") +
+    scale_x_continuous(name = expression(theta), breaks = -2:2) +
+    scale_y_continuous(name = "E[X | θ]", limits = c(0, K_np - 1)) +
+    theme_bw(base_size = 10) +
+    theme(strip.background = element_rect(fill = "grey92"),
+          panel.grid.minor = element_blank())
+}
+```
+
+```{r fig-np-erf-flex0, fig.height=5, fig.width=10, fig.cap="NP ERF comparisons at flex=0. With logistic boundaries the NP DGP coincides with GPCM, so all panels reproduce the Section 1 symmetric-threshold picture."}
+make_np_erf_grid(0)
+```
+
+```{r fig-np-erf-flex05, fig.height=5, fig.width=10, fig.cap="NP ERF comparisons at flex=0.5. The NP ERF (black) has departed from a pure logistic shape. GRM and PCM can still approximate it reasonably; binomial models show larger residual gaps."}
+make_np_erf_grid(0.5)
+```
+
+```{r fig-np-erf-flex1, fig.height=5, fig.width=10, fig.cap="NP ERF comparisons at flex=1 (fully nonparametric DGP). The NP ERF can have irregular curvature that no single parametric model can fully capture. All models are now clearly misspecified; the gap from GRM is the smallest."}
+make_np_erf_grid(1)
+```
+
+As flex increases the NP ERF develops local changes in slope and irregular inflection that no single parametric model can fully capture. The **GRM** maintains the closest fit throughout — even at flex=1 its best-fit curve traces the NP ERF more faithfully than any other model. This foreshadows the simulation's headline finding: under a nonparametric DGP the GRM is the most robust parametric approximation, not the GPCM.
+
+The **NP spline** also tracks the NP ERF closely at all flex values — its flexible monotone link can adapt to irregular curvature that the logistic cannot. However, visually close ERF fits do not translate to competitive IMV in the simulation, because both the NP spline and the binomial models ultimately express category probabilities through a single $p(\theta)$. The ERF panels show the link-function advantage of the NP spline over 2PL+logit; the simulation results show that this advantage mostly disappears when flex is high, because the category distribution constraint becomes the dominant bottleneck. Binomial models increasingly fail for the same structural reason: their single-proportion parameter cannot independently adjust each of the $K-1$ boundary functions, no matter how flexibly or accurately $p(\theta)$ is estimated.
+
+### Simulation results
+
+```{r np-setup}
+res_np <- readRDS("gpcm_binomial_results_np.rds") |>
+  filter(K == 5) |>
+  mutate(
+    model_label = factor(model_labels[as.character(model)], levels = model_labels),
+    K_label     = paste0("K = ", K)
+  )
+
+lpos_fn_np <- function(data, y_var) {
+  grps <- split(data, list(as.character(data$model_label),
+                           as.character(data$K_label)), drop = TRUE)
+  do.call(rbind, lapply(grps, function(g) {
+    x_anch <- mean(g$flex[g$flex >= quantile(g$flex, 0.9)])
+    fit    <- tryCatch(
+      mgcv::gam(as.formula(paste(y_var, "~ s(flex, bs='cs')")), data = g),
+      error = function(e) NULL
+    )
+    y_anch <- if (!is.null(fit))
+      as.numeric(predict(fit, newdata = data.frame(flex = x_anch)))
+    else
+      mean(g[[y_var]][g$flex >= quantile(g$flex, 0.9)], na.rm = TRUE)
+    data.frame(model_label = g$model_label[1], K_label = g$K_label[1],
+               flex = x_anch, y_val = y_anch, stringsAsFactors = FALSE)
+  }))
+}
+
+make_plot_np_imv_pair <- function(data, v1, v2, l1, l2,
+                                  y_lab = "IMV(model, GPCM)  [positive = GPCM wins]",
+                                  exclude_smooth = "GPCM") {
+  long <- dplyr::bind_rows(
+    dplyr::mutate(data, y = .data[[v1]], metric = l1),
+    dplyr::mutate(data, y = .data[[v2]], metric = l2)
+  ) |> dplyr::mutate(metric = factor(metric, levels = c(l1, l2)))
+
+  lpos <- do.call(rbind, lapply(
+    split(long, list(as.character(long$model_label),
+                     as.character(long$metric)), drop = TRUE),
+    function(g) {
+      x_anch <- mean(g$flex[g$flex >= quantile(g$flex, 0.9)])
+      fit    <- tryCatch(mgcv::gam(y ~ s(flex, bs = "cs"), data = g),
+                         error = function(e) NULL)
+      y_anch <- if (!is.null(fit))
+        as.numeric(predict(fit, newdata = data.frame(flex = x_anch)))
+      else
+        mean(g$y[g$flex >= quantile(g$flex, 0.9)], na.rm = TRUE)
+      data.frame(model_label = g$model_label[1], metric = g$metric[1],
+                 flex = x_anch, y_val = y_anch, stringsAsFactors = FALSE)
+    }
+  ))
+  lpos$metric <- factor(lpos$metric, levels = c(l1, l2))
+
+  ggplot(long, aes(x = flex, y = y, colour = model_label, group = model_label)) +
+    annotate("segment", x = 0, xend = 1, y = 0, yend = 0,
+             linetype = "dashed", colour = "grey60") +
+    geom_smooth(
+      data = function(d) if (is.null(exclude_smooth)) d
+                         else filter(d, !model_label %in% exclude_smooth),
+      method = "gam", formula = y ~ s(x, bs = "cs"),
+      se = TRUE, linewidth = 0.8, alpha = 0.12) +
+    annotate("rect", xmin = 1, xmax = 1.35, ymin = -Inf, ymax = Inf,
+             fill = "white", colour = NA) +
+    geom_label_repel(
+      data          = lpos,
+      aes(x = flex, y = y_val, label = model_label),
+      size          = 2.6, hjust = 0,
+      nudge_x       = 1.05 - lpos$flex,
+      direction     = "y", segment.size = 0.3, segment.color = "grey50",
+      box.padding   = 0.2, label.padding = 0.15,
+      show.legend   = FALSE, xlim = c(1, 1.35)
+    ) +
+    facet_wrap(~ metric) +
+    scale_colour_manual(values = model_colors) +
+    scale_x_continuous(
+      name   = "flex  (0 = GPCM boundaries;  1 = fully nonparametric boundaries)",
+      limits = c(0, 1.35),
+      breaks = c(0, 0.25, 0.5, 0.75, 1),
+      labels = c("0\n(GPCM)", "0.25", "0.5", "0.75", "1\n(fully NP)"),
+      expand = expansion(mult = c(0.02, 0))
+    ) +
+    coord_cartesian(clip = "off") +
+    ylab(y_lab)
+}
+
+make_plot_np <- function(data, y_var, y_lab, exclude_smooth = "GPCM") {
+  lpos <- lpos_fn_np(data, y_var)
+  ggplot(data, aes(x = flex, y = .data[[y_var]],
+                   colour = model_label, group = model_label)) +
+    annotate("segment", x = 0, xend = 1, y = 0, yend = 0,
+             linetype = "dashed", colour = "grey60") +
+    geom_smooth(
+      data = function(d) if (is.null(exclude_smooth)) d
+                         else filter(d, !model_label %in% exclude_smooth),
+      method = "gam", formula = y ~ s(x, bs = "cs"),
+      se = TRUE, linewidth = 0.8, alpha = 0.12) +
+    annotate("rect", xmin = 1, xmax = 1.35, ymin = -Inf, ymax = Inf,
+             fill = "white", colour = NA) +
+    geom_label_repel(
+      data          = lpos,
+      aes(x = flex, y = y_val, label = model_label),
+      size          = 2.6, hjust = 0,
+      nudge_x       = 1.05 - lpos$flex,
+      direction     = "y", segment.size = 0.3, segment.color = "grey50",
+      box.padding   = 0.2, label.padding = 0.15,
+      show.legend   = FALSE, xlim = c(1, 1.35)
+    ) +
+    facet_wrap(~ K_label) +
+    scale_colour_manual(values = model_colors) +
+    scale_x_continuous(
+      name   = "flex  (0 = GPCM boundaries;  1 = fully nonparametric boundaries)",
+      limits = c(0, 1.35),
+      breaks = c(0, 0.25, 0.5, 0.75, 1),
+      labels = c("0\n(GPCM)", "0.25", "0.5", "0.75", "1\n(fully NP)"),
+      expand = expansion(mult = c(0.02, 0))
+    ) +
+    coord_cartesian(clip = "off") +
+    ylab(y_lab)
+}
+```
+
+#### IMV vs. GPCM
+
+```{r fig-np-imv, fig.cap="IMV_c (left) and IMV_t (right) of each model vs. GPCM under the NP DGP. K = 5. Negative = model beats GPCM; positive = GPCM wins.", fig.height=5}
+make_plot_np_imv_pair(res_np, "imv_c", "imv_t",
+                      "ω_c (category)", "ω_t (threshold)",
+                      y_lab = "IMV(model, GPCM)  [positive = GPCM wins;  negative = model wins]")
+```
+
+The headline result is a **reversal: GRM beats GPCM** throughout (negative IMV). The NP DGP generates each boundary independently via random splines — precisely the GRM's formulation. GPCM's adjacent-category constraint is violated; GRM approximates the independent boundaries more faithfully.
+
+The **enormous gap between GPCM/GRM/PCM and all binomial models** grows with flex. A single-location binomial parameter cannot compete with $K-1$ free threshold parameters when the truth is nonparametric. The NP spline and 2PL+logit are essentially indistinguishable throughout the full flex range — ERF shape flexibility never matters once the category distribution assumption is the binding constraint. This confirms the Section 1 conclusion by a different route: whether the truth is logistic (Section 1, flex = 0) or fully nonparametric (Section 2, flex = 1), the logistic link is not the source of the binomial family's disadvantage.
+
+#### IMV vs. Binom 1PL (logit)
+
+A note before reading this figure: all binomial model lines — NP spline, 2PL logit, 1PL logit, scobit, cloglog, cauchit — are expected to converge and overlap at mid-to-high flex. This is not a display artifact; it is the result. Once the DGP generates genuinely independent boundary functions, the category distribution constraint dominates everything else: link function choice, discrimination flexibility, and ERF-shape accuracy all become irrelevant compared to whether the model has $K-1$ free thresholds or just one.
+
+```{r fig-np-imv-1pl, fig.cap="IMV_c (left) and IMV_t (right) vs. Binom 1PL (logit) floor under the NP DGP. K = 5. Positive = model beats 1PL-logit. Note: all binomial model lines (including NP spline) converge at mid-to-high flex — this convergence is the finding, not a display artifact.", fig.height=5}
+res_np_1pl <- filter(res_np, model_label != "Binom 1PL (logit)")
+make_plot_np_imv_pair(res_np_1pl, "imv_c_1pl", "imv_t_1pl",
+                      "ω_c (category)", "ω_t (threshold)",
+                      y_lab = "IMV(1PL-logit, model)  [positive = model wins]",
+                      exclude_smooth = NULL)
+```
+
+Against the 1PL-logit floor, GRM and GPCM show large and growing advantages. Among binomial models, all variants — NP spline, 2PL, scobit, cloglog, cauchit — converge to the same IMV at mid-to-high flex. **Link function and discrimination become irrelevant** once the DGP is sufficiently nonparametric: every binomial variant is equally constrained by its single-proportion category distribution, and no amount of link-function flexibility or extra discrimination parameters can compensate for that structural deficit.
+
+#### RMSE
+
+```{r fig-np-rmse, fig.cap="RMSE under the NP DGP. RMSE grows with flex for all models as the DGP becomes harder to approximate; GRM has the lowest RMSE throughout."}
+make_plot_np(res_np, "rmse",
+             "RMSE (expected score, 0-1 scale)")
+```
+
+RMSE is consistent with IMV. All models worsen as flex increases — the NP DGP is genuinely harder to predict — but GRM maintains the lowest RMSE throughout, followed by GPCM, then PCM, then the binomial cluster. The RMSE gap between GPCM/GRM/PCM and binomial models grows visibly with flex, echoing the IMV finding: threshold structure is the dominant factor for predictive accuracy under model misspecification.
+
+### Why threshold structure dominates
+
+The IMVs in Section 2 are an order of magnitude larger than in Section 1. The reason is structural: a K-category item has $K-1$ boundary functions $P(X \geq k \mid \theta)$, and models differ sharply in how many free parameters they devote to those boundaries.
+
+| Model | Free boundary parameters per item | How determined |
+|---|---|---|
+| GRM | $K$ ($a$ + $b_1,\ldots,b_{K-1}$) | $K-1$ independent logistic curves |
+| GPCM | $K$ ($a$ + $b_1,\ldots,b_{K-1}$) | Adjacent-category constraint links the boundaries |
+| PCM | $K-1$ ($b_1,\ldots,b_{K-1}$, $a=1$) | Same constraint, discrimination fixed |
+| NP spline | spline d.f. per item | All $K-1$ curves forced through one monotone spline of $\theta$ |
+| Binom 2PL | 2 ($a$, $b$) | All $K-1$ curves forced through one logistic |
+| Binom 1PL | 1 ($b$) | All $K-1$ curves forced through one logistic |
+
+The NP spline is structurally equivalent to the binomial models in this respect: however flexible its ERF, a single $p(\theta)$ still determines all $K-1$ boundaries. This is why NP spline and 2PL+logit converge to similar IMV as flex increases — neither can independently adjust each boundary.
+
+When the DGP has truly independent boundary functions (Section 2, high flex), a model with $K-1$ free boundary locations (GRM, GPCM) can track each independently. A binomial model with a single location parameter cannot — it locks all $K-1$ boundaries to shapes determined by one number. The figure below makes this concrete.
+
+```{r fig-implied-bounds, fig.height=4.5, fig.width=10, fig.cap="Implied boundary functions P(X >= k | theta) for the true NP DGP and two fitted models, at flex = 1 (K = 5). Each coloured line is one boundary (k = 1,...,4). Left: the NP DGP has four truly independent spline-shaped curves. Middle: the best-fit GRM recovers four independent logistic curves with different locations and a shared slope. Right: the best-fit Binom 1PL collapses all four boundaries to shapes determined by a single logistic p(theta) — they cannot be adjusted independently."}
+suppressPackageStartupMessages(library(RColorBrewer))
+bound_pal4 <- brewer.pal(4, "RdYlBu")
+
+# True NP boundaries at flex=1 (same item seed as illustrative figures)
+spl_f1 <- lapply(seq_len(K_np - 1L), function(k) rand_mono_spline_illus(ITEM_SEED * 100L + k))
+np_pr_f1   <- np_probs_illus(theta_g, a_np, b_np, K_np, 1.0, spl_f1)
+np_es_f1   <- es_fn(np_pr_f1, K_np)
+np_cum_f1  <- 1 - t(apply(np_pr_f1, 1, cumsum))[, seq_len(K_np - 1L), drop = FALSE]
+
+# Best-fit GRM (minimise MSE on ERF)
+grm_pf1 <- optim(c(a_np, b_np),
+                 function(p) {
+                   if (p[1] <= 0) return(1e9)
+                   mean((np_es_f1 - es_fn(grm_pr_fn(theta_g, p[1], sort(p[-1])), K_np))^2)
+                 }, method = "BFGS")$par
+grm_cum_f1 <- outer(theta_g, sort(grm_pf1[-1]),
+                    function(th, bk) plogis(grm_pf1[1] * (th - bk)))
+
+# Best-fit Binom 1PL logit
+b1_f1 <- optim(0,
+               function(b) mean((np_es_f1 - es_fn(binom_pr_fn(theta_g,1,b,K_np,"logit"),K_np))^2),
+               method = "Brent", lower = -3, upper = 3)$par
+p_f1 <- plogis(theta_g - b1_f1)
+binom_cum_f1 <- sapply(seq_len(K_np - 1L), function(k)
+                         pbinom(k - 1L, K_np - 1L, p_f1, lower.tail = FALSE))
+
+panel_labels <- c(
+  "np"    = "True NP DGP\n(K−1 free splines)",
+  "grm"   = "GRM fit\n(K−1 free logistic curves)",
+  "binom" = "Binom 1PL fit\n(1 logistic → K−1 constrained curves)"
+)
+bound_df2 <- do.call(rbind, lapply(names(panel_labels), function(src) {
+  mat <- switch(src, np = np_cum_f1, grm = grm_cum_f1, binom = binom_cum_f1)
+  do.call(rbind, lapply(seq_len(K_np - 1L), function(k)
+    data.frame(theta = theta_g, prob = mat[, k],
+               boundary = paste0("k = ", k), src = src)))
+}))
+bound_df2$src <- factor(bound_df2$src, levels = names(panel_labels),
+                        labels = panel_labels)
+
+ggplot(bound_df2, aes(x = theta, y = prob, colour = boundary)) +
+  geom_line(linewidth = 0.9) +
+  facet_wrap(~ src, ncol = 3) +
+  scale_colour_manual(values = bound_pal4, name = "Boundary") +
+  scale_x_continuous(breaks = -2:2, name = expression(theta)) +
+  scale_y_continuous(name = expression(P(X >= k ~ "|" ~ theta)), limits = c(0, 1)) +
+  theme_bw(base_size = 10) +
+  theme(strip.background = element_rect(fill = "grey92"),
+        panel.grid.minor = element_blank(),
+        legend.position  = "right")
+```
+
+In the NP DGP panel the four boundary curves are genuinely independent — different shapes, different slopes, crossing freely. The GRM panel also shows four distinct curves, because each $b_k$ is free; the shared discrimination $a$ means they have the same slope but can be located anywhere on the $\theta$ axis, recovering much of the boundary structure. In the Binom 1PL panel the four curves are entirely determined by a single logistic $p(\theta) = \text{logis}(\theta - b)$: they cannot cross, their relative spacing is fixed, and their shapes are all constrained to be logistic-transformed binomial CDFs. No choice of $b$ can fix this — the constraint is structural, not a matter of optimisation.
+
+The figure below shows the practical consequence: the IMV advantage that GPCM, GRM, and PCM have over binomial models is small in Section 1 (where the GPCM DGP keeps boundaries logistic and the binomial approximation is "only" losing the threshold structure) but explodes in Section 2 (where the NP DGP uses truly free boundaries).
+
+```{r fig-cross-section, fig.height=4.5, fig.width=9, fig.cap="Mean IMV(1PL-logit, model) at high asymmetry (Section 1, |s| > 1) vs. high flex (Section 2, flex > 0.67), K = 5, for both ω_c (left) and ω_t (right). GPCM, GRM, and PCM show a large jump moving to Section 2; binomial models and NP spline remain near zero in both. Both metrics tell the same story: threshold structure, not link function, determines the advantage of richer models."}
+s1c <- res    |> filter(abs(asym) > 1) |>
+  group_by(model_label) |>
+  summarise(imv = mean(imv_c_1pl, na.rm = TRUE), .groups = "drop") |>
+  mutate(section = "Section 1\n(GPCM DGP,  |s| > 1)", metric = "ω_c (category)")
+s1t <- res    |> filter(abs(asym) > 1) |>
+  group_by(model_label) |>
+  summarise(imv = mean(imv_t_1pl, na.rm = TRUE), .groups = "drop") |>
+  mutate(section = "Section 1\n(GPCM DGP,  |s| > 1)", metric = "ω_t (threshold)")
+s2c <- res_np |> filter(flex > 0.67) |>
+  group_by(model_label) |>
+  summarise(imv = mean(imv_c_1pl, na.rm = TRUE), .groups = "drop") |>
+  mutate(section = "Section 2\n(NP DGP,  flex > 0.67)", metric = "ω_c (category)")
+s2t <- res_np |> filter(flex > 0.67) |>
+  group_by(model_label) |>
+  summarise(imv = mean(imv_t_1pl, na.rm = TRUE), .groups = "drop") |>
+  mutate(section = "Section 2\n(NP DGP,  flex > 0.67)", metric = "ω_t (threshold)")
+
+comp_df <- rbind(s1c, s1t, s2c, s2t) |>
+  filter(model_label != "Binom 1PL (logit)") |>
+  mutate(section = factor(section, levels = c("Section 1\n(GPCM DGP,  |s| > 1)",
+                                               "Section 2\n(NP DGP,  flex > 0.67)")),
+         metric  = factor(metric,  levels = c("ω_c (category)", "ω_t (threshold)")))
+
+ord <- comp_df |>
+  filter(grepl("Section 1", as.character(section)), metric == "ω_c (category)") |>
+  arrange(imv) |> pull(model_label) |> as.character()
+comp_df$model_label <- factor(comp_df$model_label, levels = ord)
+
+ggplot(comp_df, aes(x = model_label, y = imv, fill = section)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.65) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
+  facet_wrap(~ metric, ncol = 2) +
+  scale_fill_manual(values = c("Section 1\n(GPCM DGP,  |s| > 1)" = "#2166ac",
+                                "Section 2\n(NP DGP,  flex > 0.67)" = "#d6604d"),
+                    name = NULL) +
+  labs(x = NULL, y = "Mean IMV(1PL-logit, model)  [positive = model wins]") +
+  coord_flip() +
+  theme_bw(base_size = 10) +
+  theme(strip.background = element_rect(fill = "grey92"),
+        legend.position  = "bottom",
+        panel.grid.minor = element_blank())
+```
+
+Both metrics tell the same story. For GRM, GPCM, and PCM the Section 2 advantage over 1PL-logit is roughly **15–20× larger** than in Section 1 — these models gain enormously from having $K-1$ free threshold parameters when the DGP uses $K-1$ free boundary functions. For binomial models the Section 2 bars are essentially the same height as Section 1 — they gain almost nothing from the NP DGP because they are equally constrained in both settings. The link function choice (scobit, cloglog, cauchit vs. logit) produces differences visible only in the Section 1 bars; in Section 2 those differences vanish entirely within the binomial cluster. $\omega_t$ shows slightly larger absolute differences throughout (threshold-level comparisons are more sensitive than category-level ones) but the rank ordering and the qualitative pattern are identical.
 
 ---
 
 ## Summary
 
+**Section 1: GPCM DGP** (x-axis: gap asymmetry $s$; K = 5)
+
 | Condition | Key finding |
 |---|---|
-| $s=0$ (symmetric) | Alternatives match or beat GPCM; constrained models act as implicit regularization |
-| $|s| \uparrow$, either direction | GPCM advantage grows; binomial single-$b$ can't track the asymmetric gap structure |
-| $s > 0$ vs $s < 0$ | Wider-upper gaps hurt binomial models more than wider-lower gaps of equal magnitude |
-| Best binomial link | Logit most competitive across all conditions; cloglog and probit degrade fastest |
-| GRM | Tracks GPCM closely near $s=0$; diverges at both extremes, more so for K=7 |
-| Discrimination $a$ | Scales IMV magnitude; asymmetry effect qualitatively the same at $a=1$ and $a=1.5$ |
+| GPCM vs. all others | GPCM wins; advantage grows with $|s|$ |
+| GRM vs. GPCM | GRM nearly matches GPCM — free per-item discrimination means only mild misspecification |
+| PCM vs. GPCM | PCM pays a visible price for its equal-discrimination constraint; gap ~order of magnitude larger than GRM |
+| NP spline vs. 2PL+logit | NP spline ≈ 2PL+logit — link-function cost of the logistic is negligible; logistic is already the right shape under the GPCM DGP |
+| NP spline vs. GRM/GPCM | NP spline trails by nearly the same margin as 2PL+logit — the full gap is **category-distribution cost** |
+| Binom 1PL models vs. GRM/GPCM | All 1PL binomials trail; gap grows with $|s|$ |
+| Scobit vs. 1PL-logit | Scobit consistently beats 1PL-logit; adaptive $\alpha$ tracks asymmetry direction |
+| cloglog/cauchit vs. 1PL-logit | Both consistently worse than logit; fixed asymmetry shape structurally mismatched to GPCM curvature |
+
+**Section 2: Nonparametric DGP** (x-axis: flex $\delta$, departure from logistic boundaries; K = 5)
+
+| Condition | Key finding |
+|---|---|
+| GRM vs. GPCM | **Hierarchy reverses**: GRM beats GPCM throughout — NP DGP generates independent boundaries, matching GRM's formulation |
+| IRT models vs. binomials | Gap grows enormously with flex; IMVs an order of magnitude larger than Section 1 — threshold structure dominates |
+| NP spline vs. 2PL+logit | Converge to identical performance at mid-to-high flex — ERF flexibility provides no benefit when category distribution is the bottleneck |
+| All binomial models | Cluster together at high flex; link function and discrimination become irrelevant |
+| Scobit vs. 1PL-logit | Section 1 advantage disappears under NP DGP — adaptive $\alpha$ only helps when asymmetry is systematic |
+| Key takeaway | The number of free boundary parameters per item (threshold structure) matters far more than link function shape |

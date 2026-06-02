@@ -24,38 +24,44 @@ model_labels <- c(
   grm               = "GRM",
   binom_2pl_logit   = "Binom 2PL (logit)",
   binom_1pl_logit   = "Binom 1PL (logit)",
+  binom_1pl_scobit  = "Binom 1PL (scobit)",
   binom_1pl_cloglog = "Binom 1PL (cloglog)",
-  binom_1pl_cauchit = "Binom 1PL (cauchit)",
-  binom_1pl_probit  = "Binom 1PL (probit)"
+  binom_1pl_cauchit = "Binom 1PL (cauchit)"
 )
 model_colors <- c(
-  "GPCM"              = "#1b7837",
-  "PCM"               = "#762a83",
-  "GRM"               = "#2166ac",
+  "GPCM"               = "#1b7837",
+  "PCM"                = "#762a83",
+  "GRM"                = "#2166ac",
   "Binom 2PL (logit)"  = "#d6604d",
   "Binom 1PL (logit)"  = "#f4a582",
+  "Binom 1PL (scobit)" = "#f1a340",
   "Binom 1PL (cloglog)"= "#c2a5cf",
-  "Binom 1PL (cauchit)"= "#a6dba0",
-  "Binom 1PL (probit)" = "#bababa"
+  "Binom 1PL (cauchit)"= "#a6dba0"
 )
 
 res <- res |>
   mutate(
     model_label = factor(model_labels[as.character(model)], levels = model_labels),
-    K_label     = paste0("K = ", K),
-    a_label     = paste0("a = ", a_true)
+    K_label     = paste0("K = ", K)
   )
 
-# Label positions: mean of top-10% asym observations per group
+# Label positions: anchor x at mean of top-10% asym; y from GAM prediction there
 lpos_fn <- function(data, y_var) {
-  data |>
-    group_by(model_label, K_label, a_label) |>
-    filter(asym >= quantile(asym, 0.9)) |>
-    summarise(
-      asym  = mean(asym),
-      y_val       = mean(.data[[y_var]], na.rm = TRUE),
-      .groups     = "drop"
+  grps <- split(data, list(as.character(data$model_label),
+                           as.character(data$K_label)), drop = TRUE)
+  do.call(rbind, lapply(grps, function(g) {
+    x_anch <- mean(g$asym[g$asym >= quantile(g$asym, 0.9)])
+    fit    <- tryCatch(
+      mgcv::gam(as.formula(paste(y_var, "~ s(asym, bs='cs')")), data = g),
+      error = function(e) NULL
     )
+    y_anch <- if (!is.null(fit))
+      as.numeric(predict(fit, newdata = data.frame(asym = x_anch)))
+    else
+      mean(g[[y_var]][g$asym >= quantile(g$asym, 0.9)], na.rm = TRUE)
+    data.frame(model_label = g$model_label[1], K_label = g$K_label[1],
+               asym = x_anch, y_val = y_anch, stringsAsFactors = FALSE)
+  }))
 }
 
 theme_set(
@@ -67,13 +73,13 @@ theme_set(
     )
 )
 
-make_plot <- function(data, y_var, y_lab, title_str) {
+make_plot <- function(data, y_var, y_lab, title_str, exclude_smooth = "GPCM") {
   lpos <- lpos_fn(data, y_var)
   ggplot(data, aes(x = asym, y = .data[[y_var]],
                    colour = model_label, group = model_label)) +
     annotate("segment", x = -log(8), xend = log(8), y = 0, yend = 0,
              linetype = "dashed", colour = "grey60") +
-    geom_smooth(data = function(d) filter(d, model_label != "GPCM"),
+    geom_smooth(data = function(d) if (is.null(exclude_smooth)) d else filter(d, !model_label %in% exclude_smooth),
                 method = "gam", formula = y ~ s(x, bs = "cs"),
                 se = TRUE, linewidth = 0.8, alpha = 0.12) +
     annotate("rect", xmin = log(8), xmax = log(8) + 3, ymin = -Inf, ymax = Inf,
@@ -92,7 +98,7 @@ make_plot <- function(data, y_var, y_lab, title_str) {
       show.legend   = FALSE,
       xlim          = c(log(8), log(8) + 3)
     ) +
-    facet_grid(K_label ~ a_label) +
+    facet_wrap(~ K_label) +
     scale_colour_manual(values = model_colors) +
     scale_x_continuous(
       name   = "Gap asymmetry  (0 = equal gaps;  negative = wider lower;  positive = wider upper)",
@@ -129,5 +135,25 @@ p3 <- make_plot(res, "rmse",
 ggsave("sims/plots/rmse.pdf", p3, width = 10, height = 7)
 ggsave("sims/plots/rmse.png", p3, width = 10, height = 7, dpi = 150)
 message("Saved: rmse")
+
+# ── Plot 4: IMV_c vs. 1PL-logit ───────────────────────────────────────────────
+# Exclude binom_1pl_logit (always 0). GPCM now has a real value.
+res_1pl <- filter(res, model_label != "Binom 1PL (logit)")
+p4 <- make_plot(res_1pl, "imv_c_1pl",
+                "IMV_c(1PL-logit, model)  [positive = model wins]",
+                "IMV_c: Binom 1PL (logit) vs. each model",
+                exclude_smooth = NULL)
+ggsave("sims/plots/imv_c_vs_1pl.pdf", p4, width = 10, height = 7)
+ggsave("sims/plots/imv_c_vs_1pl.png", p4, width = 10, height = 7, dpi = 150)
+message("Saved: imv_c_vs_1pl")
+
+# ── Plot 5: IMV_t vs. 1PL-logit ───────────────────────────────────────────────
+p5 <- make_plot(res_1pl, "imv_t_1pl",
+                "IMV_t(1PL-logit, model)  [positive = model wins]",
+                "IMV_t: Binom 1PL (logit) vs. each model",
+                exclude_smooth = NULL)
+ggsave("sims/plots/imv_t_vs_1pl.pdf", p5, width = 10, height = 7)
+ggsave("sims/plots/imv_t_vs_1pl.png", p5, width = 10, height = 7, dpi = 150)
+message("Saved: imv_t_vs_1pl")
 
 message("\nAll plots written to sims/plots/")
