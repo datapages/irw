@@ -49,6 +49,7 @@ model_labels <- c(
   gpcm              = "GPCM",
   pcm               = "PCM",
   grm               = "GRM",
+  tutz              = "Tutz",
   binom_2pl_logit   = "Binom 2PL (logit)",
   binom_1pl_logit   = "Binom 1PL (logit)",
   binom_1pl_scobit  = "Binom 1PL (scobit)",
@@ -60,6 +61,7 @@ model_colors <- c(
   "GPCM"               = "#1b7837",
   "PCM"                = "#762a83",
   "GRM"                = "#2166ac",
+  "Tutz"               = "#4393c3",
   "Binom 2PL (logit)"  = "#d6604d",
   "Binom 1PL (logit)"  = "#f4a582",
   "Binom 1PL (scobit)" = "#f1a340",
@@ -69,10 +71,9 @@ model_colors <- c(
 )
 
 res <- res |>
-  filter(K == 5) |>
   mutate(
     model_label = factor(model_labels[as.character(model)], levels = model_labels),
-    K_label     = paste0("K = ", K)
+    K_label     = factor(paste0("K = ", K), levels = paste0("K = ", sort(unique(K))))
   )
 
 lpos_fn <- function(data, y_var) {
@@ -111,7 +112,8 @@ make_plot_imv_pair <- function(data, v1, v2, l1, l2,
 
   lpos <- do.call(rbind, lapply(
     split(long, list(as.character(long$model_label),
-                     as.character(long$metric)), drop = TRUE),
+                     as.character(long$metric),
+                     as.character(long$K_label)), drop = TRUE),
     function(g) {
       x_anch <- mean(g$asym[g$asym >= quantile(g$asym, 0.9)])
       fit    <- tryCatch(mgcv::gam(y ~ s(asym, bs = "cs"), data = g),
@@ -121,10 +123,12 @@ make_plot_imv_pair <- function(data, v1, v2, l1, l2,
       else
         mean(g$y[g$asym >= quantile(g$asym, 0.9)], na.rm = TRUE)
       data.frame(model_label = g$model_label[1], metric = g$metric[1],
+                 K_label = g$K_label[1],
                  asym = x_anch, y_val = y_anch, stringsAsFactors = FALSE)
     }
   ))
-  lpos$metric <- factor(lpos$metric, levels = c(l1, l2))
+  lpos$metric  <- factor(lpos$metric,  levels = c(l1, l2))
+  lpos$K_label <- factor(lpos$K_label, levels = levels(long$K_label))
 
   ggplot(long, aes(x = asym, y = y, colour = model_label, group = model_label)) +
     annotate("segment", x = -log(8), xend = log(8), y = 0, yend = 0,
@@ -145,7 +149,7 @@ make_plot_imv_pair <- function(data, v1, v2, l1, l2,
       box.padding   = 0.2, label.padding = 0.15,
       show.legend   = FALSE, xlim = c(log(8), log(8) + 3)
     ) +
-    facet_wrap(~ metric) +
+    facet_grid(K_label ~ metric) +
     scale_colour_manual(values = model_colors) +
     scale_x_continuous(
       name   = "Gap asymmetry  (0 = equal gaps;  negative = wider lower;  positive = wider upper)",
@@ -450,7 +454,7 @@ Predictions are then generated using a common scoring procedure for all models: 
 
 | Factor | Levels / Distribution |
 |---|---|
-| Categories $K$ | 5 |
+| Categories $K$ | 4, 5, 6, 7 |
 | Gap asymmetry $s$ | Uniform($-\ln 8$, $\ln 8$) per replication |
 | Item discrimination $a_j$ | $\text{LogNormal}(0,\, 0.5^2)$ per item — median 1, 90th percentile $\approx 1.9$ |
 | Items per replication | 10 |
@@ -461,7 +465,7 @@ Predictions are then generated using a common scoring procedure for all models: 
 
 Each item draws its own discrimination $a_j \sim \text{LogNormal}(0, 0.5^2)$ independently, and its thresholds are $\mathbf{b}^{(j)} = \mathbf{b}(s) + \delta_j + \boldsymbol{\epsilon}^{(j)}$, where $\delta_j \sim \text{Uniform}(-1,1)$ is a location shift and $\boldsymbol{\epsilon}^{(j)} \sim \mathcal{N}(\mathbf{0},\, 0.3^2 \mathbf{I})$ adds per-threshold noise. Items therefore share the asymmetry direction but vary in difficulty location, threshold spacing, and discrimination.
 
-```{r fig-thresholds, fig.height=4, fig.cap="Threshold locations for K=5 and K=7 across the full asymmetry range. Coloured segments connect consecutive thresholds; colour encodes gap width (yellow = wide, purple = narrow). Dots mark threshold positions. All vectors span the same total range [-1.5, 1.5]."}
+```{r fig-thresholds, fig.height=6, fig.cap="Threshold locations for K=4, 5, 6, 7 across the full asymmetry range. Coloured segments connect consecutive thresholds; colour encodes gap width (yellow = wide, purple = narrow). Dots mark threshold positions. All vectors span the same total range [-1.5, 1.5]."}
 make_thresholds <- function(K, asym = 0) {
   n           <- K - 1L
   total_range <- 3.0
@@ -477,7 +481,7 @@ make_thresholds <- function(K, asym = 0) {
 asym_ex <- c(-log(8), -1, 0, 1, log(8))
 asym_labels <- c("-ln8\n(wider lower)", "-1", "0\n(symmetric)", "1",
                  "ln8\n(wider upper)")
-K_vals  <- c(5, 7)
+K_vals  <- c(4, 5, 6, 7)
 
 thresh_df <- do.call(rbind, lapply(K_vals, function(K) {
   do.call(rbind, lapply(seq_along(asym_ex), function(i) {
@@ -524,6 +528,7 @@ The nine models differ in how many parameters they use and what functional form 
 | **GPCM** | $a_j$, $b_1,\ldots,b_{K-1}$ | True generating model; correctly specified for all items |
 | **PCM** | $b_1,\ldots,b_{K-1}$ | GPCM with $a=1$ fixed |
 | **GRM** | $a$, $b_1,\ldots,b_{K-1}$ | Cumulative logit; $P(X \ge k) = \text{logis}(a(\theta-b_k))$ |
+| **Tutz** | $a$, $b_1,\ldots,b_{K-1}$ | Sequential (continuation ratio); $P(X \ge k \mid X \ge k{-}1) = \text{logis}(a(\theta-b_k))$; fit per item via EAP thetas |
 | **Binom 2PL (logit)** | $a$, $b$ | $X \sim \text{Binom}(K{-}1, \text{logis}(a\theta - b))$ |
 | **Binom 1PL (logit)** | $b$ | $X \sim \text{Binom}(K{-}1, \text{logis}(\theta - b))$ |
 | **Binom 1PL (scobit)** | $b$, $\alpha$ | $X \sim \text{Binom}(K{-}1, \text{logis}(\theta - b)^\alpha)$; $\alpha$ adapts the skew of the link |
@@ -648,11 +653,11 @@ Lower-wider thresholds reverse the asymmetry: the GPCM ERF rises slowly at first
 
 ## Results
 
-All results use $K=5$ categories, 10 items, 1000 persons, and 100 replications. Asymmetry $s$ varies continuously across replications; model comparisons are summarized with GAM smooths over $s$. IMV(model, reference) > 0 means the reference is the superior predictor.
+Results span $K \in \{4, 5, 6, 7\}$ categories, 10 items, 1000 persons, and 100 replications per K. Asymmetry $s$ varies continuously across replications; model comparisons are summarized with GAM smooths over $s$, shown separately for each K. IMV(model, reference) > 0 means the reference is the superior predictor.
 
 ### IMV vs. GPCM
 
-```{r fig-imv, fig.cap="IMV_c (left) and IMV_t (right) of each model vs. GPCM, as a function of gap asymmetry s. GAM smooths over 100 replications; K = 5. Positive = GPCM predicts better. Dashed line marks zero.", fig.height=5}
+```{r fig-imv, fig.cap="IMV_c (left) and IMV_t (right) of each model vs. GPCM, as a function of gap asymmetry s. GAM smooths over 100 replications per K; rows show K = 4, 5, 6, 7. Positive = GPCM predicts better. Dashed line marks zero.", fig.height=14}
 make_plot_imv_pair(res, "imv_c", "imv_t",
                    "ω_c (category)", "ω_t (threshold)")
 ```
@@ -669,7 +674,7 @@ The expected hierarchy holds: GPCM wins. IMV(model, GPCM) is positive for all al
 
 ### RMSE
 
-```{r fig-rmse, fig.cap="Expected-score RMSE (rescaled 0-1). Lower is better. RMSE differences are compressed relative to IMV but rank models consistently."}
+```{r fig-rmse, fig.cap="Expected-score RMSE (rescaled 0-1) by K. Lower is better. RMSE differences are compressed relative to IMV but rank models consistently.", fig.height=8}
 make_plot(res, "rmse",
           "RMSE (expected score, 0-1 scale)")
 ```
@@ -682,7 +687,7 @@ RMSE rankings are consistent with IMV. GPCM and GRM are nearly indistinguishable
 
 The figures above use oracle GPCM as the reference — a theoretical ceiling. Here we use the simplest binomial model, Binom 1PL (logit), as the floor reference instead. IMV(1PL-logit, model) > 0 means the model beats 1PL-logit; < 0 means the model is worse than 1PL-logit.
 
-```{r fig-imv-1pl, fig.cap="IMV_c (left) and IMV_t (right) of each model vs. Binom 1PL (logit) as the floor. Positive = model beats 1PL-logit. K = 5.", fig.height=5}
+```{r fig-imv-1pl, fig.cap="IMV_c (left) and IMV_t (right) of each model vs. Binom 1PL (logit) as the floor. Positive = model beats 1PL-logit. Rows show K = 4, 5, 6, 7.", fig.height=14}
 res_1pl <- filter(res, model_label != "Binom 1PL (logit)")
 make_plot_imv_pair(res_1pl, "imv_c_1pl", "imv_t_1pl",
                    "ω_c (category)", "ω_t (threshold)",

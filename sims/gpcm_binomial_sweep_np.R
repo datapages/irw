@@ -8,7 +8,7 @@
 # flex ~ Uniform(0, 1) per replication.
 #
 # All fitting models and metrics are identical to gpcm_binomial_sweep.R.
-# Saves sims/gpcm_binomial_results_np.rds.
+# Saves sims/gpcm_binomial_results_np_oracle.rds.
 #
 # Usage: Rscript sims/gpcm_binomial_sweep_np.R
 
@@ -26,7 +26,7 @@ N_CORES         <- 4L
 LNORM_SDLOG     <- 0.5
 K_grid          <- c(5L, 7L)
 THRESH_NOISE_SD <- 0.3
-out_file        <- "sims/gpcm_binomial_results_np.rds"
+out_file        <- "sims/gpcm_binomial_results_np_oracle.rds"
 
 # ── Standard model helpers (shared with gpcm_binomial_sweep.R) ─────────────────
 
@@ -261,7 +261,8 @@ run_one_np <- function(K, flex, rep_idx) {
   shifts  <- runif(N_ITEMS, -1, 1)
 
   # Phase 1: NP DGP -----------------------------------------------------------
-  X_mat <- matrix(NA_integer_, N_PERSONS, N_ITEMS)
+  X_mat          <- matrix(NA_integer_, N_PERSONS, N_ITEMS)
+  true_item_params <- vector("list", N_ITEMS)
   for (j in seq_len(N_ITEMS)) {
     a_j       <- rlnorm(1L, meanlog = 0, sdlog = LNORM_SDLOG)
     b_j       <- seq(-1.5, 1.5, length.out = n_bound) + shifts[j] +
@@ -280,6 +281,7 @@ run_one_np <- function(K, flex, rep_idx) {
     }
     if (length(unique(X_j)) < K) return(NULL)
     X_mat[, j] <- X_j
+    true_item_params[[j]] <- list(a = a_j, b = b_j, flex = flex, splines = splines_j)
   }
 
   # Phase 2: 20% cell holdout -------------------------------------------------
@@ -304,6 +306,14 @@ run_one_np <- function(K, flex, rep_idx) {
   )
   if (is.null(mod_gpcm)) return(NULL)
   theta_eap <- as.numeric(fscores(mod_gpcm, method = "EAP")[, 1])
+
+  pr_oracle <- matrix(NA_real_, n_ho, K)
+  for (j in seq_len(N_ITEMS)) {
+    cells_j <- which(ho_col == j)
+    if (!length(cells_j)) next
+    tp <- true_item_params[[j]]
+    pr_oracle[cells_j, ] <- np_probs(theta[ho_row[cells_j]], tp$a, tp$b, K, tp$flex, tp$splines)
+  }
 
   extract_params <- function(mod) {
     lapply(seq_len(N_ITEMS), function(j) {
@@ -412,11 +422,20 @@ run_one_np <- function(K, flex, rep_idx) {
       imv_t_1pl <- tryCatch(imv_t(ydf_1pl, pctt.tab, "p1", "p2"), error = function(e) NA_real_)
     }
 
+    if (is.null(pr_oracle) || anyNA(pr_oracle)) {
+      imv_c_oracle <- NA_real_; imv_t_oracle <- NA_real_
+    } else {
+      ydf_oracle   <- make_pair_df(pr, pr_oracle, all_X_ho, K)
+      imv_c_oracle <- tryCatch(imv_c(ydf_oracle, pctt.tab, "p1", "p2"), error = function(e) NA_real_)
+      imv_t_oracle <- tryCatch(imv_t(ydf_oracle, pctt.tab, "p1", "p2"), error = function(e) NA_real_)
+    }
+
     data.frame(
       K = K, flex = flex, rep = rep_idx, model = nm,
-      rmse      = rmse_fn(pr, all_X_ho, K),
-      imv_c     = imv_c_gpcm, imv_t = imv_t_gpcm,
-      imv_c_1pl = imv_c_1pl,  imv_t_1pl = imv_t_1pl,
+      rmse         = rmse_fn(pr, all_X_ho, K),
+      imv_c        = imv_c_gpcm,    imv_t        = imv_t_gpcm,
+      imv_c_1pl    = imv_c_1pl,     imv_t_1pl    = imv_t_1pl,
+      imv_c_oracle = imv_c_oracle,  imv_t_oracle = imv_t_oracle,
       stringsAsFactors = FALSE
     )
   })
@@ -450,8 +469,8 @@ results_np$flex_bin <- cut(results_np$flex,
                            breaks = c(0, 1/3, 2/3, 1),
                            labels = c("low (0-0.33)", "mid (0.33-0.67)", "high (0.67-1)"),
                            include.lowest = TRUE)
-agg <- aggregate(cbind(rmse, imv_c, imv_t, imv_c_1pl, imv_t_1pl) ~
+agg <- aggregate(cbind(rmse, imv_c, imv_t, imv_c_1pl, imv_t_1pl, imv_c_oracle, imv_t_oracle) ~
                    model + K + flex_bin,
                  data = results_np, FUN = mean, na.rm = TRUE)
-agg <- agg[order(agg$K, agg$flex_bin, agg$imv_c), ]
+agg <- agg[order(agg$K, agg$flex_bin, agg$imv_c_oracle), ]
 print(agg, digits = 4, row.names = FALSE)

@@ -12,6 +12,7 @@ suppressPackageStartupMessages({
   library(irw)
   library(imv)
   library(mirt)
+  library(scam)
   library(dplyr)
   library(parallel)
 })
@@ -103,19 +104,31 @@ process_one <- function(tab) {
   cache <- file.path(out_dir, paste0("multi_", tab, ".rds"))
   if (file.exists(cache)) {
     cached <- readRDS(cache)
-    if (!is.null(cached[["imv"]]) && !is.null(cached[["pair_imv"]])) {
+    if (!is.null(cached[["imv"]]) && !is.null(cached[["pair_imv"]]) &&
+        !is.null(cached[["imv_1pl"]]) && !is.null(cached[["asym"]]) &&
+        !is.null(cached[["cat_decomp"]])) {
       message("=== ", tab, " === (cached)")
       return(cached)
     }
-    message("=== ", tab, " === (re-running: cache missing IMV or pair_imv)")
+    message("=== ", tab, " === (re-running: cache missing required fields)")
   }
 
   message("\n=== ", tab, " ===")
 
+  rate_limit_patterns <- c("too_many_requests", "rate_limit", "quota_exceeded",
+                            "429", "too many", "rate limit", "quota")
   df <- NULL
   for (attempt in 1:3) {
+    fetch_err <- NULL
     df <- tryCatch(irw_fetch(tab), error = function(e) {
-      message("  fetch attempt ", attempt, " failed: ", e$message); NULL
+      fetch_err <<- e$message
+      msg <- e$message
+      if (any(sapply(rate_limit_patterns, grepl, x = msg, ignore.case = TRUE))) {
+        message("!!! REDIVIS RATE LIMIT: ", tab, " — ", msg)
+      } else {
+        message("  fetch attempt ", attempt, " failed: ", msg)
+      }
+      NULL
     })
     if (!is.null(df)) break
     Sys.sleep(5 * attempt)
@@ -179,7 +192,7 @@ process_one <- function(tab) {
   test_cells  <- non_missing[holdout_idx, , drop = FALSE]
   obs_vals    <- resp_mat[test_cells]
 
-  # Returns list(pred = rescaled expected scores, probs = n_test x K matrix)
+  # Returns list(pred, probs, theta) — theta is EAP for all N persons (needed for NP spline)
   predict_rescaled <- function(mod) {
     theta <- fscores(mod, response.pattern = train_mat, method = "EAP")[, 1]
     pred  <- numeric(nrow(test_cells))
@@ -194,7 +207,7 @@ process_one <- function(tab) {
       pred[rows_j]    <- as.numeric(pr %*% cats) / (K - 1L)
       probs[rows_j, ] <- pr
     }
-    list(pred = pred, probs = probs)
+    list(pred = pred, probs = probs, theta = theta)
   }
   compute_rmse <- function(pred) sqrt(mean((pred - obs_vals / (K - 1L))^2, na.rm = TRUE))
 
@@ -227,7 +240,7 @@ process_one <- function(tab) {
     )
   }
 
-  fit_eval <- function(label, itemtypes, custom = NULL, pars = NULL) {
+  fit_eval <- function(label, itemtypes, custom = NULL, pars = NULL, extract_bpars = FALSE) {
     message("    ", label, " ...")
     args <- list(data = train_mat, model = 1, itemtype = itemtypes,
                  verbose = FALSE, technical = list(NCYCLES = 2000))
@@ -244,8 +257,15 @@ process_one <- function(tab) {
     message("      RMSE=", round(rmse, 4),
             "  imv_c=", round(imv_vals$imv_c, 4),
             "  imv_t=", round(imv_vals$imv_t, 4))
+    item_bpars <- if (extract_bpars) {
+      lapply(seq_len(ni), function(j) {
+        p <- tryCatch(coef(mod, IRTpars = TRUE)[[j]], error = function(e) NULL)
+        if (is.null(p)) return(NULL)
+        as.numeric(p[1L, grep("^b", colnames(p))])
+      })
+    } else NULL
     list(label = label, rmse = rmse, imv_c = imv_vals$imv_c, imv_t = imv_vals$imv_t,
-         probs = out$probs)
+         probs = out$probs, theta = out$theta, item_bpars = item_bpars)
   }
 
   pcm_pars <- tryCatch(
@@ -262,13 +282,54 @@ process_one <- function(tab) {
 
   res <- list(
     pcm           = fit_eval("PCM",         rep("gpcm",          ni), pars = pcm_pars),
-    gpcm          = fit_eval("GPCM",        rep("gpcm",          ni)),
+    gpcm          = fit_eval("GPCM",        rep("gpcm",          ni), extract_bpars = TRUE),
     grm           = fit_eval("GRM",         rep("graded",        ni)),
     tutz          = fit_eval("Tutz",        rep("sequential",    ni)),
-    binom_1pl     = fit_eval("1PL+logit",   rep("binom_1pl",     ni), custom = custom_items),
-    binom_2pl     = fit_eval("2PL+logit",   rep("binom_2pl",     ni), custom = custom_items),
-    binom_1pl_cll = fit_eval("1PL+cloglog", rep("binom_1pl_cll", ni), custom = custom_items)
+    binom_1pl     = fit_eval("Binom 1PL (logit)",   rep("binom_1pl",     ni), custom = custom_items),
+    binom_2pl     = fit_eval("Binom 2PL (logit)",   rep("binom_2pl",     ni), custom = custom_items),
+    binom_1pl_cll = fit_eval("Binom 1PL (cloglog)", rep("binom_1pl_cll", ni), custom = custom_items)
   )
+
+  # ── NP spline (monotone scam, binomial family, EAP thetas from GPCM) ──────────
+  res$np_spline <- NULL
+  if (!is.null(res$gpcm) && !is.null(res$gpcm$theta)) {
+    message("    NP spline ...")
+    theta_eap <- res$gpcm$theta
+    np_fits <- lapply(seq_len(ni), function(j) {
+      obs_rows <- which(!is.na(train_mat[, j]))
+      df_j <- data.frame(X = as.integer(train_mat[obs_rows, j]),
+                         th = theta_eap[obs_rows])
+      tryCatch(
+        scam(cbind(X, K - 1L - X) ~ s(th, bs = "mpi"), data = df_j, family = binomial()),
+        error = function(e) NULL
+      )
+    })
+    if (!any(sapply(np_fits, is.null))) {
+      np_probs <- matrix(NA_real_, nrow(test_cells), K)
+      np_pred  <- numeric(nrow(test_cells))
+      for (j in seq_len(ni)) {
+        rows_j <- which(test_cells[, 2] == j)
+        if (length(rows_j) == 0L) next
+        th_j  <- theta_eap[test_cells[rows_j, 1]]
+        p_hat <- pmin(pmax(
+          predict(np_fits[[j]], newdata = data.frame(th = th_j), type = "response"),
+          1e-10), 1 - 1e-10)
+        pr_j  <- outer(p_hat, 0:(K - 1L), function(p, k) dbinom(k, K - 1L, p))
+        np_pred[rows_j]    <- as.numeric(pr_j %*% 0:(K - 1L)) / (K - 1L)
+        np_probs[rows_j, ] <- pr_j
+      }
+      np_imv  <- compute_imv(np_probs)
+      np_rmse <- compute_rmse(np_pred)
+      message("      RMSE=", round(np_rmse, 4),
+              "  imv_c=", round(np_imv$imv_c, 4),
+              "  imv_t=", round(np_imv$imv_t, 4))
+      res$np_spline <- list(label = "NP spline", rmse = np_rmse,
+                            imv_c = np_imv$imv_c, imv_t = np_imv$imv_t,
+                            probs = np_probs, theta = NULL, item_bpars = NULL)
+    } else {
+      message("      NP spline FAILED (scam convergence)")
+    }
+  }
 
   rmse_df <- do.call(rbind, lapply(res, function(r) {
     if (is.null(r)) return(NULL)
@@ -286,42 +347,114 @@ process_one <- function(tab) {
     if (is.null(r_base) || is.null(r_enh)) return(list(imv_c = NA_real_, imv_t = NA_real_))
     compute_imv_pair(r_base$probs, r_enh$probs)
   }
-  p1 <- safe_pair(res$binom_1pl,  res$pcm)
-  p2 <- safe_pair(res$binom_2pl,  res$gpcm)
+  p1 <- safe_pair(res$binom_1pl, res$pcm)
+  p2 <- safe_pair(res$binom_2pl, res$gpcm)
   pair_imv_df <- data.frame(
     dataset    = tab,
-    comparison = c("1PL+logit→PCM", "2PL+logit→GPCM"),
+    comparison = c("Binom 1PL (logit)→PCM", "Binom 2PL (logit)→GPCM"),
     imv_c      = round(c(p1$imv_c, p2$imv_c), 4),
     imv_t      = round(c(p1$imv_t, p2$imv_t), 4),
     stringsAsFactors = FALSE
   )
 
-  out <- list(tab = tab, K = K, ni = ni, N = N, rmse = rmse_df, imv = imv_df,
-              pair_imv = pair_imv_df)
+  # IMV vs. Binom 1PL (logit) floor: IMV(1PL, model) > 0 means model beats 1PL.
+  # The 1PL row itself is 0 by definition (self-comparison).
+  imv_1pl_df <- do.call(rbind, lapply(names(res), function(nm) {
+    r <- res[[nm]]
+    if (is.null(r)) return(NULL)
+    if (nm == "binom_1pl") {
+      vals <- list(imv_c = 0, imv_t = 0)
+    } else if (is.null(res$binom_1pl)) {
+      vals <- list(imv_c = NA_real_, imv_t = NA_real_)
+    } else {
+      vals <- tryCatch(
+        compute_imv_pair(res$binom_1pl$probs, r$probs),
+        error = function(e) list(imv_c = NA_real_, imv_t = NA_real_)
+      )
+    }
+    data.frame(dataset = tab, model = r$label,
+               imv_c = round(vals$imv_c, 4), imv_t = round(vals$imv_t, 4),
+               stringsAsFactors = FALSE)
+  }))
+
+  # ── TODO 11: Asymmetry diagnostic — log(max_gap / min_gap) from GPCM b-params ─
+  asym_df <- NULL
+  if (!is.null(res$gpcm) && !is.null(res$gpcm$item_bpars)) {
+    item_asym <- sapply(res$gpcm$item_bpars, function(b) {
+      if (is.null(b) || length(b) < 2L) return(NA_real_)
+      gaps <- diff(sort(b))
+      gaps <- gaps[gaps > 0]
+      if (length(gaps) < 2L) return(NA_real_)
+      log(max(gaps) / min(gaps))
+    })
+    asym_df <- data.frame(
+      dataset           = tab, K = K,
+      mean_log_gap_ratio = round(mean(item_asym, na.rm = TRUE), 4),
+      med_log_gap_ratio  = round(median(item_asym, na.rm = TRUE), 4),
+      stringsAsFactors   = FALSE
+    )
+  }
+
+  # ── TODO 12: Per-category log-likelihood advantage of GPCM over Binom 2PL ────
+  # For each true response category k: mean(log P_GPCM(k) - log P_Binom2PL(k))
+  # weighted by category frequency. Mirrors fig-kl-by-category in the simulation.
+  cat_decomp_df <- NULL
+  if (!is.null(res$gpcm) && !is.null(res$binom_2pl)) {
+    pr_g <- res$gpcm$probs
+    pr_b <- res$binom_2pl$probs
+    cat_decomp_df <- do.call(rbind, lapply(0L:(K - 1L), function(k) {
+      idx <- which(obs_vals == k)
+      if (length(idx) < 5L) return(NULL)
+      dll <- mean(log(pmax(pr_g[idx, k + 1L], 1e-15)) -
+                  log(pmax(pr_b[idx, k + 1L], 1e-15)), na.rm = TRUE)
+      data.frame(dataset = tab, K = K, cat = k,
+                 freq = round(length(idx) / length(obs_vals), 4),
+                 dll_gpcm_vs_binom2pl = round(dll, 6),
+                 stringsAsFactors = FALSE)
+    }))
+  }
+
+  out <- list(tab = tab, K = K, ni = ni, N = N,
+              rmse = rmse_df, imv = imv_df,
+              pair_imv = pair_imv_df, imv_1pl = imv_1pl_df,
+              asym = asym_df, cat_decomp = cat_decomp_df)
   saveRDS(out, cache)
   out
 }
 
 # ── 3. Build candidate list ───────────────────────────────────────────────────
-already_done <- function() {
+all_cached_names <- function() {
   fs <- list.files(out_dir, pattern = "^multi_.+\\.rds$", full.names = FALSE)
   fs <- fs[!grepl("^multi_(results|summary)\\.rds$", fs)]
   sub("^multi_", "", sub("\\.rds$", "", fs))
 }
 
-done_before <- already_done()
-candidates  <- setdiff(irw_filter(n_categories = c(3, 7)), done_before)
-candidates  <- sample(candidates)
-n_needed    <- max(0L, N_DATASETS - length(done_before))
-candidates  <- head(candidates, n_needed)
+# Separate truly-complete caches (have imv_1pl) from ones that need updating.
+all_cached   <- all_cached_names()
+truly_done   <- Filter(function(nm) {
+  x <- tryCatch(readRDS(file.path(out_dir, paste0("multi_", nm, ".rds"))),
+                error = function(e) NULL)
+  !is.null(x[["imv_1pl"]]) && !is.null(x[["asym"]]) && !is.null(x[["cat_decomp"]])
+}, all_cached)
+needs_update <- setdiff(all_cached, truly_done)
 
-message(length(done_before), " datasets already cached; running up to ",
-        length(candidates), " candidates on ", N_CORES, " cores")
+# New datasets to fill up to N_DATASETS beyond those already cached.
+new_candidates <- setdiff(irw_filter(n_categories = c(3, 7)), all_cached)
+new_candidates <- sample(new_candidates)
+n_new          <- max(0L, N_DATASETS - length(all_cached))
+new_candidates <- head(new_candidates, n_new)
+
+candidates <- c(needs_update, new_candidates)
+
+message(length(truly_done), " datasets complete; ",
+        length(needs_update), " need imv_1pl update; adding up to ",
+        length(new_candidates), " new candidates — ",
+        length(candidates), " total jobs on ", N_CORES, " cores")
 
 # ── 4. Parallel run ───────────────────────────────────────────────────────────
 mclapply(candidates, process_one,
          mc.cores       = N_CORES,
          mc.preschedule = FALSE)
 
-message("\nDone. ", length(already_done()), " datasets cached.")
+message("\nDone. ", length(all_cached_names()), " datasets cached.")
 message("Run poly_compare_multi_combine.R to assemble multi_results.rds.")

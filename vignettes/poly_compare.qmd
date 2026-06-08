@@ -39,9 +39,12 @@ results  <- lapply(results, function(r) {
   r
 })
 results  <- Filter(function(r) r$K >= 3, results)  # drop binary (K < 3)
-all_rmse <- do.call(rbind, lapply(results, `[[`, "rmse"))
-all_imv  <- do.call(rbind, Filter(Negate(is.null), lapply(results, `[[`, "imv")))
-all_pair <- do.call(rbind, Filter(Negate(is.null), lapply(results, `[[`, "pair_imv")))
+all_rmse     <- do.call(rbind, lapply(results, `[[`, "rmse"))
+all_imv      <- do.call(rbind, Filter(Negate(is.null), lapply(results, `[[`, "imv")))
+all_pair     <- do.call(rbind, Filter(Negate(is.null), lapply(results, `[[`, "pair_imv")))
+all_imv_1pl  <- do.call(rbind, Filter(Negate(is.null), lapply(results, `[[`, "imv_1pl")))
+all_asym     <- do.call(rbind, Filter(Negate(is.null), lapply(results, `[[`, "asym")))
+all_cat_decomp <- do.call(rbind, Filter(Negate(is.null), lapply(results, `[[`, "cat_decomp")))
 
 meta <- do.call(rbind, lapply(names(results), function(nm) {
   r <- results[[nm]]
@@ -50,10 +53,12 @@ meta <- do.call(rbind, lapply(names(results), function(nm) {
 }))
 
 # Model ordering for plots
-model_levels <- c("PCM", "GPCM", "GRM", "Tutz", "1PL+logit", "2PL+logit", "1PL+cloglog")
+model_levels <- c("PCM", "GPCM", "GRM", "Tutz",
+                  "Binom 1PL (logit)", "Binom 2PL (logit)", "Binom 1PL (cloglog)",
+                  "NP spline")
 model_type   <- c(PCM = "Standard", GPCM = "Standard", GRM = "Standard", Tutz = "Standard",
-                  `1PL+logit` = "Binomial", `2PL+logit` = "Binomial",
-                  `1PL+cloglog` = "Binomial")
+                  `Binom 1PL (logit)` = "Binomial", `Binom 2PL (logit)` = "Binomial",
+                  `Binom 1PL (cloglog)` = "Binomial", `NP spline` = "Binomial")
 
 all_rmse <- all_rmse |>
   mutate(
@@ -96,12 +101,12 @@ mean_ranks <- ranks |>
   summarise(mean_rank = mean(rank), .groups = "drop") |>
   arrange(mean_rank)
 
-# Head-to-head: GPCM vs 2PL+logit
+# Head-to-head: GPCM vs Binom 2PL (logit)
 h2h <- all_rmse |>
-  filter(model %in% c("GPCM", "2PL+logit")) |>
+  filter(model %in% c("GPCM", "Binom 2PL (logit)")) |>
   select(dataset, model, rmse) |>
   tidyr::pivot_wider(names_from = model, values_from = rmse)
-n_gpcm_beats_2pl <- sum(h2h$GPCM < h2h$`2PL+logit`, na.rm = TRUE)
+n_gpcm_beats_2pl <- sum(h2h$GPCM < h2h$`Binom 2PL (logit)`, na.rm = TRUE)
 
 # IMV summaries
 all_imv <- all_imv |>
@@ -116,9 +121,21 @@ mean_imv <- all_imv |>
             se_imv_t   = sd(imv_t,   na.rm = TRUE) / sqrt(sum(!is.na(imv_t))),
             .groups = "drop")
 
-# Per-dataset GPCM vs 2PL+logit: RMSE + pairwise IMV
+all_imv_1pl <- all_imv_1pl |>
+  mutate(model    = factor(model, levels = model_levels),
+         mod_type = model_type[as.character(model)])
+
+mean_imv_1pl <- all_imv_1pl |>
+  group_by(model, mod_type) |>
+  summarise(mean_imv_c = mean(imv_c, na.rm = TRUE),
+            se_imv_c   = sd(imv_c,   na.rm = TRUE) / sqrt(sum(!is.na(imv_c))),
+            mean_imv_t = mean(imv_t, na.rm = TRUE),
+            se_imv_t   = sd(imv_t,   na.rm = TRUE) / sqrt(sum(!is.na(imv_t))),
+            .groups = "drop")
+
+# Per-dataset GPCM vs Binom 2PL (logit): RMSE + pairwise IMV
 h2h_imv <- h2h |>
-  left_join(all_pair |> filter(comparison == "2PL+logit→GPCM") |>
+  left_join(all_pair |> filter(comparison == "Binom 2PL (logit)→GPCM") |>
               select(dataset, imv_c, imv_t),
             by = "dataset") |>
   left_join(meta |> select(dataset, K, ni, N), by = "dataset") |>
@@ -126,7 +143,7 @@ h2h_imv <- h2h |>
   mutate(tooltip = paste0(
     "Dataset: ", dataset, "<br>",
     "RMSE GPCM: ", round(GPCM, 4), "<br>",
-    "RMSE 2PL+logit: ", round(`2PL+logit`, 4), "<br>",
+    "RMSE Binom 2PL (logit): ", round(`Binom 2PL (logit)`, 4), "<br>",
     "IMV_c: ", round(imv_c, 4), "<br>",
     "IMV_t: ", round(imv_t, 4), "<br>",
     "K: ", K, "  items: ", ni, "  N: ", N
@@ -163,9 +180,10 @@ We compare seven models across two families:
 
 **Binomial IRT** (two parameters per item; response treated as B(*K*−1, *p*)):
 
-- **1PL+logit** — logistic link, discrimination fixed
-- **2PL+logit** — logistic link, free discrimination
-- **1PL+cloglog** — complementary log-log link, discrimination fixed
+- **Binom 1PL (logit)** — logistic link, discrimination fixed
+- **Binom 2PL (logit)** — logistic link, free discrimination
+- **Binom 1PL (cloglog)** — complementary log-log link, discrimination fixed
+- **NP spline** — monotone spline link, binomial category distribution; fitted per item via GPCM EAP thetas
 
 All models are fit with `mirt`. The custom binomial items use `mirt::createItem()`.
 
@@ -193,13 +211,14 @@ The two families differ substantially in how many parameters they use per item:
 | GPCM | K | yes |
 | GRM | K | yes |
 | Tutz | K | yes |
-| 1PL+logit | 1 | no |
-| **2PL+logit** | **2** | **no** |
-| 1PL+cloglog | 1 | no |
+| Binom 1PL (logit) | 1 | no |
+| **Binom 2PL (logit)** | **2** | **no** |
+| Binom 1PL (cloglog) | 1 | no |
+| NP spline | spline knots | no |
 
 PCM fixes discrimination at 1, leaving only K−1 threshold parameters free. GPCM, GRM,
 and Tutz each add a free discrimination parameter for K total. At K = 4 (the most common
-case in our data), GPCM uses 4 parameters per item vs. 2 for 2PL+logit. The binomial
+case in our data), GPCM uses 4 parameters per item vs. 2 for Binom 2PL (logit). The binomial
 models' competitiveness despite this parsimony advantage is the central question.
 
 ### Cross-validation
@@ -222,7 +241,7 @@ IMV extends the binary vigorish to polytomous responses in two ways:
 - **ω_c (category)** — all pairwise category comparisons, weighted by category frequency. The "c" indexes categories.
 - **ω_t (thresholded)** — cumulative dichotomizations at each threshold, weighted by prevalence below each cut.
 
-Both are computed against a **prevalence baseline** (training-set category proportions), so positive values mean the model improves on simply knowing the overall category distribution. We also report **pairwise IMV** — ω_c and ω_t with 2PL+logit as baseline and GPCM as the enhanced model — to directly quantify how much the standard polytomous parameterisation adds over its binomial counterpart.
+Both are computed against a **prevalence baseline** (training-set category proportions), so positive values mean the model improves on simply knowing the overall category distribution. We also report **pairwise IMV** — ω_c and ω_t with Binom 2PL (logit) as baseline and GPCM as the enhanced model — to directly quantify how much the standard polytomous parameterisation adds over its binomial counterpart.
 
 ---
 
@@ -308,7 +327,7 @@ p <- ggplot(all_rmse, aes(
   geom_point(size = 2.5, alpha = 0.85,
              position = position_dodge(width = 0.5)) +
   scale_colour_manual(values = pal, name = "Family") +
-  scale_shape_manual(values = c(16, 17, 15, 3, 1, 2, 4), name = "Model") +
+  scale_shape_manual(values = c(16, 17, 15, 3, 1, 2, 4, 8), name = "Model") +
   labs(x = "CV RMSE (rescaled response)", y = NULL) +
   theme_minimal(base_size = 12) +
   theme(
@@ -382,13 +401,40 @@ ggplot(imv_long, aes(x = reorder(model, -imv), y = imv,
   theme_minimal(base_size = 13)
 ```
 
+### IMV vs. Binom 1PL (logit) floor
+
+```{r}
+#| label: fig-imv-1pl-bars
+#| fig-cap: "Mean ω_c (category) and ω_t (thresholded) IMV vs. the Binom 1PL (logit) floor. Positive = model beats the simplest binomial baseline. Error bars show ±1 SE. The Binom 1PL (logit) row is zero by definition."
+#| fig-height: 4
+
+imv_1pl_long <- mean_imv_1pl |>
+  tidyr::pivot_longer(c(mean_imv_c, mean_imv_t),
+                      names_to = "metric", values_to = "imv") |>
+  mutate(se     = ifelse(metric == "mean_imv_c", se_imv_c, se_imv_t),
+         metric = recode(metric,
+                         mean_imv_c = "ω_c (category)",
+                         mean_imv_t = "ω_t (thresholded)"))
+
+ggplot(imv_1pl_long, aes(x = reorder(model, -imv), y = imv,
+                          fill = mod_type, ymin = imv - se, ymax = imv + se)) +
+  geom_col(width = 0.6, alpha = 0.85) +
+  geom_errorbar(width = 0.25, colour = "grey40") +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey60") +
+  scale_fill_manual(values = pal, name = "Family") +
+  facet_wrap(~metric) +
+  coord_flip() +
+  labs(x = NULL, y = "Mean IMV vs. Binom 1PL (logit) (higher = better)") +
+  theme_minimal(base_size = 13)
+```
+
 ### Pairwise IMV distributions
 
 For each dataset, pairwise IMV is computed with the binomial model as baseline and
 the standard polytomous model as the enhanced model. Positive values indicate the
 standard polytomous model improves over its binomial counterpart. The four panels
-cover both IMV variants (ω_c, ω_t) and both discrimination-constrained (1PL+logit vs.
-PCM) and free-discrimination (2PL+logit vs. GPCM) comparisons.
+cover both IMV variants (ω_c, ω_t) and both discrimination-constrained (Binom 1PL (logit) vs.
+PCM) and free-discrimination (Binom 2PL (logit) vs. GPCM) comparisons.
 
 ```{r}
 #| label: fig-pair-imv-dist
@@ -396,11 +442,11 @@ PCM) and free-discrimination (2PL+logit vs. GPCM) comparisons.
 #| fig-height: 5
 
 pair_long_raw <- all_pair |>
-  filter(comparison %in% c("1PL+logit→PCM", "2PL+logit→GPCM")) |>
+  filter(comparison %in% c("Binom 1PL (logit)→PCM", "Binom 2PL (logit)→GPCM")) |>
   tidyr::pivot_longer(c(imv_c, imv_t), names_to = "metric", values_to = "imv") |>
   mutate(
     metric     = recode(metric, imv_c = "ω_c (category)", imv_t = "ω_t (thresholded)"),
-    comparison = factor(comparison, levels = c("1PL+logit→PCM", "2PL+logit→GPCM"))
+    comparison = factor(comparison, levels = c("Binom 1PL (logit)→PCM", "Binom 2PL (logit)→GPCM"))
   )
 
 panel_stats <- pair_long_raw |>
@@ -440,25 +486,25 @@ ggplot(pair_long, aes(x = imv)) +
 
 ```{r}
 #| label: tbl-h2h
-#| tbl-cap: "Per-dataset comparison: RMSE and pairwise IMV for GPCM vs. 2PL+logit. Sorted by GPCM RMSE."
+#| tbl-cap: "Per-dataset comparison: RMSE and pairwise IMV for GPCM vs. Binom 2PL (logit). Sorted by GPCM RMSE."
 
 h2h_imv |>
   select(Dataset = dataset, K, Items = ni, N,
-         `RMSE GPCM` = GPCM, `RMSE 2PL` = `2PL+logit`,
+         `RMSE GPCM` = GPCM, `RMSE Binom 2PL` = `Binom 2PL (logit)`,
          `ω_c` = imv_c, `ω_t` = imv_t) |>
   mutate(across(where(is.numeric), \(x) round(x, 4)))
 ```
 
 ### Best standard polytomous vs. best binomial (and their constrained counterparts)
 
-GPCM is the best-performing standard polytomous model and 2PL+logit the best binomial
-model; PCM and 1PL+logit are their discrimination-constrained counterparts. The two
+GPCM is the best-performing standard polytomous model and Binom 2PL (logit) the best binomial
+model; PCM and Binom 1PL (logit) are their discrimination-constrained counterparts. The two
 panels show how each flexible model compares to its constrained analogue from the other
 family.
 
 ```{r}
 #| label: fig-model-pairs
-#| fig-cap: "Left: GPCM vs. 2PL+logit (flexible models). Right: PCM vs. 1PL+logit (constrained models). Points above the diagonal: standard polytomous model fits better. Coloured dotted lines show the mean RMSE for the two featured models (orange = binomial, blue = standard); grey dotted lines show the means for the corresponding constrained/flexible counterpart."
+#| fig-cap: "Left: GPCM vs. Binom 2PL (logit) (flexible models). Right: PCM vs. Binom 1PL (logit) (constrained models). Points above the diagonal: standard polytomous model fits better. Coloured dotted lines show the mean RMSE for the two featured models (orange = binomial, blue = standard); grey dotted lines show the means for the corresponding constrained/flexible counterpart."
 #| fig-height: 4.5
 
 make_scatter <- function(mod_x, mod_y, col, other_x = NULL, other_y = NULL) {
@@ -495,8 +541,8 @@ make_scatter <- function(mod_x, mod_y, col, other_x = NULL, other_y = NULL) {
     theme_minimal(base_size = 12)
 }
 
-p_flex  <- make_scatter("2PL+logit", "GPCM", "#2166ac", other_x = "1PL+logit", other_y = "PCM")
-p_const <- make_scatter("1PL+logit", "PCM",  "#2166ac", other_x = "2PL+logit", other_y = "GPCM")
+p_flex  <- make_scatter("Binom 2PL (logit)", "GPCM", "#2166ac", other_x = "Binom 1PL (logit)", other_y = "PCM")
+p_const <- make_scatter("Binom 1PL (logit)", "PCM",  "#2166ac", other_x = "Binom 2PL (logit)", other_y = "GPCM")
 
 subplot(
   ggplotly(p_flex,  tooltip = "text"),
@@ -520,16 +566,16 @@ stay at 2 — does the prediction gap widen with *K*?
 
 ```{r}
 #| label: fig-by-k
-#| fig-cap: "RMSE difference (2PL+logit minus GPCM) by number of response categories K. Positive values mean GPCM predicts better. Each point is one dataset; black diamonds are per-K means."
+#| fig-cap: "RMSE difference (Binom 2PL (logit) minus GPCM) by number of response categories K. Positive values mean GPCM predicts better. Each point is one dataset; black diamonds are per-K means."
 #| fig-height: 4
 
 gap_k <- all_rmse |>
-  filter(model %in% c("GPCM", "2PL+logit")) |>
+  filter(model %in% c("GPCM", "Binom 2PL (logit)")) |>
   select(dataset, model, rmse) |>
   pivot_wider(names_from = model, values_from = rmse) |>
   left_join(meta |> select(dataset, K, ni, N), by = "dataset") |>
   mutate(
-    gap     = `2PL+logit` - GPCM,
+    gap     = `Binom 2PL (logit)` - GPCM,
     tooltip = paste0(
       "Dataset: ", dataset, "<br>",
       "K: ", K, "<br>",
@@ -545,7 +591,7 @@ p_gap <- ggplot(gap_k, aes(x = K, y = gap, text = tooltip)) +
                geom = "point", shape = 18, size = 5, colour = "black",
                inherit.aes = FALSE) +
   scale_x_continuous(breaks = 3:8) +
-  labs(x = "K (number of response categories)", y = "RMSE(2PL+logit) − RMSE(GPCM)") +
+  labs(x = "K (number of response categories)", y = "RMSE(Binom 2PL (logit)) − RMSE(GPCM)") +
   theme_minimal(base_size = 13)
 
 ggplotly(p_gap, tooltip = "text") |>
@@ -566,35 +612,35 @@ ggplotly(p_gap, tooltip = "text") |>
 **Discrimination matters — and so does model family.** The clearest within-family
 pattern is that freeing discrimination helps substantially: GPCM (mean rank
 `r round(mean_ranks$mean_rank[mean_ranks$model=="GPCM"],2)`) beats PCM
-(`r round(mean_ranks$mean_rank[mean_ranks$model=="PCM"],2)`), and 2PL+logit
-(`r round(mean_ranks$mean_rank[mean_ranks$model=="2PL+logit"],2)`) beats 1PL+logit
-(`r round(mean_ranks$mean_rank[mean_ranks$model=="1PL+logit"],2)`). But across families,
+(`r round(mean_ranks$mean_rank[mean_ranks$model=="PCM"],2)`), and Binom 2PL (logit)
+(`r round(mean_ranks$mean_rank[mean_ranks$model=="Binom 2PL (logit)"],2)`) beats Binom 1PL (logit)
+(`r round(mean_ranks$mean_rank[mean_ranks$model=="Binom 1PL (logit)"],2)`). But across families,
 the standard polytomous models take the top three spots — GPCM, GRM, Tutz all rank
-ahead of 2PL+logit. The per-category parameterisation carries predictive value beyond
+ahead of Binom 2PL (logit). The per-category parameterisation carries predictive value beyond
 what a two-parameter binomial model can capture.
 
 **GPCM dominates.** GPCM wins on `r sum(winners$model == "GPCM")` of
-`r nrow(winners)` datasets and beats 2PL+logit head-to-head on `r n_gpcm_beats_2pl` of
-`r nrow(h2h)`. 2PL+logit wins on only `r sum(winners$model == "2PL+logit")` datasets
+`r nrow(winners)` datasets and beats Binom 2PL (logit) head-to-head on `r n_gpcm_beats_2pl` of
+`r nrow(h2h)`. Binom 2PL (logit) wins on only `r sum(winners$model == "Binom 2PL (logit)")` datasets
 despite using fewer parameters. The parsimony advantage of the binomial model does not
 translate to better out-of-sample prediction at this scale.
 
-**Constrained binomial models perform poorly.** 1PL+logit and 1PL+cloglog rank last,
+**Constrained binomial models perform poorly.** Binom 1PL (logit) and Binom 1PL (cloglog) rank last,
 well below even PCM. Fixing discrimination hurts far more in the binomial family than
 in the standard polytomous family — PCM at least captures per-category thresholds
-precisely, while 1PL+logit reduces the entire response distribution to a single location
+precisely, while Binom 1PL (logit) reduces the entire response distribution to a single location
 parameter.
 
-**IMV amplifies the gap between families.** By RMSE, 2PL+logit is nearly tied with
+**IMV amplifies the gap between families.** By RMSE, Binom 2PL (logit) is nearly tied with
 GPCM/GRM/Tutz. But by ω_c vs. the prevalence baseline, standard polytomous models score
-substantially higher (~0.22–0.24 vs. ~0.17 for 2PL+logit), indicating they do a better
+substantially higher (~0.22–0.24 vs. ~0.17 for Binom 2PL (logit)), indicating they do a better
 job discriminating *which category* a person falls in — signal that expected-score RMSE
 compresses away. ω_t tells a similar story but more conservatively.
 
 **Pairwise IMV confirms the advantage is real but variable.** The distributions of
-ω_c and ω_t for both the constrained (1PL+logit → PCM) and flexible (2PL+logit → GPCM)
+ω_c and ω_t for both the constrained (Binom 1PL (logit) → PCM) and flexible (Binom 2PL (logit) → GPCM)
 comparisons are right-skewed with a mode near zero, but most mass lies above zero — the
-standard polytomous model typically wins. The constrained comparison (1PL+logit → PCM)
+standard polytomous model typically wins. The constrained comparison (Binom 1PL (logit) → PCM)
 tends to show larger gains, consistent with PCM's additional threshold parameters
 compensating for the fixed-discrimination constraint.
 
@@ -603,7 +649,7 @@ compensating for the fixed-discrimination constraint.
 ## Extending this vignette
 
 - **Effect sizes.** The RMSE differences are often small. Pair them with a permutation
-  test or bootstrap CI to assess whether GPCM's edge over 2PL+logit is reliable.
+  test or bootstrap CI to assess whether GPCM's edge over Binom 2PL (logit) is reliable.
 
 - **More link functions.** Add probit and cauchit binomial variants to map out the full
   link-function landscape.

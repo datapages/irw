@@ -27,10 +27,11 @@ N_ITEMS        <- 10L
 N_REPS         <- 100L
 N_CORES        <- 4L
 LNORM_SDLOG    <- 0.5    # sd of log(a); per-item discrimination ~ LogNormal(0, 0.5^2)
-K_grid         <- c(5L, 7L)
+K_grid         <- c(4L, 5L, 6L, 7L)
 # asym ~ Uniform(-log(8), log(8)) per rep: 0 = symmetric; +log(8) = wider upper
 # gaps with max/min ratio of 8; -log(8) = wider lower gaps same magnitude.
 # Dropping K=3: with only 1 inter-threshold gap, asymmetry is undefined.
+# K=4,6 results are appended to existing K=5,7 via gpcm_binomial_extend.R.
 # Per-item threshold noise: each threshold gets iid N(0, THRESH_NOISE_SD) added
 # on top of the location shift. Thresholds span ~3 units, so 0.3 ≈ 10% of range.
 THRESH_NOISE_SD <- 0.3
@@ -238,7 +239,7 @@ rmse_fn <- function(probs, X, K) {
 }
 
 # ── One condition × rep ────────────────────────────────────────────────────────
-model_names <- c("gpcm", "pcm", "grm",
+model_names <- c("gpcm", "pcm", "grm", "tutz",
                  "binom_1pl_logit", "binom_1pl_scobit",
                  "binom_1pl_cloglog", "binom_1pl_cauchit",
                  "binom_2pl_logit", "np_spline")
