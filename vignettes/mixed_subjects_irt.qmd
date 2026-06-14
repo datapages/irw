@@ -1,7 +1,7 @@
 ---
 title: "Text-Augmented IRT Calibration: A Mixed-Subjects Proof of Concept"
 description: |
-  Can item text features generate synthetic calibration subjects for IRT?
+  Can surface text features (word count, average word length) generate synthetic calibration subjects for IRT?
   We use word-count predictors of item difficulty — from the item text vignette —
   to simulate synthetic respondents and apply the mixed-subjects IRT framework
   to a preschool social-emotional learning dataset.
@@ -69,8 +69,8 @@ synthetic data degrading the estimates.
 The IRW provides an ideal testbed. We have both item text (so we can predict
 difficulty without actual test-takers) and large-scale human response data (so
 we can measure actual parameter recovery). Here we demonstrate the approach on
-a single social-emotional learning dataset, using **text features** of items as
-the source of synthetic data rather than a live LLM API.
+a single social-emotional learning dataset, using **word count and average word length** as
+the source of synthetic difficulty predictions rather than a live LLM API.
 
 ---
 
@@ -117,7 +117,7 @@ ggplot(target_data, aes(x = pred_p, y = prop_correct, label = item)) +
   scale_x_continuous(limits = c(0.3, 0.7), labels = scales::percent) +
   scale_y_continuous(limits = c(0.4, 0.85), labels = scales::percent) +
   labs(
-    x     = "Predicted P(correct) — text features",
+    x     = "Predicted P(correct) — word count + avg word length",
     y     = "Observed P(correct) — full human sample",
     title = "Text-feature predictions vs. observed pass rates"
   ) +
@@ -173,7 +173,7 @@ N(0.5, 1), slightly offset from the human N(0, 1).
 
 ```{r}
 #| label: fig-sim-risk
-#| fig-cap: !expr sprintf("Lambda tuning in the simulation. The ability-risk criterion dips below its λ=0 value around λ = %.3f, confirming that synthetic data helps when predictions are high-quality.", sim_lambda)
+#| fig-cap: !expr sprintf("Lambda (λ) tuning in the simulation. λ controls how much weight the mixed-subjects estimator places on synthetic responses (λ=0 uses only the human pilot; larger λ blends in more synthetic data). The ability-risk criterion dips below its λ=0 value around λ = %.3f, confirming that synthetic data helps when predictions are high-quality.", sim_lambda)
 
 sim_df <- sim_summary |>
   select(lambda, risk = selection_risk) |>
@@ -192,7 +192,7 @@ ggplot(sim_df, aes(x = lambda, y = risk)) +
            label = sprintf("λ* = %.3f", sim_lambda),
            colour = "#EF4444", size = 4) +
   labs(
-    x     = "λ (synthetic data weight)",
+    x     = "λ (weight on synthetic responses; 0 = pilot only)",
     y     = "Ability estimation risk",
     title = "Simulation: risk curve shows clear minimum"
   ) +
@@ -232,7 +232,7 @@ ggplot(real_df, aes(x = lambda, y = risk)) +
            label = sprintf("λ* = %.0f (no benefit)", lambda_final),
            colour = "#EF4444", size = 4) +
   labs(
-    x     = "λ (synthetic data weight)",
+    x     = "λ (weight on synthetic responses; 0 = pilot only)",
     y     = "Ability estimation risk",
     title = "Real data: risk increases with any synthetic weight"
   ) +
@@ -302,7 +302,7 @@ data helps and when it does not.
 ## Discussion
 
 This proof of concept demonstrates two things: the mixed-subjects IRT framework
-works as designed, and simple text features are not yet a strong enough signal
+works as designed, and simple surface features (word count, average word length) are not yet a strong enough signal
 to improve IRT calibration.
 
 For text-based synthetic data to help, we would likely need: (1) richer feature
