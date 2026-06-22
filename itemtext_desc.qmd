@@ -62,59 +62,56 @@ Inputs.table(search, {
 
 ## Item complexity
 
-The scatterplot shows mean words vs. mean characters per item for each table; the histograms summarise the distribution of item length and readability. Hover for table and instrument details. The Flesch-Kincaid histogram excludes tables with FK grade < 0 or > 25 (arithmetic- or symbol-heavy items where the FK formula is not meaningful).
+The two scatterplots show item complexity across tables. Left: mean words vs. Flesch-Kincaid grade level. Right: mean stem characters vs. mean response-option characters (tables with no response options are omitted from the right panel). Hover for table and instrument details.
 
 ```{ojs}
 //| label: item-complexity
 
-hist = Plot.plot({
-  y: {grid: true},
-  x: {label: "Mean words per item"},
-  marks: [
-    Plot.rectY(plotData, Plot.binX({y: "count"}, {x: "mean_word", fill: "steelblue", tip: true})),
-    Plot.ruleY([0])
-  ]
-})
-
-scatter = Plot.plot({
+scatterFK = Plot.plot({
   grid: true,
   marks: [
     Plot.dot(plotData, {
       x: "mean_word",
-      y: "mean_character",
+      y: "FK_grade",
       fill: "steelblue",
       fillOpacity: 0.6,
       r: 4
     }),
     Plot.tip(plotData, Plot.pointer({
       x: "mean_word",
-      y: "mean_character",
-      title: d => `${d.table}\n${d.instrument}\n${d.mean_word.toFixed(1)} words · ${d.mean_character.toFixed(1)} chars`
+      y: "FK_grade",
+      title: d => `${d.table}\n${d.instrument}\n${d.mean_word.toFixed(1)} words · FK ${d.FK_grade != null ? d.FK_grade.toFixed(1) : "n/a"}`
     }))
   ],
   x: {label: "Mean words per item"},
-  y: {label: "Mean characters per item"}
+  y: {label: "FK grade level"}
 })
 
-fkData = plotData.filter(d => d.FK_grade != null && d.FK_grade >= 0 && d.FK_grade <= 25)
-fkExcluded = plotData.filter(d => d.FK_grade != null && (d.FK_grade < 0 || d.FK_grade > 25)).length
+charData = plotData.filter(d => d.mean_character_responses != null)
 
-fkHist = Plot.plot({
-  y: {grid: true},
-  x: {label: "FK grade level"},
+scatterChar = Plot.plot({
+  grid: true,
   marks: [
-    Plot.rectY(fkData, Plot.binX({y: "count"}, {x: "FK_grade", fill: "steelblue", tip: true})),
-    Plot.ruleY([0])
-  ]
+    Plot.dot(charData, {
+      x: "mean_character",
+      y: "mean_character_responses",
+      fill: "steelblue",
+      fillOpacity: 0.6,
+      r: 4
+    }),
+    Plot.tip(charData, Plot.pointer({
+      x: "mean_character",
+      y: "mean_character_responses",
+      title: d => `${d.table}\n${d.instrument}\n${d.mean_character.toFixed(1)} stem chars · ${d.mean_character_responses.toFixed(1)} response chars`
+    }))
+  ],
+  x: {label: "Mean characters (stem)"},
+  y: {label: "Mean characters (responses)"}
 })
 
 html`<div style="display:flex;gap:1.5rem;">
-  <div style="flex:1">${hist}</div>
-  <div style="flex:1">${scatter}</div>
-  <div style="flex:1">
-    ${fkHist}
-    <p style="font-size:0.85em;color:#666;margin-top:0.25rem;">${fkExcluded} table(s) excluded (FK grade < 0 or > 25).</p>
-  </div>
+  <div style="flex:1">${scatterFK}</div>
+  <div style="flex:1">${scatterChar}</div>
 </div>`
 ```
 
