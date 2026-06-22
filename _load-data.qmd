@@ -26,7 +26,23 @@ data_index <- biblio |>
   mutate(dataset = str_remove(dataset, ".R.ata$")) |>
   arrange(dataset)
 
-# Make it available to OJS 
+# Make it available to OJS
 ojs_define(data_index = data_index)
+
+# Build table → Redivis dataset reference map for embed URL construction
+irw_ds <- list(
+  list(name = "item_response_warehouse",   ref = "item_response_warehouse:as2e"),
+  list(name = "item_response_warehouse_2", ref = "item_response_warehouse_2:epbx"),
+  list(name = "item_response_warehouse_3", ref = "item_response_warehouse_3:5xaj")
+)
+table_ds_ref <- do.call(rbind, lapply(irw_ds, function(ds) {
+  tabs <- redivis$user("datapages")$dataset(ds$name)$list_tables()
+  data.frame(
+    table   = tolower(sapply(tabs, function(t) t$name)),
+    ds_ref  = ds$ref,
+    stringsAsFactors = FALSE
+  )
+}))
+ojs_define(table_ds_ref = table_ds_ref)
 # ojs_define(metadata = metadata)
 ```
