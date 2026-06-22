@@ -9,24 +9,27 @@ title: "Item Text Descriptives"
 library(redivis)
 
 user <- redivis$user("bdomingu")
-dataset <- user$dataset("irw_meta:bdxt")
-table <- dataset$table("itemtext_metadata:drat")
+dataset <- user$dataset("irw_meta")
+table <- dataset$table("itemtext_metadata")
 
 data <- table$to_tibble()
 data <- as.data.frame(data)
 data$mean_word <- as.numeric(data$mean_word)
 data$mean_character <- as.numeric(data$mean_character)
+data$FK_grade                 <- as.numeric(data$FK_grade)
+data$mean_character_responses <- as.numeric(data$mean_character_responses)
 data$instrument <- gsub("\n", "", data$instrument)
 
 n_tables      <- nrow(data)
 n_instruments <- length(unique(data$instrument))
 median_words  <- round(median(data$mean_word, na.rm = TRUE))
 median_chars  <- round(median(data$mean_character, na.rm = TRUE))
+median_fk     <- round(median(data$FK_grade, na.rm = TRUE), 1)
 
 ojs_define(plot_data = data)
 ```
 
-The IRW item text resource contains full item wording for **`r n_tables` tables** spanning **`r n_instruments` distinct instruments**. Items have a median length of `r median_words` words (`r median_chars` characters). See the [Item Text Standard](itemtext.qmd) for a full description of the data structure.
+The IRW item text resource contains full item wording for **`r n_tables` tables** spanning **`r n_instruments` distinct instruments**. Items have a median length of `r median_words` words (`r median_chars` characters) and a median Flesch-Kincaid grade level of `r median_fk`. See the [Item Text Standard](itemtext.qmd) for a full description of the data structure.
 
 ## Tables with item text
 
@@ -38,16 +41,20 @@ plotData = transpose(plot_data)
 viewof search = Inputs.search(plotData, {placeholder: "Search by table or instrument…"})
 
 Inputs.table(search, {
-  columns: ["table", "instrument", "mean_word", "mean_character"],
+  columns: ["table", "instrument", "mean_word", "mean_character", "mean_character_responses", "FK_grade"],
   header: {
     table: "Table",
     instrument: "Instrument",
     mean_word: "Mean words",
-    mean_character: "Mean characters"
+    mean_character: "Mean characters (stem)",
+    mean_character_responses: "Mean characters (responses)",
+    FK_grade: "FK grade"
   },
   format: {
-    mean_word: x => x.toFixed(1),
-    mean_character: x => x.toFixed(1)
+    mean_word: x => x == null ? "—" : x.toFixed(1),
+    mean_character: x => x == null ? "—" : x.toFixed(1),
+    mean_character_responses: x => x == null ? "—" : x.toFixed(1),
+    FK_grade: x => x == null ? "—" : x.toFixed(1)
   },
   sort: "table"
 })
@@ -55,7 +62,7 @@ Inputs.table(search, {
 
 ## Item complexity
 
-The scatterplot shows mean words vs. mean characters per item for each table; the histogram summarises the distribution of item length. Hover for table and instrument details.
+The scatterplot shows mean words vs. mean characters per item for each table; the histograms summarise the distribution of item length and readability. Hover for table and instrument details. The Flesch-Kincaid histogram excludes tables with FK grade < 0 or > 25 (arithmetic- or symbol-heavy items where the FK formula is not meaningful).
 
 ```{ojs}
 //| label: item-complexity
@@ -89,9 +96,25 @@ scatter = Plot.plot({
   y: {label: "Mean characters per item"}
 })
 
+fkData = plotData.filter(d => d.FK_grade != null && d.FK_grade >= 0 && d.FK_grade <= 25)
+fkExcluded = plotData.filter(d => d.FK_grade != null && (d.FK_grade < 0 || d.FK_grade > 25)).length
+
+fkHist = Plot.plot({
+  y: {grid: true},
+  x: {label: "FK grade level"},
+  marks: [
+    Plot.rectY(fkData, Plot.binX({y: "count"}, {x: "FK_grade", fill: "steelblue", tip: true})),
+    Plot.ruleY([0])
+  ]
+})
+
 html`<div style="display:flex;gap:1.5rem;">
   <div style="flex:1">${hist}</div>
   <div style="flex:1">${scatter}</div>
+  <div style="flex:1">
+    ${fkHist}
+    <p style="font-size:0.85em;color:#666;margin-top:0.25rem;">${fkExcluded} table(s) excluded (FK grade < 0 or > 25).</p>
+  </div>
 </div>`
 ```
 
