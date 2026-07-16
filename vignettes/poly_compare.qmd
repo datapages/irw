@@ -1,0 +1,676 @@
+---
+title: "Polytomous IRT: Binomial vs. Standard Polytomous Models"
+description: |
+  How do parsimonious binomial IRT models compare to standard polytomous IRT models
+  (GPCM, GRM, PCM, sequential) when evaluated by cross-validated prediction error and
+  Inter-Model Vigorish? We fit seven models to each of a diverse set of IRW polytomous
+  datasets and compare out-of-sample RMSE, IMV vs. a prevalence baseline, and direct
+  pairwise IMV between the best models of each family.
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+  library(plotly)
+  library(mirt)
+})
+
+fs       <- list.files("poly_compare_data", pattern = "^multi_.+\\.rds$", full.names = TRUE)
+fs       <- fs[!grepl("multi_(results|summary)\\.rds$", fs)]
+results  <- Filter(Negate(is.null), lapply(fs, readRDS))
+names(results) <- sub("^multi_", "", sub("\\.rds$", "", basename(fs)))
+# backward compat: old files store K_range, new files store K
+results  <- lapply(results, function(r) {
+  if (is.null(r[["K"]])) r$K <- r$K_range + 1L
+  r
+})
+results  <- Filter(function(r) r$K >= 3, results)  # drop binary (K < 3)
+all_rmse     <- do.call(rbind, lapply(results, `[[`, "rmse"))
+all_imv      <- do.call(rbind, Filter(Negate(is.null), lapply(results, `[[`, "imv")))
+all_pair     <- do.call(rbind, Filter(Negate(is.null), lapply(results, `[[`, "pair_imv")))
+all_imv_1pl  <- do.call(rbind, Filter(Negate(is.null), lapply(results, `[[`, "imv_1pl")))
+all_asym     <- do.call(rbind, Filter(Negate(is.null), lapply(results, `[[`, "asym")))
+all_cat_decomp <- do.call(rbind, Filter(Negate(is.null), lapply(results, `[[`, "cat_decomp")))
+
+meta <- do.call(rbind, lapply(names(results), function(nm) {
+  r <- results[[nm]]
+  data.frame(dataset = nm, K = r$K, ni = r$ni, N = r$N,
+             stringsAsFactors = FALSE)
+}))
+
+# Model ordering for plots
+model_levels <- c("PCM", "GPCM", "GRM", "Tutz",
+                  "Binom 1PL (logit)", "Binom 2PL (logit)", "Binom 1PL (cloglog)",
+                  "NP spline")
+model_type   <- c(PCM = "Standard", GPCM = "Standard", GRM = "Standard", Tutz = "Standard",
+                  `Binom 1PL (logit)` = "Binomial", `Binom 2PL (logit)` = "Binomial",
+                  `Binom 1PL (cloglog)` = "Binomial", `NP spline` = "Binomial")
+
+all_rmse <- all_rmse |>
+  mutate(
+    model     = factor(model, levels = model_levels),
+    mod_type  = model_type[as.character(model)],
+    short_name = gsub("_", " ", dataset) |> stringr::str_trunc(35)
+  )
+
+# ensure short_name is unique per dataset (truncation can collapse distinct names)
+sn_map <- all_rmse |>
+  distinct(dataset, short_name) |>
+  mutate(short_name = make.unique(short_name, sep = " "))
+all_rmse <- all_rmse |>
+  select(-short_name) |>
+  left_join(sn_map, by = "dataset")
+
+# Dataset-level: median RMSE across models for ordering
+ds_med <- all_rmse |>
+  group_by(dataset, short_name) |>
+  summarise(med_rmse = median(rmse), .groups = "drop") |>
+  arrange(med_rmse)
+
+all_rmse <- all_rmse |>
+  mutate(short_name = factor(short_name, levels = ds_med$short_name))
+
+# Winner per dataset
+winners <- all_rmse |>
+  group_by(dataset) |>
+  slice_min(rmse, n = 1, with_ties = FALSE) |>
+  ungroup()
+
+# Mean rank
+ranks <- all_rmse |>
+  group_by(dataset) |>
+  mutate(rank = rank(rmse, ties.method = "min")) |>
+  ungroup()
+
+mean_ranks <- ranks |>
+  group_by(model, mod_type) |>
+  summarise(mean_rank = mean(rank), .groups = "drop") |>
+  arrange(mean_rank)
+
+# Head-to-head: GPCM vs Binom 2PL (logit)
+h2h <- all_rmse |>
+  filter(model %in% c("GPCM", "Binom 2PL (logit)")) |>
+  select(dataset, model, rmse) |>
+  tidyr::pivot_wider(names_from = model, values_from = rmse)
+n_gpcm_beats_2pl <- sum(h2h$GPCM < h2h$`Binom 2PL (logit)`, na.rm = TRUE)
+
+# IMV summaries
+all_imv <- all_imv |>
+  mutate(model    = factor(model, levels = model_levels),
+         mod_type = model_type[as.character(model)])
+
+mean_imv <- all_imv |>
+  group_by(model, mod_type) |>
+  summarise(mean_imv_c = mean(imv_c, na.rm = TRUE),
+            se_imv_c   = sd(imv_c,   na.rm = TRUE) / sqrt(sum(!is.na(imv_c))),
+            mean_imv_t = mean(imv_t, na.rm = TRUE),
+            se_imv_t   = sd(imv_t,   na.rm = TRUE) / sqrt(sum(!is.na(imv_t))),
+            .groups = "drop")
+
+all_imv_1pl <- all_imv_1pl |>
+  mutate(model    = factor(model, levels = model_levels),
+         mod_type = model_type[as.character(model)])
+
+mean_imv_1pl <- all_imv_1pl |>
+  group_by(model, mod_type) |>
+  summarise(mean_imv_c = mean(imv_c, na.rm = TRUE),
+            se_imv_c   = sd(imv_c,   na.rm = TRUE) / sqrt(sum(!is.na(imv_c))),
+            mean_imv_t = mean(imv_t, na.rm = TRUE),
+            se_imv_t   = sd(imv_t,   na.rm = TRUE) / sqrt(sum(!is.na(imv_t))),
+            .groups = "drop")
+
+# Per-dataset GPCM vs Binom 2PL (logit): RMSE + pairwise IMV
+h2h_imv <- h2h |>
+  left_join(all_pair |> filter(comparison == "Binom 2PL (logit)→GPCM") |>
+              select(dataset, imv_c, imv_t),
+            by = "dataset") |>
+  left_join(meta |> select(dataset, K, ni, N), by = "dataset") |>
+  arrange(GPCM) |>
+  mutate(tooltip = paste0(
+    "Dataset: ", dataset, "<br>",
+    "RMSE GPCM: ", round(GPCM, 4), "<br>",
+    "RMSE Binom 2PL (logit): ", round(`Binom 2PL (logit)`, 4), "<br>",
+    "IMV_c: ", round(imv_c, 4), "<br>",
+    "IMV_t: ", round(imv_t, 4), "<br>",
+    "K: ", K, "  items: ", ni, "  N: ", N
+  ))
+```
+
+## Research question
+
+Polytomous IRT models (GPCM, GRM, PCM, sequential) are the standard tools for ordered
+responses with three or more categories. But an alternative strategy is to treat the
+response as a **binomial count** — fitting a binomial distribution B(*K*−1, *p*) where
+*p* is a function of the latent trait. Binomial IRT models are parsimonious (two
+parameters per item regardless of *K*) and can use different link functions (logit,
+log-log).
+
+The IRW makes a large-scale empirical test straightforward: **do binomial models match
+or beat standard polytomous IRT when evaluated by out-of-sample prediction error?** And
+does the choice of link function matter?
+
+---
+
+## Approach
+
+### Models
+
+We compare seven models across two families:
+
+**Standard polytomous** (one set of parameters per response category):
+
+- **PCM** — Partial Credit Model (Rasch-constrained GPCM; discrimination fixed at 1)
+- **GPCM** — Generalized Partial Credit Model (free discrimination)
+- **GRM** — Graded Response Model (cumulative logistic)
+- **Tutz** — Sequential (adjacent-category) model
+
+**Binomial IRT** (two parameters per item; response treated as B(*K*−1, *p*)):
+
+- **Binom 1PL (logit)** — logistic link, discrimination fixed
+- **Binom 2PL (logit)** — logistic link, free discrimination
+- **Binom 1PL (cloglog)** — complementary log-log link, discrimination fixed
+- **NP spline** — monotone spline link, binomial category distribution; fitted per item via GPCM EAP thetas
+
+All models are fit with `mirt`. The custom binomial items use `mirt::createItem()`.
+
+### Datasets
+
+We used `irw_filter(n_categories = c(3, 7))` to identify IRW datasets with 3–7
+ordered response categories. Additional filters: N ≥ 200, ≥ 3 items, all items share
+the same *K*. Datasets larger than 5,000 respondents were downsampled.
+
+```{r}
+#| label: selection
+#| eval: false
+
+library(irw)
+candidates <- irw_filter(n_categories = c(3, 7))
+```
+
+### Parameter counts
+
+The two families differ substantially in how many parameters they use per item:
+
+| Model | Params per item | Grows with K? |
+|---|---|---|
+| PCM | K−1 | yes |
+| GPCM | K | yes |
+| GRM | K | yes |
+| Tutz | K | yes |
+| Binom 1PL (logit) | 1 | no |
+| **Binom 2PL (logit)** | **2** | **no** |
+| Binom 1PL (cloglog) | 1 | no |
+| NP spline | spline knots | no |
+
+PCM fixes discrimination at 1, leaving only K−1 threshold parameters free. GPCM, GRM,
+and Tutz each add a free discrimination parameter for K total. At K = 4 (the most common
+case in our data), GPCM uses 4 parameters per item vs. 2 for Binom 2PL (logit). The binomial
+models' competitiveness despite this parsimony advantage is the central question.
+
+### Cross-validation
+
+20% of observed responses were randomly held out at the **cell level** — individual
+person–item pairs, not whole persons. Models were fit on the remaining 80% of responses
+(held-out cells treated as missing). Each person was then scored via EAP using only
+their observed training responses, and held-out cells were predicted as expected scores
+E[*Y*|θ̂] / (*K*−1), putting all models on a common [0, 1] scale. RMSE was computed
+over the held-out cells.
+
+The full compute script is at `vignettes/poly_compare_multi_compute.R`.
+
+### Inter-Model Vigorish (IMV)
+
+Alongside RMSE we compute two IMV metrics using the `imv` package
+([Domingue et al.](https://www.cambridge.org/core/journals/psychometrika/article/intermodel-vigorish-as-a-lens-for-understanding-and-quantifying-the-value-of-item-response-models-for-dichotomously-coded-items/F61C75F6F945A5B13F73C6128EB83998)).
+IMV extends the binary vigorish to polytomous responses in two ways:
+
+- **ω_c (category)** — all pairwise category comparisons, weighted by category frequency. The "c" indexes categories.
+- **ω_t (thresholded)** — cumulative dichotomizations at each threshold, weighted by prevalence below each cut.
+
+Both are computed against a **prevalence baseline** (training-set category proportions), so positive values mean the model improves on simply knowing the overall category distribution. We also report **pairwise IMV** — ω_c and ω_t with Binom 2PL (logit) as baseline and GPCM as the enhanced model — to directly quantify how much the standard polytomous parameterisation adds over its binomial counterpart.
+
+---
+
+```{r}
+#| label: sim-ref
+#| echo: false
+
+sim_cache <- "poly_compare_data/sim_gpcm_k5.rds"
+if (!file.exists(sim_cache)) {
+  set.seed(20260528)
+  ni <- 25L; N_sim <- 1000L; ncat <- 5L
+  a <- matrix(rlnorm(ni, 0, 0.5), ni, 1)
+  d <- matrix(rnorm(ni * (ncat - 1L)), ni, ncat - 1L)
+  sim_dat <- simdata(a = a, d = d, N = N_sim, itemtype = "gpcm")
+
+  non_missing <- which(!is.na(sim_dat), arr.ind = TRUE)
+  holdout_idx <- sample(nrow(non_missing), floor(0.2 * nrow(non_missing)))
+  train_mat   <- sim_dat
+  train_mat[non_missing[holdout_idx, , drop = FALSE]] <- NA
+  test_cells  <- non_missing[holdout_idx, , drop = FALSE]
+  obs_vals    <- sim_dat[test_cells]
+
+  mod   <- mirt(train_mat, 1, itemtype = rep("gpcm", ni),
+                verbose = FALSE, technical = list(NCYCLES = 2000))
+  theta <- fscores(mod, response.pattern = train_mat, method = "EAP")[, 1]
+  K <- ncat
+  pred <- numeric(nrow(test_cells))
+  for (j in seq_len(ni)) {
+    rows_j <- which(test_cells[, 2] == j)
+    if (length(rows_j) == 0L) next
+    Theta_j <- matrix(theta[test_cells[rows_j, 1]], ncol = 1)
+    pr      <- probtrace(extract.item(mod, j), Theta_j)
+    pred[rows_j] <- as.numeric(pr %*% 0:(ncol(pr) - 1L)) / (K - 1L)
+  }
+  saveRDS(sqrt(mean((pred - obs_vals / (K - 1L))^2)), sim_cache)
+}
+sim_rmse_gpcm <- readRDS(sim_cache)
+```
+
+## Results
+
+### Dataset overview
+
+```{r}
+#| label: tbl-datasets
+#| tbl-cap: "Polytomous datasets included in the analysis."
+
+meta |>
+  left_join(
+    winners |> select(dataset, best_model = model),
+    by = "dataset"
+  ) |>
+  rename(Dataset = dataset, `K` = K, Items = ni,
+         `N (train+test)` = N, `Best model` = best_model) |>
+  arrange(K, Items)
+```
+
+### RMSE by dataset and model
+
+```{r}
+#| label: fig-rmse-dot
+#| fig-cap: "Cross-validated RMSE for each model on each dataset. Datasets ordered by median RMSE across models. Standard polytomous models in blue, binomial models in orange. Vertical dashed line: GPCM RMSE on simulated data (N=1000, 25 items, K=5; discriminations ~ LogNormal(0, 0.5), thresholds ~ Normal(0, 1), generated via `mirt::simdata()`)."
+#| fig-height: 6.5
+
+pal <- c(Standard = "#2166ac", Binomial = "#d6604d")
+
+p <- ggplot(all_rmse, aes(
+    x    = rmse,
+    y    = short_name,
+    colour = mod_type,
+    shape  = model,
+    text = paste0(
+      "Dataset: ", dataset, "<br>",
+      "Model: ", model, "<br>",
+      "RMSE: ", round(rmse, 4), "<br>",
+      "K: ", meta$K[match(dataset, meta$dataset)],
+      "  items: ", meta$ni[match(dataset, meta$dataset)],
+      "  N: ", meta$N[match(dataset, meta$dataset)]
+    )
+  )) +
+  geom_vline(xintercept = sim_rmse_gpcm, linetype = "dashed",
+             colour = "grey30", linewidth = 0.7) +
+  geom_point(size = 2.5, alpha = 0.85,
+             position = position_dodge(width = 0.5)) +
+  scale_colour_manual(values = pal, name = "Family") +
+  scale_shape_manual(values = c(16, 17, 15, 3, 1, 2, 4, 8), name = "Model") +
+  labs(x = "CV RMSE (rescaled response)", y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major.y = element_line(colour = "grey92"),
+    axis.text.y        = element_blank()
+  )
+
+ggplotly(p, tooltip = "text") |>
+  layout(
+    yaxis = list(showticklabels = FALSE),
+    annotations = list(list(
+      text      = "80/20 train/test split. Lower RMSE = better prediction.",
+      showarrow = FALSE,
+      xref = "paper", yref = "paper",
+      x = 0, y = -0.07,
+      xanchor = "left", yanchor = "top",
+      font = list(size = 11, color = "grey50")
+    ))
+  )
+```
+
+### Model rankings
+
+```{r}
+#| label: fig-ranks
+#| fig-cap: "Mean rank across all datasets (rank 1 = best). Error bars show ±1 SE."
+#| fig-height: 3.5
+
+rank_se <- ranks |>
+  group_by(model, mod_type) |>
+  summarise(mean_rank = mean(rank), se = sd(rank) / sqrt(n()), .groups = "drop")
+
+ggplot(rank_se, aes(
+    x = reorder(model, mean_rank),
+    y = mean_rank,
+    fill = mod_type,
+    ymin = mean_rank - se,
+    ymax = mean_rank + se
+  )) +
+  geom_col(width = 0.6, alpha = 0.85) +
+  geom_errorbar(width = 0.25, colour = "grey40") +
+  scale_fill_manual(values = pal, name = "Family") +
+  coord_flip() +
+  labs(x = NULL, y = "Mean rank (lower = better)") +
+  theme_minimal(base_size = 13)
+```
+
+### IMV vs. prevalence baseline
+
+```{r}
+#| label: fig-imv-bars
+#| fig-cap: "Mean ω_c (category) and ω_t (thresholded) IMV vs. the training-set prevalence baseline. Higher = more improvement over simply predicting category proportions. Error bars show ±1 SE."
+#| fig-height: 4
+
+imv_long <- mean_imv |>
+  tidyr::pivot_longer(c(mean_imv_c, mean_imv_t),
+                      names_to = "metric", values_to = "imv") |>
+  mutate(se     = ifelse(metric == "mean_imv_c", se_imv_c, se_imv_t),
+         metric = recode(metric,
+                         mean_imv_c = "ω_c (category)",
+                         mean_imv_t = "ω_t (thresholded)"))
+
+ggplot(imv_long, aes(x = reorder(model, -imv), y = imv,
+                     fill = mod_type, ymin = imv - se, ymax = imv + se)) +
+  geom_col(width = 0.6, alpha = 0.85) +
+  geom_errorbar(width = 0.25, colour = "grey40") +
+  scale_fill_manual(values = pal, name = "Family") +
+  facet_wrap(~metric) +
+  coord_flip() +
+  labs(x = NULL, y = "Mean IMV (higher = better)") +
+  theme_minimal(base_size = 13)
+```
+
+### IMV vs. Binom 1PL (logit) floor
+
+```{r}
+#| label: fig-imv-1pl-bars
+#| fig-cap: "Mean ω_c (category) and ω_t (thresholded) IMV vs. the Binom 1PL (logit) floor. Positive = model beats the simplest binomial baseline. Error bars show ±1 SE. The Binom 1PL (logit) row is zero by definition."
+#| fig-height: 4
+
+imv_1pl_long <- mean_imv_1pl |>
+  tidyr::pivot_longer(c(mean_imv_c, mean_imv_t),
+                      names_to = "metric", values_to = "imv") |>
+  mutate(se     = ifelse(metric == "mean_imv_c", se_imv_c, se_imv_t),
+         metric = recode(metric,
+                         mean_imv_c = "ω_c (category)",
+                         mean_imv_t = "ω_t (thresholded)"))
+
+ggplot(imv_1pl_long, aes(x = reorder(model, -imv), y = imv,
+                          fill = mod_type, ymin = imv - se, ymax = imv + se)) +
+  geom_col(width = 0.6, alpha = 0.85) +
+  geom_errorbar(width = 0.25, colour = "grey40") +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey60") +
+  scale_fill_manual(values = pal, name = "Family") +
+  facet_wrap(~metric) +
+  coord_flip() +
+  labs(x = NULL, y = "Mean IMV vs. Binom 1PL (logit) (higher = better)") +
+  theme_minimal(base_size = 13)
+```
+
+### Pairwise IMV distributions
+
+For each dataset, pairwise IMV is computed with the binomial model as baseline and
+the standard polytomous model as the enhanced model. Positive values indicate the
+standard polytomous model improves over its binomial counterpart. The four panels
+cover both IMV variants (ω_c, ω_t) and both discrimination-constrained (Binom 1PL (logit) vs.
+PCM) and free-discrimination (Binom 2PL (logit) vs. GPCM) comparisons.
+
+```{r}
+#| label: fig-pair-imv-dist
+#| fig-cap: "Distribution of pairwise IMV across datasets. Each panel shows ω_c (category) or ω_t (thresholded) for the named comparison. Positive values indicate the standard polytomous model improves over its binomial counterpart. Vertical dashed line at zero."
+#| fig-height: 5
+
+pair_long_raw <- all_pair |>
+  filter(comparison %in% c("Binom 1PL (logit)→PCM", "Binom 2PL (logit)→GPCM")) |>
+  tidyr::pivot_longer(c(imv_c, imv_t), names_to = "metric", values_to = "imv") |>
+  mutate(
+    metric     = recode(metric, imv_c = "ω_c (category)", imv_t = "ω_t (thresholded)"),
+    comparison = factor(comparison, levels = c("Binom 1PL (logit)→PCM", "Binom 2PL (logit)→GPCM"))
+  )
+
+panel_stats <- pair_long_raw |>
+  group_by(metric, comparison) |>
+  summarise(
+    mean_imv = mean(imv, na.rm = TRUE),
+    n_clip   = sum(imv < -0.1 | imv > 0.1, na.rm = TRUE),
+    .groups  = "drop"
+  ) |>
+  mutate(
+    clip_label = ifelse(n_clip > 0, paste0(n_clip, " clipped"), ""),
+    mean_label = paste0("mean = ", round(mean_imv, 3)),
+    mean_x     = pmin(pmax(mean_imv, -0.1), 0.1)
+  )
+
+pair_long <- pair_long_raw |>
+  group_by(metric, comparison) |>
+  mutate(imv = pmin(pmax(imv, -0.1), 0.1)) |>
+  ungroup()
+
+ggplot(pair_long, aes(x = imv)) +
+  geom_histogram(bins = 20, fill = "#2166ac", colour = "white", alpha = 0.85) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey40") +
+  geom_vline(data = panel_stats, aes(xintercept = mean_x),
+             colour = "firebrick", linewidth = 0.8) +
+  geom_text(data = panel_stats, aes(label = mean_label),
+            x = Inf, y = Inf, hjust = 1.1, vjust = 1.5,
+            size = 3.3, colour = "firebrick", inherit.aes = FALSE) +
+  geom_text(data = panel_stats, aes(label = clip_label),
+            x = Inf, y = -Inf, hjust = 1.1, vjust = -0.5,
+            size = 3.3, colour = "grey50", inherit.aes = FALSE) +
+  facet_grid(metric ~ comparison) +
+  labs(x = "Pairwise IMV (positive = standard polytomous model better)", y = "Count",
+       caption = "Values winsorized to [−0.1, 0.1]. Red line = mean (computed on full data).") +
+  theme_minimal(base_size = 13)
+```
+
+```{r}
+#| label: tbl-h2h
+#| tbl-cap: "Per-dataset comparison: RMSE and pairwise IMV for GPCM vs. Binom 2PL (logit). Sorted by GPCM RMSE."
+
+h2h_imv |>
+  select(Dataset = dataset, K, Items = ni, N,
+         `RMSE GPCM` = GPCM, `RMSE Binom 2PL` = `Binom 2PL (logit)`,
+         `ω_c` = imv_c, `ω_t` = imv_t) |>
+  mutate(across(where(is.numeric), \(x) round(x, 4)))
+```
+
+### Best standard polytomous vs. best binomial (and their constrained counterparts)
+
+GPCM is the best-performing standard polytomous model and Binom 2PL (logit) the best binomial
+model; PCM and Binom 1PL (logit) are their discrimination-constrained counterparts. The two
+panels show how each flexible model compares to its constrained analogue from the other
+family.
+
+```{r}
+#| label: fig-model-pairs
+#| fig-cap: "Left: GPCM vs. Binom 2PL (logit) (flexible models). Right: PCM vs. Binom 1PL (logit) (constrained models). Points above the diagonal: standard polytomous model fits better. Coloured dotted lines show the mean RMSE for the two featured models (orange = binomial, blue = standard); grey dotted lines show the means for the corresponding constrained/flexible counterpart."
+#| fig-height: 4.5
+
+make_scatter <- function(mod_x, mod_y, col, other_x = NULL, other_y = NULL) {
+  d <- all_rmse |>
+    filter(model %in% c(mod_x, mod_y)) |>
+    select(dataset, model, rmse) |>
+    pivot_wider(names_from = model, values_from = rmse) |>
+    left_join(meta, by = "dataset") |>
+    mutate(tooltip = paste0(
+      "Dataset: ", dataset, "<br>",
+      mod_y, ": ", round(.data[[mod_y]], 4), "<br>",
+      mod_x, ": ", round(.data[[mod_x]], 4), "<br>",
+      "K: ", K, "  items: ", ni, "  N: ", N
+    ))
+  mean_x <- mean(d[[mod_x]], na.rm = TRUE)
+  mean_y <- mean(d[[mod_y]], na.rm = TRUE)
+  other_mean_x <- if (!is.null(other_x))
+    mean(all_rmse$rmse[all_rmse$model == other_x], na.rm = TRUE) else NULL
+  other_mean_y <- if (!is.null(other_y))
+    mean(all_rmse$rmse[all_rmse$model == other_y], na.rm = TRUE) else NULL
+  p <- ggplot(d, aes(x = .data[[mod_x]], y = .data[[mod_y]],
+                size = ni, text = tooltip)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey60") +
+    geom_vline(xintercept = mean_x, linetype = "dotted", colour = "#d6604d", linewidth = 0.8) +
+    geom_hline(yintercept = mean_y, linetype = "dotted", colour = "#2166ac", linewidth = 0.8)
+  if (!is.null(other_mean_x))
+    p <- p + geom_vline(xintercept = other_mean_x, linetype = "dotted", colour = "grey50", linewidth = 0.8)
+  if (!is.null(other_mean_y))
+    p <- p + geom_hline(yintercept = other_mean_y, linetype = "dotted", colour = "grey50", linewidth = 0.8)
+  p +
+    geom_point(colour = col, alpha = 0.75) +
+    scale_size_continuous(range = c(3, 9), name = "# items") +
+    labs(x = paste("CV RMSE —", mod_x), y = paste("CV RMSE —", mod_y)) +
+    theme_minimal(base_size = 12)
+}
+
+p_flex  <- make_scatter("Binom 2PL (logit)", "GPCM", "#2166ac", other_x = "Binom 1PL (logit)", other_y = "PCM")
+p_const <- make_scatter("Binom 1PL (logit)", "PCM",  "#2166ac", other_x = "Binom 2PL (logit)", other_y = "GPCM")
+
+subplot(
+  ggplotly(p_flex,  tooltip = "text"),
+  ggplotly(p_const, tooltip = "text"),
+  nrows = 1, shareY = FALSE, titleX = TRUE, titleY = TRUE
+) |>
+  layout(
+    annotations = list(list(
+      text      = "Above diagonal: standard polytomous model better.",
+      showarrow = FALSE, xref = "paper", yref = "paper",
+      x = 0, y = -0.1, xanchor = "left", yanchor = "top",
+      font = list(size = 11, color = "grey50")
+    ))
+  )
+```
+
+### Performance gap vs. number of response categories
+
+With more categories, standard polytomous models gain parameters while binomial models
+stay at 2 — does the prediction gap widen with *K*?
+
+```{r}
+#| label: fig-by-k
+#| fig-cap: "RMSE difference (Binom 2PL (logit) minus GPCM) by number of response categories K. Positive values mean GPCM predicts better. Each point is one dataset; black diamonds are per-K means."
+#| fig-height: 4
+
+gap_k <- all_rmse |>
+  filter(model %in% c("GPCM", "Binom 2PL (logit)")) |>
+  select(dataset, model, rmse) |>
+  pivot_wider(names_from = model, values_from = rmse) |>
+  left_join(meta |> select(dataset, K, ni, N), by = "dataset") |>
+  mutate(
+    gap     = `Binom 2PL (logit)` - GPCM,
+    tooltip = paste0(
+      "Dataset: ", dataset, "<br>",
+      "K: ", K, "<br>",
+      "Gap: ", round(gap, 4), "<br>",
+      "items: ", ni, "  N: ", N
+    )
+  )
+
+p_gap <- ggplot(gap_k, aes(x = K, y = gap, text = tooltip)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey60") +
+  geom_jitter(width = 0.08, size = 3, colour = "#2166ac", alpha = 0.75) +
+  stat_summary(aes(x = K, y = gap), fun = mean,
+               geom = "point", shape = 18, size = 5, colour = "black",
+               inherit.aes = FALSE) +
+  scale_x_continuous(breaks = 3:8) +
+  labs(x = "K (number of response categories)", y = "RMSE(Binom 2PL (logit)) − RMSE(GPCM)") +
+  theme_minimal(base_size = 13)
+
+ggplotly(p_gap, tooltip = "text") |>
+  layout(
+    annotations = list(list(
+      text      = "Above zero: GPCM better. Black diamonds: per-K means.",
+      showarrow = FALSE, xref = "paper", yref = "paper",
+      x = 0, y = -0.1, xanchor = "left", yanchor = "top",
+      font = list(size = 11, color = "grey50")
+    ))
+  )
+```
+
+---
+
+## What to notice
+
+**Discrimination matters — and so does model family.** The clearest within-family
+pattern is that freeing discrimination helps substantially: GPCM (mean rank
+`r round(mean_ranks$mean_rank[mean_ranks$model=="GPCM"],2)`) beats PCM
+(`r round(mean_ranks$mean_rank[mean_ranks$model=="PCM"],2)`), and Binom 2PL (logit)
+(`r round(mean_ranks$mean_rank[mean_ranks$model=="Binom 2PL (logit)"],2)`) beats Binom 1PL (logit)
+(`r round(mean_ranks$mean_rank[mean_ranks$model=="Binom 1PL (logit)"],2)`). But across families,
+the standard polytomous models take the top three spots — GPCM, GRM, Tutz all rank
+ahead of Binom 2PL (logit). The per-category parameterisation carries predictive value beyond
+what a two-parameter binomial model can capture.
+
+**GPCM dominates.** GPCM wins on `r sum(winners$model == "GPCM")` of
+`r nrow(winners)` datasets and beats Binom 2PL (logit) head-to-head on `r n_gpcm_beats_2pl` of
+`r nrow(h2h)`. Binom 2PL (logit) wins on only `r sum(winners$model == "Binom 2PL (logit)")` datasets
+despite using fewer parameters. The parsimony advantage of the binomial model does not
+translate to better out-of-sample prediction at this scale.
+
+**Constrained binomial models perform poorly.** Binom 1PL (logit) and Binom 1PL (cloglog) rank last,
+well below even PCM. Fixing discrimination hurts far more in the binomial family than
+in the standard polytomous family — PCM at least captures per-category thresholds
+precisely, while Binom 1PL (logit) reduces the entire response distribution to a single location
+parameter.
+
+**IMV amplifies the gap between families.** By RMSE, Binom 2PL (logit) is nearly tied with
+GPCM/GRM/Tutz. But by ω_c vs. the prevalence baseline, standard polytomous models score
+substantially higher (~0.22–0.24 vs. ~0.17 for Binom 2PL (logit)), indicating they do a better
+job discriminating *which category* a person falls in — signal that expected-score RMSE
+compresses away. ω_t tells a similar story but more conservatively.
+
+**Pairwise IMV confirms the advantage is real but variable.** The distributions of
+ω_c and ω_t for both the constrained (Binom 1PL (logit) → PCM) and flexible (Binom 2PL (logit) → GPCM)
+comparisons are right-skewed with a mode near zero, but most mass lies above zero — the
+standard polytomous model typically wins. The constrained comparison (Binom 1PL (logit) → PCM)
+tends to show larger gains, consistent with PCM's additional threshold parameters
+compensating for the fixed-discrimination constraint.
+
+---
+
+## Extending this vignette
+
+- **Effect sizes.** The RMSE differences are often small. Pair them with a permutation
+  test or bootstrap CI to assess whether GPCM's edge over Binom 2PL (logit) is reliable.
+
+- **More link functions.** Add probit and cauchit binomial variants to map out the full
+  link-function landscape.
+
+- **Scale-up.** Bump `N_DATASETS` in `poly_compare_multi_compute.R` and re-run to
+  cover more of the IRW polytomous catalogue.
+
+---
+
+## Reproducibility
+
+Results were computed on 2026-05-28 using `r nrow(meta)` IRW tables. To reproduce:
+
+```r
+# From project root
+Rscript vignettes/poly_compare_multi_compute.R
+quarto::quarto_render("vignettes/poly_compare.qmd")
+```
+
+::: {.callout-note}
+The compute script caches each dataset in `vignettes/poly_compare_data/`. Delete the
+per-dataset `.rds` files to force a fresh run; delete `multi_results.rds` to
+re-combine from scratch.
+:::
