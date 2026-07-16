@@ -69,3 +69,7 @@ All code runs with `echo: false`, `message: false`, `warning: false`, `error: fa
 - [ ] Do more with `construct_name` (measure description) from the tags sheet — currently excluded from `tag_vals` in `_load-data-explore.qmd:96` so it never appears in filters or the table. Options: (1) add it to the info callout box in `index.qmd` (~line 378), (2) add a free-text search filter for it, (3) show it as a column in the dataset table
 - [x] Apply card layout to the vignettes index page — same two-column grid style used on `research.qmd` (`.paper-grid`, `.paper-card`, etc.)
 - [x] Add plotly hover annotations to other vignette figures — applied to `fig-dataset-medians` in `2pl_across_datasets.qmd` and `fig-independence-fit` in `dutch_identity.qmd`
+
+### Vignette backlog
+
+- [ ] **PISA DIF replication** — Replicate Ouyang et al. (JASA 2026) L1-sparsity DIF method using IRW PISA 2022 math data (37 OECD countries, 169 items, 277k students). Script at `vignettes/pisa_dif_replication/code/01_estimation_math.R`. Data and parallelized script ready; estimation not yet run. In progress on branch `pisa-dif-replication`. No vignette `.qmd` yet.
