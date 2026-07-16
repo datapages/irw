@@ -69,3 +69,7 @@ All code runs with `echo: false`, `message: false`, `warning: false`, `error: fa
 - [ ] Do more with `construct_name` (measure description) from the tags sheet — currently excluded from `tag_vals` in `_load-data-explore.qmd:96` so it never appears in filters or the table. Options: (1) add it to the info callout box in `index.qmd` (~line 378), (2) add a free-text search filter for it, (3) show it as a column in the dataset table
 - [x] Apply card layout to the vignettes index page — same two-column grid style used on `research.qmd` (`.paper-grid`, `.paper-card`, etc.)
 - [x] Add plotly hover annotations to other vignette figures — applied to `fig-dataset-medians` in `2pl_across_datasets.qmd` and `fig-independence-fit` in `dutch_identity.qmd`
+
+### Vignette backlog
+
+- [x] **Gender DIF omnibus vignette** — Omnibus DIF/measurement invariance by gender across all IRW datasets with `cov_gender` or `cov_sex`. Compute script at `vignettes/gender_dif_compute.R`.
