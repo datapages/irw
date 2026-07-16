@@ -1,0 +1,319 @@
+---
+title: "Text-Augmented IRT Calibration: A Mixed-Subjects Proof of Concept"
+description: |
+  Can surface text features (word count, average word length) generate synthetic calibration subjects for IRT?
+  We use word-count predictors of item difficulty — from the item text vignette —
+  to simulate synthetic respondents and apply the mixed-subjects IRT framework
+  to a preschool social-emotional learning dataset.
+date: today
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+    embed-resources: true
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+
+cache_path <- "mixed_subjects_data/results.rds"
+if (!file.exists(cache_path)) {
+  knitr::knit_exit("Cache not found — run `vignettes/mixed_subjects_irt_compute.R` first.")
+}
+
+.c             <- readRDS(cache_path)
+gt_pars        <- .c$gt_pars
+pilot_pars     <- .c$pilot_pars
+lambda_final   <- .c$lambda_final
+lambda_summary <- .c$lambda_summary
+target_data    <- .c$target_data
+r_text         <- .c$r_text
+human_accuracy <- .c$human_accuracy
+synth_accuracy <- .c$synth_accuracy
+rmse_pilot     <- .c$rmse_pilot
+rmse_mixed     <- .c$rmse_mixed
+pilot_n        <- .c$pilot_n
+n_synth        <- .c$n_synth
+n_human_total  <- .c$n_human_total
+sim_lambda     <- .c$sim_lambda_final
+sim_summary    <- .c$sim_lambda_summary
+b_sim_true     <- .c$sim_b_true
+```
+
+## The calibration cost problem
+
+Fitting an IRT model requires pilot data — real respondents answering real items
+before the test is deployed. Collecting that data is expensive, especially for
+assessments targeting young children or clinical populations. A natural question:
+can *synthetic* responses supplement a small human pilot and improve item
+parameter recovery?
+
+[Kanopka et al.](https://klintkanopka.com/mixedsubjectsirt/) address this with
+a **mixed-subjects IRT** framework built on Prediction-Powered Inference (PPI).
+The method combines human pilot responses with a much larger pool of synthetic
+responses, using a tunable weight *λ* to control the synthetic contribution.
+When synthetic responses are informative, *λ* is large; when they are
+unreliable, *λ* shrinks toward zero — automatically guarding against poor
+synthetic data degrading the estimates.
+
+The IRW provides an ideal testbed. We have both item text (so we can predict
+difficulty without actual test-takers) and large-scale human response data (so
+we can measure actual parameter recovery). Here we demonstrate the approach on
+a single social-emotional learning dataset, using **word count and average word length** as
+the source of synthetic difficulty predictions rather than a live LLM API.
+
+---
+
+## Dataset: preschool_sel_box
+
+`preschool_sel_box` contains responses from **`r n_human_total` children** to
+**20 items** from a preschool social-emotional learning assessment. Items
+involve brief scenarios about boxes (e.g., choosing, sharing, and describing
+box contents); responses are binary (correct / incorrect).
+
+```{r}
+#| label: tbl-items
+#| tbl-cap: "Item text and human proportion correct"
+
+target_data |>
+  select(item, item_text, word_count, avg_word_len, prop_correct, pred_p) |>
+  mutate(word_count   = as.integer(word_count),
+         avg_word_len = round(avg_word_len, 1),
+         prop_correct = round(prop_correct, 3),
+         pred_p       = round(pred_p, 3)) |>
+  knitr::kable(col.names = c("Item", "Text", "Words", "Avg word len", "Human P(correct)", "Predicted P(correct)"))
+```
+
+---
+
+## Text-feature difficulty predictions
+
+The [item text difficulty vignette](item_text_difficulty.html) showed that
+simple surface features — word count and average word length — predict item
+difficulty across IRW datasets. We train a linear regression on **all IRW
+datasets except `preschool_sel_box`**, then apply it to predict pass rates for
+the 20 target items.
+
+```{r}
+#| label: fig-text-pred
+#| fig-cap: !expr sprintf("Text-feature predictions vs. observed pass rates (Pearson r = %.3f). Predictions capture rank ordering but are compressed relative to the observed range.", r_text)
+
+ggplot(target_data, aes(x = pred_p, y = prop_correct, label = item)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey70") +
+  geom_point(size = 3, colour = "#2563EB", alpha = 0.8) +
+  annotate("text", x = 0.45, y = 0.75,
+           label = sprintf("r = %.3f", r_text),
+           size = 4.5, colour = "#2563EB", fontface = "bold") +
+  scale_x_continuous(limits = c(0.3, 0.7), labels = scales::percent) +
+  scale_y_continuous(limits = c(0.4, 0.85), labels = scales::percent) +
+  labs(
+    x     = "Predicted P(correct) — word count + avg word length",
+    y     = "Observed P(correct) — full human sample",
+    title = "Text-feature predictions vs. observed pass rates"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+The correlation is `r round(r_text, 3)` — strong enough to identify easier and
+harder items, but the predictions cluster tightly (all between 35% and 60%)
+while observed pass rates span a wider range (45%–81%). This compression will
+matter when we try to use the predictions for calibration.
+
+---
+
+## Generating synthetic subjects
+
+We translate text-predicted pass rates into IRT difficulty parameters
+(*b* = −logit of predicted *P*) and simulate **`r n_synth` synthetic subjects**
+whose responses are drawn from a 1PL model. Ability is θ ~ N(0, 1), matching a
+typical standardisation population.
+
+```{r}
+#| label: fig-synth-vs-human
+#| fig-cap: "Synthetic vs. human accuracy per item. Synthetic responses match the observed ordering but are compressed toward 50%."
+
+acc_df <- data.frame(
+  item   = names(human_accuracy),
+  human  = as.numeric(human_accuracy),
+  synth  = as.numeric(synth_accuracy[names(human_accuracy)])
+)
+
+ggplot(acc_df, aes(x = human, y = synth)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey70") +
+  geom_point(size = 3, colour = "#059669", alpha = 0.8) +
+  scale_x_continuous(limits = c(0.4, 0.85), labels = scales::percent) +
+  scale_y_continuous(limits = c(0.4, 0.85), labels = scales::percent) +
+  labs(
+    x     = "Human P(correct) — full sample",
+    y     = "Synthetic P(correct) — text-predicted",
+    title = "Synthetic vs. human accuracy per item"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+---
+
+## Does the method work? A simulation first
+
+Before applying to real data, we verify that *λ* tuning behaves correctly under
+ideal conditions. We simulate 200 human pilot responses and 2,000 synthetic
+responses from a 1PL model with items evenly spaced across b ∈ [−2, 2]
+(sd = 1.22) — a wide difficulty range. The synthetic θ distribution is
+N(0.5, 1), slightly offset from the human N(0, 1).
+
+```{r}
+#| label: fig-sim-risk
+#| fig-cap: !expr sprintf("Lambda (λ) tuning in the simulation. λ controls how much weight the mixed-subjects estimator places on synthetic responses (λ=0 uses only the human pilot; larger λ blends in more synthetic data). The ability-risk criterion dips below its λ=0 value around λ = %.3f, confirming that synthetic data helps when predictions are high-quality.", sim_lambda)
+
+sim_df <- sim_summary |>
+  select(lambda, risk = selection_risk) |>
+  mutate(min_risk = min(risk))
+
+ggplot(sim_df, aes(x = lambda, y = risk)) +
+  geom_hline(yintercept = sim_df$risk[1], linetype = "dashed",
+             colour = "grey60", linewidth = 0.6) +
+  geom_line(colour = "#2563EB", linewidth = 1) +
+  geom_point(colour = "#2563EB", size = 2.5) +
+  geom_point(data = sim_df |> filter(lambda == sim_lambda),
+             colour = "#EF4444", size = 4) +
+  annotate("text",
+           x     = sim_lambda + 0.05,
+           y     = min(sim_df$risk) - 0.00008,
+           label = sprintf("λ* = %.3f", sim_lambda),
+           colour = "#EF4444", size = 4) +
+  labs(
+    x     = "λ (weight on synthetic responses; 0 = pilot only)",
+    y     = "Ability estimation risk",
+    title = "Simulation: risk curve shows clear minimum"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+The risk curve has a clear minimum at λ = `r round(sim_lambda, 3)`. In these
+ideal conditions — wide item difficulty spread, accurate synthetic data — a
+small positive weight on synthetic responses reduces ability estimation risk
+by about 0.7% relative to the pilot alone.
+
+---
+
+## Lambda tuning on real data
+
+Now we apply the same framework to `preschool_sel_box`. The pilot is a random
+sample of **`r pilot_n` children** from the full `r n_human_total`-subject
+dataset. The synthetic pool is the `r n_synth` simulated subjects.
+
+```{r}
+#| label: fig-real-risk
+#| fig-cap: "Lambda tuning on real data. The ability-risk criterion increases monotonically from λ=0 — no synthetic weight improves calibration."
+
+real_df <- lambda_summary |>
+  select(lambda, risk = selection_risk)
+
+ggplot(real_df, aes(x = lambda, y = risk)) +
+  geom_hline(yintercept = real_df$risk[1], linetype = "dashed",
+             colour = "grey60", linewidth = 0.6) +
+  geom_line(colour = "#059669", linewidth = 1) +
+  geom_point(colour = "#059669", size = 2.5) +
+  geom_point(data = real_df |> filter(lambda == lambda_final),
+             colour = "#EF4444", size = 4) +
+  annotate("text",
+           x     = 0.15,
+           y     = real_df$risk[1] + 0.0002,
+           label = sprintf("λ* = %.0f (no benefit)", lambda_final),
+           colour = "#EF4444", size = 4) +
+  labs(
+    x     = "λ (weight on synthetic responses; 0 = pilot only)",
+    y     = "Ability estimation risk",
+    title = "Real data: risk increases with any synthetic weight"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+The risk is monotonically increasing — adding any weight to the synthetic data
+*hurts* ability estimation. The method sets λ = 0, falling back to the
+pilot-only estimate.
+
+---
+
+## Parameter recovery
+
+Since λ = 0, the mixed-subjects and pilot-only models are identical. We compare
+their difficulty estimates against the ground truth from the full
+`r n_human_total`-subject dataset.
+
+```{r}
+#| label: fig-recovery
+#| fig-cap: !expr sprintf("Pilot-only difficulty recovery (n=%d). RMSE = %.3f.", pilot_n, rmse_pilot)
+
+b_df <- inner_join(
+  gt_pars    |> select(item, b_gt = b),
+  pilot_pars |> select(item, b_pilot = b),
+  by = "item"
+)
+
+ggplot(b_df, aes(x = b_gt, y = b_pilot)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey70") +
+  geom_point(size = 3, colour = "#7C3AED", alpha = 0.85) +
+  labs(
+    x     = "Ground-truth b (full sample, n = 735)",
+    y     = sprintf("Estimated b (pilot only, n = %d)", pilot_n),
+    title = sprintf("Difficulty parameter recovery  |  RMSE = %.3f", rmse_pilot)
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+---
+
+## Why does λ = 0?
+
+The simulation proved the method works when predictions are high-quality.
+So why does it fail here? Two reasons:
+
+**Compressed predictions.** The text regression predicts pass rates in the
+range 35%–60%, while true pass rates span 45%–81%. In IRT terms, the predicted
+*b* values all fall in [−0.4, +0.6], but true *b* values range from −1.8 to
++0.2. The synthetic subjects "live" in a narrow band of the difficulty scale,
+adding little information about the harder items where calibration would benefit
+most.
+
+**Adequate pilot.** With `r pilot_n` subjects and 20 items — a 5:1
+subject-to-item ratio — the pilot-only 1PL model already achieves reasonable
+precision (RMSE = `r round(rmse_pilot, 3)`). The marginal benefit from
+noisy synthetic data is small relative to the PPI correction cost the method
+must pay for mixing populations.
+
+Contrast the simulation: 200 subjects, 20 items, b spread across [−2, 2],
+oracle synthetic data → λ = `r round(sim_lambda, 3)`. The gains are modest
+(0.7% risk reduction) but real. The method correctly identifies when synthetic
+data helps and when it does not.
+
+---
+
+## Discussion
+
+This proof of concept demonstrates two things: the mixed-subjects IRT framework
+works as designed, and simple surface features (word count, average word length) are not yet a strong enough signal
+to improve IRT calibration.
+
+For text-based synthetic data to help, we would likely need: (1) richer feature
+engineering — item format, response options, cognitive demand taxonomies; (2)
+domain-specific text models; or (3) actual LLM responses scored against answer
+keys rather than statistical proxies. The IRW's combination of item text, answer
+keys, and large human response datasets makes it well-positioned for all three
+directions.
+
+The `mixedsubjectsirt` package and the [mixed-subjects IRT
+preprint](https://klintkanopka.com/mixedsubjectsirt/) provide the calibration
+framework. The `r_text`-correlation finding from the [item text
+difficulty vignette](item_text_difficulty.html) points to where feature
+engineering effort is most needed.
