@@ -88,13 +88,31 @@ if (!cache_ok) cat(
 )
 ```
 
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the
+analysis design, and the writing below — was produced largely by Claude
+(Anthropic), working from a task specification and with human review.
+Treat the methodological choices and interpretations accordingly, and
+check the compute script (`hf_reliability_compute.R`) directly if you're
+relying on the numbers here.
+:::
+
 ## Motivation
 
 Some cognitive tasks produce huge, dependable group-level effects yet turn
 out to be nearly useless for studying individual differences. The clearest
-examples are conflict-monitoring tasks: Flanker, Stroop, and their relatives.
-Every study finds that people are slower and less accurate on incongruent
-trials than congruent ones — the effect is close to universal. But
+examples are **conflict tasks**: paradigms where each trial pairs a
+target feature that must be responded to with a second, task-irrelevant
+feature that either matches (congruent) or clashes (incongruent) with the
+correct response. Flanker (arrows flanked by same- or opposite-pointing
+distractors), Stroop (color words printed in matching or mismatching ink),
+and Simon-type spatial-compatibility tasks are the classic examples. In all
+of them, incongruent trials require suppressing the irrelevant feature's
+pull toward the wrong response, which costs time and accuracy relative to
+congruent trials — the *conflict effect* (or congruency effect), usually
+indexed as incongruent-minus-congruent RT or accuracy. Every study finds
+that people are slower and less accurate on incongruent trials than
+congruent ones — the effect is close to universal. But
 @hedge2018reliability showed that when you use these same tasks to *rank*
 people (rather than just detect the group effect), reliability collapses:
 individual conditions like congruent RT or incongruent RT are often reliable
@@ -102,10 +120,77 @@ enough on their own (test-retest ICCs around .6-.8), but the *difference
 score* used to index the effect of interest — incongruent RT minus congruent
 RT — is barely reliable at all.
 
+::: {.callout-note}
+**What "reliability collapses" means, precisely.** Imagine testing the same
+people twice (or splitting one session's trials into two halves) and
+correlating each person's score across the two measurements. For congruent
+RT alone, or incongruent RT alone, that correlation is reasonably strong
+(ICC ~.6-.8) — a person who's fast in one measurement tends to still be
+fast in the other. For the *difference score*, that same across-measurement
+correlation is much weaker — in some datasets below, close to zero. This
+doesn't mean the conflict effect itself is fake or unstable at the group
+level; it means that *individual differences* in the size of the effect are
+mostly swamped by trial-level noise, so a person's difference score in one
+measurement predicts almost nothing about their difference score in
+another. How close to zero depends on how strongly congruent and
+incongruent RT covary across people — see [Where does the variance go?] for
+why.
+:::
+
+```{r}
+#| label: fig-task-examples
+#| fig-cap: "Schematic examples of the conflict manipulation in Stroop and Hearts & Flowers. Stroop: name the ink colour, ignore the printed word; ink and word agree on congruent trials, disagree on incongruent trials. Hearts & Flowers: press the button on the same side as the stimulus for hearts (congruent), the opposite side for flowers (incongruent). These are illustrative reconstructions, not verbatim task stimuli."
+#| fig-height: 3
+#| echo: false
+#| eval: true
+
+stroop_df <- tibble(
+  panel = factor(c("Congruent", "Incongruent"), levels = c("Congruent", "Incongruent")),
+  ink   = c(irw_red, irw_blue)
+)
+
+stroop_plot <- ggplot(stroop_df, aes(x = 0, y = 0, label = "RED", colour = ink)) +
+  geom_text(size = 13, fontface = "bold") +
+  scale_colour_identity() +
+  facet_wrap(~panel, nrow = 1) +
+  coord_cartesian(xlim = c(-1, 1), ylim = c(-1, 1)) +
+  labs(title = "Stroop") +
+  theme_void(base_size = 13) +
+  theme(strip.text = element_text(size = 11, face = "bold"),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+        panel.spacing = unit(1.2, "lines"),
+        plot.margin = margin(5, 15, 5, 5))
+
+hf_df <- tibble(
+  panel      = factor(c("Congruent (heart)", "Incongruent (flower)"),
+                       levels = c("Congruent (heart)", "Incongruent (flower)")),
+  symbol     = c("♥", "❀"),
+  arrow_xend = c(-0.6, 0.6)
+)
+
+hf_plot <- ggplot(hf_df) +
+  geom_text(aes(x = -0.6, y = 0.6, label = symbol), colour = "grey20", size = 11) +
+  geom_rect(data = tibble(xmin = c(-0.9, 0.3), xmax = c(-0.3, 0.9)),
+            aes(xmin = xmin, xmax = xmax), ymin = -0.9, ymax = -0.5,
+            fill = NA, colour = irw_grey, inherit.aes = FALSE) +
+  geom_segment(aes(x = -0.6, y = 0.3, xend = arrow_xend, yend = -0.5),
+               arrow = arrow(length = unit(0.15, "cm")), colour = irw_grey) +
+  facet_wrap(~panel, nrow = 1) +
+  coord_cartesian(xlim = c(-1, 1), ylim = c(-1, 1)) +
+  labs(title = "Hearts & Flowers") +
+  theme_void(base_size = 13) +
+  theme(strip.text = element_text(size = 11, face = "bold"),
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+        panel.spacing = unit(1.2, "lines"),
+        plot.margin = margin(5, 5, 5, 15))
+
+gridExtra::grid.arrange(stroop_plot, hf_plot, ncol = 2)
+```
+
 The mechanism is a direct consequence of how difference scores propagate
 variance. For two conditions $A$ and $B$ measured on the same people,
 
-$$\mathrm{Var}(B - A) = \mathrm{Var}(A) + \mathrm{Var}(B) - 2\,\mathrm{Cov}(A, B)$$
+$$\mathrm{Var}(B - A) = \mathrm{Var}(A) + \mathrm{Var}(B) - 2\,\mathrm{Cov}(A, B)$$ {#eq-vardiff}
 
 Conflict tasks are robust precisely *because* almost everyone shows a similar
 conflict cost — high scorers on congruent trials tend to also be high scorers
@@ -263,11 +348,14 @@ ggplot(sh_plot_df, aes(x = reliability_est, y = dataset_lab, colour = reliabilit
                   height = 0, position = position_dodge(width = 0.5)) +
   geom_point(size = 2.6, position = position_dodge(width = 0.5)) +
   facet_wrap(~measure_lab) +
-  scale_colour_manual(values = c("Congruent" = irw_blue, "Incongruent" = irw_grey,
+  scale_colour_manual(values = c("Congruent" = irw_grey, "Incongruent" = "black",
                                   "Difference score" = irw_red), name = NULL) +
   labs(x = "Split-half reliability (Spearman-Brown corrected)", y = NULL) +
   theme(legend.position = "bottom")
 ```
+
+<details>
+<summary>Show full split-half reliability table (all datasets, measures, and conditions)</summary>
 
 ```{r}
 #| label: tbl-splithalf
@@ -285,6 +373,8 @@ results %>%
   arrange(Dataset, Measure) %>%
   knitr::kable()
 ```
+
+</details>
 
 The pattern in @fig-splithalf reproduces the core finding of
 @hedge2018reliability directly: congruent and incongruent RT reliabilities
@@ -338,11 +428,54 @@ results %>%
   knitr::kable()
 ```
 
-This table makes the mechanism from the Motivation section concrete: in
-every dataset, $\mathrm{Cov}(\text{cong}, \text{incong})$ is a large fraction
-of both individual variances, so subtracting $2\,\mathrm{Cov}$ removes most
-of the variance that Var(congruent) and Var(incongruent) contribute,
-leaving Var(difference) small relative to either component alone.
+This table makes @eq-vardiff concrete: in every dataset,
+$\mathrm{Cov}(\text{cong}, \text{incong})$ is a large fraction of both
+individual variances, so subtracting $2\,\mathrm{Cov}$ (the last term in
+@eq-vardiff) removes most of the variance that Var(congruent) and
+Var(incongruent) contribute, leaving Var(difference) small relative to
+either component alone.
+
+@fig-variance-decomp shows @eq-vardiff concretely for a single task, the
+alcohol Stroop. Var(congruent) and Var(incongruent) are both large and
+similar in size, but so is $2\,\mathrm{Cov}(\text{cong}, \text{incong})$ —
+almost as large as the two variances combined — so nearly all of that
+variance is removed in the subtraction, leaving Var(difference) close to
+zero. This is the arithmetic behind the "reliability collapses" claim
+above: two individually well-behaved, reliable measurements can combine
+into an almost-zero-variance difference score whenever they're highly
+correlated across people.
+
+```{r}
+#| label: fig-variance-decomp
+#| fig-cap: "Variance decomposition for the alcohol Stroop RT difference score (trial floor = 5). Var(difference) = Var(congruent) + Var(incongruent) − 2·Cov(congruent, incongruent); the covariance bar is almost as large as the sum of the two variance bars, leaving very little variance in the difference score."
+#| fig-height: 4.2
+
+vdf_row <- results %>%
+  filter(trial_floor == 5, measure == "rt", reliability_type == "difference",
+         dataset == "alcoholstroop_jones2024")
+
+vdf <- tibble(
+  component = factor(
+    c("Var(congruent)", "Var(incongruent)", "2·Cov(cong, incong)", "Var(difference)"),
+    levels = c("Var(congruent)", "Var(incongruent)", "2·Cov(cong, incong)", "Var(difference)")
+  ),
+  value = c(vdf_row$var_congruent, vdf_row$var_incongruent,
+            2 * vdf_row$cov_cong_incong, vdf_row$var_difference),
+  role  = c("congruent", "incongruent", "subtracted", "result")
+)
+
+ggplot(vdf, aes(x = component, y = value, fill = role)) +
+  geom_col(width = 0.6) +
+  geom_text(aes(label = sprintf("%.3f", value)), vjust = -0.4, size = 4) +
+  scale_fill_manual(values = c(congruent = irw_grey, incongruent = "black",
+                               subtracted = irw_blue, result = irw_red),
+                     guide = "none") +
+  labs(x = NULL, y = "Variance (RT, seconds²)",
+       title = paste(dataset_labels["alcoholstroop_jones2024"], "RT: where the variance goes")) +
+  expand_limits(y = max(vdf$value) * 1.15) +
+  theme_minimal(base_size = 13) +
+  theme(plot.title = element_text(size = 12, face = "bold"))
+```
 
 ### True test-retest reliability (Hearts & Flowers only)
 
@@ -484,7 +617,7 @@ conditions are consistently far more reliable than the within-subject
 difference score built from them. The mechanism is exactly the one
 @hedge2018reliability describe: the two conditions are highly correlated
 across people, so most of their between-person variance cancels in the
-subtraction, while trial-level noise does not.
+subtraction (@eq-vardiff), while trial-level noise does not.
 
 **This is a property of difference-score designs, not a general statement
 about IRW data.** Most IRW tables are fixed-item-bank IRT designs, where
