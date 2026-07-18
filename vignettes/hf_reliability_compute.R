@@ -34,6 +34,23 @@ MIN_N_RESPONDENTS  <- 50
 
 spearman_brown <- function(r) 2 * r / (1 + r)
 
+# irw_fetch() occasionally fails transiently against the Redivis API
+# (observed for several tables during this vignette's dataset search, not
+# specific to any one table). Retry with a short backoff before treating a
+# fetch as a genuine failure (e.g. a table that really doesn't exist).
+irw_fetch_retry <- function(table, tries = 3, wait_s = 5) {
+  for (i in seq_len(tries)) {
+    df <- tryCatch(irw_fetch(table), error = function(e) NULL)
+    if (!is.null(df)) return(df)
+    if (i < tries) {
+      message("  irw_fetch('", table, "') failed (attempt ", i, "/", tries, "), retrying...")
+      Sys.sleep(wait_s)
+    }
+  }
+  message("  irw_fetch('", table, "') failed after ", tries, " attempts.")
+  NULL
+}
+
 # ==============================================================================
 # Step 0: locate candidate datasets
 #
@@ -91,7 +108,7 @@ raw_data <- list()
 step0_rows <- list()
 
 for (tbl in candidate_tables) {
-  df <- tryCatch(irw_fetch(tbl), error = function(e) NULL)
+  df <- irw_fetch_retry(tbl)
   if (is.null(df)) {
     step0_rows[[tbl]] <- tibble(table = tbl, n_responses = NA, n_participants = NA,
                                  has_rt = NA, condition_candidates = "fetch failed",
@@ -159,10 +176,71 @@ print(step0_summary, width = Inf)
 #   mexico_*_safety_conflicts (8 tables) -- EXCLUDED: keyword false positive
 #     on "conflicts" (a public-safety perceptions survey); no rt column, no
 #     congruent/incongruent structure.
+#
+#   enkavi_2019_stroop, enkavi_2019_simon, enkavi_2019_ant_flanker -- KEPT.
+#     Located by direct inspection of item_response_warehouse_3, not via the
+#     keyword scan above: at the time of writing these tables aren't yet
+#     indexed in irw_metadata(), so the keyword screen can't find them, but
+#     irw_fetch() resolves them directly by table name regardless. All three
+#     are part of the Enkavi, Eisenberg et al. (2019) Self-Regulation
+#     Ontology test-retest battery: N=523, a genuine 2-wave retest design
+#     (same structure as imps2025_hf's wave variable, but a much shorter,
+#     general-population adult retest interval rather than a ~6-month
+#     child-development gap -- no per-wave date is available in the table
+#     itself, so see Enkavi et al. (2019) directly for the interval design).
+#     stroop and simon are already a clean binary congruent/incongruent
+#     contrast. ant_flanker's itemcov_condition has a third "neutral" level;
+#     those trials are excluded here to match the two-condition contrast
+#     used throughout this vignette.
+#
+#   enkavi_2019_navon, enkavi_2019_stopsignal, enkavi_2019_gonogo,
+#   enkavi_2019_taskswitch, enkavi_2019_dpx_axcpt -- EXCLUDED for now (same
+#   battery, same N=523/2-wave design). navon has a 2 (level) x 3 (conflict)
+#   structure needing a bespoke contrast; stopsignal/gonogo/taskswitch/
+#   dpx_axcpt aren't binary congruent/incongruent contrasts (go/no-go,
+#   switch cost, AX-CPT probe types) and would need either engine changes or
+#   a separate analysis. Good candidates for a follow-up extension.
 # ------------------------------------------------------------------------------
 
-final_tables <- c("imps2025_hf", "alcoholstroop_jones2024", "matzke-etal-2019")
+final_tables <- c("imps2025_hf", "alcoholstroop_jones2024", "matzke-etal-2019",
+                   "enkavi_2019_stroop", "enkavi_2019_simon", "enkavi_2019_ant_flanker")
 message("\nFinal candidate tables: ", paste(final_tables, collapse = ", "))
+
+# ------------------------------------------------------------------------------
+# The enkavi_2019_* tables aren't yet indexed in irw_metadata() (so the
+# keyword screen above can't find them), but irw_fetch() resolves them
+# directly by table name like any other IRW table -- fetched here as a
+# manual addition to the candidate set.
+# ------------------------------------------------------------------------------
+
+enkavi_step0_rows <- list()
+for (tbl in c("enkavi_2019_stroop", "enkavi_2019_simon", "enkavi_2019_ant_flanker")) {
+  message("Fetching: ", tbl)
+  df <- irw_fetch_retry(tbl)
+  raw_data[[tbl]] <- df
+
+  if (is.null(df)) {
+    enkavi_step0_rows[[tbl]] <- tibble(table = tbl, n_responses = NA, n_participants = NA,
+                                        has_rt = NA, condition_candidates = "fetch failed",
+                                        has_wave = NA)
+    next
+  }
+
+  cond_cand <- detect_condition_candidates(df)
+  cond_str <- if (length(cond_cand) == 0) "none found" else
+    paste(sprintf("%s={%s}", names(cond_cand), map_chr(cond_cand, paste, collapse = ",")),
+          collapse = "; ")
+
+  enkavi_step0_rows[[tbl]] <- tibble(
+    table = tbl,
+    n_responses = nrow(df),
+    n_participants = length(unique(df$id)),
+    has_rt = "rt" %in% names(df),
+    condition_candidates = cond_str,
+    has_wave = "wave" %in% names(df)
+  )
+}
+step0_summary <- bind_rows(step0_summary, bind_rows(enkavi_step0_rows))
 
 # ==============================================================================
 # Generic split-half / test-retest reliability engine
@@ -336,6 +414,28 @@ prep_matzke <- function(df) {
     )
 }
 
+# Enkavi et al. (2019) tasks already carry a two-level itemcov_condition
+# column coded exactly as congruent/incongruent, and rt/resp in the standard
+# IRW shape -- no condition recoding needed, unlike the datasets above.
+prep_enkavi_binary <- function(df) {
+  df %>%
+    transmute(
+      id = as.character(id),
+      condition = factor(itemcov_condition, levels = c("congruent", "incongruent")),
+      rt = as.numeric(rt), correct = as.integer(resp), rt_eligible = as.integer(resp),
+      wave = as.character(wave)
+    )
+}
+
+# ANT Flanker adds a third "neutral" itemcov_condition level (no flankers);
+# those trials are dropped here to keep the same binary contrast used
+# elsewhere in this vignette.
+prep_enkavi_flanker <- function(df) {
+  df %>%
+    filter(itemcov_condition %in% c("congruent", "incongruent")) %>%
+    prep_enkavi_binary()
+}
+
 # ==============================================================================
 # Dataset specs
 # ==============================================================================
@@ -345,6 +445,9 @@ hf_wave_order <- c(
   "2022-2023 Fall" = 3, "2022-2023 Spring" = 4,
   "PLUS Fall" = 10, "PLUS Spring" = 11
 )
+
+enkavi_wave_order <- c("1" = 1, "2" = 2)
+enkavi_wave_pairs  <- list(c("1", "2"))
 
 specs <- list(
   list(key = "imps2025_hf_blocked", table = "imps2025_hf", task_type = "congruency",
@@ -360,7 +463,16 @@ specs <- list(
        notes = "Addiction/attentional-bias Stroop: neutral word (congruent analogue) vs. alcohol-related word (incongruent analogue). Not a classic color-word conflict task, but structurally identical: per-trial rt + accuracy in two conditions. No wave variable -- split-half only."),
   list(key = "matzke_stopsignal_2019", table = "matzke-etal-2019", task_type = "response-inhibition (structural analogue only)",
        prep_fn = prep_matzke, wave_order = NULL, wave_pairs = NULL,
-       notes = "Stop-signal task: go trials (congruent analogue) vs. stop-signal trials (incongruent analogue). RT for the stop condition uses failed-stop-trial RT (a response occurred), NOT Hedge et al.'s SSRT race-model estimate -- interpret D_rt and D_acc here as a naive structural analogue only, not a validated inhibition measure. No wave variable -- split-half only.")
+       notes = "Stop-signal task: go trials (congruent analogue) vs. stop-signal trials (incongruent analogue). RT for the stop condition uses failed-stop-trial RT (a response occurred), NOT Hedge et al.'s SSRT race-model estimate -- interpret D_rt and D_acc here as a naive structural analogue only, not a validated inhibition measure. No wave variable -- split-half only."),
+  list(key = "enkavi_stroop", table = "enkavi_2019_stroop", task_type = "congruency",
+       prep_fn = prep_enkavi_binary, wave_order = enkavi_wave_order, wave_pairs = enkavi_wave_pairs,
+       notes = "Enkavi, Eisenberg et al. (2019) Self-Regulation Ontology battery: classic color-word Stroop, congruent vs. incongruent, N=523. Genuine 2-wave retest design (general-population adults; a much shorter interval than the imps2025_hf child/development gap, though the exact interval isn't recoverable from the table itself)."),
+  list(key = "enkavi_simon", table = "enkavi_2019_simon", task_type = "congruency",
+       prep_fn = prep_enkavi_binary, wave_order = enkavi_wave_order, wave_pairs = enkavi_wave_pairs,
+       notes = "Enkavi, Eisenberg et al. (2019) Self-Regulation Ontology battery: Simon task (spatial stimulus-response compatibility), congruent vs. incongruent, N=523, 2-wave retest."),
+  list(key = "enkavi_ant_flanker", table = "enkavi_2019_ant_flanker", task_type = "congruency",
+       prep_fn = prep_enkavi_flanker, wave_order = enkavi_wave_order, wave_pairs = enkavi_wave_pairs,
+       notes = "Enkavi, Eisenberg et al. (2019) Self-Regulation Ontology battery: Attention Network Test flanker component, congruent vs. incongruent (neutral-flanker trials excluded to match the binary contrast used elsewhere in this vignette), N=523, 2-wave retest.")
 )
 
 # ==============================================================================
@@ -374,7 +486,11 @@ result_rows <- list()
 for (spec in specs) {
   message("\n--- ", spec$key, " ---")
   df <- raw_data[[spec$table]]
-  if (is.null(df)) df <- irw_fetch(spec$table)
+  if (is.null(df)) df <- irw_fetch_retry(spec$table)
+  if (is.null(df)) {
+    message("  SKIPPED: could not fetch ", spec$table)
+    next
+  }
 
   trial_dt <- as.data.table(spec$prep_fn(df))
 
@@ -527,14 +643,35 @@ message("\nSaved to ", out_dir, "/hf_reliability_results.rds")
 
 # ==============================================================================
 # Bibtex citations
+#
+# enkavi_2019_* tables aren't yet indexed in irw_metadata(), so
+# irw_save_bibtex() can't look them up -- excluded here to avoid a single
+# unknown-table lookup failing bibtex generation for every table. Their
+# citation (Enkavi et al., 2019) is added by hand to references.bib instead.
 # ==============================================================================
 
+bibtex_tables <- setdiff(unique(map_chr(specs, "table")),
+                          c("enkavi_2019_stroop", "enkavi_2019_simon", "enkavi_2019_ant_flanker"))
+
 generated <- tryCatch(
-  irw_save_bibtex(unique(map_chr(specs, "table")),
-                   output_file = file.path(out_dir, "irw_references.bib")),
+  irw_save_bibtex(bibtex_tables, output_file = file.path(out_dir, "irw_references.bib")),
   error = function(e) { message("irw_save_bibtex failed: ", conditionMessage(e)); character(0) }
 )
+
+# Only append entries whose citation key isn't already in bib_file, so
+# re-running this script doesn't duplicate citations on every run.
 if (length(generated) > 0) {
-  cat(paste0(generated, "\n"), file = bib_file, append = TRUE, sep = "\n")
+  entry_key <- function(entry) sub("^@\\w+\\{([^,]+),.*$", "\\1", trimws(entry))
+  existing_keys <- if (file.exists(bib_file)) {
+    bib_lines <- readLines(bib_file)
+    key_lines <- grep("^@\\w+\\{", bib_lines, value = TRUE)
+    vapply(key_lines, entry_key, character(1), USE.NAMES = FALSE)
+  } else character(0)
+  new_entries <- generated[!vapply(generated, entry_key, character(1)) %in% existing_keys]
+  if (length(new_entries) > 0) {
+    cat(paste0(new_entries, "\n"), file = bib_file, append = TRUE, sep = "\n")
+    message(length(new_entries), " new citation(s) appended to ", bib_file)
+  } else {
+    message("No new citations to append to ", bib_file, " (all already present).")
+  }
 }
-message("IRW dataset citations appended to ", bib_file)

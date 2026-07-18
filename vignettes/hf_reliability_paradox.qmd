@@ -6,7 +6,9 @@ description: |
   individual-differences reliability, because the within-subject difference
   score that measures the effect cancels out most of the between-person
   variance. We test whether the same collapse appears in IRW cognitive-control
-  data: the Hearts & Flowers task, an alcohol Stroop, and a stop-signal task.
+  data: the Hearts & Flowers task, an alcohol Stroop, a stop-signal task, and
+  three tasks (Stroop, Simon, ANT flanker) from the Enkavi et al. (2019)
+  Self-Regulation Ontology battery.
 date: today
 bibliography: hf_reliability/references.bib
 format:
@@ -67,7 +69,10 @@ dataset_labels <- c(
   imps2025_hf_blocked    = "Hearts & Flowers (blocked)",
   imps2025_hf_mixed      = "Hearts & Flowers (mixed-trial)",
   alcoholstroop_jones2024 = "Alcohol Stroop",
-  matzke_stopsignal_2019 = "Stop-signal (OSARI)"
+  matzke_stopsignal_2019 = "Stop-signal (OSARI)",
+  enkavi_stroop           = "Stroop (Enkavi et al. 2019)",
+  enkavi_simon            = "Simon (Enkavi et al. 2019)",
+  enkavi_ant_flanker      = "ANT Flanker (Enkavi et al. 2019)"
 )
 
 measure_labels <- c(rt = "Reaction time", acc = "Accuracy")
@@ -212,10 +217,18 @@ side as the stimulus for hearts (congruent, low conflict) and the *opposite*
 side for flowers (incongruent, high conflict). This is a spatial
 stimulus-response compatibility manipulation in the same family as Simon and
 Flanker effects, which makes it a natural candidate for replicating the
-reliability paradox in IRW data. We also check two independent tasks with
-the same congruent/incongruent structure: an alcohol-related
-attentional-bias Stroop [@alcoholstroop_jones2024], and a stop-signal
-(go/no-go family) task [@matzke-etal-2019].
+reliability paradox in IRW data. We also check independent tasks with the
+same congruent/incongruent structure: an alcohol-related attentional-bias
+Stroop [@alcoholstroop_jones2024], a stop-signal (go/no-go family) task
+[@matzke-etal-2019], and three tasks (a classic color-word Stroop, a Simon
+task, and the flanker component of the Attention Network Test) from
+@enkavi2019's large-scale Self-Regulation Ontology test-retest battery.
+Enkavi et al.'s own analysis is directly relevant here: across 372
+behavioral-task dependent variables, they found contrast (difference-score)
+DVs had a median reliability roughly 0.29 points lower than the raw,
+noncontrast DVs they were built from (median ICC 0.17 vs. 0.50) — the same
+qualitative pattern as @hedge2018reliability, in a much broader battery, and
+the Stroop effect is one of the examples they use to illustrate it.
 
 ## Methods
 
@@ -236,6 +249,7 @@ step0 %>%
     decision = case_when(
       table == "imps2025_hf" ~ "Kept (Hearts & Flowers, 2475 respondents, has wave variable)",
       table == "alcoholstroop_jones2024" ~ "Kept (156 respondents, single session)",
+      grepl("^enkavi_2019_", table) ~ "Kept (Enkavi et al. 2019 battery, 523 respondents, has wave variable)",
       grepl("safety_conflicts", table) ~ "Excluded: keyword false positive on \"conflicts\" (public-safety survey, no rt/condition structure)",
       TRUE ~ "Excluded"
     )
@@ -256,7 +270,22 @@ respondents and was kept; `matzke-experiment1-2022`,
 7, 9, and 9 respondents respectively and were dropped for falling below our
 50-respondent floor.
 
-The final set has **four dataset variants** across three IRW tables:
+A third round located `enkavi_2019_stroop`, `enkavi_2019_simon`, and
+`enkavi_2019_ant_flanker` — three tasks from @enkavi2019's Self-Regulation
+Ontology battery — by direct inspection of IRW's table list rather than the
+keyword screen above: at the time of writing these tables aren't yet indexed
+in IRW's metadata catalog, so the keyword screen (which scans that catalog)
+can't see them, even though they're fetchable like any other IRW table and
+their table names alone would have matched the `stroop`/`simon`/`flanker`
+keywords. Five further tasks in the same battery
+(`enkavi_2019_navon`, `enkavi_2019_stopsignal`, `enkavi_2019_gonogo`,
+`enkavi_2019_taskswitch`, `enkavi_2019_dpx_axcpt`) were located at the same
+time but excluded from this round: they're related but not binary
+congruent/incongruent contrasts (go/no-go, switch cost, AX-CPT probe types)
+or need a bespoke 3-condition contrast (Navon), and are left for a future
+extension of this analysis.
+
+The final set has **seven dataset variants** across six IRW tables:
 
 - **Hearts & Flowers, blocked** (`imps2025_hf`): the `hearts test` block
   (congruent) vs. the `flowers test` block (incongruent) — a separate-block
@@ -273,6 +302,17 @@ The final set has **four dataset variants** across three IRW tables:
   but with an identical per-trial rt/accuracy structure.
 - **Stop-signal / OSARI** (`matzke-etal-2019`): go trials (congruent
   analogue) vs. stop-signal trials (incongruent analogue).
+- **Stroop** (`enkavi_2019_stroop`): classic color-word Stroop, congruent
+  vs. incongruent, from @enkavi2019's Self-Regulation Ontology battery.
+  N=523, an online (Amazon Mechanical Turk) adult sample (52% female, age
+  21-60, mean 34.1).
+- **Simon** (`enkavi_2019_simon`): spatial stimulus-response compatibility
+  task, congruent vs. incongruent, same battery and sample as above.
+- **ANT Flanker** (`enkavi_2019_ant_flanker`): the flanker component of the
+  Attention Network Test, congruent vs. incongruent (a third "neutral"
+  condition, no flankers, is excluded to keep the same two-condition
+  contrast used throughout this vignette), same battery and sample as
+  above.
 
 ### Preprocessing
 
@@ -311,17 +351,32 @@ split-half only) restrict to each person's earliest available session, so
 that pooling multiple sessions doesn't artificially inflate reliability for
 respondents with repeat data.
 
-**Test-retest.** Hearts & Flowers has a genuine wave variable, so for that
-task alone we additionally computed real test-retest correlations across two
-sessions (no splitting; raw condition means and $D$ from each full session,
-correlated across sessions). Two wave pairs were available: `PLUS Fall` →
-`PLUS Spring` and `2021-2022 Fall` → `2021-2022 Spring` (different cohorts).
-**This is an important deviation from Hedge et al.**: their test-retest
-interval is ~3 weeks in stable young adults, ours is roughly a school
-semester (~6 months) in developing children aged ~5-11 — real developmental
-change over that interval, not just measurement noise, will suppress our
-test-retest correlations relative to theirs. The alcohol Stroop and
-stop-signal datasets have no wave variable and support split-half only.
+**Test-retest.** Two dataset groups have a genuine wave variable and
+therefore support real test-retest correlations across sessions (no
+splitting; raw condition means and $D$ from each full session, correlated
+across sessions), rather than just split-half:
+
+- **Hearts & Flowers**: two wave pairs were available, `PLUS Fall` →
+  `PLUS Spring` and `2021-2022 Fall` → `2021-2022 Spring` (different
+  cohorts). **This is an important deviation from Hedge et al.**: their
+  test-retest interval is ~3 weeks in stable young adults, ours is roughly a
+  school semester (~6 months) in developing children aged ~5-11 — real
+  developmental change over that interval, not just measurement noise, will
+  suppress our test-retest correlations relative to theirs.
+- **The three Enkavi et al. (2019) tasks** (Stroop, Simon, ANT Flanker):
+  `wave` is coded 1/2 for the two sessions. @enkavi2019 report a mean
+  interval of 111 days between waves (median 115, range 60-228) in their
+  Amazon Mechanical Turk adult sample — shorter than Hearts & Flowers'
+  ~6-month gap and in stable adults rather than developing children, but
+  still much longer than Hedge et al.'s ~3 weeks, and with substantial
+  participant-to-participant variability in the exact interval (unlike the
+  fixed-cohort H&F waves). Of the 523 respondents used for split-half,
+  only respondents retained by Enkavi et al.'s own retest invitation and
+  who cleared our trial floor at both sessions contribute to test-retest
+  estimates (~150 respondents; see @fig-retest).
+
+The alcohol Stroop and stop-signal datasets have no wave variable and
+support split-half only.
 
 ## Results
 
@@ -329,8 +384,8 @@ stop-signal datasets have no wave variable and support split-half only.
 
 ```{r}
 #| label: fig-splithalf
-#| fig-cap: "Split-half reliability (Spearman-Brown corrected; mean ± SD across splits) for each condition and the difference score, trial floor = 5. Difference-score reliability collapses relative to the conditions it's built from in three of the four dataset variants."
-#| fig-height: 5
+#| fig-cap: "Split-half reliability (Spearman-Brown corrected; mean ± SD across splits) for each condition and the difference score, trial floor = 5. Difference-score reliability drops relative to the conditions it's built from in every dataset variant except the stop-signal exception, though the size of the drop varies widely."
+#| fig-height: 7
 
 sh_plot_df <- results %>%
   filter(trial_floor == 5, !grepl("test-retest", reliability_type)) %>%
@@ -378,14 +433,34 @@ results %>%
 
 The pattern in @fig-splithalf reproduces the core finding of
 @hedge2018reliability directly: congruent and incongruent RT reliabilities
-sit at .78-.99 across all four dataset variants, but the RT difference-score
-reliability drops to near zero for the mixed-trial Hearts & Flowers
-(`r sprintf("%.2f", results$reliability_est[results$dataset=="imps2025_hf_mixed" & results$measure=="rt" & results$reliability_type=="difference" & results$trial_floor==5])`),
-the alcohol Stroop
-(`r sprintf("%.2f", results$reliability_est[results$dataset=="alcoholstroop_jones2024" & results$measure=="rt" & results$reliability_type=="difference" & results$trial_floor==5])`),
-and drops substantially — though not to zero — for the blocked Hearts &
-Flowers design
-(`r sprintf("%.2f", results$reliability_est[results$dataset=="imps2025_hf_blocked" & results$measure=="rt" & results$reliability_type=="difference" & results$trial_floor==5])`).
+sit at .78-.99 across all seven dataset variants, but the RT difference-score
+reliability drops in every one of them except the stop-signal exception. The
+size of that drop, however, varies considerably. At one extreme, it collapses
+to near zero for the mixed-trial Hearts & Flowers
+(`r sprintf("%.2f", results$reliability_est[results$dataset=="imps2025_hf_mixed" & results$measure=="rt" & results$reliability_type=="difference" & results$trial_floor==5])`)
+and the alcohol Stroop
+(`r sprintf("%.2f", results$reliability_est[results$dataset=="alcoholstroop_jones2024" & results$measure=="rt" & results$reliability_type=="difference" & results$trial_floor==5])`).
+The blocked Hearts & Flowers design
+(`r sprintf("%.2f", results$reliability_est[results$dataset=="imps2025_hf_blocked" & results$measure=="rt" & results$reliability_type=="difference" & results$trial_floor==5])`)
+and the Enkavi et al. (2019) Simon task
+(`r sprintf("%.2f", results$reliability_est[results$dataset=="enkavi_simon" & results$measure=="rt" & results$reliability_type=="difference" & results$trial_floor==5])`)
+retain a moderate amount. And the Enkavi Stroop
+(`r sprintf("%.2f", results$reliability_est[results$dataset=="enkavi_stroop" & results$measure=="rt" & results$reliability_type=="difference" & results$trial_floor==5])`)
+and ANT Flanker
+(`r sprintf("%.2f", results$reliability_est[results$dataset=="enkavi_ant_flanker" & results$measure=="rt" & results$reliability_type=="difference" & results$trial_floor==5])`)
+retain a sizeable fraction of their component reliability, despite still
+being well below their congruent/incongruent components (~.93-.96). This is
+a useful complication of the "collapses to near zero" framing from the
+Motivation section: the direction of the effect (component >> difference) is
+essentially universal across these seven variants, but its magnitude is not
+— it depends on exactly how strongly the two conditions covary across
+people in a given task, sample, and design, which is itself variable. The
+Enkavi tasks — a much larger (N=523), adult, single-country online sample
+than the other datasets here — retaining more difference-score reliability
+than mixed-trial H&F or the alcohol Stroop is consistent with sample
+composition (a wider age/ability range inflates between-person variance
+relative to trial-level noise) contributing to that variability, though we
+can't isolate that from task differences with only one dataset per task.
 
 The blocked-vs-mixed-trial contrast within the same H&F task is informative:
 Hedge et al.'s tasks intermix conditions within a block, and it's exactly
@@ -477,19 +552,29 @@ ggplot(vdf, aes(x = component, y = value, fill = role)) +
   theme(plot.title = element_text(size = 12, face = "bold"))
 ```
 
-### True test-retest reliability (Hearts & Flowers only)
+### True test-retest reliability
+
+Five of the seven dataset variants have a genuine wave variable and
+therefore support true test-retest correlations, not just split-half: the
+two Hearts & Flowers variants (a ~6-month, within-school-year gap in
+developing children) and the three Enkavi et al. (2019) tasks (a mean
+111-day gap in adults; see Preprocessing).
 
 ```{r}
 #| label: fig-retest
-#| fig-cap: "Split-half (single session) vs. true test-retest reliability for Hearts & Flowers RT. Test-retest spans roughly a school semester in developing children, not the ~3-week interval used by Hedge et al. in stable adults, so lower absolute values are expected."
-#| fig-height: 4.5
+#| fig-cap: "Split-half (single session) vs. true test-retest reliability for RT, across all five dataset variants with a wave variable. Hearts & Flowers test-retest spans roughly a school semester in developing children; the Enkavi tasks span a mean 111-day gap in adults. Neither matches Hedge et al.'s ~3-week adult interval, so lower absolute values are expected in both."
+#| fig-height: 7
+#| fig-width: 9.5
 
 retest_df <- results %>%
-  filter(dataset %in% c("imps2025_hf_blocked", "imps2025_hf_mixed"), measure == "rt") %>%
+  filter(dataset %in% c("imps2025_hf_blocked", "imps2025_hf_mixed",
+                         "enkavi_stroop", "enkavi_simon", "enkavi_ant_flanker"),
+         measure == "rt") %>%
   mutate(
     design = case_when(
-      grepl("PLUS Fall -> PLUS Spring", reliability_type) ~ "Test-retest (PLUS cohort)",
-      grepl("2021-2022 Fall -> 2021-2022 Spring", reliability_type) ~ "Test-retest (K cohort)",
+      grepl("PLUS Fall -> PLUS Spring", reliability_type) ~ "Test-retest (H&F, PLUS cohort)",
+      grepl("2021-2022 Fall -> 2021-2022 Spring", reliability_type) ~ "Test-retest (H&F, K cohort)",
+      grepl("test-retest: 1 -> 2", reliability_type) ~ "Test-retest (Enkavi et al. 2019, mean 111d)",
       trial_floor == 5 ~ "Split-half (single session)",
       TRUE ~ NA_character_
     ),
@@ -506,34 +591,48 @@ retest_df <- results %>%
 ggplot(retest_df, aes(x = reliability_est, y = condition, colour = design)) +
   geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
   geom_point(size = 2.8, position = position_dodge(width = 0.5)) +
-  facet_wrap(~dataset_lab) +
+  facet_wrap(~dataset_lab, ncol = 2) +
   scale_colour_manual(values = c("Split-half (single session)" = irw_blue,
-                                  "Test-retest (PLUS cohort)" = irw_red,
-                                  "Test-retest (K cohort)" = "#f4a582"), name = NULL) +
+                                  "Test-retest (H&F, PLUS cohort)" = irw_red,
+                                  "Test-retest (H&F, K cohort)" = "#f4a582",
+                                  "Test-retest (Enkavi et al. 2019, mean 111d)" = "#1a9850"),
+                       name = NULL, guide = guide_legend(nrow = 2)) +
   labs(x = "Reliability", y = NULL,
-       caption = "PLUS cohort: Fall -> Spring, one school year. K cohort: 2021-22 Fall -> Spring.") +
+       caption = "H&F PLUS cohort: Fall -> Spring, one school year. H&F K cohort: 2021-22 Fall -> Spring.\nEnkavi et al. (2019): mean 111-day gap, range 60-228 days, Amazon Mechanical Turk adults.") +
   theme(legend.position = "bottom")
 ```
 
 Test-retest reliabilities are lower than split-half across the board, as
-expected from the much longer, developmentally active retest interval. But
-the *relative* pattern survives: the difference score's test-retest
-reliability is consistently the lowest of the three, both in the blocked and
-mixed-trial variants, indicating the paradox isn't an artifact of the
-within-session split-half method — it also shows up when the same people are
-tested again months later.
+expected from the much longer retest interval in both the H&F and Enkavi
+designs relative to Hedge et al.'s ~3 weeks. But the *relative* pattern
+survives everywhere: the difference score's test-retest reliability is
+consistently the lowest of the three conditions, in all five dataset
+variants, indicating the paradox isn't an artifact of the within-session
+split-half method — it also shows up when the same people are tested again
+weeks or months later, in both a developmental (H&F) and a stable-adult
+(Enkavi) sample. As with the split-half results, the *size* of the
+test-retest collapse varies: the Enkavi Stroop difference score
+(`r sprintf("%.2f", results$reliability_est[results$dataset=="enkavi_stroop" & results$measure=="rt" & results$reliability_type=="difference (test-retest: 1 -> 2)"])`)
+retains noticeably more reliability across a true ~111-day retest than the
+Enkavi Simon
+(`r sprintf("%.2f", results$reliability_est[results$dataset=="enkavi_simon" & results$measure=="rt" & results$reliability_type=="difference (test-retest: 1 -> 2)"])`)
+or ANT Flanker
+(`r sprintf("%.2f", results$reliability_est[results$dataset=="enkavi_ant_flanker" & results$measure=="rt" & results$reliability_type=="difference (test-retest: 1 -> 2)"])`)
+difference scores do, mirroring the split-half ordering for the same three
+tasks.
 
 ### Comparison to Hedge, Powell & Sumner (2018)
 
 The table below places our estimates next to the point estimates reported in
 Hedge et al.'s Table 1 (average of their Studies 1 and 2; two-way
-random-effects ICC, absolute agreement, ~3-week test-retest in adults). Two
-IRW rows are shown per comparable task: the split-half (single-session)
+random-effects ICC, absolute agreement, ~3-week test-retest in adults). IRW
+rows are shown per comparable task: the split-half (single-session)
 estimate, which is the most directly comparable design for the alcohol
-Stroop and stop-signal datasets since they have no wave variable, and the
-Hearts & Flowers test-retest estimate, which is the more conceptually
-faithful comparison to Hedge et al.'s design despite the much longer
-interval.
+Stroop and stop-signal datasets since they have no wave variable, plus a
+test-retest estimate for every dataset that has one (Hearts & Flowers and
+the three Enkavi et al. 2019 tasks) — of the two, the Enkavi test-retest
+rows are the closer match to Hedge et al.'s own true-test-retest,
+stable-adult design.
 
 ```{r}
 #| label: tbl-hedge-comparison
@@ -544,10 +643,16 @@ irw_split <- results %>%
   transmute(pair_task = dataset_labels[dataset], source = "IRW, split-half",
             condition = reliability_type, reliability = reliability_est)
 
-irw_retest <- results %>%
+irw_retest_hf <- results %>%
   filter(measure == "rt", grepl("test-retest: PLUS Fall", reliability_type)) %>%
   mutate(condition = sub(" \\(test-retest.*\\)", "", reliability_type)) %>%
-  transmute(pair_task = dataset_labels[dataset], source = "IRW, test-retest (Fall->Spring)",
+  transmute(pair_task = dataset_labels[dataset], source = "IRW, test-retest (H&F, Fall->Spring)",
+            condition, reliability = reliability_est)
+
+irw_retest_enkavi <- results %>%
+  filter(measure == "rt", grepl("test-retest: 1 -> 2", reliability_type)) %>%
+  mutate(condition = sub(" \\(test-retest.*\\)", "", reliability_type)) %>%
+  transmute(pair_task = dataset_labels[dataset], source = "IRW, test-retest (Enkavi, mean 111d)",
             condition, reliability = reliability_est)
 
 hedge_tbl <- hedge_ref %>%
@@ -556,14 +661,16 @@ hedge_tbl <- hedge_ref %>%
             condition = condition, reliability = icc_mean)
 
 pairing <- tribble(
-  ~pair_task_irw,                    ~pair_task_hedge,
-  "Hearts & Flowers (mixed-trial)",  "Flanker",
-  "Hearts & Flowers (blocked)",      "Flanker",
-  "Alcohol Stroop",                  "Stroop",
-  "Stop-signal (OSARI)",             "Stop-signal"
+  ~pair_task_irw,                     ~pair_task_hedge,
+  "Hearts & Flowers (mixed-trial)",   "Flanker",
+  "Hearts & Flowers (blocked)",       "Flanker",
+  "Alcohol Stroop",                   "Stroop",
+  "Stop-signal (OSARI)",              "Stop-signal",
+  "Stroop (Enkavi et al. 2019)",      "Stroop",
+  "ANT Flanker (Enkavi et al. 2019)", "Flanker"
 )
 
-comparison <- bind_rows(irw_split, irw_retest) %>%
+comparison <- bind_rows(irw_split, irw_retest_hf, irw_retest_enkavi) %>%
   inner_join(pairing, by = c("pair_task" = "pair_task_irw")) %>%
   transmute(`Lab task analogue` = pair_task_hedge, `IRW dataset` = pair_task,
             Source = source, Condition = tools::toTitleCase(condition),
@@ -579,13 +686,25 @@ comparison <- bind_rows(irw_split, irw_retest) %>%
 knitr::kable(comparison)
 ```
 
-Two things stand out. First, the *direction* of the effect (condition
+A few things stand out. First, the *direction* of the effect (condition
 reliability >> difference-score reliability) matches Hedge et al. in every
 task pair except the stop-signal analogue, for the reasons discussed above.
 Second, our absolute IRW split-half numbers for individual conditions run
 higher than Hedge et al.'s test-retest ICCs — expected, since split-half
 reliability has no opportunity for between-session instability to erode it,
-while ICC test-retest does.
+while ICC test-retest does. Third, the Enkavi test-retest rows are the
+closest design match to Hedge et al.'s own true-test-retest methodology
+among our datasets, but don't line up on magnitude in a consistent
+direction: the Enkavi Flanker test-retest difference-score reliability
+(.34) is closer to Hedge et al.'s Flanker ICC (.49) than Enkavi's own
+split-half estimate (.69) is, while for Stroop it's the reverse — Enkavi's
+split-half estimate (.65) is closer to Hedge et al.'s Stroop ICC (.63) than
+Enkavi's own test-retest estimate (.44) is. We read this as a caution
+against over-interpreting small magnitude differences across these
+comparisons: different reliability estimators (Pearson split-half here vs.
+Hedge et al.'s two-way random-effects ICC), samples, and retest intervals
+all contribute noise to the exact numbers, even when the qualitative
+pattern (component >> difference) is consistent throughout.
 
 ### Trial-count sensitivity
 
@@ -605,19 +724,39 @@ results %>%
 Raising the per-condition trial floor from 5 to 10 trims the sample (most
 sharply for the mixed-trial H&F variant, which has fewer trials per
 condition to begin with) but does not change the qualitative picture: the
-difference score remains far less reliable than either condition alone.
+difference score remains far less reliable than either condition alone. The
+three Enkavi tasks are unaffected by this trim (523 respondents at both
+floors) — they simply have more trials per condition to begin with than
+H&F does.
 
 ## Discussion
 
 The reliability paradox replicates in IRW cognitive-control data. Across
-three independent tasks (Hearts & Flowers, alcohol Stroop, and — with an
-important caveat — a stop-signal task) spanning both split-half and true
-multi-month test-retest designs, individual congruent and incongruent
-conditions are consistently far more reliable than the within-subject
-difference score built from them. The mechanism is exactly the one
-@hedge2018reliability describe: the two conditions are highly correlated
-across people, so most of their between-person variance cancels in the
-subtraction (@eq-vardiff), while trial-level noise does not.
+six independent tasks (Hearts & Flowers, alcohol Stroop, a stop-signal task,
+and the Enkavi et al. 2019 Stroop, Simon, and ANT Flanker tasks) spanning
+split-half and true test-retest designs in both a developmental and a
+stable-adult sample, individual congruent and incongruent conditions are
+consistently far more reliable than the within-subject difference score
+built from them. The mechanism is exactly the one @hedge2018reliability
+describe: the two conditions are highly correlated across people, so most
+of their between-person variance cancels in the subtraction (@eq-vardiff),
+while trial-level noise does not. @enkavi2019's own analysis of a much
+broader task battery reaches the same conclusion by a different route,
+which is reassuring convergent evidence that this isn't an artifact of our
+specific pipeline.
+
+**The size of the collapse varies far more than its direction.** Every
+congruency-style dataset here (i.e., excluding the stop-signal exception)
+shows the qualitative pattern, but RT difference-score reliability spans
+roughly .04 to .69 depending on the task, sample, and design — not a fixed
+"paradox constant." The Enkavi tasks, run in a larger, adult, Amazon
+Mechanical Turk sample, generally retained more difference-score
+reliability than the mixed-trial H&F or alcohol Stroop datasets did, though
+we can't cleanly separate sample effects from task effects with only one
+dataset per task. Researchers relying on a congruency-style contrast score
+for individual-differences work should treat this as a genuinely
+task-and-sample-specific empirical question, not something to be predicted
+from task family alone.
 
 **This is a property of difference-score designs, not a general statement
 about IRW data.** Most IRW tables are fixed-item-bank IRT designs, where
@@ -627,17 +766,21 @@ apply to them, and this vignette should not be read as evidence that IRW
 data are broadly unreliable for individual-differences work. It applies
 specifically to trial-level tasks that measure an effect as a within-subject
 contrast between two positively-correlated conditions, which in the current
-IRW warehouse means Hearts & Flowers, the alcohol Stroop, and the
-matzke-etal-2019 stop-signal task (plus, presumably, any future task with
-the same congruent/incongruent or go/no-go structure).
+IRW warehouse means Hearts & Flowers, the alcohol Stroop, the
+matzke-etal-2019 stop-signal task, and the enkavi_2019_stroop,
+enkavi_2019_simon, and enkavi_2019_ant_flanker tasks (plus, presumably, any
+future task with the same congruent/incongruent or go/no-go structure —
+including the five other Enkavi et al. 2019 tasks noted in Methods as
+candidates for a future extension).
 
 **The blocked-vs-mixed-trial finding is worth follow-up.** That H&F's
 blocked design retains more difference-score reliability than its
 trial-intermixed mixed block is consistent with the variance-shrinkage
-mechanism, but we only have one task to check it in. If it holds up in other
-tasks, it would suggest a practical mitigation for researchers who need an
-individual-differences difference score badly enough to trade away some
-ecological validity: block, don't intermix.
+mechanism, but we only have one task to check it in — none of the Enkavi
+tasks offer a blocked/mixed contrast of the same kind. If it holds up in
+other tasks, it would suggest a practical mitigation for researchers who
+need an individual-differences difference score badly enough to trade away
+some ecological validity: block, don't intermix.
 
 **The stop-signal analogue needs a real SSRT, not this vignette's naive
 substitute.** We used failed-stop RT in place of Hedge et al.'s race-model
