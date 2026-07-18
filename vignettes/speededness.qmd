@@ -1,0 +1,290 @@
+---
+title: "Speeded vs. Power Tests in the IRW"
+description: |
+  Which IRW instruments show evidence of a fixed time limit (speeded tests)
+  versus untimed administration (power tests)? We screen response-time-carrying
+  IRW tables for the classic speededness signature — a rising rate of
+  unanswered items toward the end of the test — and ask what it implies for
+  how each table's item responses should be modeled.
+date: today
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(ggplot2)
+
+# Load precomputed results (produced by speededness_compute.R)
+.cache              <- readRDS("speededness_data/speededness_results.rds")
+table_summary       <- .cache$table_summary
+item_level_results  <- .cache$item_level_results
+candidate_tables    <- .cache$candidate_tables
+```
+
+## Research question
+
+Classical test theory draws a sharp distinction between **power tests**, where
+every respondent has enough time to attempt every item, and **speeded tests**,
+where a fixed time limit means slower respondents run out of time before
+reaching the end. The distinction matters beyond test administration: speeded
+data violate the local independence assumption that most IRT models rely on.
+When items are left blank because time ran out — not because the respondent
+didn't know the answer — item difficulty and discrimination estimates near
+the end of the test become entangled with time pressure rather than reflecting
+the construct alone.
+
+Most IRW tables don't come labeled "speeded" or "power." But the two designs
+leave different fingerprints in the data: speeded tests show a rising rate of
+missing (not-reached) responses as item position increases, while power tests
+show a flat, position-independent missingness rate. We use this signature to
+screen the response-time-carrying tables in the IRW and classify each one.
+
+---
+
+## Step 1: Select candidate tables
+
+We use `irw_filter()` to find tables that carry a response-time (`rt`)
+variable at all, with at least 10 items (fewer than that, a position trend
+isn't very informative).
+
+```{r}
+#| label: filter-datasets
+#| eval: false
+
+candidate_tables <- irw_filter(var = "rt", n_items = c(10, Inf))
+```
+
+`irw_filter()` only knows metadata-level facts — it can't tell us whether
+`rt` is recorded per-response or is really a single total-test-time value
+copied onto every row for a person, and it can't tell us whether `rt` is in
+seconds or milliseconds. Both are checked after fetching each table, and
+tables that fail either check are dropped (see Step 2).
+
+This selected `r length(candidate_tables)` candidate tables from the IRW
+(as of `r format(.cache$date_run, "%B %Y")`), of which
+`r nrow(table_summary)` had usable response and RT data and were classified.
+
+::: {.callout-note}
+To reproduce with current IRW holdings, re-run `speededness_compute.R` and
+commit the updated `speededness_data/speededness_results.rds`.
+:::
+
+---
+
+## Step 2: Per-table speededness diagnostics
+
+For each candidate table, `fit_speededness()`:
+
+1. Fetches the table and sanity-checks `rt` — drops non-positive values,
+   converts millisecond-scale `rt` to seconds, and drops tables where `rt`
+   looks like a single total-test-time value (more than 90% of respondents
+   have only one distinct `rt` value) rather than a genuine per-response
+   measurement.
+2. Derives an **item position** variable. When a `date` timestamp varies
+   meaningfully within respondents, position is each item's median rank in
+   that within-person timestamp order. Otherwise, position falls back to
+   order of first appearance in the fetched data — a real limitation, since
+   the IRW standard doesn't guarantee that row order reflects presentation
+   order. Tables using the fallback are flagged via `order_source` in the
+   results and should be read with that caveat in mind.
+3. Computes the **omission trend**: proportion of missing responses at each
+   item position, regressed on position. A positive, permutation-significant
+   slope (position labels shuffled 500 times) is the classic speededness
+   signature — unfinished items cluster at the end rather than scattering
+   randomly — and tags the table `"likely speeded"`; otherwise `"likely power"`.
+4. Computes secondary diagnostics: the **RT-by-position trend** (declining RT
+   near the end suggests rushing), the **accuracy-by-position trend**
+   (reported as a raw diagnostic — it's confounded with any difficulty
+   ordering of items and isn't used for classification), and the
+   **person-level speed-accuracy correlation** (total RT vs. total score;
+   near zero suggests power, positive suggests a speed-accuracy tradeoff
+   consistent with time pressure).
+
+```{r}
+#| label: fit-function
+#| eval: false
+
+fit_speededness <- function(table_name) {
+  df <- irw_fetch(table_name)
+  # ... rt sanity checks, item-position derivation ...
+
+  omit_by_pos <- df |>
+    group_by(position) |>
+    summarise(p_missing = mean(is.na(resp)), .groups = "drop")
+  omit_slope <- coef(lm(p_missing ~ position, data = omit_by_pos))[["position"]]
+
+  # permutation test: shuffle position labels, refit, compare slope magnitude
+  perm_slopes <- replicate(500, {
+    shuffled <- omit_by_pos
+    shuffled$position <- sample(shuffled$position)
+    coef(lm(p_missing ~ position, data = shuffled))[["position"]]
+  })
+  omit_perm_p <- mean(abs(perm_slopes) >= abs(omit_slope))
+
+  classification <- if (omit_slope > 0 && omit_perm_p < 0.05) "likely speeded" else "likely power"
+  # ... RT trend, accuracy trend, person-level speed-accuracy correlation ...
+}
+
+# Run across all candidate tables; each result written to disk as it completes
+# (see speededness_compute.R for full details, including the rt plausibility
+# checks and construct_type join)
+```
+
+---
+
+## Step 3: Results
+
+### Distribution of omission slopes
+
+```{r}
+#| label: fig-omit-slopes
+#| fig-cap: "Omission-by-position slope for each classified table, colored by classification. Positive slopes indicate a rising rate of unanswered items toward the end of the test."
+#| fig-height: 4
+
+ggplot(table_summary, aes(x = omit_slope, fill = classification)) +
+  geom_histogram(bins = 30, alpha = 0.85, position = "identity") +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey40") +
+  scale_fill_manual(values = c("likely speeded" = "#b2182b", "likely power" = "#2166ac")) +
+  labs(
+    x    = "Omission-by-position slope",
+    y    = "Number of tables",
+    fill = NULL
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+### Summary statistics
+
+```{r}
+#| label: tbl-summary
+#| tbl-cap: "Classification counts and summary statistics across screened IRW tables"
+
+table_summary |>
+  group_by(classification) |>
+  summarise(
+    Tables            = n(),
+    `Median items`    = round(median(n_items), 1),
+    `Median N`        = round(median(n_participants), 0),
+    `Median RT slope` = round(median(rt_slope, na.rm = TRUE), 4),
+    `Median speed-accuracy r` = round(median(speed_acc_cor, na.rm = TRUE), 3),
+    .groups = "drop"
+  )
+```
+
+### Example tables
+
+We highlight the most clearly speeded table (steepest positive, significant
+omission slope) and the flattest power table (omission slope closest to zero)
+among those classified.
+
+```{r}
+#| label: fig-examples
+#| fig-cap: "Proportion of missing responses by item position for a clearly speeded table (top) and a clearly power table (bottom)."
+#| fig-height: 7
+
+speeded_example <- table_summary |>
+  filter(classification == "likely speeded") |>
+  slice_max(omit_slope, n = 1) |>
+  pull(table)
+
+power_example <- table_summary |>
+  filter(classification == "likely power") |>
+  slice_min(abs(omit_slope), n = 1) |>
+  pull(table)
+
+example_data <- item_level_results |>
+  filter(table %in% c(speeded_example, power_example)) |>
+  mutate(
+    label = case_when(
+      table == speeded_example ~ paste0(table, " (likely speeded)"),
+      table == power_example   ~ paste0(table, " (likely power)")
+    )
+  )
+
+ggplot(example_data, aes(x = position, y = p_missing)) +
+  geom_point(colour = "#2166ac") +
+  geom_smooth(method = "lm", se = FALSE, colour = "#b2182b", linewidth = 0.8) +
+  facet_wrap(~label, ncol = 1, scales = "free_y") +
+  labs(x = "Item position", y = "Proportion missing") +
+  theme_minimal(base_size = 13)
+```
+
+### Classification by construct type
+
+Does speededness cluster in cognitive/ability instruments rather than
+affective or survey-type constructs? This is a plausible pattern — cognitive
+tests are more often administered under time pressure — but not an assumed
+one; we report what the classified tables show.
+
+```{r}
+#| label: tbl-crosstab
+#| tbl-cap: "Classification by construct type"
+
+table_summary |>
+  filter(!is.na(construct_type)) |>
+  count(construct_type, classification) |>
+  tidyr::pivot_wider(names_from = classification, values_from = n, values_fill = 0)
+```
+
+---
+
+## Why this matters
+
+Speeded data violate local independence: an item's missingness (or, before
+that, the accuracy of a rushed final answer) reflects the respondent's
+position in the test and remaining time, not just their standing on the
+measured construct. Fitting a standard IRT model to speeded data without
+accounting for this can bias item parameters — particularly for items near
+the end of the test, where difficulty and discrimination estimates become
+entangled with time-pressure effects rather than reflecting the construct
+alone. Tables flagged `"likely speeded"` here are candidates for models that
+explicitly separate a speed and an accuracy process, or for pre-processing
+that treats not-reached items differently from items the respondent actually
+attempted and got wrong.
+
+**Limitations.** Where no natural presentation-order variable (`date`) is
+available, item position falls back to order of first appearance in the
+fetched data, which need not reflect the order items were actually
+administered — the `order_source` column in the results flags which tables
+rely on this fallback. The accuracy-by-position trend is reported as a raw
+diagnostic only; it is confounded with any difficulty ordering of items and
+does not factor into classification. Classification itself is a screen, not
+a definitive test: the permutation-based significance threshold (p < .05)
+will misclassify some tables, especially ones near the boundary between
+speeded and power administration.
+
+---
+
+## Reproducibility
+
+Results on this page were computed on `r format(.cache$date_run, "%B %d, %Y")`
+using `r length(candidate_tables)` candidate IRW tables. To reproduce:
+
+```r
+# 1. Re-run the compute script (from project root)
+source("vignettes/speededness_compute.R")
+
+# 2. Re-render this page
+quarto::quarto_render("vignettes/speededness.qmd")
+```
+
+::: {.callout-tip}
+To cite the datasets used, run:
+
+```r
+for (tbl in table_summary$table) {
+  irw_save_bibtex(tbl, output_file = "speededness_data/irw_references.bib", append = TRUE)
+}
+```
+:::
