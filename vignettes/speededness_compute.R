@@ -260,12 +260,13 @@ message("\nDone. ", nrow(table_summary), " tables classified out of ",
         length(candidate_tables), " candidates.")
 
 # ------------------------------------------------------------------------------
-# 5. Join construct_type from IRW metadata
+# 5. Join construct_type from IRW tags
+#    (irw_metadata() does not carry construct_type; it lives in irw_tags())
 # ------------------------------------------------------------------------------
 
 table_summary <- tryCatch({
-  md <- irw_metadata()
-  table_summary |> left_join(md |> select(table, construct_type), by = "table")
+  tg <- irw_tags()
+  table_summary |> left_join(tg |> select(table, construct_type), by = "table")
 }, error = function(e) {
   message("  construct_type join failed: ", conditionMessage(e))
   table_summary |> mutate(construct_type = NA_character_)
@@ -290,13 +291,13 @@ message("Saved to ", out_dir, "/speededness_results.rds")
 
 # ------------------------------------------------------------------------------
 # 7. Generate citations
+#    irw_save_bibtex() takes the full vector of table names in one call
+#    (it has no append argument -- it writes the whole bibliography at once)
 # ------------------------------------------------------------------------------
 
-for (tbl in table_summary$table) {
-  tryCatch(
-    irw_save_bibtex(tbl, output_file = file.path(out_dir, "irw_references.bib"), append = TRUE),
-    error = function(e) message("  bibtex failed for: ", tbl)
-  )
-}
+tryCatch(
+  irw_save_bibtex(table_summary$table, output_file = file.path(out_dir, "irw_references.bib")),
+  error = function(e) message("  bibtex generation failed: ", conditionMessage(e))
+)
 
 message("Citations saved to ", out_dir, "/irw_references.bib")
