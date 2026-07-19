@@ -44,6 +44,8 @@ if (cache_ok) {
   candidate_tables <- .cache$candidate_tables
   date_run         <- .cache$date_run
   draft_from_local <- isTRUE(.cache$DRAFT_FROM_LOCAL_FIXTURES)
+  r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
+  r_n_tables_run   <- length(candidate_tables)
 } else {
   summary_df <- tibble(
     table = character(), construct_type = character(), n_items = integer(),
@@ -59,6 +61,8 @@ if (cache_ok) {
   candidate_tables <- character()
   date_run <- Sys.Date()
   draft_from_local <- FALSE
+  r_all_candidates <- 0L
+  r_n_tables_run   <- 0L
 }
 
 knitr::opts_chunk$set(eval = cache_ok)
@@ -155,23 +159,37 @@ the IRW:
 #| label: filter-datasets
 #| eval: false
 
-tables <- irw_filter(
-  item_format  = "Likert Scale/selected response",
-  n_categories = c(4, 7),
-  n_items      = c(5, Inf)
+all_candidates <- irw_filter(
+  item_format    = "Likert Scale/selected response",
+  n_categories   = c(4, 7),
+  n_items        = c(5, Inf),
+  n_participants = c(100, Inf)
 )
+
+# A manageable random sample for this pass, not the full candidate list
+tables <- sample(all_candidates, min(150, length(all_candidates)))
 ```
 
 We restrict to tables tagged as Likert-format selected-response items, with
 4 to 7 response categories (covering both odd category counts with a true
-midpoint — 5, 7 — and even counts without one — 4, 6) and **at least 5 items
-per person**. The item-count floor matters more here than in most IRW
-vignettes: ERS and MRS are computed as a *proportion of a person's own
-responses*, so with very few items per person that proportion is built from
-very few trials and is correspondingly noisy (a person who happens to answer
-2 of 3 items at the scale endpoint gets an ERS of 0.67 by chance alone). Five
-items is still a fairly low floor — treat person-level style estimates from
-tables near it as noisier than those from longer batteries.
+midpoint — 5, 7 — and even counts without one — 4, 6), **at least 5 items
+per person**, and **at least 100 respondents**. The item-count floor matters
+more here than in most IRW vignettes: ERS and MRS are computed as a
+*proportion of a person's own responses*, so with very few items per person
+that proportion is built from very few trials and is correspondingly noisy
+(a person who happens to answer 2 of 3 items at the scale endpoint gets an
+ERS of 0.67 by chance alone). Five items is still a fairly low floor — treat
+person-level style estimates from tables near it as noisier than those from
+longer batteries. The respondent floor rules out tables too small for
+table-level ERS/MRS means and CFA fits to be anything but sampling noise.
+
+This selection is deliberately not exhaustive: `r r_all_candidates` tables
+met these criteria as of `r format(date_run, "%B %Y")`, and this pass
+analyzes a **random sample of `r r_n_tables_run` of them** rather than the
+full list — some candidate tables run past 100 items and tens of thousands
+of respondents, and running all of them in one pass isn't practical.
+`fit_to_disk()`'s on-disk cache (see below) means a later pass with a larger
+or different sample adds to what's already here rather than redoing it.
 
 ### Per-table computation
 
@@ -220,9 +238,10 @@ fit_response_style <- function(table_name) {
 }
 ```
 
-This selected `r length(candidate_tables)` candidate tables from the IRW (as
-of `r format(date_run, "%B %Y")`), of which `r nrow(summary_df)` produced
-usable response-style results after the checks above.
+Of the `r r_n_tables_run` sampled tables, `r nrow(summary_df)` produced
+usable response-style results after the checks above (the rest were dropped
+for an inconsistent category range, too few respondents after cleaning, or a
+CFA that didn't converge).
 
 ::: {.callout-note}
 To reproduce with current IRW holdings, re-run `response_style_compute.R`
@@ -409,9 +428,7 @@ quarto::quarto_render("vignettes/response_style.qmd")
 To cite the datasets used, run:
 
 ```r
-for (tbl in summary_df$table) {
-  irw_save_bibtex(tbl, output_file = "response_style_data/irw_references.bib", append = TRUE)
-}
+irw_save_bibtex(summary_df$table, output_file = "response_style_data/irw_references.bib")
 ```
 :::
 

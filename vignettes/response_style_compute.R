@@ -33,27 +33,52 @@ dir.create(fits_dir, recursive = TRUE, showWarnings = FALSE)
 
 MAX_N            <- 10000  # downsample respondents before CFA to keep fitting tractable
 MIN_ITEMS        <- 5      # matches the n_items floor used in dataset selection below
+MIN_PARTICIPANTS <- 100    # dataset-selection floor -- "not too small": below this,
+                           # person-level style indices and CFA fits are too unstable
+                           # to be worth including in the sample
 MIN_RESPONDENTS  <- 30     # per-table floor after cleaning, for stable style indices/CFA
+MAX_TABLES       <- 150    # cap on how many candidate tables to actually run per pass
 
 # ==============================================================================
 # 1. Select datasets
 #
 # Likert-format tables with 4-7 response categories -- this range covers both
 # odd category counts with a true midpoint (5, 7) and even counts without one
-# (4, 6) -- and at least 5 items per person, so person-level style indices
-# (proportions computed over items) are reasonably stable. Tables where
+# (4, 6) -- at least 5 items per person, so person-level style indices
+# (proportions computed over items) are reasonably stable -- and at least
+# MIN_PARTICIPANTS respondents, so table-level ERS/MRS means and CFA fits
+# aren't dominated by sampling noise from a handful of people. Tables where
 # per-item category range turns out to be inconsistent (e.g. some items
 # 1-4, others 1-7) are dropped later, in fit_response_style(), since that
-# can't be detected from table-level metadata alone.
+# can't be detected from table-level metadata alone. Very large tables are
+# not excluded here -- fit_response_style() subsets down to MAX_N
+# respondents per table instead, so a handful of huge tables don't dominate
+# runtime or bias the sample toward whichever instruments happen to have
+# the most respondents.
 # ==============================================================================
 
-tables <- irw_filter(
-  item_format = "Likert Scale/selected response",
-  n_categories = c(4, 7),
-  n_items      = c(MIN_ITEMS, Inf)
+all_candidates <- irw_filter(
+  item_format    = "Likert Scale/selected response",
+  n_categories   = c(4, 7),
+  n_items        = c(MIN_ITEMS, Inf),
+  n_participants = c(MIN_PARTICIPANTS, Inf)
 )
 
-message("Candidate Likert tables: ", length(tables))
+message("Candidate Likert tables (n_participants >= ", MIN_PARTICIPANTS, "): ",
+        length(all_candidates))
+
+# Random sample of a manageable subset for this pass -- rerunning the full
+# candidate list (hundreds of tables, some with 100+ items and huge N) is
+# impractical in one pass; fit_to_disk()'s cache means later passes with a
+# different/larger sample just add to what's already on disk rather than
+# redoing this work.
+tables <- if (length(all_candidates) > MAX_TABLES) {
+  sample(all_candidates, MAX_TABLES)
+} else {
+  all_candidates
+}
+
+message("Sampled ", length(tables), " of ", length(all_candidates), " candidates for this run.")
 
 # Table-level construct_type for the final summary, fetched once for all
 # candidate tables rather than per-table.
@@ -304,6 +329,7 @@ saveRDS(
     summary           = all_summary,
     loadings          = all_loadings,
     candidate_tables  = tables,
+    n_all_candidates  = length(all_candidates),
     date_run          = Sys.Date(),
     session           = sessionInfo()
   ),
@@ -314,13 +340,11 @@ message("Saved to ", out_dir, "/response_style_results.rds")
 
 # ==============================================================================
 # 7. Generate citations (only for tables that produced usable results)
+#    irw_save_bibtex() takes the full vector of table names in one call
+#    (it has no append argument -- it writes the whole bibliography at once)
 # ==============================================================================
 
-for (tbl in unique(all_summary$table)) {
-  tryCatch(
-    irw_save_bibtex(tbl, output_file = file.path(out_dir, "irw_references.bib"), append = TRUE),
-    error = function(e) message("  bibtex failed for: ", tbl)
-  )
-}
-
-message("Citations saved to ", out_dir, "/irw_references.bib")
+tryCatch(
+  irw_save_bibtex(unique(all_summary$table), output_file = file.path(out_dir, "irw_references.bib")),
+  error = function(e) message("  bibtex generation failed: ", conditionMessage(e))
+)
