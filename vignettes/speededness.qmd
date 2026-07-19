@@ -56,13 +56,17 @@ screen the response-time-carrying tables in the IRW and classify each one.
 
 We use `irw_filter()` to find tables that carry a response-time (`rt`)
 variable at all, with at least 10 items (fewer than that, a position trend
-isn't very informative).
+isn't very informative). We also disable `irw_filter()`'s default density
+filter (`density = NULL`): its default keeps only tables with 50-100%
+response density, but speededness *is* elevated missingness — screening on
+density up front would exclude exactly the tables most likely to show the
+signature we're looking for.
 
 ```{r}
 #| label: filter-datasets
 #| eval: false
 
-candidate_tables <- irw_filter(var = "rt", n_items = c(10, Inf))
+candidate_tables <- irw_filter(var = "rt", n_items = c(10, Inf), density = NULL)
 ```
 
 `irw_filter()` only knows metadata-level facts — it can't tell us whether

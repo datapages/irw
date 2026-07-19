@@ -29,6 +29,11 @@ dir.create(fits_dir, recursive = TRUE, showWarnings = FALSE)
 #
 #    var = "rt" restricts to tables that carry a response-time column at all.
 #    n_items >= 10 is needed for a position trend to be meaningful.
+#    density = NULL disables irw_filter()'s default 0.5-1 density filter.
+#    Speededness *is* elevated missingness (low density), so filtering on
+#    density up front would systematically exclude the tables most likely
+#    to show the signature we're screening for -- e.g. it would silently
+#    drop rapm_poulton_2022_timed/untimed and the PISA tables entirely.
 #
 #    Note: irw_filter() only knows metadata-level facts (which vars exist,
 #    item/participant counts). It cannot tell us whether `rt` is recorded
@@ -37,7 +42,7 @@ dir.create(fits_dir, recursive = TRUE, showWarnings = FALSE)
 #    per-table function below re-checks and drops any table that fails this.
 # ------------------------------------------------------------------------------
 
-candidate_tables <- irw_filter(var = "rt", n_items = c(10, Inf))
+candidate_tables <- irw_filter(var = "rt", n_items = c(10, Inf), density = NULL)
 message("Candidate RT tables: ", length(candidate_tables))
 
 # ------------------------------------------------------------------------------
