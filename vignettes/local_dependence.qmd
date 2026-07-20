@@ -41,6 +41,8 @@ if (cache_ok) {
   .cache           <- readRDS(cache_path)
   summary_df       <- .cache$summary
   q3_matrices      <- .cache$q3_matrices
+  item_text_list   <- .cache$item_text %||% list()
+  item_family_list <- .cache$item_family %||% list()
   candidate_tables <- .cache$candidate_tables
   date_run         <- .cache$date_run
   is_pilot         <- isTRUE(.cache$pilot)
@@ -54,6 +56,8 @@ if (cache_ok) {
     mean_abs_q3 = numeric(), construct_type = character(), item_format = character()
   )
   q3_matrices      <- list()
+  item_text_list   <- list()
+  item_family_list <- list()
   candidate_tables <- character()
   date_run         <- Sys.Date()
   is_pilot         <- FALSE
@@ -238,8 +242,8 @@ share residual variance the single-trait model didn't capture.
 #| fig-cap: "Q3 residual correlation matrices for the table with the highest proportion of flagged pairs (left) and the cleanest table in this sample (right). Darker cells indicate stronger residual correlation between that item pair, in either direction."
 #| fig-height: 5.5
 
-worst_table <- summary_df %>% slice_max(prop_flagged, n = 1) %>% pull(table)
-clean_table <- summary_df %>% slice_min(prop_flagged, n = 1) %>% pull(table)
+worst_table <- summary_df %>% slice_max(prop_flagged, n = 1, with_ties = FALSE) %>% pull(table)
+clean_table <- summary_df %>% slice_min(prop_flagged, n = 1, with_ties = FALSE) %>% pull(table)
 
 q3_long <- function(tbl) {
   m <- q3_matrices[[tbl]]
@@ -289,6 +293,164 @@ ggplot(summary_df %>% filter(!is.na(item_format)),
 
 `r if (is_pilot) paste0("With only ", nrow(summary_df), " tables in this pilot, ", "@fig-by-format is illustrative at best -- there isn't enough coverage per format to say anything about where local dependence concentrates. The full run will have enough tables per item_format/construct_type to make this comparison meaningful.") else "Read @fig-by-format for where local dependence concentrates across the formats represented in this sample."`
 
+## Two case studies against known structure
+
+Everything above treats a flagged pair as a black box: Q3 says two items
+share residual variance, but not *why*. IRW carries two kinds of
+independent, dataset-author-asserted information that let us check whether
+flagged pairs correspond to something real rather than model noise:
+`item_family` — an explicit id IRW's data standard uses to mark testlets,
+clone items, or items with obvious common features — and free-text item
+wording, which we can compare lexically between item pairs.
+
+### Case study 1: does Q3 recover a known testlet structure?
+
+```{r}
+#| label: tbl-item-family-case-study
+#| tbl-cap: "Proportion of item pairs flagged as locally dependent, split by whether the pair shares an IRW item_family id, for every table in this sample that carries a usable item_family grouping."
+
+strip_item_prefix <- function(x) sub("^item_", "", x)
+
+item_family_case_study <- bind_rows(lapply(names(item_family_list), function(tbl) {
+  q3  <- q3_matrices[[tbl]]
+  fam <- item_family_list[[tbl]]
+  if (is.null(q3) || is.null(fam)) return(NULL)
+  items   <- rownames(q3)
+  raw_ids <- strip_item_prefix(items)
+  fam_id  <- setNames(fam$item_family[match(raw_ids, fam$item)], items)
+  pair_idx <- combn(items, 2)
+  q3_vals <- mapply(function(a, b) q3[a, b], pair_idx[1, ], pair_idx[2, ])
+  same_fam <- mapply(function(a, b) !is.na(fam_id[a]) && !is.na(fam_id[b]) && fam_id[a] == fam_id[b],
+                      pair_idx[1, ], pair_idx[2, ])
+  keep <- !is.na(q3_vals)
+  tibble(table = tbl, q3 = q3_vals[keep], same_family = same_fam[keep])
+}))
+
+item_family_case_study %>%
+  mutate(flagged = abs(q3) > 0.2) %>%
+  group_by(table, same_family) %>%
+  summarise(n_pairs = n(), prop_flagged = mean(flagged), .groups = "drop") %>%
+  mutate(same_family = ifelse(same_family, "Same item_family", "Different / no family")) %>%
+  pivot_wider(names_from = same_family, values_from = c(n_pairs, prop_flagged)) %>%
+  knitr::kable(digits = 2)
+```
+
+`item_family` turns out to be rare in current IRW holdings: only
+`r length(item_family_list)` of the `r nrow(summary_df)` tables in this pass
+carry a usable grouping (a non-`NA` family id shared by at least two items).
+One of them, `chakraborty2026_IWAH_IRW`, is a clean validation case: its
+`item_family` groups the *same base item repeated across measurement
+rounds* (e.g. `IWAH_3_r1` and `IWAH_3_r3` share family `3`) — literally the
+"clone items" case the IRW standard describes. Same-family pairs there are
+flagged at roughly three times the rate of different-family pairs. That's
+reassuring: Q3 is recovering a real, independently-asserted structure, not
+just noise. It's also the only table in this sample where the check has
+much power — treat this as a single confirmatory example, not a systematic
+test, until more IRW tables carry `item_family` metadata.
+
+::: {.callout-note}
+A related standard field, `itemcov_` (per-item covariates), was checked
+too but turned out not to encode grouping structure in any of the
+`r sum(summary_df$has_itemcov, na.rm = TRUE)` tables that carry it in this
+sample — it's used here for continuous item-level covariates (a difficulty
+score, eye-tracking dwell time), not testlet/family ids. It isn't a useful
+signal for this comparison and isn't pursued further.
+:::
+
+### Case study 2: do flagged pairs share more text?
+
+```{r}
+#| label: fig-text-overlap-diff
+#| fig-cap: "Within each table, the difference in mean lexical (word-overlap) similarity between flagged and unflagged item pairs. Positive values mean flagged pairs share more item-text wording than unflagged pairs in that table; the reference line is zero (no difference)."
+#| fig-height: 4
+
+tokenize <- function(x) {
+  x <- tolower(x)
+  x <- gsub("[^a-z0-9 ]", " ", x)
+  w <- unique(strsplit(x, "\\s+")[[1]])
+  w[nchar(w) > 0]
+}
+jaccard <- function(a, b) {
+  ua <- tokenize(a); ub <- tokenize(b)
+  if (length(ua) == 0 || length(ub) == 0) return(NA_real_)
+  length(intersect(ua, ub)) / length(union(ua, ub))
+}
+
+text_pair_pool <- bind_rows(lapply(names(item_text_list), function(tbl) {
+  q3  <- q3_matrices[[tbl]]
+  txt <- item_text_list[[tbl]]
+  if (is.null(q3) || is.null(txt)) return(NULL)
+  txt <- txt %>% distinct(item, item_text) %>% mutate(item = as.character(item))
+  if (any(duplicated(txt$item))) txt <- txt %>% distinct(item, .keep_all = TRUE)
+  items   <- rownames(q3)
+  raw_ids <- strip_item_prefix(items)
+  id_text <- setNames(txt$item_text[match(raw_ids, txt$item)], items)
+  if (all(is.na(id_text))) return(NULL)
+  pair_idx <- combn(items, 2)
+  q3_vals  <- mapply(function(a, b) q3[a, b], pair_idx[1, ], pair_idx[2, ])
+  sim_vals <- mapply(function(a, b) jaccard(id_text[a], id_text[b]), pair_idx[1, ], pair_idx[2, ])
+  tibble(table = tbl, q3 = q3_vals, sim = sim_vals)
+})) %>%
+  filter(!is.na(sim), !is.na(q3)) %>%
+  mutate(flagged = abs(q3) > 0.2)
+
+text_diff_by_table <- text_pair_pool %>%
+  group_by(table) %>%
+  filter(any(flagged), any(!flagged)) %>%
+  summarise(diff = mean(sim[flagged]) - mean(sim[!flagged]), .groups = "drop")
+
+ggplot(text_diff_by_table, aes(x = diff)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_histogram(bins = 30, fill = irw_blue, colour = "white") +
+  labs(x = "Mean text similarity: flagged pairs minus unflagged pairs", y = "Number of tables")
+```
+
+Restricting to the `r nrow(text_diff_by_table)` item-text tables with at
+least one flagged and one unflagged pair, `r sum(text_diff_by_table$diff > 0)`
+of them (`r round(100 * mean(text_diff_by_table$diff > 0))`%) show flagged
+pairs sharing *more* text than unflagged pairs — a modest majority, and a
+Wilcoxon signed-rank test on the per-table difference rejects a zero
+median (median diff = `r round(median(text_diff_by_table$diff), 3)`,
+`r {p <- wilcox.test(text_diff_by_table$diff, mu = 0)$p.value; paste0("p ", if (p < 0.001) "< 0.001" else paste0("= ", round(p, 3)))}`).
+That's a real but weak effect, and it's *not* consistent — a sizable
+minority of tables show no relationship or the reverse.
+
+```{r}
+#| label: tbl-text-overlap-examples
+#| tbl-cap: "Two contrasting tables: one where lexical overlap tracks local dependence, one where it doesn't despite similar-looking item wording."
+
+bind_rows(
+  text_pair_pool %>% filter(table == "mpsycho_rwdq") %>%
+    summarise(table = "mpsycho_rwdq", mean_sim_flagged = mean(sim[flagged]),
+              mean_sim_unflagged = mean(sim[!flagged])),
+  text_pair_pool %>% filter(table == "singh_2025_identity_irs") %>%
+    summarise(table = "singh_2025_identity_irs", mean_sim_flagged = mean(sim[flagged]),
+              mean_sim_unflagged = mean(sim[!flagged]))
+) %>%
+  knitr::kable(digits = 2, col.names = c("Table", "Mean similarity (flagged pairs)", "Mean similarity (unflagged pairs)"))
+```
+
+The two rows in @tbl-text-overlap-examples illustrate why the aggregate
+effect is weak rather than strong. `mpsycho_rwdq` (a job-characteristics
+scale — every item reads "The work on R packages requires/involves...")
+shows the expected pattern: pairs flagged as locally dependent share
+noticeably more wording than unflagged pairs, because the items that
+overlap most in content ("requires a depth of expertise" /  "requires very
+specialized knowledge") are exactly the ones the model flags.
+`singh_2025_identity_irs` shows the opposite pattern despite having
+*higher* overlap overall: every item in that scale shares the same
+template stem ("My ethnic-racial identity is/holds/brings..."), so lexical
+similarity is uniformly high whether or not a given pair is flagged — the
+metric can't distinguish "these are reverse-coded twins of each other"
+from "these are just two items from the same templated battery." A crude
+lexical-overlap metric only works when a table's items vary in how much
+they overlap; it's uninformative for template-item batteries where they
+all look alike by construction. (A handful of tables also contain items
+with *literally identical* repeated-trial text — e.g. the same stimulus
+probed several times — which trivially inflates similarity for reasons
+unrelated to construct overlap; those weren't used as headline examples
+here for that reason.)
+
 ## Practical implications
 
 Finding local dependence doesn't mean the unidimensional fit is useless —
@@ -317,10 +479,12 @@ calibrated p-value.
 *which* pairs share residual variance, but two different tables with the
 same flagged-proportion can have very different structure underneath — one
 might have a handful of tightly clustered testlets, another scattered
-pairwise noise with no coherent grouping. The stretch-goal testlet-clustering
-check described in the compute script (checking whether flagged pairs
-concentrate within an item-naming-derived testlet grouping) was not run for
-this pass; it would help distinguish these cases.
+pairwise noise with no coherent grouping. The two case studies above are a
+start on distinguishing these (flagged pairs concentrating in a known
+`item_family` grouping, or sharing more item text), but both are limited by
+sparse metadata coverage — `item_family` in particular is populated for
+only 2 of 791 tables — so most tables here still can't be checked against
+independent ground truth.
 
 **Model choice is coarse.** Every table gets exactly one of two model
 families (2PL or GRM) based only on its category count, with no comparison
