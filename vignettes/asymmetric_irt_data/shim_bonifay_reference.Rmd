@@ -1,0 +1,1122 @@
+---
+title: 'Estimation Infrastructure for Asymmetric IRT Models'
+output:
+  html_document: default
+---
+
+This supplement provides the estimation infrastructure used in the manuscript, *On the asymmetry, complexity, and predicted data pattern of nontraditional item response theory models*.
+
+It includes: (1) analysis settings, (2) Gauss-Hermite quadrature setup, (3) custom item definitions for AO, LPE, and RH with analytic gradients and Hessians, (4) prior specification and starting-value transfer routines, and (5) an LSAT7 illustration that demonstrates the full estimation pipeline from a baseline 2PLM fit through all three asymmetric models.
+
+# Analysis settings
+
+```{r}
+library(mirt)
+library(statmod)
+library(dplyr)
+library(tidyr)
+
+em_cycles     <- 5000
+quadpts_fit   <- 50
+optimizer_fit <- "nlminb"
+start_beta_RH <- 0.2
+dlogit        <- 1.702
+
+eps_prob_clip_lower <- 1e-32
+eps_prob_clip_upper <- .Machine$double.eps
+
+make_shape_prior_profile <- function(){
+  list(
+    AO  = list(mean = 0, sd = 1),
+    LPE = list(mean = 0, sd = 1),
+    RH  = list(mean = 0, sd = 1)
+  )
+}
+
+EMP_PRIORS <- make_shape_prior_profile()
+```
+
+# Gauss-Hermite quadrature N(0,1)
+
+```{r}
+gh <- statmod::gauss.quad.prob(quadpts_fit, dist = "normal")
+ord <- order(gh$nodes)
+
+theta <- gh$nodes[ord]
+w_theta <- gh$weights[ord]
+Theta_mat <- matrix(theta, ncol = 1)
+
+prior_GH50 <- local({
+  theta_ref <- as.numeric(theta)
+  w_ref <- as.numeric(w_theta)
+  tol <- 1e-12
+
+  stopifnot(isTRUE(all.equal(sum(w_ref), 1, tolerance = tol)))
+
+  function(Theta, Etable){
+    Theta <- as.matrix(Theta)
+    if(ncol(Theta) != 1L)
+      stop("prior_GH50(): only 1D supported")
+    th <- as.numeric(Theta[,1])
+    if(length(th) != length(theta_ref) || max(abs(th - theta_ref)) > tol){
+      stop("prior_GH50(): Theta mismatch. Use customTheta = Theta_mat")
+    }
+    w_ref
+  }
+})
+
+assert_fixed_GH50_contract <- local({
+  theta_ref <- as.numeric(theta)
+  Theta_ref <- as.matrix(Theta_mat)
+
+  function(theta_in, Theta_mat_in, quadpts_fit = NULL){
+    theta_in <- as.numeric(theta_in)
+    Theta_mat_in <- as.matrix(Theta_mat_in)
+    if(ncol(Theta_mat_in) != 1L)
+      stop("This script assumes a 1D Theta_mat.")
+    if(length(theta_in) != length(theta_ref) ||
+       !isTRUE(all.equal(theta_in, theta_ref, tolerance = 0, check.attributes = FALSE))){
+      stop("This script is locked to the global GH50 'theta'.")
+    }
+    if(nrow(Theta_mat_in) != nrow(Theta_ref) ||
+       !isTRUE(all.equal(as.numeric(Theta_mat_in[,1]), theta_ref,
+                         tolerance = 0, check.attributes = FALSE))){
+      stop("This script is locked to the global GH50 'Theta_mat'.")
+    }
+    if(!is.null(quadpts_fit) &&
+       (!is.numeric(quadpts_fit) || length(quadpts_fit) != 1L ||
+        quadpts_fit != length(theta_ref))){
+      stop(sprintf(
+        "quadpts_fit is retained only for interface compatibility. Set quadpts_fit = %d.",
+        length(theta_ref)
+      ))
+    }
+    TRUE
+  }
+})
+```
+
+# Helpers
+
+```{r}
+bound_prob_mirt <- local({
+  eps_lo <- eps_prob_clip_lower
+  eps_hi <- eps_prob_clip_upper
+  function(P){
+    P[P <= eps_lo]     <- eps_lo
+    P[P >= 1 - eps_hi] <- 1 - eps_hi
+    P
+  }
+})
+
+clip_mask_mirt <- local({
+  eps_lo <- eps_prob_clip_lower
+  eps_hi <- eps_prob_clip_upper
+  function(P){
+    (P <= eps_lo) | (P >= 1 - eps_hi)
+  }
+})
+
+validate_prior_norm <- function(mean, sd, nm = "shape prior"){
+  if(!is.numeric(mean) || length(mean) != 1L || !is.finite(mean)){
+    stop(nm, ": mean must be a single finite number")
+  }
+  if(!is.numeric(sd) || length(sd) != 1L || !is.finite(sd) || sd <= 0){
+    stop(nm, ": sd must be a single positive finite number")
+  }
+  invisible(TRUE)
+}
+
+shape_par_name <- function(model_type){
+  switch(model_type,
+         "AO"  = "eta",
+         "LPE" = "S",
+         "RH"  = "delta",
+         stop("Unknown model_type: ", model_type))
+}
+
+set_norm_prior_in_values <- function(sv, par_names, mean = 0, sd = 1){
+  validate_prior_norm(mean, sd)
+
+  nmcol <- if("name" %in% names(sv)) "name" else if("parname" %in% names(sv)) "parname" else
+    stop("set_norm_prior_in_values(): no name/parname column found")
+
+  if(!("prior.type" %in% names(sv))) sv$prior.type <- NA_character_
+  if(!("prior_1" %in% names(sv))) sv$prior_1 <- NA_real_
+  if(!("prior_2" %in% names(sv))) sv$prior_2 <- NA_real_
+
+  sv$prior.type <- as.character(sv$prior.type)
+
+  idx <- sv[[nmcol]] %in% par_names
+  if(any(idx)){
+    sv$prior.type[idx] <- "norm"
+    sv$prior_1[idx] <- mean
+    sv$prior_2[idx] <- sd
+  }
+
+  sv
+}
+
+get_col <- function(df, cand){
+  hit <- intersect(cand, names(df))
+  if(length(hit) == 0) stop("Missing column: ", paste(cand, collapse = ","))
+  hit[1]
+}
+
+convert_ad_logit_to_probit <- function(ad_df, D = 1.702){
+  stopifnot(is.data.frame(ad_df))
+  req <- c("item","a1","d")
+  if(!all(req %in% names(ad_df))){
+    stop("convert_ad_logit_to_probit(): need columns: ", paste(req, collapse = ", "))
+  }
+  out <- ad_df
+  out$a1 <- out$a1 / D
+  out$d  <- out$d  / D
+  out
+}
+```
+
+# Custom link IRT models with analytic gradients/Hessians
+
+## AO (lambda = exp(eta))
+
+```{r}
+AO_def <- local({
+
+  log1pexp <- function(x){
+    pmax(x, 0) + log1p(exp(-abs(x)))
+  }
+
+  P_AO <- function(par, Theta, ncat){
+    a   <- par[1]
+    d   <- par[2]
+    eta <- par[3]
+
+    Theta <- as.matrix(Theta); th <- Theta[,1]
+    z <- a * th + d
+    lambda <- exp(eta)
+
+    if(lambda == 0){
+      logP0 <- -exp(z)
+      P0 <- exp(logP0)
+      P1 <- -expm1(logP0)
+      return(bound_prob_mirt(cbind(P0, P1)))
+    }
+    if(is.infinite(lambda)){
+      P0 <- rep(1, length(z))
+      P1 <- rep(0, length(z))
+      return(bound_prob_mirt(cbind(P0, P1)))
+    }
+
+    logA  <- log1pexp(eta + z)
+    logP0 <- -logA / lambda
+    P0 <- exp(logP0)
+    P1 <- -expm1(logP0)
+    bound_prob_mirt(cbind(P0, P1))
+  }
+
+  dP_AO <- function(par, Theta, ncat){
+    a   <- par[1]
+    d   <- par[2]
+    eta <- par[3]
+
+    Theta <- as.matrix(Theta); th <- Theta[,1]
+    z <- a * th + d
+    lambda <- exp(eta)
+
+    n <- length(z)
+    npar <- length(par)
+    dp1 <- array(0, dim = c(n, ncat, npar))
+
+    if(!(lambda == 0 || is.infinite(lambda))){
+      logA <- log1pexp(eta + z)
+      g    <- exp(z - logA)
+      P0   <- exp(-logA / lambda)
+
+      dP_dz   <- P0 * g
+      dP_da   <- th * dP_dz
+      dP_dd   <- dP_dz
+      dP_deta <- P0 * (g - logA / lambda)
+
+      dP_da[!is.finite(dP_da)] <- 0
+      dP_dd[!is.finite(dP_dd)] <- 0
+      dP_deta[!is.finite(dP_deta)] <- 0
+
+      dp1[,2,1] <- dP_da
+      dp1[,2,2] <- dP_dd
+      dp1[,2,3] <- dP_deta
+      dp1[,1,]  <- -dp1[,2,]
+    }
+
+    Pbound <- P_AO(par, Theta, ncat)
+    clip <- clip_mask_mirt(Pbound)
+    for(cat in 1:ncat){
+      if(any(clip[,cat])) dp1[clip[,cat], cat, ] <- 0
+    }
+
+    as.vector(dp1)
+  }
+
+  d2P_AO <- function(par, Theta, ncat){
+    a   <- par[1]
+    d   <- par[2]
+    eta <- par[3]
+
+    Theta <- as.matrix(Theta); th <- Theta[,1]
+    z <- a * th + d
+    lambda <- exp(eta)
+
+    n <- length(z)
+    npar <- length(par)
+    dp2 <- array(0, dim = c(n, ncat, npar, npar))
+
+    if(!(lambda == 0 || is.infinite(lambda))){
+      logA <- log1pexp(eta + z)
+      g    <- exp(z - logA)
+      P0   <- exp(-logA / lambda)
+      h    <- g - logA / lambda
+
+      d2_dz2     <- P0 * (g - (1 + lambda) * g^2)
+      d2_dz_deta <- -P0 * g * (h + lambda * g)
+      dh_deta    <- (logA / lambda) - g - lambda * g^2
+      d2_deta2   <- P0 * (dh_deta - h^2)
+
+      d2_dz2[!is.finite(d2_dz2)] <- 0
+      d2_dz_deta[!is.finite(d2_dz_deta)] <- 0
+      d2_deta2[!is.finite(d2_deta2)] <- 0
+
+      dp2[,2,1,1] <- th^2 * d2_dz2
+      dp2[,2,2,2] <- d2_dz2
+      dp2[,2,1,2] <- th * d2_dz2
+      dp2[,2,2,1] <- dp2[,2,1,2]
+
+      dp2[,2,1,3] <- th * d2_dz_deta
+      dp2[,2,3,1] <- dp2[,2,1,3]
+      dp2[,2,2,3] <- d2_dz_deta
+      dp2[,2,3,2] <- dp2[,2,2,3]
+
+      dp2[,2,3,3] <- d2_deta2
+      dp2[,1,,]   <- -dp2[,2,,]
+    }
+
+    Pbound <- P_AO(par, Theta, ncat)
+    clip <- clip_mask_mirt(Pbound)
+    for(cat in 1:ncat){
+      if(any(clip[,cat])) dp2[clip[,cat], cat, , ] <- 0
+    }
+
+    as.vector(dp2)
+  }
+
+  gr_AO <- function(x, Theta){
+    dp1 <- array(dP_AO(x@par, Theta, x@ncat),
+                 dim = c(nrow(Theta), x@ncat, length(x@par)))
+    g <- mirt:::symbolicGrad_par(x, Theta, dp1 = dp1)
+    g[x@est]
+  }
+
+  hss_AO <- function(x, Theta){
+    dp1 <- array(dP_AO(x@par, Theta, x@ncat),
+                 dim = c(nrow(Theta), x@ncat, length(x@par)))
+    dp2 <- array(d2P_AO(x@par, Theta, x@ncat),
+                 dim = c(nrow(Theta), x@ncat, length(x@par), length(x@par)))
+    H <- mirt:::symbolicHessian_par(x, Theta, dp1 = dp1, dp2 = dp2)
+    H[x@est, x@est, drop = FALSE]
+  }
+
+  list(P = P_AO, dP = dP_AO, d2P = d2P_AO, gr = gr_AO, hss = hss_AO)
+})
+```
+
+## LPE (lambda = exp(S))
+
+```{r}
+LPE_def <- local({
+
+  P_LPE <- function(par, Theta, ncat){
+    a  <- par[1]
+    d  <- par[2]
+    S  <- par[3]
+
+    Theta <- as.matrix(Theta); th <- Theta[,1]
+    z <- a * th + d
+
+    lambda <- exp(S)
+    logPsi <- plogis(z, log.p = TRUE)
+
+    if(lambda == 0){
+      P1 <- rep(1, length(z))
+      P0 <- rep(0, length(z))
+      return(bound_prob_mirt(cbind(P0, P1)))
+    }
+    if(is.infinite(lambda)){
+      P1 <- ifelse(logPsi == 0, 1, 0)
+      P0 <- 1 - P1
+      return(bound_prob_mirt(cbind(P0, P1)))
+    }
+
+    t  <- lambda * logPsi
+    P1 <- exp(t)
+    P0 <- -expm1(t)
+    bound_prob_mirt(cbind(P0, P1))
+  }
+
+  dP_LPE <- function(par, Theta, ncat){
+    a  <- par[1]
+    d  <- par[2]
+    S  <- par[3]
+
+    Theta <- as.matrix(Theta); th <- Theta[,1]
+    z <- a * th + d
+    lambda <- exp(S)
+
+    n <- length(z)
+    npar <- length(par)
+    dp1 <- array(0, dim = c(n, ncat, npar))
+
+    if(!(lambda == 0 || is.infinite(lambda))){
+      Psi    <- plogis(z)
+      logPsi <- plogis(z, log.p = TRUE)
+      Q      <- 1 - Psi
+
+      Praw <- P_LPE(par, Theta, ncat)
+      P1 <- Praw[,2]
+
+      dP_dz <- lambda * P1 * Q
+      dP_da <- th * dP_dz
+      dP_dd <- dP_dz
+      dP_dS <- lambda * P1 * logPsi
+
+      dP_da[!is.finite(dP_da)] <- 0
+      dP_dd[!is.finite(dP_dd)] <- 0
+      dP_dS[!is.finite(dP_dS)] <- 0
+
+      dp1[,2,1] <- dP_da
+      dp1[,2,2] <- dP_dd
+      dp1[,2,3] <- dP_dS
+      dp1[,1,]  <- -dp1[,2,]
+    }
+
+    Pbound <- P_LPE(par, Theta, ncat)
+    clip <- clip_mask_mirt(Pbound)
+    for(cat in 1:ncat){
+      if(any(clip[,cat])) dp1[clip[,cat], cat, ] <- 0
+    }
+
+    as.vector(dp1)
+  }
+
+  d2P_LPE <- function(par, Theta, ncat){
+    a  <- par[1]
+    d  <- par[2]
+    S  <- par[3]
+
+    Theta <- as.matrix(Theta); th <- Theta[,1]
+    z <- a * th + d
+    lambda <- exp(S)
+
+    n <- length(z)
+    npar <- length(par)
+    dp2 <- array(0, dim = c(n, ncat, npar, npar))
+
+    if(!(lambda == 0 || is.infinite(lambda))){
+      Psi    <- plogis(z)
+      logPsi <- plogis(z, log.p = TRUE)
+      Q      <- 1 - Psi
+
+      Praw <- P_LPE(par, Theta, ncat)
+      P1 <- Praw[,2]
+
+      d2_dz2     <- lambda * P1 * Q * (lambda * Q - Psi)
+      d2_dz_dS   <- lambda * P1 * Q * (lambda * logPsi + 1)
+      d2_dS2     <- lambda * P1 * logPsi * (1 + lambda * logPsi)
+
+      d2_dz2[!is.finite(d2_dz2)] <- 0
+      d2_dz_dS[!is.finite(d2_dz_dS)] <- 0
+      d2_dS2[!is.finite(d2_dS2)] <- 0
+
+      dp2[,2,1,1] <- th^2 * d2_dz2
+      dp2[,2,2,2] <- d2_dz2
+      dp2[,2,1,2] <- th * d2_dz2
+      dp2[,2,2,1] <- dp2[,2,1,2]
+
+      dp2[,2,1,3] <- th * d2_dz_dS
+      dp2[,2,3,1] <- dp2[,2,1,3]
+      dp2[,2,2,3] <- d2_dz_dS
+      dp2[,2,3,2] <- dp2[,2,2,3]
+
+      dp2[,2,3,3] <- d2_dS2
+      dp2[,1,,]   <- -dp2[,2,,]
+    }
+
+    Pbound <- P_LPE(par, Theta, ncat)
+    clip <- clip_mask_mirt(Pbound)
+    for(cat in 1:ncat){
+      if(any(clip[,cat])) dp2[clip[,cat], cat, , ] <- 0
+    }
+
+    as.vector(dp2)
+  }
+
+  gr_LPE <- function(x, Theta){
+    dp1 <- array(dP_LPE(x@par, Theta, x@ncat),
+                 dim = c(nrow(Theta), x@ncat, length(x@par)))
+    g <- mirt:::symbolicGrad_par(x, Theta, dp1 = dp1)
+    g[x@est]
+  }
+
+  hss_LPE <- function(x, Theta){
+    dp1 <- array(dP_LPE(x@par, Theta, x@ncat),
+                 dim = c(nrow(Theta), x@ncat, length(x@par)))
+    dp2 <- array(d2P_LPE(x@par, Theta, x@ncat),
+                 dim = c(nrow(Theta), x@ncat, length(x@par), length(x@par)))
+    H <- mirt:::symbolicHessian_par(x, Theta, dp1 = dp1, dp2 = dp2)
+    H[x@est, x@est, drop = FALSE]
+  }
+
+  list(P = P_LPE, dP = dP_LPE, d2P = d2P_LPE, gr = gr_LPE, hss = hss_LPE)
+})
+```
+
+## RH (delta)
+
+```{r}
+RH_def <- local({
+
+  P_RH <- function(par, Theta, ncat){
+    a <- par[1]
+    d <- par[2]
+    delta <- par[3]
+
+    Theta <- as.matrix(Theta); th <- Theta[,1]
+    z <- a * th + d
+
+    s <- plogis(delta * th)
+    sigma <- sqrt(2) * sqrt(s)
+    u <- z / sigma
+    u[(is.nan(u)) & (z == 0) & (sigma == 0)] <- 0
+
+    P0 <- numeric(length(u))
+    P1 <- numeric(length(u))
+    pos <- (u >= 0)
+
+    P0[pos]  <- pnorm(u[pos], lower.tail = FALSE)
+    P1[pos]  <- 1 - P0[pos]
+    P1[!pos] <- pnorm(u[!pos])
+    P0[!pos] <- 1 - P1[!pos]
+
+    bound_prob_mirt(cbind(P0, P1))
+  }
+
+  dP_RH <- function(par, Theta, ncat){
+    a <- par[1]
+    d <- par[2]
+    delta <- par[3]
+
+    Theta <- as.matrix(Theta); th <- Theta[,1]
+    z <- a * th + d
+
+    s <- plogis(delta * th)
+    sigma <- sqrt(2) * sqrt(s)
+    u <- z / sigma
+    u[(is.nan(u)) & (z == 0) & (sigma == 0)] <- 0
+
+    phi <- dnorm(u)
+
+    n <- length(u)
+    npar <- length(par)
+    dp1 <- array(0, dim = c(n, ncat, npar))
+
+    u_a <- th / sigma
+    u_d <- 1 / sigma
+    c   <- th * (1 - s) / 2
+    u_delta <- -u * c
+
+    dP_da <- phi * u_a
+    dP_dd <- phi * u_d
+    dP_ddelta <- phi * u_delta
+
+    dP_da[!is.finite(dP_da)] <- 0
+    dP_dd[!is.finite(dP_dd)] <- 0
+    dP_ddelta[!is.finite(dP_ddelta)] <- 0
+
+    dp1[,2,1] <- dP_da
+    dp1[,2,2] <- dP_dd
+    dp1[,2,3] <- dP_ddelta
+    dp1[,1,]  <- -dp1[,2,]
+
+    Pbound <- P_RH(par, Theta, ncat)
+    clip <- clip_mask_mirt(Pbound)
+    for(cat in 1:ncat){
+      if(any(clip[,cat])) dp1[clip[,cat], cat, ] <- 0
+    }
+
+    as.vector(dp1)
+  }
+
+  d2P_RH <- function(par, Theta, ncat){
+    a <- par[1]
+    d <- par[2]
+    delta <- par[3]
+
+    Theta <- as.matrix(Theta); th <- Theta[,1]
+    z <- a * th + d
+
+    s <- plogis(delta * th)
+    sigma <- sqrt(2) * sqrt(s)
+    u <- z / sigma
+    u[(is.nan(u)) & (z == 0) & (sigma == 0)] <- 0
+
+    phi <- dnorm(u)
+
+    n <- length(u)
+    npar <- length(par)
+    dp2 <- array(0, dim = c(n, ncat, npar, npar))
+
+    u_a <- th / sigma
+    u_d <- 1 / sigma
+    c   <- th * (1 - s) / 2
+    u_delta <- -u * c
+
+    P_aa <- -phi * u * (u_a^2)
+    P_dd <- -phi * u * (u_d^2)
+    P_ad <- -phi * u * (u_a * u_d)
+
+    P_ad2 <- phi * u_a * c * (u^2 - 1)
+    P_dd2 <- phi * u_d * c * (u^2 - 1)
+
+    u_dd2 <- u * th^2 * (1 - s^2) / 4
+    P_d2d2 <- phi * (u_dd2 - u * (u_delta^2))
+
+    P_aa[!is.finite(P_aa)] <- 0
+    P_dd[!is.finite(P_dd)] <- 0
+    P_ad[!is.finite(P_ad)] <- 0
+    P_ad2[!is.finite(P_ad2)] <- 0
+    P_dd2[!is.finite(P_dd2)] <- 0
+    P_d2d2[!is.finite(P_d2d2)] <- 0
+
+    dp2[,2,1,1] <- P_aa
+    dp2[,2,2,2] <- P_dd
+    dp2[,2,1,2] <- P_ad; dp2[,2,2,1] <- P_ad
+    dp2[,2,1,3] <- P_ad2; dp2[,2,3,1] <- P_ad2
+    dp2[,2,2,3] <- P_dd2; dp2[,2,3,2] <- P_dd2
+    dp2[,2,3,3] <- P_d2d2
+
+    dp2[,1,,]   <- -dp2[,2,,]
+
+    Pbound <- P_RH(par, Theta, ncat)
+    clip <- clip_mask_mirt(Pbound)
+    for(cat in 1:ncat){
+      if(any(clip[,cat])) dp2[clip[,cat], cat, , ] <- 0
+    }
+
+    as.vector(dp2)
+  }
+
+  gr_RH <- function(x, Theta){
+    dp1 <- array(dP_RH(x@par, Theta, x@ncat),
+                 dim = c(nrow(Theta), x@ncat, length(x@par)))
+    g <- mirt:::symbolicGrad_par(x, Theta, dp1 = dp1)
+    g[x@est]
+  }
+
+  hss_RH <- function(x, Theta){
+    dp1 <- array(dP_RH(x@par, Theta, x@ncat),
+                 dim = c(nrow(Theta), x@ncat, length(x@par)))
+    dp2 <- array(d2P_RH(x@par, Theta, x@ncat),
+                 dim = c(nrow(Theta), x@ncat, length(x@par), length(x@par)))
+    H <- mirt:::symbolicHessian_par(x, Theta, dp1 = dp1, dp2 = dp2)
+    H[x@est, x@est, drop = FALSE]
+  }
+
+  list(P = P_RH, dP = dP_RH, d2P = d2P_RH, gr = gr_RH, hss = hss_RH)
+})
+
+inject_helpers_into_def <- function(def){
+  stopifnot(is.list(def))
+  for(nm in c("P","dP","d2P","gr","hss")){
+    if(!is.function(def[[nm]])) stop("def$", nm, " is not a function")
+    environment(def[[nm]])$bound_prob_mirt <- bound_prob_mirt
+    environment(def[[nm]])$clip_mask_mirt  <- clip_mask_mirt
+  }
+  def
+}
+
+AO_def  <- inject_helpers_into_def(AO_def)
+LPE_def <- inject_helpers_into_def(LPE_def)
+RH_def  <- inject_helpers_into_def(RH_def)
+```
+
+# Create custom items
+
+```{r}
+make_x_AO <- function(deriv_mode = c("analytic","richardson")){
+  deriv_mode <- match.arg(deriv_mode)
+  args <- list(
+    name = "AO",
+    par = c(a1 = 1, d = 0, eta = 0),
+    est = c(TRUE, TRUE, TRUE),
+    P = AO_def$P
+  )
+  if(deriv_mode == "analytic"){
+    args$gr  <- AO_def$gr
+    args$hss <- AO_def$hss
+  } else {
+    args$derivType <- "Richardson"
+    args$derivType.hss <- "Richardson"
+  }
+  do.call(createItem, args)
+}
+
+make_x_LPE <- function(deriv_mode = c("analytic","richardson")){
+  deriv_mode <- match.arg(deriv_mode)
+  args <- list(
+    name = "LPE",
+    par = c(a1 = 1, d = 0, S = 0),
+    est = c(TRUE, TRUE, TRUE),
+    P = LPE_def$P
+  )
+  if(deriv_mode == "analytic"){
+    args$gr  <- LPE_def$gr
+    args$hss <- LPE_def$hss
+  } else {
+    args$derivType <- "Richardson"
+    args$derivType.hss <- "Richardson"
+  }
+  do.call(createItem, args)
+}
+
+make_x_RH <- function(deriv_mode = c("analytic","richardson")){
+  deriv_mode <- match.arg(deriv_mode)
+  args <- list(
+    name = "RH",
+    par = c(a1 = 1, d = 0, delta = 0),
+    est = c(TRUE, TRUE, TRUE),
+    P = RH_def$P
+  )
+  if(deriv_mode == "analytic"){
+    args$gr  <- RH_def$gr
+    args$hss <- RH_def$hss
+  } else {
+    args$derivType <- "Richardson"
+    args$derivType.hss <- "Richardson"
+  }
+  do.call(createItem, args)
+}
+
+make_custom_bank <- function(deriv_mode = c("analytic","richardson")){
+  deriv_mode <- match.arg(deriv_mode)
+  list(
+    AO  = make_x_AO(deriv_mode = deriv_mode),
+    LPE = make_x_LPE(deriv_mode = deriv_mode),
+    RH  = make_x_RH(deriv_mode = deriv_mode)
+  )
+}
+```
+
+# Starting values and custom fits
+
+```{r}
+extract_ad <- function(mod){
+  tab <- mirt::mod2values(mod)
+  nmcol  <- if("name" %in% names(tab)) "name" else "parname"
+  valcol <- "value"
+  if(!("item" %in% names(tab))) stop("mod2values() has no 'item' column")
+
+  item_num <- suppressWarnings(as.integer(gsub("[^0-9]+","", as.character(tab$item))))
+  tab$item_num <- item_num
+  tab <- tab[!is.na(tab$item_num) & tab$item_num > 0, , drop = FALSE]
+
+  out_long <- tab[, c("item_num", nmcol, valcol), drop = FALSE]
+  names(out_long) <- c("item","par","value")
+  out_long$par <- as.character(out_long$par)
+  out_long$value <- suppressWarnings(as.numeric(out_long$value))
+
+  out_wide <- tidyr::pivot_wider(out_long, names_from = par, values_from = value)
+
+  if(!("a1" %in% names(out_wide)) && "a"  %in% names(out_wide)) out_wide$a1 <- out_wide$a
+  if(!("d"  %in% names(out_wide)) && "d1" %in% names(out_wide)) out_wide$d  <- out_wide$d1
+
+  out_wide <- out_wide[, c("item","a1","d"), drop = FALSE]
+  out_wide
+}
+
+apply_startvals_to_sv <- function(sv, ad_df = NULL, model_type, shape_init = NULL, shape_df = NULL){
+
+  nmcol  <- get_col(sv, c("name","parname"))
+  valcol <- get_col(sv, c("value"))
+  estcol <- get_col(sv, c("est"))
+
+  if(!("item" %in% names(sv))) stop("pars table has no 'item' column")
+
+  item_num <- suppressWarnings(as.integer(gsub("[^0-9]+","", as.character(sv$item))))
+
+  if(!is.null(ad_df) && nrow(ad_df) > 0){
+    ad_df <- as.data.frame(ad_df)
+    if(!all(c("item","a1","d") %in% names(ad_df))){
+      stop("apply_startvals_to_sv(): ad_df must contain item, a1, d")
+    }
+    for(i in ad_df$item){
+      a_i <- ad_df$a1[ad_df$item == i][1]
+      d_i <- ad_df$d [ad_df$item == i][1]
+      if(is.finite(a_i)){
+        idx <- (item_num == i) & (sv[[nmcol]] %in% c("a1","a"))
+        sv[[valcol]][idx] <- a_i
+      }
+      if(is.finite(d_i)){
+        idx <- (item_num == i) & (sv[[nmcol]] %in% c("d","d1"))
+        sv[[valcol]][idx] <- d_i
+      }
+    }
+  }
+
+  shape_name <- shape_par_name(model_type)
+
+  if(!is.null(shape_df) && nrow(shape_df) > 0){
+    shape_df <- as.data.frame(shape_df)
+    if(!all(c("item", shape_name) %in% names(shape_df))){
+      stop("apply_startvals_to_sv(): shape_df must contain item and ", shape_name)
+    }
+    for(i in shape_df$item){
+      s_i <- shape_df[[shape_name]][shape_df$item == i][1]
+      if(is.finite(s_i)){
+        idx <- (item_num == i) & (sv[[nmcol]] == shape_name)
+        sv[[valcol]][idx] <- s_i
+        sv[[estcol]][idx] <- TRUE
+      }
+    }
+  } else if(!is.null(shape_init) && is.finite(shape_init)){
+    idxs <- (item_num > 0) & (sv[[nmcol]] == shape_name)
+    sv[[valcol]][idxs] <- shape_init
+    sv[[estcol]][idxs] <- TRUE
+  }
+
+  sv
+}
+
+fit_custom <- function(dat_items, wts, model_type, custom_item_obj,
+                       ad_start = NULL, shape_init = NULL, shape_df = NULL,
+                       shape_prior_mean = 0, shape_prior_sd = 1,
+                       em_cycles = 5000, quadpts_fit = 50, optimizer_fit = "nlminb"){
+
+  warns <- character(0)
+
+  assert_fixed_GH50_contract(theta, Theta_mat, quadpts_fit)
+
+  fit_technical <- list(
+    NCYCLES = em_cycles,
+    customTheta = Theta_mat,
+    customPriorFun = prior_GH50
+  )
+
+  out <- tryCatch({
+
+    sv_raw <- withCallingHandlers(
+      mirt(dat_items, model = 1, itemtype = model_type,
+           customItems = setNames(list(custom_item_obj), model_type),
+           pars = "values", method = "EM",
+           survey.weights = wts,
+           technical = fit_technical,
+           optimizer = optimizer_fit,
+           verbose = FALSE),
+      warning = function(w){
+        warns <<- c(warns, conditionMessage(w))
+        invokeRestart("muffleWarning")
+      }
+    )
+
+    sv2 <- apply_startvals_to_sv(
+      sv_raw,
+      ad_df = ad_start,
+      model_type = model_type,
+      shape_init = shape_init,
+      shape_df = shape_df
+    )
+
+    sv2 <- set_norm_prior_in_values(
+      sv2,
+      par_names = shape_par_name(model_type),
+      mean = shape_prior_mean,
+      sd = shape_prior_sd
+    )
+
+    mod <- withCallingHandlers(
+      mirt(dat_items, model = 1, itemtype = model_type,
+           customItems = setNames(list(custom_item_obj), model_type),
+           pars = sv2, method = "EM",
+           survey.weights = wts,
+           technical = fit_technical,
+           optimizer = optimizer_fit,
+           verbose = FALSE),
+      warning = function(w){
+        warns <<- c(warns, conditionMessage(w))
+        invokeRestart("muffleWarning")
+      }
+    )
+
+    list(mod = mod, error = FALSE, message = NA_character_, warnings = unique(warns))
+
+  }, error = function(e){
+    list(mod = NULL, error = TRUE, message = conditionMessage(e), warnings = unique(warns))
+  })
+
+  out
+}
+```
+
+# Safe extractors
+
+```{r}
+has_valid_mod <- function(fit_obj, require_converged = FALSE){
+  ok <- !is.null(fit_obj) && !isTRUE(fit_obj$error) && !is.null(fit_obj$mod)
+  if(require_converged && ok){
+    ok <- tryCatch(isTRUE(fit_obj$mod@OptimInfo$converged), error = function(e) FALSE)
+  }
+  ok
+}
+
+extract_param_table <- function(mod){
+  tab <- mod2values(mod)
+  item_num <- suppressWarnings(as.integer(gsub("[^0-9]+", "", as.character(tab$item))))
+  tab$item_num <- item_num
+  tab <- tab[!is.na(tab$item_num) & tab$item_num > 0, , drop = FALSE]
+
+  nmcol <- if("name" %in% names(tab)) "name" else "parname"
+
+  out_long <- tab[, c("item_num", nmcol, "value"), drop = FALSE]
+  names(out_long) <- c("item", "par", "value")
+  out_long$par <- as.character(out_long$par)
+  out_long$value <- suppressWarnings(as.numeric(out_long$value))
+
+  out_wide <- tidyr::pivot_wider(out_long, names_from = par, values_from = value)
+
+  if(!("a1" %in% names(out_wide)) && "a"  %in% names(out_wide)) out_wide$a1 <- out_wide$a
+  if(!("d"  %in% names(out_wide)) && "d1" %in% names(out_wide)) out_wide$d  <- out_wide$d1
+
+  out_wide[order(out_wide$item), , drop = FALSE]
+}
+```
+
+# Fixed defaults
+
+```{r}
+.em_cycles_global <- em_cycles
+.quadpts_fit_global <- quadpts_fit
+.optimizer_fit_global <- optimizer_fit
+.start_beta_RH_global <- start_beta_RH
+.dlogit_global <- dlogit
+.EMP_PRIORS_global <- EMP_PRIORS
+```
+
+# LSAT7 illustration
+
+```{r}
+fit_lsat7 <- function(
+  em_cycles = .em_cycles_global,
+  quadpts_fit = .quadpts_fit_global,
+  optimizer_fit = .optimizer_fit_global,
+  start_beta_RH = .start_beta_RH_global,
+  dlogit = .dlogit_global,
+  priors = .EMP_PRIORS_global
+){
+
+  assert_fixed_GH50_contract(theta, Theta_mat, quadpts_fit)
+
+  data(LSAT7)
+  lsat7_full <- as.data.frame(expand.table(LSAT7))
+  ni_lsat7 <- ncol(lsat7_full)
+
+  lsat7_mirt_df <- lsat7_full
+  lsat7_mirt_df[] <- lapply(lsat7_mirt_df, function(x) as.integer(as.character(x)))
+  names(lsat7_mirt_df) <- paste0("I", seq_len(ni_lsat7))
+  lsat7_mirt_df$r <- 1
+  rownames(lsat7_mirt_df) <- NULL
+
+  dat_items <- lsat7_mirt_df[, 1:ni_lsat7, drop = FALSE]
+  wts <- lsat7_mirt_df$r
+
+  fit_technical <- list(
+    NCYCLES = em_cycles,
+    customTheta = Theta_mat,
+    customPriorFun = prior_GH50
+  )
+
+  custom_bank <- make_custom_bank(deriv_mode = "analytic")
+
+  # 1) Baseline 2PLM
+  fit_2PL <- mirt(
+    dat_items, model = 1, itemtype = "2PL",
+    method = "EM",
+    survey.weights = wts,
+    technical = fit_technical,
+    optimizer = optimizer_fit,
+    verbose = FALSE
+  )
+
+  ad_2PL <- extract_ad(fit_2PL)
+
+  ad_RH_start <- if(!is.null(ad_2PL) && nrow(ad_2PL) > 0){
+    convert_ad_logit_to_probit(ad_2PL, D = dlogit)
+  } else {
+    NULL
+  }
+
+  # 2) Custom AO
+  fit_AO <- fit_custom(
+    dat_items, wts,
+    model_type = "AO",
+    custom_item_obj = custom_bank$AO,
+    ad_start = ad_2PL,
+    shape_init = 0,
+    shape_prior_mean = priors$AO$mean,
+    shape_prior_sd = priors$AO$sd,
+    em_cycles = em_cycles,
+    quadpts_fit = quadpts_fit,
+    optimizer_fit = optimizer_fit
+  )
+
+  # 3) Custom LPE
+  fit_LPE <- fit_custom(
+    dat_items, wts,
+    model_type = "LPE",
+    custom_item_obj = custom_bank$LPE,
+    ad_start = ad_2PL,
+    shape_init = 0,
+    shape_prior_mean = priors$LPE$mean,
+    shape_prior_sd = priors$LPE$sd,
+    em_cycles = em_cycles,
+    quadpts_fit = quadpts_fit,
+    optimizer_fit = optimizer_fit
+  )
+
+  # 4) Custom RH
+  fit_RH <- fit_custom(
+    dat_items, wts,
+    model_type = "RH",
+    custom_item_obj = custom_bank$RH,
+    ad_start = ad_RH_start,
+    shape_init = start_beta_RH,
+    shape_prior_mean = priors$RH$mean,
+    shape_prior_sd = priors$RH$sd,
+    em_cycles = em_cycles,
+    quadpts_fit = quadpts_fit,
+    optimizer_fit = optimizer_fit
+  )
+
+  # 5) Built-in LPE via restricted 5PLM (g = 0, u = 1; for comparison with custom LPE)
+  fit_LPE_builtin <- tryCatch({
+    warns_b <- character(0)
+
+    sv_b <- withCallingHandlers(
+      mirt(dat_items, model = 1, itemtype = "5PL",
+           pars = "values", method = "EM",
+           survey.weights = wts,
+           technical = fit_technical,
+           optimizer = optimizer_fit,
+           verbose = FALSE),
+      warning = function(w){
+        warns_b <<- c(warns_b, conditionMessage(w))
+        invokeRestart("muffleWarning")
+      }
+    )
+
+    nmcol_b <- if("name" %in% names(sv_b)) "name" else "parname"
+
+    # Fix g = 0, u = 1
+    for(pn in c("g","c","c1")){
+      idx <- sv_b[[nmcol_b]] == pn
+      if(any(idx)){
+        sv_b$value[idx] <- 0; sv_b$est[idx] <- FALSE
+        if("lbound" %in% names(sv_b)) sv_b$lbound[idx] <- 0
+        if("ubound" %in% names(sv_b)) sv_b$ubound[idx] <- 0
+      }
+    }
+    for(pn in c("u","u1")){
+      idx <- sv_b[[nmcol_b]] == pn
+      if(any(idx)){
+        sv_b$value[idx] <- 1; sv_b$est[idx] <- FALSE
+        if("lbound" %in% names(sv_b)) sv_b$lbound[idx] <- 1
+        if("ubound" %in% names(sv_b)) sv_b$ubound[idx] <- 1
+      }
+    }
+
+    # Set shape parameter start to 0 and apply prior
+    is_shape <- sv_b[[nmcol_b]] %in% c("S","logS")
+    if(any(is_shape)) sv_b$value[is_shape] <- 0
+    sv_b <- set_norm_prior_in_values(sv_b, par_names = c("S","logS"),
+                                      mean = priors$LPE$mean, sd = priors$LPE$sd)
+
+    mod_b <- withCallingHandlers(
+      mirt(dat_items, model = 1, itemtype = "5PL",
+           pars = sv_b, method = "EM",
+           survey.weights = wts,
+           technical = fit_technical,
+           optimizer = optimizer_fit,
+           verbose = FALSE),
+      warning = function(w){
+        warns_b <<- c(warns_b, conditionMessage(w))
+        invokeRestart("muffleWarning")
+      }
+    )
+
+    list(mod = mod_b, error = FALSE, message = NA_character_, warnings = unique(warns_b))
+  }, error = function(e){
+    list(mod = NULL, error = TRUE, message = conditionMessage(e), warnings = character(0))
+  })
+
+  list(
+    meta = list(
+      em_cycles = em_cycles,
+      quadpts_fit = quadpts_fit,
+      optimizer_fit = optimizer_fit,
+      start_beta_RH = start_beta_RH,
+      dlogit = dlogit,
+      shape_priors = priors
+    ),
+    fit = list(
+      `2PLM` = list(mod = fit_2PL, error = FALSE, message = NA_character_, warnings = character(0)),
+      AO = fit_AO,
+      LPE = fit_LPE,
+      RH = fit_RH,
+      LPE_builtin = fit_LPE_builtin
+    )
+  )
+}
+```
+
+# Run LSAT7 illustration
+
+```{r}
+res_lsat7 <- fit_lsat7()
+
+cat("\n--- 2PLM ---\n")
+print(extract_param_table(res_lsat7$fit$`2PLM`$mod))
+
+cat("\n--- Custom AO ---\n")
+if(has_valid_mod(res_lsat7$fit$AO)){
+  print(extract_param_table(res_lsat7$fit$AO$mod))
+} else {
+  cat("AO fit failed:", res_lsat7$fit$AO$message, "\n")
+}
+
+cat("\n--- Custom LPE ---\n")
+if(has_valid_mod(res_lsat7$fit$LPE)){
+  print(extract_param_table(res_lsat7$fit$LPE$mod))
+} else {
+  cat("LPE fit failed:", res_lsat7$fit$LPE$message, "\n")
+}
+
+cat("\n--- Custom RH ---\n")
+if(has_valid_mod(res_lsat7$fit$RH)){
+  print(extract_param_table(res_lsat7$fit$RH$mod))
+} else {
+  cat("RH fit failed:", res_lsat7$fit$RH$message, "\n")
+}
+
+cat("\n--- Built-in LPE (5PLM with g = 0, u = 1; for comparison) ---\n")
+if(has_valid_mod(res_lsat7$fit$LPE_builtin)){
+  print(extract_param_table(res_lsat7$fit$LPE_builtin$mod))
+} else {
+  cat("Built-in LPE fit failed:", res_lsat7$fit$LPE_builtin$message, "\n")
+}
+```
