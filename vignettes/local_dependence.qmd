@@ -28,6 +28,7 @@ library(dplyr)
 library(tidyr)
 library(tibble)
 library(ggplot2)
+library(plotly)
 
 theme_set(theme_minimal(base_size = 13))
 irw_blue <- "#2166ac"
@@ -215,18 +216,28 @@ and commit the updated `local_dependence_data/local_dependence_results.rds`.
 
 ```{r}
 #| label: fig-prop-flagged-ranked
-#| fig-cap: "Proportion of item pairs flagged as locally dependent (|Q3| > 0.2), one point per table, ranked from lowest to highest."
+#| fig-cap: "Proportion of item pairs flagged as locally dependent (|Q3| > 0.2), one point per table, ranked from lowest to highest. Hover over a point to see which table it is."
 #| fig-height: 6
 
 flagged_plot_df <- summary_df %>%
   arrange(prop_flagged) %>%
-  mutate(table_lab = factor(table, levels = table))
+  mutate(
+    rank    = row_number(),
+    tooltip = paste0(
+      "Table: ", table,
+      "<br>Prop. flagged: ", round(prop_flagged, 3),
+      "<br>Model: ", itemtype
+    )
+  )
 
-ggplot(flagged_plot_df, aes(x = prop_flagged, y = table_lab, colour = itemtype)) +
-  geom_point(size = 2.5) +
+p <- ggplot(flagged_plot_df, aes(x = prop_flagged, y = rank, colour = itemtype, text = tooltip)) +
+  geom_point(size = 2) +
   scale_colour_manual(values = c("2PL" = irw_blue, "graded" = irw_red), name = "Model") +
   labs(x = "Proportion of item pairs flagged", y = NULL) +
-  theme(axis.text.y = element_text(size = 7), legend.position = "bottom")
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+
+ggplotly(p, tooltip = "text") %>%
+  layout(legend = list(orientation = "h", y = -0.1))
 ```
 
 Most tables should sit toward the low end of @fig-prop-flagged-ranked — a
