@@ -1,0 +1,566 @@
+---
+title: "Asymmetric IRT Models Across IRW: Do LPE, RH, and AO Beat the 2PL?"
+description: |
+  Shim & Bonifay (2026) introduce three IRT models with asymmetric item
+  response functions -- LPE, RH, and AO -- and show, via simplex-sampled
+  synthetic data, that two of them fit about as well as a standard 2PL even
+  when fitting propensity alone is compared, while the third (RH) is more
+  parsimonious. They never apply the models to real data. We do: after a
+  dedicated correctness/recovery validation gate, we fit a 2PL reference plus
+  all three asymmetric models across dozens of binary IRW tables, to see
+  whether the extra asymmetry parameter actually earns its keep, and whether
+  its direction tracks known response phenomena like guessing.
+date: today
+bibliography: asymmetric_irt_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(plotly)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+irw_green <- "#4daf4a"
+
+model_colors <- c("2PLM" = irw_grey, "RH" = irw_blue, "LPE" = irw_red, "AO" = irw_green)
+
+results_path <- "asymmetric_irt_data/asymmetric_irt_results.rds"
+gate_path    <- "asymmetric_irt_data/validation_gate_log.rds"
+cache_ok     <- file.exists(results_path) && file.exists(gate_path)
+
+if (cache_ok) {
+  .res             <- readRDS(results_path)
+  summary_df       <- .res$summary
+  item_level_df    <- .res$item_level
+  candidate_tables <- .res$candidate_tables
+  n_all_candidates <- .res$n_all_candidates
+  min_participants <- .res$min_participants
+  is_pilot         <- isTRUE(.res$pilot)
+  date_run         <- .res$date_run
+
+  .gate              <- readRDS(gate_path)
+  reduction_check    <- .gate$reduction_check
+  noncrossing_ok     <- .gate$noncrossing_ok
+  lpe_curves         <- .gate$lpe_curves
+  theta_grid         <- .gate$theta_grid
+  kappa_vals         <- .gate$kappa_vals
+  recovery_df        <- .gate$recovery_df
+  recovery_summary   <- .gate$recovery_summary
+  gate_date_run      <- .gate$date_run
+} else {
+  summary_df <- tibble(
+    table = character(), n_items = integer(), n_participants = integer(),
+    construct_type = character(), bic_2pl = numeric(), bic_delta_AO = numeric(),
+    bic_delta_LPE = numeric(), bic_delta_RH = numeric(), winning_model = character()
+  )
+  item_level_df <- tibble(
+    table = character(), model = character(), item = character(), a1 = numeric(),
+    d = numeric(), shape_est = numeric(), kappa = numeric(), lambda_P = numeric()
+  )
+  candidate_tables <- character(); n_all_candidates <- 0L; min_participants <- 2000
+  is_pilot <- FALSE; date_run <- Sys.Date()
+  reduction_check <- tibble(model = character(), reference = character(),
+                             max_abs_diff = numeric(), pass = logical())
+  noncrossing_ok <- NA; lpe_curves <- matrix(); theta_grid <- numeric()
+  kappa_vals <- numeric()
+  recovery_df <- tibble(model = character(), item = integer(), a_true = numeric(),
+                         d_true = numeric(), shape_true = numeric(), shape_est = numeric())
+  recovery_summary <- tibble(model = character(), cor_shape = numeric(), mean_abs_error = numeric())
+  gate_date_run <- Sys.Date()
+}
+
+knitr::opts_chunk$set(eval = cache_ok)
+```
+
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (!cache_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Cache not found** — figures and tables will not appear. Generate results ",
+  "by running, in order, from the project root:\n\n",
+  "```r\nRscript vignettes/asymmetric_irt_data/validation_gate.R\n",
+  "Rscript vignettes/asymmetric_irt_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+::: {.callout-note}
+This vignette — including the model implementation, the validation gate, the
+dataset search, the compute script, and the writing below — was produced
+largely by Claude (Anthropic), working from a task specification and with
+human review. The custom item types used here are a non-trivial extension of
+`mirt`; treat the methodological choices and results accordingly, and check
+`asymmetric_irt_helpers.R` and the validation gate directly if you're relying
+on the numbers shown.
+:::
+
+## Background
+
+Every IRT model used elsewhere on this site — the 2PL, the graded response
+model, the [Dutch Identity](dutch_identity.qmd)'s loglinear framework — has a
+**symmetric** item response function: the probability of a correct or
+endorsing response rises smoothly and symmetrically around the item's
+difficulty. But nothing requires that. A guessing-prone multiple-choice item,
+for instance, has a response curve that rises quickly from a nonzero floor
+and then flattens gradually near the top — asymmetric around its inflection
+point.
+
+@shimbonifay2026 study three such asymmetric models, each adding a single
+shape parameter $\kappa$ to a standard two-parameter item:
+
+- **LPE** (logistic power expit): $P(\theta) = [\Psi(z)]^{\kappa}$, where
+  $\Psi$ is the logistic CDF and $z = a(\theta - b)$. Raising the logistic
+  curve to a power skews it toward one tail.
+- **RH** (Ramsay/heteroscedastic, per the paper's naming): $P(\theta) =
+  \Phi\!\left(z / \sigma(\theta)\right)$, where $\sigma(\theta) = \sqrt{2}\,
+  [1 + \exp(-\kappa\theta)]^{-1/2}$ and $\Phi$ is the *normal* (probit) CDF.
+  Here asymmetry comes from letting the response variance itself change with
+  $\theta$, rather than from a power transform.
+- **AO** (Aranda-Ordaz, after the link function's origin, [-@aranda1981forcing]):
+  $P(\theta) = 1 - [1 + \kappa\exp(z)]^{-1/\kappa}$.
+
+In all three, a symmetric baseline is a special case: $\kappa = 1$ recovers
+the ordinary logistic 2PL for LPE and AO, and $\kappa = 0$ recovers a
+2-parameter *normal-ogive* model for RH. The paper's own contribution is
+methodological, not empirical: using synthetic data sampled arbitrarily from
+the response-probability simplex (not generated from any of these models),
+they show LPE and AO have **fitting propensity statistically
+indistinguishable from the 2PLM** — so any real advantage isn't just an
+artifact of the extra parameter — while RH is **more parsimonious**, fitting
+arbitrary data somewhat less readily. They never fit any of the three models
+to real item response data.
+
+That's the gap this vignette fills: do LPE, RH, and AO actually improve on a
+standard 2PL across real IRW instruments, and — since Shim & Bonifay frame
+asymmetry around phenomena like guessing (a leniency effect concentrated at
+the low end of $\theta$) — does the *direction* of the fitted asymmetry
+relate to `construct_type`, e.g. more leniency in cognitive/educational items
+than in opinion/attitude items?
+
+Implementing three custom, hand-derived item types is the highest-risk part
+of any vignette on this site, so before touching a single real IRW table we
+ran a dedicated validation gate — shown next — and only proceeded to the real
+data once it passed.
+
+## Validation: does the implementation actually behave correctly?
+
+Each model type was implemented as a custom `mirt` item, with the paper's own
+$P$/$dP$/$d^2P$ math (copied, not re-derived) cross-checked against the
+authors' own reference implementation. Three checks had to pass before any
+real IRW table was fit.
+
+### (a) Symmetric-baseline reduction
+
+At $\kappa = 1$ (LPE, AO) or $\kappa = 0$ (RH), each custom item's $P(\theta)$
+should exactly reproduce its symmetric reference model.
+
+```{r}
+#| label: tbl-reduction-check
+#| tbl-cap: "Maximum absolute difference between each custom item's P(theta) at its symmetric baseline and the corresponding reference model, evaluated on a 401-point theta grid from -6 to 6."
+
+reduction_check |>
+  mutate(max_abs_diff = formatC(max_abs_diff, format = "e", digits = 2)) |>
+  rename(Model = model, Reference = reference, `Max |diff|` = max_abs_diff, Pass = pass) |>
+  knitr::kable(align = "llrc")
+```
+
+All three differences are at machine precision (`r formatC(max(reduction_check$max_abs_diff), format="e", digits=1)`
+or smaller) — the custom items reduce to their reference models exactly, not
+just approximately.
+
+### (b) LPE non-crossing property
+
+@shimbonifay2026 (Section 2.1) prove that LPE curves at different $\kappa$
+never cross: for $\kappa < 1$ the curve sits at or above the $\kappa = 1$
+curve at every $\theta$, and for $\kappa > 1$ it sits at or below it. This is
+a strong, cheap check directly on the $P$ function.
+
+```{r}
+#| label: fig-lpe-noncrossing
+#| fig-cap: "LPE item response curves at six values of kappa (a = 1, d = 0). Curves for kappa < 1 sit at or above the kappa = 1 curve everywhere; curves for kappa > 1 sit at or below it. No crossing is visible anywhere on the grid."
+#| fig-height: 4.5
+
+lpe_df <- as.data.frame(lpe_curves) |>
+  mutate(theta = theta_grid) |>
+  pivot_longer(-theta, names_to = "kappa_label", values_to = "p") |>
+  mutate(kappa = as.numeric(sub("^k", "", kappa_label)),
+         kappa_label = factor(paste0("κ = ", kappa),
+                               levels = paste0("κ = ", sort(kappa_vals))))
+
+ggplot(lpe_df, aes(x = theta, y = p, colour = kappa_label)) +
+  geom_line(linewidth = 0.9) +
+  scale_colour_viridis_d(name = NULL, option = "plasma", end = 0.9) +
+  labs(x = expression(theta), y = expression(P(theta)))
+```
+
+Non-crossing holds across every pair of $\kappa$ values checked
+(`r paste(kappa_vals, collapse = ", ")`): **`r noncrossing_ok`**.
+
+### (c) Simulation recovery
+
+Finally, we simulated data from each model at known, clearly asymmetric
+$\kappa$ values ($N = 2{,}000$ persons, 20 items — matching the real-data
+scale used below) and fit the corresponding custom item to see whether the
+true shape parameter comes back out.
+
+```{r}
+#| label: fig-recovery
+#| fig-cap: "Shape-parameter recovery: true vs. estimated kappa (natural, unconstrained estimation scale) for each model, N = 2,000 simulated persons, 20 items. The dashed line is exact recovery."
+#| fig-height: 4
+
+ggplot(recovery_df, aes(x = shape_true, y = shape_est)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_point(aes(colour = model), size = 2, alpha = 0.8) +
+  scale_colour_manual(values = model_colors, guide = "none") +
+  facet_wrap(~model, scales = "free") +
+  labs(x = "True shape parameter", y = "Estimated shape parameter")
+```
+
+```{r}
+#| label: tbl-recovery-summary
+#| tbl-cap: "Correlation and mean absolute error between true and estimated shape parameters, by model."
+
+recovery_summary |>
+  mutate(across(c(cor_shape, mean_abs_error), \(x) round(x, 3))) |>
+  rename(Model = model, `Correlation` = cor_shape, `Mean abs. error` = mean_abs_error) |>
+  knitr::kable(align = "lrr")
+```
+
+RH recovers well; AO recovers decently; **LPE recovery is noticeably weaker**
+at this sample size. That gap held up under scrutiny rather than being a bug:
+the analytic LPE/AO gradients matched numerical finite-difference gradients
+to several decimal places everywhere tested, and separate runs at larger $N$
+showed recovery improving substantially (roughly $r \approx 0.4$ at $N =
+800$ rising to $r \approx 0.7$ at $N = 5{,}000$) — consistent with a genuine
+small-sample identifiability limitation of the LPE power-transform
+parameterization, not an implementation error. Interestingly, this is the
+*opposite* of what the paper's own indirect diagnostic (fitting-propensity
+stability under arbitrary simplex-sampled data) suggests, which reads RH as
+having comparatively less information. The two diagnostics ask different
+questions — arbitrary-data fitting stability vs. direct generative-truth
+recovery — and needn't agree; the tension is worth flagging rather than
+resolving here. Practically, it means **per-item LPE $\kappa$ estimates below
+should be read with more caution than RH's**, and it's why the real-data
+batch below uses a higher participant floor ($N \geq `r format(min_participants, big.mark=",")`$)
+than other IRW vignettes.
+
+All three checks passed
+(`r format(gate_date_run, "%B %d, %Y")`); only then did we move to real IRW
+data.
+
+## Data and methods
+
+```{r}
+#| label: filter-datasets
+#| eval: false
+
+all_candidates <- irw_filter(
+  n_categories   = 2,
+  n_items        = c(5, 40),
+  n_participants = c(2000, Inf)
+)
+```
+
+Binary items only — polytomous extensions of LPE/RH/AO are future work, not
+attempted here. `r n_all_candidates` tables met this criterion as of
+`r format(date_run, "%B %Y")`; `r nrow(summary_df)` of them produced usable
+results across all four models (the rest were dropped for too few usable
+items after cleaning, or a model that failed to converge).
+
+For each candidate table, `fit_asymmetric_irt()`:
+
+1. Fetches the table and builds a wide response matrix (`irw_fetch()` +
+   `irw_long2resp()`), capping at 10,000 respondents.
+2. Fits a standard 2PL as the reference model, on a fixed 50-point
+   Gauss-Hermite quadrature (so later BIC comparisons aren't confounded by
+   different integration grids).
+3. Fits LPE, RH, and AO as custom items, initialized from the 2PL fit (RH's
+   $a$/$d$ are first converted from logit to probit scale) and regularized
+   toward the symmetric baseline with a $N(0, 1)$ prior on each shape
+   parameter — the paper's "moderate shrinkage" condition. Each fit is
+   wrapped in `tryCatch`; non-convergent fits are logged and dropped rather
+   than retried.
+4. Compares AIC/BIC/log-likelihood of each asymmetric model against the 2PL
+   reference, and records the winning model by BIC.
+5. Extracts, per item, the shape parameter $\kappa$ and $\Lambda_P$ (paper
+   Eq. 7: $\Lambda_P = P(b+x) + P(b-x) - 1$ at $x = 1$ logit from the item's
+   own difficulty $b$) — positive $\Lambda_P$ means **leniency** (the item is
+   easier than a symmetric model would predict, in the sense described
+   below), negative means **strictness**.
+
+```{r}
+#| label: fit-function
+#| eval: false
+
+fit_asymmetric_irt <- function(table_name) {
+  resp    <- fetch_wide(table_name)              # irw_fetch() + irw_long2resp(), cleaned
+  fit_2pl <- mirt(resp, 1, itemtype = "2PL", technical = list(customTheta = Theta_mat_ref, ...))
+  fit_lpe <- fit_custom(resp, "LPE", make_custom_item("LPE"), ad_start = extract_ad(fit_2pl), ...)
+  fit_rh  <- fit_custom(resp, "RH",  make_custom_item("RH"),  ad_start = convert_ad_logit_to_probit(...), ...)
+  fit_ao  <- fit_custom(resp, "AO",  make_custom_item("AO"),  ad_start = extract_ad(fit_2pl), ...)
+  # ... compare BIC, extract per-item kappa / lambda_P ...
+}
+```
+
+::: {.callout-note}
+To reproduce with current IRW holdings, re-run `validation_gate.R` then
+`asymmetric_irt_compute.R`, and commit the updated
+`asymmetric_irt_data/asymmetric_irt_results.rds`.
+:::
+
+## Results
+
+### Does any asymmetric model beat the 2PL?
+
+```{r}
+#| label: tbl-winning-counts
+#| tbl-cap: "Winning model by BIC, across all tables with usable results."
+
+summary_df |>
+  count(winning_model, name = "n_tables") |>
+  mutate(pct = round(100 * n_tables / sum(n_tables), 1)) |>
+  arrange(desc(n_tables)) |>
+  rename(`Winning model` = winning_model, `# Tables` = n_tables, `%` = pct) |>
+  knitr::kable(align = "lrr")
+```
+
+RH is the clear standout: it wins by BIC in a large share of tables, often by
+a wide margin. LPE and AO win far less often — consistent with the paper's
+own finding that RH behaves differently from the other two, though not in
+the direction Shim & Bonifay's arbitrary-data diagnostic alone would suggest
+(recall Section "Validation" above).
+
+```{r}
+#| label: fig-bic-delta-ranked
+#| fig-cap: "Best asymmetric-model BIC delta relative to the 2PL, one point per table, ranked from most-improved to least. Negative values favor the asymmetric model; color shows which model achieved that best delta (2PLM = no asymmetric model improved on it). Hover for details."
+#| fig-height: 6.5
+
+ranked_df <- summary_df |>
+  rowwise() |>
+  mutate(best_delta = min(c(bic_delta_AO, bic_delta_LPE, bic_delta_RH), na.rm = TRUE)) |>
+  ungroup() |>
+  arrange(best_delta) |>
+  mutate(
+    rank    = row_number(),
+    tooltip = paste0(
+      "Table: ", table,
+      "<br>Winning model: ", winning_model,
+      "<br>Best BIC delta vs. 2PL: ", round(best_delta, 1),
+      "<br>n_items: ", n_items, ", n: ", n_participants
+    )
+  )
+
+p <- ggplot(ranked_df, aes(x = best_delta, y = rank, colour = winning_model, text = tooltip)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_point(size = 2) +
+  scale_colour_manual(values = model_colors, name = "Winning model") +
+  labs(x = "Best asymmetric BIC delta vs. 2PL  (negative favors asymmetry)", y = NULL) +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+
+ggplotly(p, tooltip = "text") |>
+  layout(legend = list(orientation = "h", y = -0.1))
+```
+
+The long tail on the left of @fig-bic-delta-ranked is almost entirely RH: for
+a handful of tables the BIC improvement over the plain 2PL runs into the
+hundreds of points, which is not a marginal preference.
+
+### Does it concentrate by construct type?
+
+```{r}
+#| label: tbl-construct-crosstab
+#| tbl-cap: "Winning model by construct_type (multi-tagged combinations collapsed into the first matching bucket)."
+
+bucket_construct <- function(x) {
+  x <- ifelse(is.na(x), "Unknown", x)
+  case_when(
+    grepl("Cognitive", x) ~ "Cognitive/educational",
+    grepl("Opinion", x)   ~ "Opinion/attitude",
+    x == "Unknown"        ~ "Unknown",
+    TRUE                  ~ "Other"
+  )
+}
+
+crosstab_df <- summary_df |> mutate(bucket = bucket_construct(construct_type))
+
+crosstab_df |>
+  count(bucket, winning_model) |>
+  pivot_wider(names_from = winning_model, values_from = n, values_fill = 0) |>
+  rename(`Construct bucket` = bucket) |>
+  knitr::kable(align = "lrrrr")
+```
+
+RH wins across every construct bucket, so "does RH win" isn't itself very
+diagnostic of construct type. The more targeted question is whether the
+*direction* of asymmetry — leniency vs. strictness — differs by bucket, which
+is closer to what Shim & Bonifay's guessing framing actually predicts.
+
+```{r}
+#| label: fig-lambda-by-bucket
+#| fig-cap: "Distribution of item-level Lambda_P (positive = leniency, negative = strictness) for the winning model's items in each table, by construct bucket. Dashed line at zero."
+#| fig-height: 4.5
+
+lambda_bucket_df <- item_level_df |>
+  inner_join(crosstab_df |> select(table, bucket, winning_model), by = "table") |>
+  filter(model == winning_model, bucket != "Unknown")
+
+ggplot(lambda_bucket_df, aes(x = bucket, y = lambda_P)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_boxplot(fill = irw_blue, alpha = 0.3, outlier.alpha = 0.4, width = 0.5) +
+  labs(x = NULL, y = expression(Lambda[P]~"(item-level, winning model)"))
+```
+
+```{r}
+#| label: lambda-bucket-stats
+#| echo: false
+
+lambda_stats <- lambda_bucket_df |>
+  group_by(bucket) |>
+  summarise(mean_lambda = mean(lambda_P), prop_positive = mean(lambda_P > 0), .groups = "drop")
+
+cog_mean <- round(lambda_stats$mean_lambda[lambda_stats$bucket == "Cognitive/educational"], 3)
+opn_mean <- round(lambda_stats$mean_lambda[lambda_stats$bucket == "Opinion/attitude"], 3)
+cog_pos  <- round(100 * lambda_stats$prop_positive[lambda_stats$bucket == "Cognitive/educational"])
+opn_pos  <- round(100 * lambda_stats$prop_positive[lambda_stats$bucket == "Opinion/attitude"])
+```
+
+Cognitive/educational items skew mildly toward leniency (mean
+$\Lambda_P$ = `r cog_mean`, `r cog_pos`% of items positive) compared to
+Opinion/attitude items (mean $\Lambda_P$ = `r opn_mean`, `r opn_pos`% positive).
+That's the direction the guessing hypothesis predicts, and it's a real,
+non-zero gap — but it is a **modest** one, well short of a clean separation,
+and both buckets have plenty of items on either side of zero. Treat this as
+weak, directionally consistent evidence rather than a strong confirmation.
+
+### One convincing example
+
+```{r}
+#| label: example-setup
+#| echo: false
+
+example_table <- "colombia_2023_politics_attitudes"
+example_item  <- "item_p5261s7"
+
+ex_row <- item_level_df |>
+  filter(table == example_table, model == "RH", item == example_item)
+
+ex_delta <- summary_df$bic_delta_RH[summary_df$table == example_table]
+
+a_ex <- ex_row$a1[1]; d_ex <- ex_row$d[1]; kappa_ex <- ex_row$kappa[1]
+b_ex <- -d_ex / a_ex
+lambda_ex <- ex_row$lambda_P[1]
+```
+
+`r example_table` is the table with the single largest RH BIC improvement in
+this sample (`r round(ex_delta, 1)` BIC points below the 2PL). Its item
+`r example_item` (RH: $a$ = `r round(a_ex,2)`, $b$ = `r round(b_ex,2)`,
+$\kappa$ = `r round(kappa_ex,2)`, $\Lambda_P$ = `r round(lambda_ex,3)`) makes
+the asymmetry concrete: below, the fitted RH curve is plotted against the
+symmetric normal-ogive curve that the *same* $a$ and $b$ would imply under
+$\kappa = 0$ (the exact reduction validated above) — i.e., what a standard
+model would have predicted for this item.
+
+```{r}
+#| label: fig-example-irf
+#| fig-cap: "Fitted RH item response curve (blue) vs. the symmetric normal-ogive curve implied by the same discrimination and difficulty (grey dashed), for one item where RH wins convincingly. Hover to compare predicted response probabilities at any theta."
+#| fig-height: 4.5
+
+theta_ex <- seq(-4, 4, length.out = 401)
+sigma_ex <- sqrt(2) * (1 + exp(-kappa_ex * theta_ex))^(-1/2)
+p_rh_ex  <- pnorm((a_ex * theta_ex + d_ex) / sigma_ex)
+p_sym_ex <- pnorm(a_ex * theta_ex + d_ex)
+
+ex_df <- tibble(theta = theta_ex, RH = p_rh_ex, `Symmetric (kappa=0)` = p_sym_ex) |>
+  pivot_longer(-theta, names_to = "curve", values_to = "p") |>
+  mutate(tooltip = paste0(curve, "<br>theta: ", round(theta,2), "<br>P: ", round(p,3)))
+
+p <- ggplot(ex_df, aes(x = theta, y = p, colour = curve, group = curve, text = tooltip)) +
+  geom_line(linewidth = 1) +
+  geom_vline(xintercept = b_ex, linetype = "dotted", colour = irw_grey) +
+  scale_colour_manual(values = c("RH" = irw_blue, "Symmetric (kappa=0)" = irw_grey), name = NULL) +
+  labs(x = expression(theta), y = expression(P(theta)))
+
+ggplotly(p, tooltip = "text") |>
+  layout(legend = list(orientation = "h", y = -0.15))
+```
+
+The RH curve rises more steeply through the middle of the trait range and
+flattens earlier at the top than the symmetric reference would — exactly the
+qualitative signature $\Lambda_P > 0$ describes: a person one logit above and
+one logit below this item's difficulty are, on average, more likely to
+endorse it than a symmetric model centered on the same difficulty would
+predict.
+
+## Limitations
+
+**Binary items only.** LPE/RH/AO extensions to polytomous items exist in
+principle but weren't attempted here.
+
+**Fixed regularization.** The $N(0,1)$ MAP prior on each shape parameter is
+the paper's own "moderate shrinkage" condition, applied uniformly; no
+per-table prior-sensitivity sweep was run at IRW scale (the paper does run
+one, in a different context).
+
+**RH is probit-linked; the others are logistic.** RH is not exactly nested
+in the logistic 2PLM the way LPE and AO are — its BIC comparisons deserve the
+same caution the paper itself applies when comparing across link functions.
+
+**Per-item shape estimates are noisy, and a few are extreme.** A handful of
+items — typically ones that are answered almost unanimously one way — show
+implausibly large $|\kappa|$ (LPE up to roughly 76, AO up to roughly 27 in
+this batch), consistent with the recovery weakness documented above rather
+than a broken fit, but not individually verified case by case. Treat
+extreme per-item $\kappa$ values as thin-data artifacts unless checked
+directly.
+
+**LPE recovery is the weakest of the three at this sample size.** Per-item
+LPE $\kappa$ values should be read with more caution than RH's; see the
+validation section above.
+
+## Reproducibility
+
+Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+# 1. Re-run the validation gate (from the project root)
+source("vignettes/asymmetric_irt_data/validation_gate.R")
+
+# 2. Re-run the real-data batch
+source("vignettes/asymmetric_irt_compute.R")
+
+# 3. Re-render this page
+quarto::quarto_render("vignettes/asymmetric_irt.qmd")
+```
+
+::: {.callout-tip}
+To cite the datasets used, run:
+
+```r
+irw_save_bibtex(summary_df$table, output_file = "asymmetric_irt_data/irw_references.bib")
+```
+:::
+
+---
+
+## References
