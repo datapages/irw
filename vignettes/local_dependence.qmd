@@ -1,0 +1,354 @@
+---
+title: "Local Dependence Across IRW: How Often Does Local Independence Fail?"
+description: |
+  Every unidimensional IRT model used elsewhere on this site -- 2PL, GRM,
+  IMV comparisons -- assumes local independence: once you condition on the
+  latent trait, item responses are unrelated. We fit the standard model to
+  each IRW table and check for residual (Q3) correlation between item
+  pairs, to see how often that assumption actually holds and where it
+  concentrates.
+date: today
+bibliography: local_dependence_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+
+cache_path <- "local_dependence_data/local_dependence_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache           <- readRDS(cache_path)
+  summary_df       <- .cache$summary
+  q3_matrices      <- .cache$q3_matrices
+  candidate_tables <- .cache$candidate_tables
+  date_run         <- .cache$date_run
+  is_pilot         <- isTRUE(.cache$pilot)
+  r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
+  r_n_tables_run   <- length(candidate_tables)
+} else {
+  summary_df <- tibble(
+    table = character(), n_items = integer(), n_participants = integer(),
+    n_categories = integer(), itemtype = character(), n_pairs = integer(),
+    n_flagged = integer(), prop_flagged = numeric(), max_abs_q3 = numeric(),
+    mean_abs_q3 = numeric(), construct_type = character(), item_format = character()
+  )
+  q3_matrices      <- list()
+  candidate_tables <- character()
+  date_run         <- Sys.Date()
+  is_pilot         <- FALSE
+  r_all_candidates <- 0L
+  r_n_tables_run   <- 0L
+}
+
+knitr::opts_chunk$set(eval = cache_ok)
+```
+
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (!cache_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Cache not found** — figures and tables will not appear. Generate results ",
+  "by running the compute script, then re-render:\n\n",
+  "```r\nRscript vignettes/local_dependence_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+```{r}
+#| label: pilot-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (cache_ok && is_pilot) cat(
+  "::: {.callout-warning}\n",
+  "**Draft preview, small pilot run.** This render uses a deliberately small ",
+  "sample of ", r_n_tables_run, " tables (a mix of hand-picked known-good ",
+  "tables and a random top-up), run live against Redivis, to validate the ",
+  "pipeline and page layout before committing to a full batch across all ",
+  r_all_candidates, " eligible tables. All numbers here are real computed ",
+  "results -- not placeholders -- but treat the *distributions* as a small, ",
+  "noisy preview rather than a representative picture of local dependence ",
+  "across the IRW. Re-run `local_dependence_compute.R` with `PILOT <- FALSE` ",
+  "to scale up.\n",
+  ":::\n", sep = ""
+)
+```
+
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the
+analysis design, and the writing below — was produced largely by Claude
+(Anthropic), working from a task specification and with human review.
+Treat the methodological choices and interpretations accordingly, and
+check the compute script (`local_dependence_compute.R`) directly if you're
+relying on the numbers here.
+:::
+
+## Motivation
+
+Every unidimensional IRT model used elsewhere on this site — the [2PL fits
+across cognitive datasets](2pl_across_datasets.qmd), the [IMV
+comparisons](imv.qmd), the CFA models in the [CFA tutorial](cfa.qmd) — rests
+on the same core assumption: **local independence**. Once you condition on a
+person's position on the latent trait, their responses to different items
+are assumed to be statistically independent. Practically, that means all the
+leftover covariance between two items should be explained by the single
+trait the model estimates; none should be left over once θ is accounted
+for.
+
+Local independence is easy to state and easy to violate. Items can share a
+common passage or stimulus (testlets), overlap in wording, trigger each
+other (a fatigue or practice effect from one item bleeding into the next),
+or simply double up on a narrow sub-facet of the construct. When that
+happens, the model still fits — nothing about a standard 2PL or GRM
+estimation run will *warn* you that local independence has failed — but the
+consequences are real: item and person parameter standard errors are
+generally too small (the model effectively double-counts information from
+correlated items), and reliability/information estimates can be optimistic.
+This vignette asks a simple empirical question: after fitting the standard
+model IRW vignettes already use, how often is local independence actually
+violated in practice, and does it concentrate anywhere identifiable?
+
+## Data and methods
+
+### Dataset selection
+
+```{r}
+#| label: filter-datasets
+#| eval: false
+
+all_candidates <- irw_filter(
+  n_items        = c(5, 40),
+  n_participants = c(200, Inf)
+)
+```
+
+We cap items at 40 (and require at least 5) mainly for compute reasons: the
+number of item pairs — and so the size of the residual correlation matrix —
+grows quadratically with item count, and fitting a full unidimensional IRT
+model to every eligible IRW table is itself not cheap. `r r_all_candidates`
+tables met this criterion as of `r format(date_run, "%B %Y")`.
+`r if (is_pilot) "This page currently runs on a small pilot subset (see the warning above); a full pass analyzes all of them." else paste0("This pass analyzes all ", r_n_tables_run, " of them.")`
+
+### Per-table computation
+
+For each candidate table, `fit_local_dependence()`:
+
+1. Fetches the table and builds a wide response matrix (`irw_fetch()` +
+   `irw_long2resp()`), downsampling to at most 10,000 respondents and
+   dropping zero-variance items, mirroring the [2PL across
+   datasets](2pl_across_datasets.qmd) pipeline.
+2. Fits a single-factor unidimensional model with `mirt`: 2PL for binary
+   items, the graded response model (GRM) for tables with 3-10 response
+   categories. Tables outside that category range are skipped. Non-
+   convergent fits are logged and dropped rather than forced into the
+   results.
+3. Computes Yen's Q3 statistic [@yen1984effects] for every item pair — the
+   correlation between each pair's model residuals (observed minus
+   model-implied expected response). In practice this is a single call,
+   `residuals(fit, type = "Q3")`; the installed `mirt` version exposes Q3
+   directly for both the 2PL and GRM fits used here, so no manual
+   residual/`probtrace()` fallback was needed (confirmed by piloting on a
+   known binary table and a known polytomous table before running the
+   batch).
+4. Flags any pair with `|Q3| > 0.2` as locally dependent. **This threshold
+   is a common convention, not a hard statistical cutoff** — treat the
+   proportion of flagged pairs as a continuous severity signal, not a
+   binary pass/fail per table.
+5. Records, per table: total item pairs, number and proportion flagged,
+   max and mean `|Q3|`, plus `construct_type` and `item_format` from IRW's
+   tags for the cross-tab below.
+
+```{r}
+#| label: fit-function
+#| eval: false
+
+fit_local_dependence <- function(table_name) {
+  resp <- fetch_wide(table_name)  # irw_fetch() + irw_long2resp(), cleaned
+  fit  <- mirt(resp, 1, itemtype = if (n_categories == 2) "2PL" else "graded")
+  q3   <- residuals(fit, type = "Q3", verbose = FALSE)
+  # ... flag pairs, summarize per table ...
+}
+```
+
+Of the `r r_n_tables_run` candidate tables in this pass, `r nrow(summary_df)`
+produced usable results (the rest were dropped for too few usable items,
+an out-of-range category count, or a model that didn't converge).
+
+::: {.callout-note}
+To reproduce with current IRW holdings, re-run `local_dependence_compute.R`
+and commit the updated `local_dependence_data/local_dependence_results.rds`.
+:::
+
+## Results
+
+### How often are item pairs flagged?
+
+```{r}
+#| label: fig-prop-flagged-ranked
+#| fig-cap: "Proportion of item pairs flagged as locally dependent (|Q3| > 0.2), one point per table, ranked from lowest to highest."
+#| fig-height: 6
+
+flagged_plot_df <- summary_df %>%
+  arrange(prop_flagged) %>%
+  mutate(table_lab = factor(table, levels = table))
+
+ggplot(flagged_plot_df, aes(x = prop_flagged, y = table_lab, colour = itemtype)) +
+  geom_point(size = 2.5) +
+  scale_colour_manual(values = c("2PL" = irw_blue, "graded" = irw_red), name = "Model") +
+  labs(x = "Proportion of item pairs flagged", y = NULL) +
+  theme(axis.text.y = element_text(size = 7), legend.position = "bottom")
+```
+
+Most tables should sit toward the low end of @fig-prop-flagged-ranked — a
+handful of flagged pairs out of many, consistent with local independence
+holding approximately, as intended by design. The tables at the high end are
+the ones worth a closer look: a large fraction of their item pairs still
+share residual variance the single-trait model didn't capture.
+
+### A worst case and a clean case, side by side
+
+```{r}
+#| label: fig-q3-heatmaps
+#| fig-cap: "Q3 residual correlation matrices for the table with the highest proportion of flagged pairs (left) and the cleanest table in this sample (right). Darker cells indicate stronger residual correlation between that item pair, in either direction."
+#| fig-height: 5.5
+
+worst_table <- summary_df %>% slice_max(prop_flagged, n = 1) %>% pull(table)
+clean_table <- summary_df %>% slice_min(prop_flagged, n = 1) %>% pull(table)
+
+q3_long <- function(tbl) {
+  m <- q3_matrices[[tbl]]
+  as.data.frame(as.table(m)) %>%
+    rename(item1 = Var1, item2 = Var2, q3 = Freq) %>%
+    mutate(table = tbl)
+}
+
+q3_pair_df <- bind_rows(
+  q3_long(worst_table) %>% mutate(panel = paste0(worst_table, " (worst: ",
+    round(summary_df$prop_flagged[summary_df$table == worst_table] * 100), "% flagged)")),
+  q3_long(clean_table) %>% mutate(panel = paste0(clean_table, " (cleanest: ",
+    round(summary_df$prop_flagged[summary_df$table == clean_table] * 100), "% flagged)"))
+)
+
+ggplot(q3_pair_df, aes(x = item1, y = item2, fill = q3)) +
+  geom_tile() +
+  scale_fill_gradient2(low = irw_blue, mid = "white", high = irw_red, midpoint = 0,
+                        limits = c(-1, 1), name = "Q3") +
+  scale_y_discrete(limits = rev) +
+  facet_wrap(~panel, scales = "free") +
+  labs(x = NULL, y = NULL) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 6),
+        axis.text.y = element_text(size = 6),
+        strip.text = element_text(size = 9))
+```
+
+`r worst_table` is the table with the largest share of flagged pairs in this
+sample; `r clean_table` is the cleanest. Side by side in
+@fig-q3-heatmaps, the contrast is visible directly in the tile pattern: a
+mostly-white matrix with a few isolated warm/cool cells (independence
+approximately holding) versus a matrix with a broader spread of nonzero
+residual correlation.
+
+### Does it concentrate by item format?
+
+```{r}
+#| label: fig-by-format
+#| fig-cap: "Proportion of flagged pairs by item_format. Each point is one table."
+#| fig-height: 4
+
+ggplot(summary_df %>% filter(!is.na(item_format)),
+       aes(x = prop_flagged, y = item_format)) +
+  geom_point(colour = irw_blue, size = 2.5, alpha = 0.8) +
+  labs(x = "Proportion of item pairs flagged", y = NULL)
+```
+
+`r if (is_pilot) paste0("With only ", nrow(summary_df), " tables in this pilot, ", "@fig-by-format is illustrative at best -- there isn't enough coverage per format to say anything about where local dependence concentrates. The full run will have enough tables per item_format/construct_type to make this comparison meaningful.") else "Read @fig-by-format for where local dependence concentrates across the formats represented in this sample."`
+
+## Practical implications
+
+Finding local dependence doesn't mean the unidimensional fit is useless —
+it means the reported standard errors and reliability are likely
+optimistic for the affected tables, and that a more structured model would
+fit better. The standard remedies are **bifactor models** (a general trait
+plus item-cluster-specific nuisance factors) and **testlet models**
+[@wainer1987testlet] (which explicitly model the shared testlet effect as
+its own random effect per person-testlet). Both require identifying which
+items cluster together, either from known content structure (a shared
+passage, a shared stem) or empirically from which pairs get flagged here.
+Neither is implemented in this vignette — flagging *which* tables and item
+pairs would benefit from that additional structure is the contribution
+here; fitting the remedy is a natural next step.
+
+## Limitations
+
+**The |Q3| > 0.2 threshold is a convention, not a statistical test.** Q3
+has a null distribution that depends on sample size and test length, and
+values well below 0.2 can be statistically significant in large samples
+while values above it can occur by chance in small ones. Treat the flagged
+proportion as a comparative severity signal across IRW tables, not as a
+calibrated p-value.
+
+**Item pairs, not global structure.** Q3 is inherently pairwise: it flags
+*which* pairs share residual variance, but two different tables with the
+same flagged-proportion can have very different structure underneath — one
+might have a handful of tightly clustered testlets, another scattered
+pairwise noise with no coherent grouping. The stretch-goal testlet-clustering
+check described in the compute script (checking whether flagged pairs
+concentrate within an item-naming-derived testlet grouping) was not run for
+this pass; it would help distinguish these cases.
+
+**Model choice is coarse.** Every table gets exactly one of two model
+families (2PL or GRM) based only on its category count, with no comparison
+against alternative models (3PL, nominal, bifactor) that might fit some
+tables better on their own terms. A table flagged here as locally dependent
+under a plain unidimensional model might not be under a better-specified
+one.
+
+## Reproducibility
+
+Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+# 1. Re-run the compute script (from the project root)
+source("vignettes/local_dependence_compute.R")
+
+# 2. Re-render this page
+quarto::quarto_render("vignettes/local_dependence.qmd")
+```
+
+::: {.callout-tip}
+To cite the datasets used, run:
+
+```r
+irw_save_bibtex(summary_df$table, output_file = "local_dependence_data/irw_references.bib")
+```
+:::
+
+---
+
+## References
