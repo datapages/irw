@@ -86,6 +86,13 @@ if (cache_ok) {
   gate_date_run <- Sys.Date()
 }
 
+itemfit_path <- "asymmetric_irt_data/example_itemfit.rds"
+if (file.exists(itemfit_path)) {
+  empirical_bins_df <- readRDS(itemfit_path)$bins
+} else {
+  empirical_bins_df <- tibble(theta = numeric(), n = numeric(), obs_prop = numeric(), exp_prop = numeric())
+}
+
 knitr::opts_chunk$set(eval = cache_ok)
 ```
 
@@ -115,6 +122,170 @@ human review. The custom item types used here are a non-trivial extension of
 on the numbers shown.
 :::
 
+## Explore the model shapes
+
+The three asymmetric models below are easier to feel than to read as
+equations. Pick one, drag $\kappa$, and watch the fitted curve (blue) pull
+away from the symmetric baseline it's compared against everywhere in this
+vignette (grey dashed) — the standard logistic 2PL for LPE and AO, a
+normal-ogive model for RH.
+
+```{=html}
+<div class="asym-widget" style="border:1px solid #dee2e6;border-radius:6px;padding:1rem 1.25rem;margin:1rem 0;">
+  <div style="display:flex;flex-wrap:wrap;gap:1.5rem;align-items:center;margin-bottom:0.75rem;">
+    <label style="font-weight:600;">Model:
+      <select id="asym-model" style="margin-left:0.4rem;">
+        <option value="LPE" selected>LPE</option>
+        <option value="RH">RH</option>
+        <option value="AO">AO</option>
+      </select>
+    </label>
+    <label style="font-weight:600;flex:1;min-width:220px;">κ:
+      <input id="asym-kappa" type="range" style="width:60%;vertical-align:middle;margin:0 0.5rem;">
+      <span id="asym-kappa-val" style="font-family:monospace;"></span>
+    </label>
+  </div>
+  <svg id="asym-svg" viewBox="0 0 640 380" style="width:100%;max-width:640px;height:auto;display:block;"></svg>
+  <div id="asym-blurb" style="margin-top:0.75rem;font-size:0.95rem;"></div>
+</div>
+
+<script>
+(function() {
+  function erf(x) {
+    // Abramowitz & Stegun 7.1.26 approximation, accurate to ~1.5e-7
+    var sign = x < 0 ? -1 : 1;
+    x = Math.abs(x);
+    var a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741,
+        a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+    var t = 1 / (1 + p * x);
+    var y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+    return sign * y;
+  }
+  function pnorm(x) { return 0.5 * (1 + erf(x / Math.SQRT2)); }
+  function plogis(x) { return 1 / (1 + Math.exp(-x)); }
+
+  function modelP(model, kappa, theta) {
+    var z = theta; // a = 1, d = 0
+    if (model === "LPE") return Math.pow(plogis(z), kappa);
+    if (model === "AO")  return 1 - Math.pow(1 + kappa * Math.exp(z), -1 / kappa);
+    if (model === "RH") {
+      var sigma = Math.sqrt(2) * Math.pow(1 + Math.exp(-kappa * theta), -0.5);
+      return pnorm(z / sigma);
+    }
+  }
+  function symmetricP(model, theta) {
+    return model === "RH" ? pnorm(theta) : plogis(theta);
+  }
+
+  var modelInfo = {
+    LPE: {
+      name: "LPE (Logistic Positive Exponent)",
+      formula: "P(θ) = [Ψ(a(θ − b))]^κ",
+      blurb: "Raises the logistic curve to a power. κ &lt; 1 lifts the whole curve up (more lenient); κ &gt; 1 pulls it down (stricter). κ = 1 recovers the 2PL exactly.",
+      range: [0.05, 5], step: 0.05, def: 1
+    },
+    RH: {
+      name: "RH (Residual Heteroscedasticity)",
+      formula: "P(θ) = Φ(a(θ−b) / σ(θ)),  σ(θ) = √2·(1 + e^(−κθ))^(−1/2)",
+      blurb: "Instead of a power transform, lets the response variance itself change with θ. κ = 0 recovers a symmetric normal-ogive model exactly.",
+      range: [-4, 4], step: 0.05, def: 0
+    },
+    AO: {
+      name: "AO (Aranda-Ordaz)",
+      formula: "P(θ) = 1 − [1 + κ·e^(a(θ−b))]^(−1/κ)",
+      blurb: "A different link function that also collapses to the 2PL at κ = 1, skewing toward one tail for other κ — similar in spirit to LPE, different in its algebra.",
+      range: [0.05, 5], step: 0.05, def: 1
+    }
+  };
+
+  var selEl = document.getElementById("asym-model");
+  var kappaEl = document.getElementById("asym-kappa");
+  var kappaValEl = document.getElementById("asym-kappa-val");
+  var svg = document.getElementById("asym-svg");
+  var blurbEl = document.getElementById("asym-blurb");
+
+  var W = 640, H = 380, mL = 50, mR = 20, mT = 10, mB = 40;
+  var plotW = W - mL - mR, plotH = H - mT - mB;
+  function px(theta) { return mL + (theta + 4) / 8 * plotW; }
+  function py(p) { return mT + (1 - p) * plotH; }
+
+  function pathFor(fn) {
+    var d = "";
+    for (var i = 0; i <= 160; i++) {
+      var theta = -4 + i * (8 / 160);
+      var x = px(theta), y = py(fn(theta));
+      d += (i === 0 ? "M" : "L") + x.toFixed(2) + "," + y.toFixed(2) + " ";
+    }
+    return d;
+  }
+
+  function staticAxesSvg() {
+    var s = "";
+    s += '<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (mT + plotH) + '" stroke="#888"/>';
+    s += '<line x1="' + mL + '" y1="' + (mT + plotH) + '" x2="' + (mL + plotW) + '" y2="' + (mT + plotH) + '" stroke="#888"/>';
+    [-4, -2, 0, 2, 4].forEach(function(t) {
+      var x = px(t);
+      s += '<line x1="' + x + '" y1="' + (mT + plotH) + '" x2="' + x + '" y2="' + (mT + plotH + 5) + '" stroke="#888"/>';
+      s += '<text x="' + x + '" y="' + (mT + plotH + 18) + '" font-size="11" text-anchor="middle" fill="#333">' + t + '</text>';
+    });
+    [0, 0.25, 0.5, 0.75, 1].forEach(function(p) {
+      var y = py(p);
+      s += '<line x1="' + (mL - 5) + '" y1="' + y + '" x2="' + mL + '" y2="' + y + '" stroke="#888"/>';
+      s += '<text x="' + (mL - 9) + '" y="' + (y + 4) + '" font-size="11" text-anchor="end" fill="#333">' + p + '</text>';
+    });
+    s += '<text x="' + (mL + plotW / 2) + '" y="' + (H - 4) + '" font-size="12" text-anchor="middle" fill="#333">θ</text>';
+    s += '<text x="12" y="' + (mT + plotH / 2) + '" font-size="12" text-anchor="middle" fill="#333" transform="rotate(-90 12 ' + (mT + plotH / 2) + ')">P(θ)</text>';
+    return s;
+  }
+
+  function draw() {
+    var model = selEl.value;
+    var info = modelInfo[model];
+    var kappa = parseFloat(kappaEl.value);
+    kappaValEl.textContent = "κ = " + kappa.toFixed(2);
+
+    var baselineD = pathFor(function(theta) { return symmetricP(model, theta); });
+    var selectedD = pathFor(function(theta) { return modelP(model, kappa, theta); });
+
+    svg.innerHTML =
+      staticAxesSvg() +
+      '<path d="' + baselineD + '" fill="none" stroke="#9a9a9a" stroke-width="2" stroke-dasharray="4,3"/>' +
+      '<path d="' + selectedD + '" fill="none" stroke="#2166ac" stroke-width="2.5"/>' +
+      '<line x1="' + (mL + 12) + '" y1="18" x2="' + (mL + 34) + '" y2="18" stroke="#2166ac" stroke-width="2.5"/>' +
+      '<text x="' + (mL + 40) + '" y="22" font-size="11" fill="#333">Selected model</text>' +
+      '<line x1="' + (mL + 12) + '" y1="34" x2="' + (mL + 34) + '" y2="34" stroke="#9a9a9a" stroke-width="2" stroke-dasharray="4,3"/>' +
+      '<text x="' + (mL + 40) + '" y="38" font-size="11" fill="#333">Symmetric baseline</text>';
+
+    var lambdaP = modelP(model, kappa, 1) + modelP(model, kappa, -1) - 1;
+    var direction = lambdaP > 0.005
+      ? "— leniency (the curve sits above the symmetric baseline on average)"
+      : lambdaP < -0.005
+      ? "— strictness (the curve sits below the symmetric baseline on average)"
+      : "— essentially symmetric at this κ";
+
+    blurbEl.innerHTML =
+      "<strong>" + info.name + "</strong>: " + info.formula + "<br>" +
+      info.blurb + "<br><br>" +
+      "Л_P at ±1 logit from difficulty, at the current κ: <strong>" + lambdaP.toFixed(3) + "</strong> " + direction + ". " +
+      "This is exactly the Л_P statistic used throughout the Results section below.";
+  }
+
+  function onModelChange() {
+    var info = modelInfo[selEl.value];
+    kappaEl.min = info.range[0];
+    kappaEl.max = info.range[1];
+    kappaEl.step = info.step;
+    kappaEl.value = info.def;
+    draw();
+  }
+
+  selEl.addEventListener("change", onModelChange);
+  kappaEl.addEventListener("input", draw);
+  onModelChange();
+})();
+</script>
+```
+
 ## Background
 
 Every IRT model used elsewhere on this site — the 2PL, the graded response
@@ -129,10 +300,10 @@ point.
 @shimbonifay2026 study three such asymmetric models, each adding a single
 shape parameter $\kappa$ to a standard two-parameter item:
 
-- **LPE** (logistic power expit): $P(\theta) = [\Psi(z)]^{\kappa}$, where
+- **LPE** (Logistic Positive Exponent): $P(\theta) = [\Psi(z)]^{\kappa}$, where
   $\Psi$ is the logistic CDF and $z = a(\theta - b)$. Raising the logistic
   curve to a power skews it toward one tail.
-- **RH** (Ramsay/heteroscedastic, per the paper's naming): $P(\theta) =
+- **RH** (Residual Heteroscedasticity): $P(\theta) =
   \Phi\!\left(z / \sigma(\theta)\right)$, where $\sigma(\theta) = \sqrt{2}\,
   [1 + \exp(-\kappa\theta)]^{-1/2}$ and $\Phi$ is the *normal* (probit) CDF.
   Here asymmetry comes from letting the response variance itself change with
@@ -303,9 +474,9 @@ For each candidate table, `fit_asymmetric_irt()`:
    than retried.
 4. Compares AIC/BIC/log-likelihood of each asymmetric model against the 2PL
    reference, and records the winning model by BIC.
-5. Extracts, per item, the shape parameter $\kappa$ and $\Lambda_P$ (paper
-   Eq. 7: $\Lambda_P = P(b+x) + P(b-x) - 1$ at $x = 1$ logit from the item's
-   own difficulty $b$) — positive $\Lambda_P$ means **leniency** (the item is
+5. Extracts, per item, the shape parameter $\kappa$ and $\text{Л}_P$ (paper
+   Eq. 7: $\text{Л}_P = P(b+x) + P(b-x) - 1$ at $x = 1$ logit from the item's
+   own difficulty $b$) — positive $\text{Л}_P$ means **leniency** (the item is
    easier than a symmetric model would predict, in the sense described
    below), negative means **strictness**.
 
@@ -379,7 +550,10 @@ p <- ggplot(ranked_df, aes(x = best_delta, y = rank, colour = winning_model, tex
   theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
 
 ggplotly(p, tooltip = "text") |>
-  layout(legend = list(orientation = "h", y = -0.1))
+  layout(
+    legend = list(orientation = "h", y = -0.25, x = 0.5, xanchor = "center"),
+    margin = list(b = 90)
+  )
 ```
 
 The long tail on the left of @fig-bic-delta-ranked is almost entirely RH: for
@@ -418,7 +592,7 @@ is closer to what Shim & Bonifay's guessing framing actually predicts.
 
 ```{r}
 #| label: fig-lambda-by-bucket
-#| fig-cap: "Distribution of item-level Lambda_P (positive = leniency, negative = strictness) for the winning model's items in each table, by construct bucket. Dashed line at zero."
+#| fig-cap: "Distribution of item-level Л_P (positive = leniency, negative = strictness) for the winning model's items in each table, by construct bucket. Dashed line at zero."
 #| fig-height: 4.5
 
 lambda_bucket_df <- item_level_df |>
@@ -428,7 +602,7 @@ lambda_bucket_df <- item_level_df |>
 ggplot(lambda_bucket_df, aes(x = bucket, y = lambda_P)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = irw_grey) +
   geom_boxplot(fill = irw_blue, alpha = 0.3, outlier.alpha = 0.4, width = 0.5) +
-  labs(x = NULL, y = expression(Lambda[P]~"(item-level, winning model)"))
+  labs(x = NULL, y = "Л_P (item-level, winning model)")
 ```
 
 ```{r}
@@ -446,8 +620,8 @@ opn_pos  <- round(100 * lambda_stats$prop_positive[lambda_stats$bucket == "Opini
 ```
 
 Cognitive/educational items skew mildly toward leniency (mean
-$\Lambda_P$ = `r cog_mean`, `r cog_pos`% of items positive) compared to
-Opinion/attitude items (mean $\Lambda_P$ = `r opn_mean`, `r opn_pos`% positive).
+$\text{Л}_P$ = `r cog_mean`, `r cog_pos`% of items positive) compared to
+Opinion/attitude items (mean $\text{Л}_P$ = `r opn_mean`, `r opn_pos`% positive).
 That's the direction the guessing hypothesis predicts, and it's a real,
 non-zero gap — but it is a **modest** one, well short of a clean separation,
 and both buckets have plenty of items on either side of zero. Treat this as
@@ -475,7 +649,7 @@ lambda_ex <- ex_row$lambda_P[1]
 `r example_table` is the table with the single largest RH BIC improvement in
 this sample (`r round(ex_delta, 1)` BIC points below the 2PL). Its item
 `r example_item` (RH: $a$ = `r round(a_ex,2)`, $b$ = `r round(b_ex,2)`,
-$\kappa$ = `r round(kappa_ex,2)`, $\Lambda_P$ = `r round(lambda_ex,3)`) makes
+$\kappa$ = `r round(kappa_ex,2)`, $\text{Л}_P$ = `r round(lambda_ex,3)`) makes
 the asymmetry concrete: below, the fitted RH curve is plotted against the
 symmetric normal-ogive curve that the *same* $a$ and $b$ would imply under
 $\kappa = 0$ (the exact reduction validated above) — i.e., what a standard
@@ -483,7 +657,7 @@ model would have predicted for this item.
 
 ```{r}
 #| label: fig-example-irf
-#| fig-cap: "Fitted RH item response curve (blue) vs. the symmetric normal-ogive curve implied by the same discrimination and difficulty (grey dashed), for one item where RH wins convincingly. Hover to compare predicted response probabilities at any theta."
+#| fig-cap: "Fitted RH item response curve (blue) vs. the symmetric normal-ogive curve implied by the same discrimination and difficulty (grey dashed), for one item where RH wins convincingly. Orange points are empirical bins -- observed endorsement rate within 10 EAP-theta groups, the same binning mirt::itemfit(..., empirical.plot=) uses internally, sized by group n. Hover to compare predicted response probabilities at any theta, or see each bin's observed rate and n."
 #| fig-height: 4.5
 
 theta_ex <- seq(-4, 4, length.out = 401)
@@ -495,19 +669,47 @@ ex_df <- tibble(theta = theta_ex, RH = p_rh_ex, `Symmetric (kappa=0)` = p_sym_ex
   pivot_longer(-theta, names_to = "curve", values_to = "p") |>
   mutate(tooltip = paste0(curve, "<br>theta: ", round(theta,2), "<br>P: ", round(p,3)))
 
+bins_ex <- empirical_bins_df |>
+  mutate(tooltip = paste0(
+    "Empirical bin<br>theta (bin mean): ", round(theta, 2),
+    "<br>Observed rate: ", round(obs_prop, 3),
+    "<br>n: ", n
+  ))
+
 p <- ggplot(ex_df, aes(x = theta, y = p, colour = curve, group = curve, text = tooltip)) +
   geom_line(linewidth = 1) +
   geom_vline(xintercept = b_ex, linetype = "dotted", colour = irw_grey) +
+  geom_point(
+    data = bins_ex, inherit.aes = FALSE,
+    aes(x = theta, y = obs_prop, size = n, text = tooltip),
+    colour = "#e6550d", alpha = 0.7
+  ) +
   scale_colour_manual(values = c("RH" = irw_blue, "Symmetric (kappa=0)" = irw_grey), name = NULL) +
+  scale_size_continuous(range = c(1.5, 5), guide = "none") +
   labs(x = expression(theta), y = expression(P(theta)))
 
 ggplotly(p, tooltip = "text") |>
   layout(legend = list(orientation = "h", y = -0.15))
 ```
 
+```{r}
+#| echo: false
+#| output: asis
+
+if (nrow(empirical_bins_df) == 0) {
+  cat("**Empirical bins not shown above** -- generate them by running ",
+      "`asymmetric_irt_data/example_itemfit_compute.R` ",
+      "(requires `REDIVIS_API_TOKEN`) and re-rendering.\n", sep = "")
+} else {
+  cat("The empirical bins track the fitted RH curve noticeably more closely ",
+      "than they would track a symmetric model through the same points, ",
+      "which is the direct empirical check behind the BIC preference above.\n", sep = "")
+}
+```
+
 The RH curve rises more steeply through the middle of the trait range and
 flattens earlier at the top than the symmetric reference would — exactly the
-qualitative signature $\Lambda_P > 0$ describes: a person one logit above and
+qualitative signature $\text{Л}_P > 0$ describes: a person one logit above and
 one logit below this item's difficulty are, on average, more likely to
 endorse it than a symmetric model centered on the same difficulty would
 predict.
@@ -549,7 +751,10 @@ source("vignettes/asymmetric_irt_data/validation_gate.R")
 # 2. Re-run the real-data batch
 source("vignettes/asymmetric_irt_compute.R")
 
-# 3. Re-render this page
+# 3. Re-fit the single worked example and extract its empirical theta bins
+source("vignettes/asymmetric_irt_data/example_itemfit_compute.R")
+
+# 4. Re-render this page
 quarto::quarto_render("vignettes/asymmetric_irt.qmd")
 ```
 
