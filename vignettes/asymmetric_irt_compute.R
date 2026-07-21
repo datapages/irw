@@ -5,6 +5,24 @@
 # and does the direction of asymmetry (leniency vs. strictness, via their
 # Л_P index) relate to construct_type?
 #
+# Model comparison metric: out-of-sample InterModel Vigorish (IMV) on a
+# response-level held-out test set -- NOT in-sample BIC, and NOT k-fold CV.
+# Per project convention (see [[feedback_cv_holdout]] / Stenhaug & Domingue,
+# 2022), holdout masks individual person-item CELLS, not whole persons:
+# for each table, ~20% of observed cells are set to NA before fitting; each
+# model's own EAP theta is estimated from a person's *retained* responses
+# only; held-out predicted probabilities come from that model's own fitted
+# item parameters via extract.item()/probtrace(); imv::imv.binary() compares
+# each asymmetric model's held-out predictions against the 2PLM reference's,
+# using the identical held-out cells for both (same mask, reused across all
+# four model fits on a given table). BIC was the original metric here; see
+# [[project_asymmetric_irt_vignette]] memory for why this switched -- all
+# three asymmetric models have the same per-item parameter count, so a BIC
+# comparison among LPE/RH/AO is just log-likelihood, and a large BIC edge
+# over 2PLM does not guarantee any real predictive gain out of sample (the
+# validation-gate synthetic check in validation_gate.R section (d) found
+# cases where it doesn't).
+#
 # Requires vignettes/asymmetric_irt_data/validation_gate_log.rds to already
 # show a passing gate (see validation_gate.R) -- this script does not re-run
 # those checks.
@@ -17,6 +35,11 @@
 # Usage:
 #   Rscript vignettes/asymmetric_irt_data/validation_gate.R   # gate, once
 #   Rscript vignettes/asymmetric_irt_compute.R                # from project root
+#
+# NOTE: this rewrites the fitting methodology (masked-training fits, not
+# full-data fits), so any existing vignettes/asymmetric_irt_data/fits/*.rds
+# from a prior BIC-based run are stale and must be deleted before re-running
+# -- fit_to_disk() below skips any table whose output file already exists.
 
 library(irw)
 source("vignettes/asymmetric_irt_helpers.R")
@@ -24,6 +47,7 @@ library(dplyr)
 library(purrr)
 library(furrr)
 library(tibble)
+library(imv)
 
 set.seed(20260720)
 
@@ -40,6 +64,10 @@ MAX_N            <- 10000
 EM_CYCLES        <- 2000  # lower than the 5000 used for the small validation
                            # gate/reference LSAT7 example -- tractable at
                            # batch scale; convergence is checked per model
+HOLDOUT_FRAC     <- 0.2   # response-level (cell) holdout fraction, per
+                           # [[feedback_cv_holdout]]; masked once per table,
+                           # reused across all four model fits so comparisons
+                           # are on identical held-out cells
 PILOT            <- FALSE # TRUE: run on a random subset first; check results
                            # before committing to the full candidate list
 PILOT_N_TABLES   <- 10
@@ -91,6 +119,33 @@ lambda_P <- function(def, par_row, x = 1) {
   p_hi + p_lo - 1
 }
 
+# Response-level (cell) holdout: mask HOLDOUT_FRAC of the *observed* cells
+# (never touches cells that were already NA in the source data), returning
+# the masked training matrix plus the held-out cell indices and true values.
+mask_holdout <- function(resp, frac = HOLDOUT_FRAC) {
+  resp_train <- resp
+  obs_idx  <- which(!is.na(as.matrix(resp)), arr.ind = TRUE)
+  n_mask   <- floor(frac * nrow(obs_idx))
+  mask_idx <- obs_idx[sample(seq_len(nrow(obs_idx)), n_mask), , drop = FALSE]
+  true_vals <- as.matrix(resp)[mask_idx]
+  for (k in seq_len(nrow(mask_idx))) resp_train[mask_idx[k, 1], mask_idx[k, 2]] <- NA
+  list(train = resp_train, mask_idx = mask_idx, true_vals = true_vals)
+}
+
+# Held-out predicted P(response = 1) for a fitted model, one probtrace()
+# call per item (vectorized across that item's held-out persons) rather
+# than one call per cell.
+heldout_preds <- function(fit, theta_vec, mask_idx) {
+  preds <- numeric(nrow(mask_idx))
+  for (j in unique(mask_idx[, 2])) {
+    rows    <- which(mask_idx[, 2] == j)
+    persons <- mask_idx[rows, 1]
+    it <- extract.item(fit, j)
+    preds[rows] <- probtrace(it, matrix(theta_vec[persons], ncol = 1))[, "P.1"]
+  }
+  preds
+}
+
 fit_asymmetric_irt <- function(table_name) {
   message("  Processing: ", table_name)
 
@@ -118,11 +173,14 @@ fit_asymmetric_irt <- function(table_name) {
     return(NULL)
   }
 
-  # Reference 2PLM, fit on the same fixed GH50 quadrature as the custom
-  # models below so BIC comparisons aren't confounded by different
-  # integration grids.
+  # Response-level holdout, masked once per table and reused for every
+  # model fit below so all comparisons are on identical held-out cells.
+  ho <- mask_holdout(resp, HOLDOUT_FRAC)
+
+  # Reference 2PLM, fit on the masked training matrix and on the same fixed
+  # GH50 quadrature as the custom models below.
   fit_2pl <- tryCatch(
-    mirt(resp, 1, itemtype = "2PL", verbose = FALSE,
+    mirt(ho$train, 1, itemtype = "2PL", verbose = FALSE,
          technical = list(NCYCLES = EM_CYCLES, customTheta = Theta_mat_ref, customPriorFun = prior_GH50)),
     error = function(e) { message("    2PL failed: ", conditionMessage(e)); NULL }
   )
@@ -132,12 +190,13 @@ fit_asymmetric_irt <- function(table_name) {
     return(NULL)
   }
   ad_2pl <- extract_ad(fit_2pl)
-  bic_2pl <- mirt::extract.mirt(fit_2pl, "BIC")
+  th_2pl <- fscores(fit_2pl, method = "EAP")[, 1]
+  p_2pl_heldout <- heldout_preds(fit_2pl, th_2pl, ho$mask_idx)
 
   fit_one_asym <- function(model_type) {
     ad_start <- if (model_type == "RH") convert_ad_logit_to_probit(ad_2pl, D = 1.702) else ad_2pl
     out <- tryCatch(
-      fit_custom(resp, model_type, make_custom_item(model_type),
+      fit_custom(ho$train, model_type, make_custom_item(model_type),
                  ad_start = ad_start, shape_init = 0, prior_sd = 1,
                  em_cycles = EM_CYCLES),
       error = function(e) list(mod = NULL, error = TRUE, message = conditionMessage(e))
@@ -161,8 +220,15 @@ fit_asymmetric_irt <- function(table_name) {
     return(NULL)
   }
 
-  bic_delta <- map_dbl(models_fit, function(m) mirt::extract.mirt(m, "BIC") - bic_2pl)
-  winning_model <- if (min(bic_delta) < 0) names(which.min(bic_delta)) else "2PLM"
+  # Out-of-sample IMV: each asymmetric model's held-out predictions vs. the
+  # 2PLM reference's, on the identical held-out cells. Positive = the
+  # asymmetric model predicts held-out responses better than 2PLM.
+  imv_val <- map_dbl(models_fit, function(m) {
+    th_m <- fscores(m, method = "EAP")[, 1]
+    p_m_heldout <- heldout_preds(m, th_m, ho$mask_idx)
+    imv.binary(ho$true_vals, p_2pl_heldout, p_m_heldout)
+  })
+  winning_model <- if (max(imv_val) > 0) names(which.max(imv_val)) else "2PLM"
 
   item_level <- map_dfr(names(models_fit), function(model_type) {
     par_tab <- extract_param_table(models_fit[[model_type]])
@@ -186,10 +252,11 @@ fit_asymmetric_irt <- function(table_name) {
   list(
     summary = tibble(
       table = table_name, n_items = ni, n_participants = nrow(resp),
-      construct_type = construct_type, bic_2pl = bic_2pl,
-      bic_delta_AO  = bic_delta[["AO"]]  %||% NA_real_,
-      bic_delta_LPE = bic_delta[["LPE"]] %||% NA_real_,
-      bic_delta_RH  = bic_delta[["RH"]]  %||% NA_real_,
+      construct_type = construct_type,
+      n_heldout = nrow(ho$mask_idx),
+      imv_AO  = imv_val[["AO"]]  %||% NA_real_,
+      imv_LPE = imv_val[["LPE"]] %||% NA_real_,
+      imv_RH  = imv_val[["RH"]]  %||% NA_real_,
       winning_model = winning_model
     ),
     item_level = item_level
