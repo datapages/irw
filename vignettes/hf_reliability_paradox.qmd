@@ -5,8 +5,9 @@ description: |
   Stroop, stop-signal) produce large, dependable group effects but poor
   individual-differences reliability, because the within-subject difference
   score that measures the effect cancels out most of the between-person
-  variance. We test whether the same collapse appears in IRW cognitive-control
-  data: the Hearts & Flowers task, an alcohol Stroop, a stop-signal task, and
+  variance. We test whether the same attenuation appears in IRW
+  cognitive-control data: the Hearts & Flowers task, an alcohol Stroop, a
+  stop-signal task, and
   three tasks (Stroop, Simon, ANT flanker) from the Enkavi et al. (2019)
   Self-Regulation Ontology battery.
 date: today
@@ -384,11 +385,12 @@ support split-half only.
 
 ```{r}
 #| label: fig-splithalf
-#| fig-cap: "Split-half reliability (Spearman-Brown corrected; mean ± SD across splits) for each condition and the difference score, trial floor = 5. Difference-score reliability drops relative to the conditions it's built from in every dataset variant except the stop-signal exception, though the size of the drop varies widely."
+#| fig-cap: "Split-half reliability (Spearman-Brown corrected; mean ± SD across splits) for each condition and the difference score, trial floor = 5, for the six congruency-style dataset variants. Difference-score reliability drops relative to the conditions it's built from in every one of them, though the size of the drop varies widely. The stop-signal dataset is excluded here and shown separately in [Stop-signal: a structural comparison], since failed-stop RT isn't a congruency contrast in the same sense."
 #| fig-height: 7
 
 sh_plot_df <- results %>%
-  filter(trial_floor == 5, !grepl("test-retest", reliability_type)) %>%
+  filter(trial_floor == 5, !grepl("test-retest", reliability_type),
+         dataset != "matzke_stopsignal_2019") %>%
   mutate(
     dataset_lab = factor(dataset_labels[dataset], levels = rev(dataset_labels)),
     reliability_type = factor(reliability_type,
@@ -433,9 +435,9 @@ results %>%
 
 The pattern in @fig-splithalf reproduces the core finding of
 @hedge2018reliability directly: congruent and incongruent RT reliabilities
-sit at .78-.99 across all seven dataset variants, but the RT difference-score
-reliability drops in every one of them except the stop-signal exception. The
-size of that drop, however, varies considerably. At one extreme, it collapses
+sit at .78-.99 across all six congruency-style dataset variants, but the RT
+difference-score reliability drops in every one of them. The size of that
+drop, however, varies considerably. At one extreme, it collapses
 to near zero for the mixed-trial Hearts & Flowers
 (`r sprintf("%.2f", results$reliability_est[results$dataset=="imps2025_hf_mixed" & results$measure=="rt" & results$reliability_type=="difference" & results$trial_floor==5])`)
 and the alcohol Stroop
@@ -452,7 +454,7 @@ retain a sizeable fraction of their component reliability, despite still
 being well below their congruent/incongruent components (~.93-.96). This is
 a useful complication of the "collapses to near zero" framing from the
 Motivation section: the direction of the effect (component >> difference) is
-essentially universal across these seven variants, but its magnitude is not
+essentially universal across these six variants, but its magnitude is not
 — it depends on exactly how strongly the two conditions covary across
 people in a given task, sample, and design, which is itself variable. The
 Enkavi tasks — a much larger (N=523), adult, single-country online sample
@@ -473,17 +475,72 @@ warm-up) to vary independently across conditions, which lowers
 $\mathrm{Cov}(A,B)$ relative to $\mathrm{Var}(A)$ and $\mathrm{Var}(B)$ less
 than a fully intermixed design does.
 
-The stop-signal dataset is the exception: its difference-score reliability
-stays high
-(`r sprintf("%.2f", results$reliability_est[results$dataset=="matzke_stopsignal_2019" & results$measure=="rt" & results$reliability_type=="difference" & results$trial_floor==5])`).
-This is best read in light of the stop-signal deviation noted in Methods —
-failed-stop RT and go RT are driven by different aspects of the race model
-(a fast guess vs. the whole go-process distribution) and are less tightly
-coupled across people than two congruency conditions of the same trial type,
-so the variance-shrinkage mechanism has less to work with. This is a useful
-negative case: the paradox is not automatic whenever you subtract two RTs,
-it specifically depends on how correlated the two conditions are across
-people.
+**This contrast deserves a caution, though.** Mean trials per condition are
+similar between the two variants (~9.5-11.1 for blocked, ~9.7-9.9 for mixed;
+see [Trial-count sensitivity]), but the *retained samples* are not: the
+blocked split-half sample is
+`r results$n_respondents[results$dataset=="imps2025_hf_blocked" & results$measure=="rt" & results$reliability_type=="difference" & results$trial_floor==5]`
+respondents (of the 2,475 in `imps2025_hf`), while the mixed-trial sample is
+only
+`r results$n_respondents[results$dataset=="imps2025_hf_mixed" & results$measure=="rt" & results$reliability_type=="difference" & results$trial_floor==5]`
+— about a quarter as many. Since per-condition trial counts are comparable
+for those who clear the floor in each variant, this gap isn't the trial
+floor thinning out the mixed sample; it looks more like most respondents
+never received a "mixed test" block at all, so blocked and mixed aren't a
+within-person manipulation on a shared sample but two considerably
+different-sized (and potentially differently-composed, e.g. by cohort or
+wave) subgroups of the full `imps2025_hf` respondent pool. We can't rule out
+that this compositional difference, rather than the block/intermixed design
+itself, contributes to the reliability gap between them.
+
+### Stop-signal: a structural comparison
+
+The stop-signal dataset was excluded from @fig-splithalf above because it
+doesn't share the congruent/incongruent structure of the other six
+variants, and its result is the opposite of the general pattern: its
+difference-score reliability stays high
+(`r sprintf("%.2f", results$reliability_est[results$dataset=="matzke_stopsignal_2019" & results$measure=="rt" & results$reliability_type=="difference" & results$trial_floor==5])`),
+barely below its congruent (go,
+`r sprintf("%.2f", results$reliability_est[results$dataset=="matzke_stopsignal_2019" & results$measure=="rt" & results$reliability_type=="congruent" & results$trial_floor==5])`)
+and incongruent (stop,
+`r sprintf("%.2f", results$reliability_est[results$dataset=="matzke_stopsignal_2019" & results$measure=="rt" & results$reliability_type=="incongruent" & results$trial_floor==5])`)
+components. As detailed in Methods, this isn't really a like-for-like
+difference score: $D_{rt}$ here is failed-stop RT minus go RT, not
+Hedge et al.'s race-model SSRT, so this figure is a structural comparison,
+not a validated inhibition measure. Failed-stop RT and go RT are driven by
+different aspects of the race model (a fast guess vs. the whole
+go-process distribution) and so are less tightly coupled across people
+than two congruency conditions of the same trial type — the
+variance-shrinkage mechanism has less to work with. That makes it a useful
+negative case (the paradox is not automatic whenever you subtract two
+RTs — it depends on how correlated the two quantities are across people),
+but not a direct replication attempt, and it should not be read alongside
+the congruency tasks above as if it were measuring the same kind of
+contrast. A proper replication would need the race-model SSRT integration
+method Hedge et al. use, which we do not implement here.
+
+```{r}
+#| label: tbl-stopsignal
+#| tbl-cap: "Stop-signal split-half reliability alongside Hedge et al. (2018) Table 1 (mean of their Studies 1 & 2). The IRW 'Difference' row is failed-stop RT minus go RT, a structural stand-in for SSRT, not SSRT itself — the two are not the same quantity and shouldn't be read as a validation of one against the other."
+
+ss_irw <- results %>%
+  filter(trial_floor == 5, measure == "rt", !grepl("test-retest", reliability_type),
+         dataset == "matzke_stopsignal_2019") %>%
+  mutate(Condition = recode(reliability_type,
+                             congruent = "Go", incongruent = "Stop",
+                             difference = "Difference (failed-stop − go)")) %>%
+  transmute(Source = "IRW, split-half", Condition,
+            Reliability = round(reliability_est, 2))
+
+ss_hedge <- hedge_ref %>%
+  filter(measure == "rt", task == "Stop-signal") %>%
+  transmute(Source = "Hedge et al. (2018), test-retest",
+            Condition = tools::toTitleCase(condition),
+            Reliability = round(icc_mean, 2))
+
+bind_rows(ss_irw, ss_hedge) %>%
+  knitr::kable()
+```
 
 ### Where does the variance go?
 
@@ -625,10 +682,12 @@ tasks.
 
 The table below places our estimates next to the point estimates reported in
 Hedge et al.'s Table 1 (average of their Studies 1 and 2; two-way
-random-effects ICC, absolute agreement, ~3-week test-retest in adults). IRW
-rows are shown per comparable task: the split-half (single-session)
-estimate, which is the most directly comparable design for the alcohol
-Stroop and stop-signal datasets since they have no wave variable, plus a
+random-effects ICC, absolute agreement, ~3-week test-retest in adults), for
+the six congruency-style tasks. (The stop-signal dataset is compared
+separately in [Stop-signal: a structural comparison], since it isn't a
+congruency contrast.) IRW rows are shown per comparable task: the
+split-half (single-session) estimate, which is the most directly comparable
+design for the alcohol Stroop since it has no wave variable, plus a
 test-retest estimate for every dataset that has one (Hearts & Flowers and
 the three Enkavi et al. 2019 tasks) — of the two, the Enkavi test-retest
 rows are the closer match to Hedge et al.'s own true-test-retest,
@@ -636,10 +695,11 @@ stable-adult design.
 
 ```{r}
 #| label: tbl-hedge-comparison
-#| tbl-cap: "IRW reliability estimates alongside Hedge et al. (2018) Table 1 point estimates (mean of their Studies 1 & 2). NA where a comparable estimate wasn't computed (e.g. no test-retest wave for a dataset)."
+#| tbl-cap: "IRW reliability estimates alongside Hedge et al. (2018) Table 1 point estimates (mean of their Studies 1 & 2), for the six congruency-style tasks. NA where a comparable estimate wasn't computed (e.g. no test-retest wave for a dataset). Stop-signal is shown separately below."
 
 irw_split <- results %>%
-  filter(trial_floor == 5, measure == "rt", !grepl("test-retest", reliability_type)) %>%
+  filter(trial_floor == 5, measure == "rt", !grepl("test-retest", reliability_type),
+         dataset != "matzke_stopsignal_2019") %>%
   transmute(pair_task = dataset_labels[dataset], source = "IRW, split-half",
             condition = reliability_type, reliability = reliability_est)
 
@@ -656,7 +716,7 @@ irw_retest_enkavi <- results %>%
             condition, reliability = reliability_est)
 
 hedge_tbl <- hedge_ref %>%
-  filter(measure == "rt") %>%
+  filter(measure == "rt", task != "Stop-signal", task != "Go/No-go") %>%
   transmute(pair_task = task, source = "Hedge et al. (2018), test-retest",
             condition = condition, reliability = icc_mean)
 
@@ -665,7 +725,6 @@ pairing <- tribble(
   "Hearts & Flowers (mixed-trial)",   "Flanker",
   "Hearts & Flowers (blocked)",       "Flanker",
   "Alcohol Stroop",                   "Stroop",
-  "Stop-signal (OSARI)",              "Stop-signal",
   "Stroop (Enkavi et al. 2019)",      "Stroop",
   "ANT Flanker (Enkavi et al. 2019)", "Flanker"
 )
@@ -688,7 +747,8 @@ knitr::kable(comparison)
 
 A few things stand out. First, the *direction* of the effect (condition
 reliability >> difference-score reliability) matches Hedge et al. in every
-task pair except the stop-signal analogue, for the reasons discussed above.
+task pair shown here (the stop-signal analogue, excluded from this table,
+runs the opposite way — see [Stop-signal: a structural comparison]).
 Second, our absolute IRW split-half numbers for individual conditions run
 higher than Hedge et al.'s test-retest ICCs — expected, since split-half
 reliability has no opportunity for between-session instability to erode it,
@@ -731,13 +791,17 @@ H&F does.
 
 ## Discussion
 
-The reliability paradox replicates in IRW cognitive-control data. Across
+The reliability paradox replicates in IRW cognitive-control data — as an
+**attenuation of variable size, not a uniform collapse to zero**. Across
 six independent tasks (Hearts & Flowers, alcohol Stroop, a stop-signal task,
 and the Enkavi et al. 2019 Stroop, Simon, and ANT Flanker tasks) spanning
 split-half and true test-retest designs in both a developmental and a
 stable-adult sample, individual congruent and incongruent conditions are
 consistently far more reliable than the within-subject difference score
-built from them. The mechanism is exactly the one @hedge2018reliability
+built from them, but several of those difference scores — the blocked H&F
+design, the Enkavi Simon task, and (most strikingly) the Enkavi Stroop and
+ANT Flanker tasks — retain moderate reliability rather than collapsing
+outright. The mechanism is exactly the one @hedge2018reliability
 describe: the two conditions are highly correlated across people, so most
 of their between-person variance cancels in the subtraction (@eq-vardiff),
 while trial-level noise does not. @enkavi2019's own analysis of a much
