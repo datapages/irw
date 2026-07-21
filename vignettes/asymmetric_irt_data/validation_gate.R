@@ -200,10 +200,22 @@ print(recovery_summary)
 
 mask_holdout <- function(resp, frac = 0.2) {
   resp_train <- resp
-  obs_idx <- which(!is.na(as.matrix(resp)), arr.ind = TRUE)
-  n_mask  <- floor(frac * nrow(obs_idx))
-  mask_idx <- obs_idx[sample(seq_len(nrow(obs_idx)), n_mask), , drop = FALSE]
-  true_vals <- as.matrix(resp)[mask_idx]
+  mat <- as.matrix(resp)
+  n_obs_per_person <- rowSums(!is.na(mat))
+  # Mask per person, always leaving at least one observed response -- see
+  # the matching comment in asymmetric_irt_compute.R's mask_holdout() for
+  # why (real tables can strand a person with zero retained responses).
+  mask_list <- vector("list", nrow(mat))
+  for (i in seq_len(nrow(mat))) {
+    k <- n_obs_per_person[i]
+    if (k < 2) next
+    obs_cols <- which(!is.na(mat[i, ]))
+    n_mask_i <- min(floor(frac * k), k - 1)
+    if (n_mask_i < 1) next
+    mask_list[[i]] <- cbind(row = i, col = sample(obs_cols, n_mask_i))
+  }
+  mask_idx <- do.call(rbind, mask_list)
+  true_vals <- mat[mask_idx]
   for (k in seq_len(nrow(mask_idx))) resp_train[mask_idx[k, 1], mask_idx[k, 2]] <- NA
   list(train = resp_train, mask_idx = mask_idx, true_vals = true_vals)
 }

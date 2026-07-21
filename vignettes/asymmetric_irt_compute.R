@@ -124,10 +124,24 @@ lambda_P <- function(def, par_row, x = 1) {
 # the masked training matrix plus the held-out cell indices and true values.
 mask_holdout <- function(resp, frac = HOLDOUT_FRAC) {
   resp_train <- resp
-  obs_idx  <- which(!is.na(as.matrix(resp)), arr.ind = TRUE)
-  n_mask   <- floor(frac * nrow(obs_idx))
-  mask_idx <- obs_idx[sample(seq_len(nrow(obs_idx)), n_mask), , drop = FALSE]
-  true_vals <- as.matrix(resp)[mask_idx]
+  mat <- as.matrix(resp)
+  n_obs_per_person <- rowSums(!is.na(mat))
+  # Real IRW tables can carry substantial pre-existing missingness (skip
+  # patterns etc.) -- masking naively at the cell level can strand a person
+  # with zero retained responses, which breaks the custom-item mirt fits
+  # ("incorrect length for 'group'") even though the native 2PL merely warns.
+  # Mask per person instead, always leaving at least one observed response.
+  mask_list <- vector("list", nrow(mat))
+  for (i in seq_len(nrow(mat))) {
+    k <- n_obs_per_person[i]
+    if (k < 2) next
+    obs_cols <- which(!is.na(mat[i, ]))
+    n_mask_i <- min(floor(frac * k), k - 1)
+    if (n_mask_i < 1) next
+    mask_list[[i]] <- cbind(row = i, col = sample(obs_cols, n_mask_i))
+  }
+  mask_idx <- do.call(rbind, mask_list)
+  true_vals <- mat[mask_idx]
   for (k in seq_len(nrow(mask_idx))) resp_train[mask_idx[k, 1], mask_idx[k, 2]] <- NA
   list(train = resp_train, mask_idx = mask_idx, true_vals = true_vals)
 }
@@ -172,6 +186,14 @@ fit_asymmetric_irt <- function(table_name) {
     message("    skipped: n_categories = ", n_categories, " (expected binary)")
     return(NULL)
   }
+  # Canonicalize to 0/1 -- IRW tables aren't guaranteed to use 0/1 coding
+  # (e.g. some use 1/2). mirt() re-codes internally regardless, but
+  # mask_holdout()'s true_vals are read straight off this matrix and get
+  # passed to imv.binary(), which requires literal 0/1 outcomes.
+  resp <- as.data.frame(lapply(resp, function(x) {
+    lv <- sort(unique(na.omit(x)))
+    match(x, lv) - 1
+  }))
 
   # Response-level holdout, masked once per table and reused for every
   # model fit below so all comparisons are on identical held-out cells.
