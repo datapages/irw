@@ -1,0 +1,535 @@
+---
+title: "Network Psychometrics vs. IRT: Does Centrality Track Discrimination?"
+description: |
+  IRT explains why items correlate with a single latent trait; network
+  psychometrics explains it with a graph of direct partial-correlation
+  edges between items, no latent variable required. Under a strong single
+  common cause, the two should agree: a network's node centrality should
+  track IRT discrimination, and the network should look densely and
+  uniformly connected. We test this across real IRW instruments and check
+  whether the relationship tracks tables already flagged as
+  multidimensional or locally dependent elsewhere on this site.
+date: today
+bibliography: network_psych_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(plotly)
+library(qgraph)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+cache_path <- "network_psych_data/network_psych_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache               <- readRDS(cache_path)
+  summary_df           <- .cache$summary
+  graphs_list          <- .cache$graphs %||% list()
+  strengths_list       <- .cache$strengths %||% list()
+  discriminations_list <- .cache$discriminations %||% list()
+  candidate_tables     <- .cache$candidate_tables
+  date_run             <- .cache$date_run
+  is_pilot             <- isTRUE(.cache$pilot)
+  n_all_candidates     <- .cache$n_all_candidates %||% length(candidate_tables)
+  n_binary_all         <- .cache$n_binary_all %||% NA_integer_
+  n_poly_all           <- .cache$n_poly_all %||% NA_integer_
+  r_n_tables_run       <- length(candidate_tables)
+} else {
+  summary_df <- tibble(
+    table = character(), n_items = integer(), n_participants = integer(),
+    n_categories = integer(), network_method = character(), network_density = numeric(),
+    strength_a_cor = numeric(), construct_type = character(), item_format = character(),
+    dim_ratio_12 = numeric(), dim_nfact_suggested = integer(), dim_unidimensional = logical(),
+    ld_prop_flagged = numeric(), ld_mean_abs_q3 = numeric(),
+    has_dim_match = logical(), has_ld_match = logical()
+  )
+  graphs_list <- list(); strengths_list <- list(); discriminations_list <- list()
+  candidate_tables <- character()
+  date_run <- Sys.Date()
+  is_pilot <- FALSE
+  n_all_candidates <- 0L; n_binary_all <- NA_integer_; n_poly_all <- NA_integer_
+  r_n_tables_run <- 0L
+}
+
+knitr::opts_chunk$set(eval = cache_ok)
+```
+
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (!cache_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Cache not found** — figures and tables will not appear. Generate results ",
+  "by running the compute script, then re-render:\n\n",
+  "```r\nRscript vignettes/network_psych_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+```{r}
+#| label: pilot-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (cache_ok && is_pilot) cat(
+  "::: {.callout-warning}\n",
+  "**Draft preview, small pilot run.** This render uses a deliberately small ",
+  "sample of ", r_n_tables_run, " tables (a mix of hand-picked known-good ",
+  "tables and a random top-up), run live against Redivis, to validate the ",
+  "pipeline and page layout before committing to a full batch across all ",
+  n_all_candidates, " eligible tables. All numbers here are real computed ",
+  "results -- not placeholders -- but treat the *distributions* as a small, ",
+  "noisy preview rather than a representative picture. Re-run ",
+  "`network_psych_compute.R` with `PILOT <- FALSE` to scale up.\n",
+  ":::\n", sep = ""
+)
+```
+
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the
+analysis design, and the writing below — was produced largely by Claude
+(Anthropic), working from a task specification and with human review.
+Treat the methodological choices and interpretations accordingly, and
+check the compute script (`network_psych_compute.R`) directly if you're
+relying on the numbers here.
+:::
+
+## Motivation
+
+Every other vignette on this site treats item covariation the same way
+IRT does: responses correlate because they all depend, more or less, on
+one latent trait. **Network psychometrics** proposes a different account.
+Instead of a shared cause behind the correlations, it models items as
+nodes in a graph and estimates direct, partial-correlation edges between
+them — an Ising model for binary items, a Gaussian graphical model
+(EBICglasso) for polytomous ones. No latent variable is fit at all; the
+graph *is* the model.
+
+These two accounts aren't just philosophically different — they make a
+shared, testable prediction. Van der Maas et al. (2006)
+[@vandermaas2006dynamical] and Epskamp, Maris, van Borkulo, & Borsboom
+(2018) [@epskamp2018testing] show that if a single dominant common cause
+really does explain a set of items, the two descriptions should coincide:
+a node's **centrality** (how strongly and directly it connects to every
+other node) should track that item's **IRT discrimination**, and the
+estimated network should look densely and fairly uniformly connected —
+not clustered into visibly separate sub-groups. This vignette tests that
+prediction across real IRW instruments, and asks whether it holds up
+better or worse for tables this site's other diagnostics already flag as
+multidimensional ([dimensionality vignette](dimensionality.qmd)) or
+locally dependent ([local-dependence vignette](local_dependence.qmd)).
+
+## Data and methods
+
+### Dataset selection
+
+```{r}
+#| label: filter-datasets
+#| eval: false
+
+binary_tables <- irw_filter(n_items = c(5, 30), n_participants = c(300, Inf),
+                             n_categories = 2)
+poly_tables   <- irw_filter(n_items = c(5, 30), n_participants = c(300, Inf),
+                             n_categories = c(3, 7))
+```
+
+Items are capped at 30 (lower than the dimensionality vignette's 40) and
+polytomous tables are restricted to 3-7 response categories, mainly for
+compute reasons: EBIC-regularized network estimation scales worse than a
+single IRT fit or eigen-decomposition. `r n_all_candidates` tables met
+this criterion as of `r format(date_run, "%B %Y")` (`r n_binary_all`
+binary, `r n_poly_all` polytomous).
+`r if (is_pilot) "This page currently runs on a small pilot subset (see the warning above); a full pass analyzes all of them." else paste0("This pass analyzes all ", r_n_tables_run, " of them.")`
+
+### Per-table computation
+
+For each candidate table, `fit_network()`:
+
+1. Fetches the table and builds a wide response matrix, downsampling to
+   at most 10,000 respondents and dropping zero-variance items, mirroring
+   the other IRT vignettes on this site.
+2. Estimates a regularized network with `bootnet::estimateNetwork()`:
+   `IsingFit` for binary items, `EBICglasso` for polytomous items
+   (treating ordinal Likert data as continuous — standard network-
+   literature practice, an approximation rather than an exact ordinal
+   network model; see Limitations).
+3. Computes node centrality with `qgraph::centrality_auto()`. In a
+   genuinely weighted network this returns a `Strength` column (each
+   item's summed edge weight); a fully empty regularized network — every
+   edge shrunk to zero — gets auto-detected as unweighted and falls back
+   to `Degree` instead. That's still a real, informative result (kept in
+   the data below), just not one with a meaningful strength-discrimination
+   correlation, so that comparison is left `NA` for those tables.
+4. Fits the same one-factor model used elsewhere on this site — 2PL for
+   binary, the graded response model for polytomous — and extracts item
+   discrimination.
+5. Records the correlation between node strength and discrimination
+   across items — the vignette's core comparison — plus network density
+   (proportion of possible edges present) and `construct_type`/
+   `item_format` from IRW's tags.
+6. Joins in, where the same table appears: the eigenvalue ratio /
+   parallel-analysis outcome from the [dimensionality
+   vignette](dimensionality.qmd)'s cache, and the proportion of Q3-flagged
+   pairs from the [local-dependence vignette](local_dependence.qmd)'s
+   cache — read directly from their saved results rather than
+   recomputed.
+
+```{r}
+#| label: fit-function
+#| eval: false
+
+fit_network <- function(table_name) {
+  resp <- fetch_wide(table_name)  # irw_fetch() + irw_long2resp(), cleaned
+  net  <- estimateNetwork(resp, default = if (n_categories == 2) "IsingFit" else "EBICglasso")
+  cent <- centrality_auto(net$graph)
+  fit  <- mirt(resp, 1, itemtype = if (n_categories == 2) "2PL" else "graded")
+  a    <- coef(fit, simplify = TRUE)$items[, "a1"]
+  cor(cent$node.centrality$Strength, a)  # the core comparison
+}
+```
+
+Of the `r r_n_tables_run` candidate tables in this pass, `r nrow(summary_df)`
+produced usable results (the rest were dropped for too few usable items,
+an unsupported column type on fetch, a network/IRT model that failed to
+fit, or too few remaining response categories). This pass matched a
+dimensionality-vignette entry for `r sum(summary_df$has_dim_match)` of
+those tables and a local-dependence-vignette entry for
+`r sum(summary_df$has_ld_match)` — both caches were built on an
+overlapping but not identical candidate pool, so coverage is high but not
+total.
+
+::: {.callout-note}
+To reproduce with current IRW holdings, re-run `network_psych_compute.R`
+(after the dimensionality and local-dependence compute scripts, which it
+depends on) and commit the updated
+`network_psych_data/network_psych_results.rds`.
+:::
+
+## Results
+
+### Two concrete examples, opposite ends of the relationship
+
+```{r}
+#| label: fig-example-network
+#| fig-cap: "Estimated network (left) and IRT discrimination parameters (right) for the table with the strongest strength-discrimination correlation in this sample (top) and the weakest (bottom). Top: a dense, uniformly-connected graph with node positions that roughly track item discrimination -- exactly what Epskamp et al.'s theory predicts under a strong single factor. Bottom: edge thickness and node position barely track discrimination at all."
+#| fig-height: 10
+#| fig-width: 11
+
+example_candidates <- summary_df %>%
+  filter(!is.na(strength_a_cor), network_density > 0) %>%
+  rowwise() %>%
+  # Exclude numerically degenerate IRT fits -- e.g. a near-duplicate item
+  # pair can drive discrimination to an implausible boundary value (a ~ 50),
+  # which makes for a misleading rather than illustrative example.
+  mutate(max_abs_a = max(abs(discriminations_list[[table]]), na.rm = TRUE)) %>%
+  ungroup() %>%
+  filter(max_abs_a < 5)
+hi_table <- example_candidates %>% slice_max(strength_a_cor, n = 1, with_ties = FALSE) %>% pull(table)
+lo_table <- example_candidates %>% slice_min(strength_a_cor, n = 1, with_ties = FALSE) %>% pull(table)
+
+hi_cor <- summary_df$strength_a_cor[summary_df$table == hi_table]
+lo_cor <- summary_df$strength_a_cor[summary_df$table == lo_table]
+
+plot_example_pair <- function(table_name, label) {
+  g <- graphs_list[[table_name]]
+  s <- strengths_list[[table_name]]
+  a <- discriminations_list[[table_name]]
+
+  par(mar = c(4, 1, 4, 1))
+  qgraph::qgraph(g, layout = "spring", labels = names(s),
+                 label.cex = 0.9, vsize = 11, edge.color = irw_blue,
+                 title = paste0(label, ": ", table_name, "\nestimated network"),
+                 title.cex = 1)
+
+  par(mar = c(4, 10, 4, 2))
+  ord <- order(a)
+  barplot(a[ord], names.arg = names(a)[ord], horiz = TRUE, las = 1,
+          cex.names = 0.8, col = irw_blue, border = NA,
+          xlab = "IRT discrimination (a)",
+          main = paste0(label, ": ", table_name, "\ndiscrimination"), cex.main = 1)
+}
+
+par(mfrow = c(2, 2))
+plot_example_pair(hi_table, "Highest correlation")
+plot_example_pair(lo_table, "Lowest correlation")
+```
+
+```{r}
+#| label: example-pair-inline
+#| echo: false
+
+hi_density <- summary_df$network_density[summary_df$table == hi_table]
+lo_density <- summary_df$network_density[summary_df$table == lo_table]
+lo_a       <- discriminations_list[[lo_table]]
+n_lo_neg_a <- sum(lo_a < 0)
+```
+
+`r hi_table` has a strength-discrimination correlation of `r round(hi_cor, 2)`
+— about as clean a confirmation of the theory as this sample produces.
+`r lo_table` sits at the opposite end, at `r round(lo_cor, 2)`: the two
+descriptions of the same items agree much less about which ones matter
+most, to the point of actively disagreeing about direction.
+
+What makes the contrast worth dwelling on is what *doesn't* differ between
+them: both networks are fully connected (density
+`r round(hi_density, 2)` and `r round(lo_density, 2)` respectively — every
+possible edge present in both). Density and uniformity, the other half of
+Epskamp et al.'s prediction, look identical here; only the
+strength-discrimination correlation reveals that one table matches the
+single-common-cause story and the other doesn't. A network that merely
+*looks* dense and uniform is not, on its own, evidence that IRT and
+network psychometrics agree about the items — this pair is a direct
+counterexample.
+
+The disagreement in `r lo_table` isn't subtle, either:
+`r n_lo_neg_a` of its `r length(lo_a)` items get a *negative* IRT
+discrimination, meaning the 2PL model estimates them as running opposite
+the trait it fit from the rest — yet the network still connects every one
+of those items to every other about as strongly as any pair in
+`r hi_table`. The two frameworks aren't just disagreeing on a matter of
+degree; they disagree on which items belong together at all. Practically,
+that matters most for anyone using either statistic to pick or drop items
+— shortening a scale by discrimination, or by network centrality, is not
+a neutral choice, and a table like this one is exactly where the two
+selections would part ways. Compare both examples to the aggregate
+picture below: most tables fall somewhere between these two extremes, but
+not always close to the middle.
+
+### Does strength track discrimination in general?
+
+```{r}
+#| label: fig-cor-ranked
+#| fig-cap: "Correlation between network node strength and IRT discrimination, one point per table, ranked from lowest to highest. Values near 1 match the theoretical prediction under a strong single factor; low or negative values indicate a breakdown. Hover over a point to see which table it is."
+#| fig-height: 6
+
+ranked_df <- summary_df %>%
+  filter(!is.na(strength_a_cor)) %>%
+  arrange(strength_a_cor) %>%
+  mutate(
+    rank = row_number(),
+    tooltip = paste0(
+      "Table: ", table,
+      "<br>Strength-a correlation: ", round(strength_a_cor, 2),
+      "<br>Network method: ", network_method,
+      "<br>Network density: ", round(network_density, 2),
+      "<br>n_items: ", n_items
+    )
+  )
+
+p <- ggplot(ranked_df, aes(x = strength_a_cor, y = rank, text = tooltip)) +
+  geom_point(colour = irw_blue, size = 1.6, alpha = 0.7) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
+  labs(x = "Correlation: node strength vs. IRT discrimination", y = NULL) +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+
+ggplotly(p, tooltip = "text") |> layout(margin = list(t = 60))
+```
+
+```{r}
+#| label: cor-summary-inline
+#| echo: false
+
+med_cor <- median(summary_df$strength_a_cor, na.rm = TRUE)
+prop_strong <- mean(summary_df$strength_a_cor > 0.7, na.rm = TRUE)
+n_na_cor <- sum(is.na(summary_df$strength_a_cor))
+```
+
+The median strength-discrimination correlation across `r sum(!is.na(summary_df$strength_a_cor))`
+tables with a usable comparison is `r round(med_cor, 2)`, and
+`r scales::percent(prop_strong, accuracy = 1)` of tables exceed 0.7.
+`r if (n_na_cor > 0) paste0(n_na_cor, " table(s) are excluded here because their regularized network had no edges at all -- an empty network, not a low correlation.") else ""`
+The relationship is real and often strong, but — as the two comparisons
+below make concrete — it is not universal.
+
+### Cross-vignette payoff 1: does it track the dimensionality diagnostic?
+
+```{r}
+#| label: fig-cor-vs-dimensionality
+#| fig-cap: "Strength-discrimination correlation against the dimensionality vignette's eigenvalue ratio (log scale, capped at 15 for display). If Epskamp et al.'s theory holds, the correlation should sit near 1 for tables with a high (clearly unidimensional) ratio and scatter lower as the ratio approaches the vignette's ratio = 4 heuristic cutoff or below. Hover for table details."
+#| fig-height: 5
+
+join_dim_df <- summary_df %>%
+  filter(!is.na(strength_a_cor), !is.na(dim_ratio_12)) %>%
+  mutate(tooltip = paste0(
+    "Table: ", table,
+    "<br>Strength-a cor: ", round(strength_a_cor, 2),
+    "<br>Eigenvalue ratio: ", round(dim_ratio_12, 2),
+    "<br>PA unidimensional: ", dim_unidimensional
+  ))
+
+p <- ggplot(join_dim_df, aes(x = pmin(dim_ratio_12, 15), y = strength_a_cor, text = tooltip)) +
+  geom_point(colour = irw_blue, size = 2, alpha = 0.7) +
+  geom_smooth(method = "loess", se = FALSE, colour = irw_red, linewidth = 0.8) +
+  scale_x_log10() +
+  labs(x = "Eigenvalue ratio (dimensionality vignette, log scale, capped at 15)",
+       y = "Strength-discrimination correlation")
+
+ggplotly(p, tooltip = "text") |> layout(margin = list(t = 60))
+```
+
+```{r}
+#| label: dim-join-inline
+#| echo: false
+
+dim_join_full <- join_dim_df %>% filter(!is.na(dim_unidimensional))
+n_dim_join    <- nrow(join_dim_df)
+cor_dim_join  <- cor(join_dim_df$strength_a_cor, log(join_dim_df$dim_ratio_12))
+n_flagged_uni   <- sum(dim_join_full$dim_unidimensional)
+n_flagged_multi <- sum(!dim_join_full$dim_unidimensional)
+med_cor_uni     <- median(dim_join_full$strength_a_cor[dim_join_full$dim_unidimensional])
+med_cor_multi   <- median(dim_join_full$strength_a_cor[!dim_join_full$dim_unidimensional])
+wilcox_p_dim    <- wilcox.test(
+  dim_join_full$strength_a_cor[dim_join_full$dim_unidimensional],
+  dim_join_full$strength_a_cor[!dim_join_full$dim_unidimensional]
+)$p.value
+```
+
+Across the `r n_dim_join` tables with a match in both this vignette and the
+[dimensionality vignette](dimensionality.qmd), the two diagnostics move
+together weakly but reliably (r = `r round(cor_dim_join, 2)` between
+strength-discrimination correlation and log eigenvalue ratio) — real
+signal in the direction the theory predicts, not a tight relationship.
+The theory's prediction shows up more clearly when split by the
+dimensionality vignette's own parallel-analysis call: the
+`r n_flagged_uni` tables it flags as unidimensional have a median
+strength-discrimination correlation of `r round(med_cor_uni, 2)`, versus
+`r round(med_cor_multi, 2)` for the `r n_flagged_multi` tables it flags as
+multidimensional (Wilcoxon `r if (wilcox_p_dim < 0.001) "p < 0.001" else paste0("p = ", round(wilcox_p_dim, 3))`).
+Parallel analysis is strict — only a small fraction of tables clear its
+bar for "unidimensional" — but among the ones that do, network centrality
+and IRT discrimination agree noticeably better.
+
+### Cross-vignette payoff 2: do locally dependent tables look denser?
+
+```{r}
+#| label: fig-density-vs-localdep
+#| fig-cap: "Network density against the local-dependence vignette's proportion of Q3-flagged item pairs. A testlet or shared-stimulus effect should show up as extra edges concentrated among the affected items -- more flagged pairs, denser estimated networks -- rather than the theory's predicted uniform density. Hover for table details."
+#| fig-height: 5
+
+join_ld_df <- summary_df %>%
+  filter(!is.na(network_density), !is.na(ld_prop_flagged)) %>%
+  mutate(tooltip = paste0(
+    "Table: ", table,
+    "<br>Network density: ", round(network_density, 2),
+    "<br>Prop. Q3-flagged: ", round(ld_prop_flagged, 2)
+  ))
+
+p <- ggplot(join_ld_df, aes(x = ld_prop_flagged, y = network_density, text = tooltip)) +
+  geom_point(colour = irw_blue, size = 2, alpha = 0.7) +
+  labs(x = "Proportion of pairs Q3-flagged (local-dependence vignette)",
+       y = "Network density")
+
+ggplotly(p, tooltip = "text") |> layout(margin = list(t = 60))
+```
+
+```{r}
+#| label: ld-join-inline
+#| echo: false
+
+n_ld_join    <- nrow(join_ld_df)
+cor_ld_join  <- cor(join_ld_df$network_density, join_ld_df$ld_prop_flagged)
+cor_test_ld  <- cor.test(join_ld_df$network_density, join_ld_df$ld_prop_flagged)
+```
+
+Across the `r n_ld_join` tables with a match in both this vignette and the
+[local-dependence vignette](local_dependence.qmd), network density and the
+proportion of Q3-flagged pairs correlate at r = `r round(cor_ld_join, 2)`
+(`r if (cor_test_ld$p.value < 0.001) "p < 0.001" else paste0("p = ", round(cor_test_ld$p.value, 3))`)
+— the expected sign (more flagged pairs, denser network), and with
+`r n_ld_join` tables behind it, a reliable one. Density alone doesn't distinguish a uniformly
+dense network from one with a few tightly-connected clusters sitting
+inside an otherwise sparse graph — the latter is the more specific
+testlet signature, and it's exactly what the local-dependence vignette's
+[Q3 heatmaps](local_dependence.qmd#a-worst-case-and-a-clean-case-side-by-side)
+are built to catch directly. Detecting that cluster structure from the
+network side properly needs community-detection tools this pass didn't
+run at batch scale (see Limitations); density is the coarser proxy
+available here.
+
+## Practical implications
+
+Where the strength-discrimination correlation is high and the network is
+dense and uniform, network psychometrics and IRT are, practically
+speaking, telling the same story about the same items — using either
+framework to identify the "best" items should agree. Where it breaks
+down, that's a signal worth taking seriously in its own right, independent
+of which framework you prefer: it means the two ways of describing item
+covariation actually disagree about which items matter most, and a table
+flagged as multidimensional or locally dependent elsewhere on this site
+is a reasonable place to expect exactly that disagreement.
+
+## Limitations
+
+- **EBICglasso on ordinal data** treats Likert-type responses as
+  continuous, standard practice in the network-psychometrics literature
+  but an approximation, not an exact ordinal network model.
+- **Network estimation is more sample- and tuning-sensitive** than fitting
+  a single IRT model. Small tables in this sample should be read
+  cautiously; an empty regularized network (no edges survive
+  regularization) is itself informative but excludes that table from the
+  strength-discrimination comparison entirely.
+- **No bootstrap stability checks.** `bootnet`'s case-dropping bootstrap
+  (the standard way to check whether an estimated network's edges and
+  centrality ordering are stable) was not run at full-batch scale for
+  compute reasons. A natural follow-up: run it for a handful of the most
+  interesting example tables from the full batch (the strongest
+  confirmation, the sharpest breakdown) rather than all of them.
+- **Density is a coarse proxy for "clustered."** As noted above, telling
+  a uniformly dense network apart from one with tight sub-clusters needs
+  community-detection tools this pass didn't run.
+- **Cache overlap is partial.** The dimensionality and local-dependence
+  caches were built on their own candidate pools (different item-count
+  caps), so not every table here has a match in both — see the match-rate
+  numbers in Data and methods.
+
+## Reproducibility
+
+```{r}
+#| label: repro
+#| echo: true
+#| eval: false
+
+# 1. Re-run the prerequisite compute scripts first (from the project root)
+Rscript vignettes/dimensionality_compute.R
+Rscript vignettes/local_dependence_compute.R
+
+# 2. Re-run this vignette's compute script
+Rscript vignettes/network_psych_compute.R
+
+# 3. Re-render this page
+quarto render vignettes/network_psych.qmd
+```
+
+Session info from the compute run: R `r if (cache_ok) .cache$session$R.version$version.string else "N/A"`,
+run on `r format(date_run, "%B %d, %Y")`.
+
+## References
+
+::: {#refs}
+:::
