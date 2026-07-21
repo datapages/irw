@@ -257,7 +257,7 @@ see [below](#two-diagnostics-one-disagreement).
 
 ```{r}
 #| label: fig-ratio-by-construct
-#| fig-cap: "Eigenvalue ratio by construct_type (primary label, for tables tagged with more than one). Each point is one table; diamonds mark the median within each type."
+#| fig-cap: "Eigenvalue ratio by construct_type (primary label, for tables tagged with more than one). Each point is one table; diamonds mark the median within each type. Hover over a point to see which table it is."
 #| fig-height: 5
 
 construct_order <- summary_df %>%
@@ -269,17 +269,29 @@ construct_order <- summary_df %>%
 
 plot_df <- summary_df %>%
   filter(!is.na(construct_type)) %>%
-  mutate(construct_type = factor(construct_type, levels = construct_order))
+  mutate(
+    construct_type = factor(construct_type, levels = construct_order),
+    tooltip = paste0(
+      "Table: ", table,
+      "<br>Ratio: ", round(ratio_12, 2),
+      "<br>PA factors: ", nfact_suggested,
+      "<br>n_items: ", n_items,
+      "<br>Construct: ", construct_type
+    )
+  )
 
 medians_df <- plot_df %>%
   group_by(construct_type) %>%
-  summarise(med = median(ratio_12), .groups = "drop")
+  summarise(med = median(ratio_12), .groups = "drop") %>%
+  mutate(tooltip = paste0("Median (", construct_type, "): ", round(med, 2)))
 
-ggplot(plot_df, aes(x = pmin(ratio_12, 15), y = construct_type)) +
+p <- ggplot(plot_df, aes(x = pmin(ratio_12, 15), y = construct_type, text = tooltip)) +
   geom_jitter(height = 0.15, colour = irw_blue, alpha = 0.5, size = 1.7) +
-  geom_point(data = medians_df, aes(x = pmin(med, 15), y = construct_type),
+  geom_point(data = medians_df, aes(x = pmin(med, 15), y = construct_type, text = tooltip),
              shape = 18, size = 4, colour = irw_red) +
   labs(x = "1st / 2nd eigenvalue ratio (capped at 15 for display)", y = NULL)
+
+ggplotly(p, tooltip = "text")
 ```
 
 ```{r}
@@ -335,7 +347,8 @@ p <- ggplot(ranked_df, aes(x = pmin(ratio_12, 15), y = rank, text = tooltip)) +
   labs(x = "1st / 2nd eigenvalue ratio (capped at 15 for display)", y = NULL) +
   theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
 
-ggplotly(p, tooltip = "text")
+ggplotly(p, tooltip = "text") |>
+  layout(margin = list(t = 60))
 ```
 
 ### Sanity check: does the diagnostic recover a known answer?
@@ -343,7 +356,7 @@ ggplotly(p, tooltip = "text")
 ```{r}
 #| label: fig-scree-sanity
 #| fig-cap: "Scree plots for a known multi-factor personality battery (left, psychtools_bfi -- 25 items, 5 named traits) and a single-construct math test (right, 4thgrade_math_sirt), for comparison. The dashed line at eigenvalue = 1 is a visual reference (the classic Kaiser criterion), not the decision rule used elsewhere in this vignette."
-#| fig-height: 4.5
+#| fig-height: 5
 
 scree_tables <- c("psychtools_bfi" = "psychtools_bfi (Big Five personality, 5 known factors)",
                    "4thgrade_math_sirt" = "4thgrade_math_sirt (single-construct math test)")
@@ -359,8 +372,9 @@ if (nrow(scree_df) > 0) {
     geom_hline(yintercept = 1, linetype = "dashed", colour = irw_grey) +
     geom_line(colour = irw_blue) +
     geom_point(colour = irw_blue) +
-    facet_wrap(~table, scales = "free_x") +
-    labs(x = "Component", y = "Eigenvalue")
+    facet_wrap(~table, scales = "free_x", labeller = label_wrap_gen(width = 22)) +
+    labs(x = "Component", y = "Eigenvalue") +
+    theme(strip.text = element_text(size = 10, lineheight = 1.1))
 } else {
   cat("Sanity-check tables not present in this run.")
 }
