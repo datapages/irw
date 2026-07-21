@@ -71,6 +71,15 @@ pal <- c(MH = "#2166ac", `Logistic (uniform)` = "#d6604d",
          `Logistic (non-uniform)` = "#4dac26")
 ```
 
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the
+analysis design, and the writing below — was produced largely by Claude
+(Anthropic), working from a task specification and with human review.
+Treat the methodological choices and interpretations accordingly, and
+check the compute script (`gender_dif_compute.R`) directly if you're
+relying on the numbers here.
+:::
+
 ## Research question
 
 Differential item functioning (DIF) occurs when an item is systematically easier or
@@ -271,9 +280,6 @@ div_df <- ds_summary |>
 p_div <- ggplot(div_df, aes(x = prop_mh, y = median_r2,
                              colour = item_type, size = n_persons, text = tooltip)) +
   geom_hline(yintercept = c(0.035, 0.07), linetype = "dashed", colour = "grey60") +
-  annotate("text", x = 0, y = c(0.037, 0.072),
-           label = c("Negligible / Moderate", "Moderate / Large"),
-           hjust = 0, vjust = 0, size = 3, colour = "grey45") +
   geom_point(alpha = 0.8) +
   scale_x_continuous(labels = scales::percent_format(), limits = c(0, 1.05)) +
   scale_colour_manual(values = c(Dichotomous = "#2166ac", Polytomous = "#4dac26"),
@@ -283,13 +289,29 @@ p_div <- ggplot(div_df, aes(x = prop_mh, y = median_r2,
        y = expression("Median " * Delta * R^2 * " (logistic uniform)")) +
   theme_minimal(base_size = 13)
 
+# Threshold labels are added as native plotly annotations (xref = "paper") rather
+# than a ggplot annotate() layer, which ggplotly() clips at the left panel edge.
 ggplotly(p_div, tooltip = "text") |>
-  layout(annotations = list(list(
-    text      = "Point size = sample size. Hover for dataset details.",
-    showarrow = FALSE, xref = "paper", yref = "paper",
-    x = 0, y = -0.12, xanchor = "left", yanchor = "top",
-    font = list(size = 11, color = "grey50")
-  )))
+  layout(annotations = list(
+    list(
+      text      = "Negligible / Moderate", showarrow = FALSE,
+      xref = "paper", yref = "y", x = 0.01, y = 0.037,
+      xanchor = "left", yanchor = "bottom",
+      font = list(size = 11, color = "grey45")
+    ),
+    list(
+      text      = "Moderate / Large", showarrow = FALSE,
+      xref = "paper", yref = "y", x = 0.01, y = 0.072,
+      xanchor = "left", yanchor = "bottom",
+      font = list(size = 11, color = "grey45")
+    ),
+    list(
+      text      = "Point size = sample size. Hover for dataset details.",
+      showarrow = FALSE, xref = "paper", yref = "paper",
+      x = 0, y = -0.12, xanchor = "left", yanchor = "top",
+      font = list(size = 11, color = "grey50")
+    )
+  ))
 ```
 
 The same pattern holds at the item level: MH-significant polytomous items cluster near
@@ -446,14 +468,6 @@ persists even with purification when group trait-mean differences are large — 
 a fundamental limitation of total-score matching for polytomous data, not a tuning
 issue. Logistic ΔR² is the more reliable metric in those settings. For polytomous
 datasets with more than 20 items, `difPolyLogistic` was skipped due to computational cost; those datasets contribute MH results only.
-
----
-
-## Extending this vignette
-
-- **Multiple-testing correction.** Apply BH correction within each dataset.
-- **ETS Δ for polytomous.** Explore generalised effect-size measures for the GMH odds ratio.
-- **Scale-up.** Increase `N_DATASETS` to process all 459 candidate datasets.
 
 ---
 
