@@ -1,0 +1,488 @@
+---
+title: "Gender DIF Across IRW Datasets"
+description: |
+  An omnibus survey of differential item functioning (DIF) by gender or sex across all
+  IRW datasets that record this covariate. We apply two DIF families — Mantel-Haenszel
+  (uniform DIF, with ETS Δ effect sizes) and logistic regression (uniform and non-uniform
+  DIF) — to each dataset and ask: how prevalent is gender DIF, and do the two methods agree?
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(plotly)
+
+out_dir <- "gender_dif_data"
+fs      <- list.files(out_dir, pattern = "\\.rds$", full.names = TRUE)
+results <- Filter(Negate(is.null),
+                  lapply(setNames(fs, sub("\\.rds$", "", basename(fs))), readRDS))
+
+# Flat item-level data frame
+items_df <- bind_rows(lapply(names(results), function(nm) {
+  r <- results[[nm]]
+  if (is.null(r$items)) return(NULL)
+  r$items |>
+    mutate(dataset = nm, n_persons = r$n_persons, is_poly = r$is_poly)
+}))
+
+# Dataset-level summary
+ds_summary <- bind_rows(lapply(names(results), function(nm) {
+  r <- results[[nm]]
+  it <- r$items
+  log_run <- if ("logistic_run" %in% names(it)) any(it$logistic_run, na.rm = TRUE) else NA
+  tibble(
+    dataset       = nm,
+    n_items       = r$n_items,
+    n_persons     = r$n_persons,
+    group_col     = r$group_col,
+    ref           = r$group_vals[1],
+    focal         = r$group_vals[2],
+    is_poly       = r$is_poly,
+    logistic_run  = log_run,
+    n_mh_sig      = sum(it$p_mh    < 0.05, na.rm = TRUE),
+    n_unif_sig    = if (isTRUE(log_run)) sum(it$p_unif    < 0.05, na.rm = TRUE) else NA_integer_,
+    n_nonunif_sig = if (isTRUE(log_run)) sum(it$p_nonunif < 0.05, na.rm = TRUE) else NA_integer_,
+    median_r2     = if ("delta_r2_unif" %in% names(it))
+                      median(it$delta_r2_unif, na.rm = TRUE) else NA_real_
+  )
+})) |>
+  mutate(
+    prop_mh      = n_mh_sig      / n_items,
+    prop_unif    = n_unif_sig    / n_items,
+    prop_nonunif = n_nonunif_sig / n_items,
+    short_name   = make.unique(gsub("_", " ", dataset) |>
+                                 stringr::str_trunc(35), sep = " ")
+  )
+
+pal <- c(MH = "#2166ac", `Logistic (uniform)` = "#d6604d",
+         `Logistic (non-uniform)` = "#4dac26")
+```
+
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the
+analysis design, and the writing below — was produced largely by Claude
+(Anthropic), working from a task specification and with human review.
+Treat the methodological choices and interpretations accordingly, and
+check the compute script (`gender_dif_compute.R`) directly if you're
+relying on the numbers here.
+:::
+
+## Research question
+
+Differential item functioning (DIF) occurs when an item is systematically easier or
+harder for one group than another, *after controlling for the underlying trait*. Gender
+is one of the most commonly examined group variables in educational and psychological
+measurement, yet most DIF studies target a single instrument. The IRW makes a broader
+question tractable: **how prevalent is gender DIF across a diverse collection of
+real-world datasets?** And do two complementary DIF methods agree on which items are
+flagged?
+
+---
+
+## Approach
+
+### Dataset selection
+
+We identified all IRW datasets that record a `cov_gender` or `cov_sex` covariate using
+`irw_filter()`, which also applies a default response-density filter (≥ 50%) to exclude
+sparse datasets unlikely to support stable estimation. Datasets with fewer than 6 items
+or fewer than 50 respondents per group are excluded.
+
+```{r}
+#| label: selection
+#| eval: false
+
+library(irw)
+candidates <- union(
+  irw_filter(var = "cov_gender"),
+  irw_filter(var = "cov_sex")
+)
+```
+
+The initial search found **459** candidate datasets. After filtering,
+**`r nrow(ds_summary)` datasets** are included here.
+
+### DIF procedure
+
+For each dataset we:
+
+1. Binarised the gender/sex covariate using the two most common values (reference =
+   most common; up to `r max(ds_summary$n_persons)` respondents sampled per dataset).
+2. Dropped items with zero variance in either group.
+3. Applied two DIF families, dispatched on item type:
+
+| Family | Dichotomous | Polytomous | Detects |
+|--------|-------------|------------|---------|
+| **Mantel-Haenszel** | `difR::difMH` | `difR::difGMH` | Uniform DIF only |
+| **Logistic regression** | `difR::difLogistic` | `difR::difPolyLogistic` | Uniform + non-uniform DIF |
+
+The MH family uses total score as the matching criterion and produces the **ETS Δ**
+effect size (= −2.35 × ln α̂~MH~) for dichotomous items: |Δ| < 1 negligible (A),
+1–1.5 moderate (B), > 1.5 large (C). The logistic family fits ordinal regression
+models per item and decomposes DIF into a uniform component (group main effect) and
+a non-uniform component (group × score interaction).
+
+The full compute script is at `vignettes/gender_dif_compute.R`.
+
+---
+
+## Results
+
+### Dataset overview
+
+```{r}
+#| label: tbl-datasets
+#| tbl-cap: "Datasets included in the analysis. DIF counts use α = 0.05 (uncorrected)."
+
+ds_summary |>
+  select(dataset, n_persons, n_items, is_poly, group_col, ref, focal,
+         n_mh_sig, n_unif_sig, n_nonunif_sig) |>
+  rename(
+    Dataset          = dataset,
+    N                = n_persons,
+    Items            = n_items,
+    Polytomous       = is_poly,
+    `Group col`      = group_col,
+    Reference        = ref,
+    Focal            = focal,
+    `DIF (MH)`       = n_mh_sig,
+    `DIF (unif)`     = n_unif_sig,
+    `DIF (non-unif)` = n_nonunif_sig
+  )
+```
+
+### Proportion of items flagged per dataset
+
+```{r}
+#| label: fig-dif-prop
+#| fig-cap: "Proportion of items with significant DIF (α = 0.05) by dataset and method. Datasets ordered by MH DIF rate."
+#| fig-height: 5
+
+level_order <- ds_summary |> arrange(prop_mh) |> pull(short_name)
+
+plot_df <- ds_summary |>
+  pivot_longer(
+    cols      = c(prop_mh, prop_unif, prop_nonunif),
+    names_to  = "method",
+    values_to = "prop_dif"
+  ) |>
+  mutate(
+    method = recode(method,
+      prop_mh      = "MH",
+      prop_unif    = "Logistic (uniform)",
+      prop_nonunif = "Logistic (non-uniform)"
+    ),
+    method     = factor(method, levels = names(pal)),
+    short_name = factor(short_name, levels = level_order),
+    n_sig = case_when(
+      method == "MH"                    ~ n_mh_sig,
+      method == "Logistic (uniform)"    ~ n_unif_sig,
+      method == "Logistic (non-uniform)"~ n_nonunif_sig
+    ),
+    tooltip = paste0(
+      "Dataset: ", dataset, "<br>",
+      "Method: ", method, "<br>",
+      "DIF items: ", n_sig, " / ", n_items, "<br>",
+      "N: ", scales::comma(n_persons)
+    )
+  )
+
+p <- ggplot(plot_df, aes(
+    x = prop_dif, y = short_name, colour = method, text = tooltip
+  )) +
+  geom_point(size = 2.5, alpha = 0.85, position = position_dodge(width = 0.5)) +
+  scale_x_continuous(labels = scales::percent_format(), limits = c(0, 1.05)) +
+  scale_colour_manual(values = pal, name = "Method") +
+  labs(x = "Proportion of items with DIF", y = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(
+    panel.grid.major.y = element_line(colour = "grey92"),
+    axis.text.y        = element_blank()
+  )
+
+ggplotly(p, tooltip = "text") |>
+  layout(
+    yaxis = list(showticklabels = FALSE),
+    annotations = list(list(
+      text      = "α = 0.05 (uncorrected). Hover for item counts and sample size.",
+      showarrow = FALSE, xref = "paper", yref = "paper",
+      x = 0, y = -0.1, xanchor = "left", yanchor = "top",
+      font = list(size = 11, color = "grey50")
+    ))
+  )
+```
+
+### Overall DIF prevalence
+
+```{r}
+#| label: tbl-overall
+#| tbl-cap: "DIF prevalence pooled across all datasets, by method."
+
+bind_rows(
+  items_df |> summarise(method = "MH (uniform)",
+    Datasets = n_distinct(dataset), `Total items` = n(),
+    `DIF items` = sum(p_mh    < 0.05, na.rm = TRUE),
+    `DIF rate`  = scales::percent(mean(p_mh    < 0.05, na.rm = TRUE), accuracy = 0.1)),
+  items_df |> summarise(method = "Logistic (uniform)",
+    Datasets = n_distinct(dataset), `Total items` = n(),
+    `DIF items` = sum(p_unif   < 0.05, na.rm = TRUE),
+    `DIF rate`  = scales::percent(mean(p_unif   < 0.05, na.rm = TRUE), accuracy = 0.1)),
+  items_df |> summarise(method = "Logistic (non-uniform)",
+    Datasets = n_distinct(dataset), `Total items` = n(),
+    `DIF items` = sum(p_nonunif < 0.05, na.rm = TRUE),
+    `DIF rate`  = scales::percent(mean(p_nonunif < 0.05, na.rm = TRUE), accuracy = 0.1))
+) |> rename(Method = method)
+```
+
+### Significance vs. effect size: the key divergence
+
+A central finding of this analysis is that MH significance and ΔR² effect size can
+come apart dramatically, particularly for polytomous items. Many datasets show MH
+flagging rates near 100% while their median ΔR² stays in negligible territory (< 0.035).
+This reflects a known limitation of Mantel-Haenszel for polytomous scales: when
+groups differ substantially on the underlying trait mean, the total-score matching
+criterion is contaminated and the GMH statistic accumulates to near-zero p-values for
+every item — even when per-item effect sizes are trivial. Datasets that land in the
+**lower-right** of the figure below exemplify this pattern. Datasets in the
+**upper-right** (high flag rate *and* large ΔR²) represent genuine widespread DIF.
+
+```{r}
+#| label: fig-sig-vs-effect
+#| fig-cap: "Dataset-level relationship between MH flagging rate and median logistic ΔR² effect size. Horizontal dashed lines mark the negligible/moderate (0.035) and moderate/large (0.07) ΔR² thresholds. Datasets without logistic results (polytomous, > 20 items) are excluded."
+#| fig-height: 4.5
+
+div_df <- ds_summary |>
+  filter(!is.na(median_r2)) |>
+  mutate(
+    item_type = if_else(is_poly, "Polytomous", "Dichotomous"),
+    tooltip   = paste0(
+      "Dataset: ", dataset, "<br>",
+      "Type: ", if_else(is_poly, "Polytomous", "Dichotomous"), "<br>",
+      "MH flagged: ", scales::percent(prop_mh, accuracy = 1), "<br>",
+      "Median ΔR²: ", round(median_r2, 4), "<br>",
+      "N: ", scales::comma(n_persons)
+    )
+  )
+
+p_div <- ggplot(div_df, aes(x = prop_mh, y = median_r2,
+                             colour = item_type, size = n_persons, text = tooltip)) +
+  geom_hline(yintercept = c(0.035, 0.07), linetype = "dashed", colour = "grey60") +
+  geom_point(alpha = 0.8) +
+  scale_x_continuous(labels = scales::percent_format(), limits = c(0, 1.05)) +
+  scale_colour_manual(values = c(Dichotomous = "#2166ac", Polytomous = "#4dac26"),
+                      name = "Item type") +
+  scale_size_continuous(range = c(3, 9), name = "N", guide = "none") +
+  labs(x = "Proportion of items flagged by MH (α = 0.05)",
+       y = expression("Median " * Delta * R^2 * " (logistic uniform)")) +
+  theme_minimal(base_size = 13)
+
+# Threshold labels are added as native plotly annotations (xref = "paper") rather
+# than a ggplot annotate() layer, which ggplotly() clips at the left panel edge.
+ggplotly(p_div, tooltip = "text") |>
+  layout(annotations = list(
+    list(
+      text      = "Negligible / Moderate", showarrow = FALSE,
+      xref = "paper", yref = "y", x = 0.01, y = 0.037,
+      xanchor = "left", yanchor = "bottom",
+      font = list(size = 11, color = "grey45")
+    ),
+    list(
+      text      = "Moderate / Large", showarrow = FALSE,
+      xref = "paper", yref = "y", x = 0.01, y = 0.072,
+      xanchor = "left", yanchor = "bottom",
+      font = list(size = 11, color = "grey45")
+    ),
+    list(
+      text      = "Point size = sample size. Hover for dataset details.",
+      showarrow = FALSE, xref = "paper", yref = "paper",
+      x = 0, y = -0.12, xanchor = "left", yanchor = "top",
+      font = list(size = 11, color = "grey50")
+    )
+  ))
+```
+
+The same pattern holds at the item level: MH-significant polytomous items cluster near
+zero on ΔR², while MH-significant dichotomous items span a wider effect-size range.
+
+```{r}
+#| label: fig-item-sig-vs-r2
+#| fig-cap: "ΔR² distributions for MH-significant vs. non-significant items, by item type. Dashed line marks the negligible/moderate threshold (ΔR² = 0.035). Items without logistic results are excluded."
+#| fig-height: 4
+
+items_df |>
+  filter(!is.na(delta_r2_unif), !is.na(p_mh)) |>
+  mutate(
+    mh_sig    = factor(if_else(p_mh < 0.05, "MH significant", "MH not significant"),
+                       levels = c("MH not significant", "MH significant")),
+    item_type = if_else(is_poly, "Polytomous", "Dichotomous")
+  ) |>
+  ggplot(aes(x = mh_sig, y = delta_r2_unif, fill = item_type)) +
+  geom_hline(yintercept = 0.035, linetype = "dashed", colour = "#d6604d") +
+  geom_boxplot(outlier.size = 0.8, alpha = 0.8) +
+  facet_wrap(~item_type, scales = "free_y") +
+  scale_fill_manual(values = c(Dichotomous = "#2166ac", Polytomous = "#4dac26"),
+                    guide = "none") +
+  labs(x = NULL, y = expression(Delta * R^2 ~ "(logistic uniform)")) +
+  theme_minimal(base_size = 13) +
+  theme(axis.text.x = element_text(angle = 15, hjust = 1))
+```
+
+### P-value distributions
+
+Under the null (no DIF), p-values should be uniform. An excess of small p-values
+indicates systematic DIF. Comparing uniform and non-uniform distributions reveals
+whether DIF in this sample is primarily a difficulty shift or a slope difference.
+
+```{r}
+#| label: fig-pval-hist
+#| fig-cap: "Item-level p-value distributions by DIF method. Red dashed line marks α = 0.05."
+#| fig-height: 4
+
+items_df |>
+  pivot_longer(cols = c(p_mh, p_unif, p_nonunif),
+               names_to = "method", values_to = "p") |>
+  mutate(method = recode(method,
+    p_mh      = "MH (uniform)",
+    p_unif    = "Logistic (uniform)",
+    p_nonunif = "Logistic (non-uniform)"
+  )) |>
+  filter(!is.na(p)) |>
+  ggplot(aes(x = p)) +
+  geom_histogram(binwidth = 0.05, boundary = 0,
+                 fill = "#2166ac", colour = "white", alpha = 0.75) +
+  geom_vline(xintercept = 0.05, linetype = "dashed", colour = "#d6604d") +
+  facet_wrap(~method) +
+  labs(x = "p-value", y = "Count") +
+  theme_minimal(base_size = 13)
+```
+
+### ETS Δ effect sizes (dichotomous datasets)
+
+For dichotomous items the MH odds ratio translates to the ETS Δ scale, which classifies
+DIF severity: |Δ| < 1 = negligible (A), 1–1.5 = moderate (B), > 1.5 = large (C).
+Positive Δ means the item is harder for the focal group.
+
+```{r}
+#| label: fig-delta
+#| fig-cap: "ETS Δ distribution for dichotomous items. Dashed lines mark the A/B boundary (|Δ| = 1) and B/C boundary (|Δ| = 1.5)."
+#| fig-height: 3.5
+
+delta_df <- items_df |> filter(!is.na(delta_mh))
+
+if (nrow(delta_df) > 0) {
+  ggplot(delta_df, aes(x = delta_mh)) +
+    geom_histogram(binwidth = 0.25, boundary = 0,
+                   fill = "#2166ac", colour = "white", alpha = 0.75) +
+    geom_vline(xintercept = c(-1.5, -1, 1, 1.5),
+               linetype = "dashed", colour = "#d6604d") +
+    annotate("text", x = c(-1.25, 0, 1.25), y = Inf,
+             label = c("B", "A", "B"), vjust = 1.5, size = 3.5, colour = "grey40") +
+    labs(x = "ETS Δ", y = "Count") +
+    theme_minimal(base_size = 13)
+} else {
+  message("No dichotomous datasets in current results.")
+}
+```
+
+### Logistic R² effect sizes (uniform DIF)
+
+The logistic regression approach produces a pseudo-R² difference (Zumbo 1999) for each
+item: the increase in model fit when a group term is added. This provides a
+sample-size-independent effect size for both dichotomous and polytomous items.
+Conventional cutoffs: < 0.035 negligible, 0.035–0.07 moderate, > 0.07 large
+(Jodoin & Gierl 2001).
+
+```{r}
+#| label: fig-delta-r2
+#| fig-cap: "Distribution of pseudo-R² effect sizes for uniform DIF (logistic). Items with logistic skipped (polytomous datasets > 20 items) are excluded. Dashed lines mark negligible/moderate and moderate/large cutoffs."
+#| fig-height: 3.5
+
+r2_df <- items_df |>
+  filter("delta_r2_unif" %in% names(items_df)) |>
+  filter(!is.na(delta_r2_unif)) |>
+  mutate(item_type = if_else(is_poly, "Polytomous", "Dichotomous"))
+
+if (nrow(r2_df) > 0) {
+  ggplot(r2_df, aes(x = delta_r2_unif, fill = item_type)) +
+    geom_histogram(binwidth = 0.005, boundary = 0,
+                   colour = "white", alpha = 0.8, position = "stack") +
+    geom_vline(xintercept = c(0.035, 0.07),
+               linetype = "dashed", colour = "#d6604d") +
+    annotate("text", x = c(0.017, 0.0525, 0.11), y = Inf,
+             label = c("Negligible", "Moderate", "Large"),
+             vjust = 1.5, size = 3.5, colour = "grey40") +
+    scale_fill_manual(values = c(Dichotomous = "#2166ac", Polytomous = "#4dac26"),
+                      name = "Item type") +
+    labs(x = expression(Delta*R^2~"(uniform DIF)"), y = "Count") +
+    theme_minimal(base_size = 13)
+} else {
+  message("delta_r2_unif not available — rerun compute script.")
+}
+```
+
+---
+
+## What to notice
+
+**MH significance and effect size come apart for polytomous items.** Many polytomous
+datasets show near-universal MH flagging (prop_mh ≈ 1) while median ΔR² stays in
+negligible territory. This is a consequence of how the Generalized Mantel-Haenszel test
+works: it conditions on the observed total score, which is itself contaminated when
+groups differ on the underlying trait mean (as is common for personality and
+psychological scales by gender). In those cases, GMH accumulates to p ≈ 0 for every
+item even when no item is individually biased. The logistic ΔR² is not susceptible to
+this artifact because it models the group effect directly rather than aggregating
+stratified tables.
+
+**Effect sizes are mostly negligible.** Even where MH significance is high, the
+majority of items have ΔR² below 0.035 — the conventional threshold for a "negligible"
+effect. Datasets with genuinely large per-item effects (ΔR² > 0.07) are the exception.
+Significance-only DIF reporting inflates the apparent prevalence of meaningful gender
+bias.
+
+**DIF is nonetheless real and common.** The logistic results — less prone to the
+contamination artifact — still flag a substantial proportion of items across datasets,
+and some datasets show non-trivial ΔR². The IRW's scale makes this a uniquely broad
+cross-domain baseline: gender DIF is not confined to a few pathological instruments.
+
+**Non-uniform DIF is less common than uniform.** The logistic non-uniform component
+(group × score interaction) flags fewer items than the uniform component, consistent
+with the broader measurement literature.
+
+**Limitations.** All analyses use uncorrected α = 0.05; BH correction within each
+dataset would reduce flagging rates. The GMH anticonservatism for polytomous items
+persists even with purification when group trait-mean differences are large — this is
+a fundamental limitation of total-score matching for polytomous data, not a tuning
+issue. Logistic ΔR² is the more reliable metric in those settings. For polytomous
+datasets with more than 20 items, `difPolyLogistic` was skipped due to computational cost; those datasets contribute MH results only.
+
+---
+
+## Reproducibility
+
+Results were computed on 2026-05-28 using `r nrow(ds_summary)` IRW tables. To reproduce:
+
+```r
+# From project root
+Rscript vignettes/gender_dif_compute.R
+quarto::quarto_render("vignettes/gender_dif.qmd")
+```
+
+::: {.callout-note}
+The compute script writes one `.rds` file per dataset to `vignettes/gender_dif_data/`.
+Delete those files to force a fresh run. The vignette renders on whatever results are
+present — no need to wait for the full run to complete.
+:::
