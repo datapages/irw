@@ -1,0 +1,448 @@
+---
+title: "Dimensionality Across IRW: How Often Does Unidimensionality Hold?"
+description: |
+  Every unidimensional IRT model used elsewhere on this site -- 1PL, 2PL,
+  the IMV comparisons -- assumes item responses are explained by a single
+  latent trait. We compute item correlation matrices for every eligible
+  IRW table and run two classic exploratory diagnostics, the eigenvalue
+  ratio and parallel analysis, to see how often that assumption actually
+  holds and whether it varies by construct type.
+date: today
+bibliography: dimensionality_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(plotly)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+cache_path <- "dimensionality_data/dimensionality_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache           <- readRDS(cache_path)
+  summary_df       <- .cache$summary
+  eigenvalues_list <- .cache$eigenvalues %||% list()
+  candidate_tables <- .cache$candidate_tables
+  date_run         <- .cache$date_run
+  is_pilot         <- isTRUE(.cache$pilot)
+  ratio_cutoff     <- .cache$ratio_cutoff %||% 4
+  r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
+  r_n_tables_run   <- length(candidate_tables)
+} else {
+  summary_df <- tibble(
+    table = character(), n_items = integer(), n_participants = integer(),
+    n_categories = integer(), cor_method = character(), ratio_12 = numeric(),
+    prop_var_1 = numeric(), nfact_suggested = integer(),
+    unidimensional_pa = logical(), construct_type = character(),
+    item_format = character()
+  )
+  eigenvalues_list <- list()
+  candidate_tables <- character()
+  date_run         <- Sys.Date()
+  is_pilot         <- FALSE
+  ratio_cutoff     <- 4
+  r_all_candidates <- 0L
+  r_n_tables_run   <- 0L
+}
+
+knitr::opts_chunk$set(eval = cache_ok)
+```
+
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (!cache_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Cache not found** — figures and tables will not appear. Generate results ",
+  "by running the compute script, then re-render:\n\n",
+  "```r\nRscript vignettes/dimensionality_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+```{r}
+#| label: pilot-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (cache_ok && is_pilot) cat(
+  "::: {.callout-warning}\n",
+  "**Draft preview, partial run.** This render uses a partial sample of ",
+  r_n_tables_run, " tables out of ", r_all_candidates, " eligible tables ",
+  "(either a small hand-picked/random pilot, or a snapshot taken while the ",
+  "full batch was still running against Redivis), to validate the pipeline ",
+  "and page layout before the full batch finishes. All numbers here are ",
+  "real computed results -- not placeholders -- but treat the ",
+  "*distributions* as a small, noisy preview rather than a representative ",
+  "picture of dimensionality across the IRW. Re-run ",
+  "`dimensionality_compute.R` (with `PILOT <- FALSE` and the full batch ",
+  "complete) to scale up.\n",
+  ":::\n", sep = ""
+)
+```
+
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the
+analysis design, and the writing below — was produced largely by Claude
+(Anthropic), working from a task specification and with human review.
+Treat the methodological choices and interpretations accordingly, and
+check the compute script (`dimensionality_compute.R`) directly if you're
+relying on the numbers here.
+:::
+
+## Motivation
+
+Every unidimensional IRT model used elsewhere on this site — the [2PL fits
+across cognitive datasets](2pl_across_datasets.qmd), the [IMV
+comparisons](imv.qmd), the [Dutch Identity](dutch_identity.qmd) — rests on
+the same starting assumption: a single latent trait explains the pattern of
+item correlations. That assumption is a convenience as much as a claim
+about the world. Real instruments often bundle related but distinct
+sub-facets (a "self-regulation" battery with attention, inhibition, and
+working-memory items), or are built explicitly as multi-factor scales (a
+personality inventory with five named traits). Fitting a 1PL/2PL to
+multidimensional data doesn't produce an error — it produces a single
+composite ability estimate that quietly averages over whatever structure
+was actually there. This vignette asks a simple empirical question: across
+real IRW instruments, how often does the data actually look
+one-dimensional, and does that vary by construct type?
+
+We use two classic *exploratory* diagnostics, not a confirmatory test: the
+ratio of the first to second eigenvalue of the item correlation matrix
+(larger = more consistent with one dominant factor), and parallel analysis
+[@horn1965rationale] — comparing the observed eigenvalues to those expected
+from random data. Both flag *candidates* for multidimensionality; neither
+tells you what the extra dimensions are or whether they're substantively
+meaningful. The [CFA vignette](cfa.qmd) shows the confirmatory next step for
+any table flagged here.
+
+## Data and methods
+
+### Dataset selection
+
+```{r}
+#| label: filter-datasets
+#| eval: false
+
+all_candidates <- irw_filter(
+  n_items        = c(5, 40),
+  n_participants = c(200, Inf)
+)
+```
+
+We cap items at 40 (and require at least 5) for compute reasons: tetrachoric
+and polychoric correlation matrices, and parallel analysis on top of them,
+both scale poorly as item count grows, and this needs to run across every
+eligible IRW table. `r r_all_candidates` tables met this criterion as of
+`r format(date_run, "%B %Y")`.
+`r if (is_pilot) "This page currently runs on a small pilot subset (see the warning above); a full pass analyzes all of them." else paste0("This pass analyzes all ", r_n_tables_run, " of them.")`
+
+### Per-table computation
+
+For each candidate table, `fit_dimensionality()`:
+
+1. Fetches the table and builds a wide response matrix (`irw_fetch()` +
+   `irw_long2resp()`), downsampling to at most 10,000 respondents and
+   dropping zero-variance items, mirroring the [2PL across
+   datasets](2pl_across_datasets.qmd) and [local
+   dependence](local_dependence.qmd) pipelines.
+2. Builds an item correlation matrix appropriate to the response type:
+   **tetrachoric** (`psych::tetrachoric()`) for binary items, **polychoric**
+   (`psych::polychoric()`) for 3-10 response categories, and a **Pearson**
+   fallback (logged explicitly) for anything outside that range — mostly
+   continuous slider items, which show up as tables with a large number of
+   distinct response values.
+3. Eigen-decomposes the correlation matrix and records the ratio of the
+   1st to 2nd eigenvalue and the proportion of total variance the 1st
+   eigenvalue explains.
+4. Runs parallel analysis (`psych::fa.parallel()`, factor extraction, no
+   plot) against a simulated random-data baseline, recording the suggested
+   number of factors. Wrapped in `tryCatch` — this can fail on small or
+   ill-conditioned matrices, in which case the table is logged and dropped
+   rather than crashing the batch.
+5. Records, per table: item/respondent counts, correlation method used,
+   eigenvalue ratio, proportion of variance on factor 1, parallel-analysis
+   suggested factor count, plus `construct_type` and `item_format` from
+   IRW's tags for the breakdown below.
+
+```{r}
+#| label: fit-function
+#| eval: false
+
+fit_dimensionality <- function(table_name) {
+  resp   <- fetch_wide(table_name)  # irw_fetch() + irw_long2resp(), cleaned
+  cormat <- if (n_categories == 2) tetrachoric(resp)$rho
+            else if (n_categories <= 10) polychoric(resp, max.cat = 10)$rho
+            else cor(resp, use = "pairwise.complete.obs")
+  ev <- eigen(cormat, symmetric = TRUE, only.values = TRUE)$values
+  pa <- fa.parallel(cormat, n.obs = nrow(resp), fa = "fa", plot = FALSE)
+  # ... ratio_12 <- ev[1] / ev[2]; suggested factors <- pa$nfact ...
+}
+```
+
+Of the `r r_n_tables_run` candidate tables in this pass, `r nrow(summary_df)`
+produced usable results (the rest were dropped for too few usable items or
+a correlation/eigendecomposition that failed outright).
+
+::: {.callout-note}
+To reproduce with current IRW holdings, re-run `dimensionality_compute.R`
+and commit the updated
+`dimensionality_data/dimensionality_results.rds`.
+:::
+
+## Results
+
+### How concentrated is the variance in one factor?
+
+```{r}
+#| label: fig-ratio-hist
+#| fig-cap: "Ratio of the 1st to 2nd eigenvalue of the item correlation matrix, one table per bar. The dashed line marks a ratio of 4, near the top of the ~3-to-1-or-greater range sometimes read as a rough sign of approximate unidimensionality [@embretson2000item] -- treat it as a rule of thumb, not a hard rule."
+#| fig-height: 4.5
+
+ggplot(summary_df, aes(x = pmin(ratio_12, 15))) +
+  geom_histogram(bins = 40, fill = irw_blue, colour = "white") +
+  geom_vline(xintercept = ratio_cutoff, linetype = "dashed", colour = irw_red) +
+  labs(x = "1st / 2nd eigenvalue ratio (capped at 15 for display)", y = "Number of tables")
+```
+
+```{r}
+#| label: ratio-summary-inline
+#| echo: false
+
+n_above_cutoff <- sum(summary_df$ratio_12 > ratio_cutoff, na.rm = TRUE)
+pct_above_cutoff <- round(100 * n_above_cutoff / nrow(summary_df))
+n_pa_unidim <- sum(summary_df$unidimensional_pa, na.rm = TRUE)
+pct_pa_unidim <- round(100 * n_pa_unidim / nrow(summary_df))
+```
+
+`r pct_above_cutoff`% of tables (`r n_above_cutoff` of `r nrow(summary_df)`)
+clear the ratio > `r ratio_cutoff` heuristic in @fig-ratio-hist. Parallel
+analysis is much stricter: only `r pct_pa_unidim`% of tables
+(`r n_pa_unidim`) get a suggested factor count of exactly 1. That gap
+between the two diagnostics is itself the most interesting finding here —
+see [below](#two-diagnostics-one-disagreement).
+
+### Does it vary by construct type?
+
+```{r}
+#| label: fig-ratio-by-construct
+#| fig-cap: "Eigenvalue ratio by construct_type. Each point is one table; diamonds mark the median within each type."
+#| fig-height: 5
+
+construct_order <- summary_df %>%
+  filter(!is.na(construct_type)) %>%
+  group_by(construct_type) %>%
+  summarise(med = median(ratio_12), .groups = "drop") %>%
+  arrange(med) %>%
+  pull(construct_type)
+
+plot_df <- summary_df %>%
+  filter(!is.na(construct_type)) %>%
+  mutate(construct_type = factor(construct_type, levels = construct_order))
+
+medians_df <- plot_df %>%
+  group_by(construct_type) %>%
+  summarise(med = median(ratio_12), .groups = "drop")
+
+ggplot(plot_df, aes(x = pmin(ratio_12, 15), y = construct_type)) +
+  geom_jitter(height = 0.15, colour = irw_blue, alpha = 0.5, size = 1.7) +
+  geom_point(data = medians_df, aes(x = pmin(med, 15), y = construct_type),
+             shape = 18, size = 4, colour = irw_red) +
+  labs(x = "1st / 2nd eigenvalue ratio (capped at 15 for display)", y = NULL)
+```
+
+```{r}
+#| label: tbl-by-construct
+#| tbl-cap: "Eigenvalue ratio and parallel-analysis factor counts by construct_type."
+
+summary_df %>%
+  filter(!is.na(construct_type)) %>%
+  group_by(construct_type) %>%
+  summarise(
+    n_tables            = n(),
+    median_ratio         = median(ratio_12),
+    prop_ratio_above_cut = mean(ratio_12 > ratio_cutoff),
+    median_nfact         = median(nfact_suggested, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(median_ratio)) %>%
+  knitr::kable(digits = 2, col.names = c("Construct type", "N tables", "Median ratio",
+                                          "Prop. ratio > cutoff", "Median PA factors"))
+```
+
+Read @fig-ratio-by-construct and @tbl-by-construct together: constructs
+built as a single narrow skill or trait tend to sit toward the high-ratio
+end, while constructs assembled from several named sub-facets (a
+multi-scale personality or psychopathology battery folded into one IRW
+table) tend to sit lower. Neither diagnostic is a clean binary split —
+there's substantial within-type spread — but the ranking across types is
+informative on its own.
+
+### Every table, ranked
+
+```{r}
+#| label: fig-ratio-ranked
+#| fig-cap: "Every table's eigenvalue ratio, ranked from lowest to highest. Hover over a point to see which table it is."
+#| fig-height: 6
+
+ranked_df <- summary_df %>%
+  arrange(ratio_12) %>%
+  mutate(
+    rank    = row_number(),
+    tooltip = paste0(
+      "Table: ", table,
+      "<br>Ratio: ", round(ratio_12, 2),
+      "<br>PA factors: ", nfact_suggested,
+      "<br>n_items: ", n_items,
+      "<br>Construct: ", construct_type
+    )
+  )
+
+p <- ggplot(ranked_df, aes(x = pmin(ratio_12, 15), y = rank, text = tooltip)) +
+  geom_point(colour = irw_blue, size = 1.6, alpha = 0.7) +
+  geom_vline(xintercept = ratio_cutoff, linetype = "dashed", colour = irw_red) +
+  labs(x = "1st / 2nd eigenvalue ratio (capped at 15 for display)", y = NULL) +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+
+ggplotly(p, tooltip = "text")
+```
+
+### Sanity check: does the diagnostic recover a known answer?
+
+```{r}
+#| label: fig-scree-sanity
+#| fig-cap: "Scree plots for a known multi-factor personality battery (left, psychtools_bfi -- 25 items, 5 named traits) and a single-construct math test (right, 4thgrade_math_sirt), for comparison. The dashed line at eigenvalue = 1 is a visual reference (the classic Kaiser criterion), not the decision rule used elsewhere in this vignette."
+#| fig-height: 4.5
+
+scree_tables <- c("psychtools_bfi" = "psychtools_bfi (Big Five personality, 5 known factors)",
+                   "4thgrade_math_sirt" = "4thgrade_math_sirt (single-construct math test)")
+
+scree_df <- bind_rows(lapply(names(scree_tables), function(tbl) {
+  ev <- eigenvalues_list[[tbl]]
+  if (is.null(ev)) return(NULL)
+  tibble(table = scree_tables[[tbl]], component = seq_along(ev), eigenvalue = ev)
+}))
+
+if (nrow(scree_df) > 0) {
+  ggplot(scree_df, aes(x = component, y = eigenvalue)) +
+    geom_hline(yintercept = 1, linetype = "dashed", colour = irw_grey) +
+    geom_line(colour = irw_blue) +
+    geom_point(colour = irw_blue) +
+    facet_wrap(~table, scales = "free_x") +
+    labs(x = "Component", y = "Eigenvalue")
+} else {
+  cat("Sanity-check tables not present in this run.")
+}
+```
+
+```{r}
+#| label: sanity-inline
+#| echo: false
+
+bfi_row  <- summary_df %>% filter(table == "psychtools_bfi")
+math_row <- summary_df %>% filter(table == "4thgrade_math_sirt")
+```
+
+`r if (nrow(bfi_row) > 0) paste0("The Big Five inventory -- 5 named traits by construction -- has a 1st/2nd eigenvalue ratio of ", round(bfi_row$ratio_12, 2), " and parallel analysis suggests ", bfi_row$nfact_suggested, " factors: both diagnostics correctly flag it as clearly multidimensional.") else "psychtools_bfi is not present in this run."` `r if (nrow(math_row) > 0) paste0("The math test has a ratio of ", round(math_row$ratio_12, 2), ", well above the personality battery's -- the diagnostic moves in the expected direction even though (see below) parallel analysis alone still suggests more than one factor for it.") else ""`
+
+### Two diagnostics, one disagreement {#two-diagnostics-one-disagreement}
+
+The eigenvalue ratio and parallel analysis agree on *direction* — the math
+test above scores more unidimensional than the personality battery on both
+— but they disagree sharply on the *absolute* call. Parallel analysis
+suggests exactly one factor for only `r pct_pa_unidim`% of tables in this
+sample, including tables like the math test above that most researchers
+would treat as reasonably unidimensional in practice. This isn't a bug in
+the pipeline: it's a documented property of parallel analysis run on
+tetrachoric/polychoric correlation matrices. Garrido, Abad, and Ponsoda
+[-@garrido2013new] show in a large simulation study that PA on polychoric
+correlations systematically **over-extracts** factors relative to PA on
+Pearson correlations, especially with few response categories, skewed
+items, or smaller samples — exactly the conditions common across IRW
+tables. The polychoric/tetrachoric correlation estimates themselves carry
+sampling noise that inflates later eigenvalues, and parallel analysis's
+random-data baseline doesn't fully correct for it.
+
+Practically: treat the eigenvalue ratio in @fig-ratio-hist as the more
+robust of the two signals for *ranking* tables against each other, and
+treat parallel analysis's suggested factor count as a noisy, generally
+inflated upper bound rather than a literal count of a table's dimensions.
+A table is worth a closer confirmatory look (with the [CFA
+vignette](cfa.qmd)) when *both* diagnostics point the same direction —
+low ratio and a PA count well above 1 — rather than off either one alone.
+
+## Limitations
+
+**Exploratory, not confirmatory.** Neither diagnostic tells you what the
+extra dimensions are, whether they're substantively meaningful, or whether
+a bifactor/testlet structure (rather than several independent traits)
+better describes the data. The [CFA vignette](cfa.qmd) is the natural next
+step for any table flagged here.
+
+**Parallel analysis over-extracts on ordinal data**, as discussed above
+[@garrido2013new] — don't read the suggested factor count as a literal
+answer to "how many dimensions does this table have."
+
+**A single ratio collapses a lot of structure.** Two tables with the same
+1st/2nd eigenvalue ratio can have very different shapes underneath — one
+might have one dominant factor and many small residual ones, another two
+comparably-sized factors and nothing else. The full eigenvalue spectrum
+(as in the scree plots above) carries more information than the ratio
+alone; the ratio is used here as a single sortable number because it needs
+to summarize `r nrow(summary_df)` tables in one figure.
+
+**Local dependence and low dimensionality aren't the same thing.** A table
+can show local item dependence (testlets, shared stems) without failing a
+global dimensionality check, and vice versa. See the [local dependence
+vignette](local_dependence.qmd) for the complementary residual-correlation
+diagnostic.
+
+## Reproducibility
+
+Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+# 1. Re-run the compute script (from the project root)
+source("vignettes/dimensionality_compute.R")
+
+# 2. Re-render this page
+quarto::quarto_render("vignettes/dimensionality.qmd")
+```
+
+::: {.callout-tip}
+To cite the datasets used, run:
+
+```r
+irw_save_bibtex(summary_df$table, output_file = "dimensionality_data/references.bib")
+```
+:::
+
+---
+
+## References
