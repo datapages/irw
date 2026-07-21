@@ -28,6 +28,7 @@ library(dplyr)
 library(tidyr)
 library(tibble)
 library(ggplot2)
+library(plotly)
 
 theme_set(theme_minimal(base_size = 13))
 irw_blue <- "#2166ac"
@@ -151,6 +152,72 @@ the IRW:
 3. **Does controlling for style — even with a crude method — change a
    basic substantive conclusion (a factor loading)?**
 
+### See extreme responding in action
+
+Drag the slider to change how much a simulated respondent's answers are
+driven by response style rather than by item content. At $p = 0$, every
+answer reflects a fixed, moderate underlying attitude (with a little
+item-level noise); as $p$ rises, a growing share of answers instead land on
+a scale endpoint by chance, regardless of what the item actually asks. The
+resulting **ERS** — the proportion of this one simulated respondent's own
+answers sitting at an endpoint — is exactly the person-level statistic this
+vignette computes for every respondent in every IRW Likert-format table
+below.
+
+```{ojs}
+viewof style_p = Inputs.range(
+  [0, 0.8], {value: 0.2, step: 0.05, label: "Extreme-response tendency (p)"}
+)
+```
+
+```{ojs}
+n_items_demo = 12
+rng = d3.randomLcg(42)
+
+demo_responses = {
+  const resp = [];
+  for (let i = 0; i < n_items_demo; i++) {
+    if (rng() < style_p) {
+      resp.push(rng() < 0.5 ? 1 : 5);
+    } else {
+      const honest = Math.round(3 + (rng() - 0.5) * 1.5);
+      resp.push(Math.min(5, Math.max(1, honest)));
+    }
+  }
+  return resp;
+}
+
+demo_ers = demo_responses.filter((r) => r === 1 || r === 5).length / n_items_demo
+```
+
+```{ojs}
+Plot.plot({
+  width: 700,
+  height: 110,
+  marginLeft: 40,
+  x: {domain: [0.5, n_items_demo + 0.5], label: "Item"},
+  y: {domain: [0.5, 5.5], label: "Response (1-5)", ticks: [1, 2, 3, 4, 5]},
+  marks: [
+    Plot.ruleY([1, 5], {stroke: "#d73027", strokeDasharray: "3,3"}),
+    Plot.dot(
+      demo_responses.map((r, i) => ({item: i + 1, resp: r})),
+      {
+        x: "item", y: "resp", r: 6,
+        fill: (d) => (d.resp === 1 || d.resp === 5) ? "#d73027" : "#2166ac"
+      }
+    )
+  ]
+})
+```
+
+```{ojs}
+html`<div style="font-size:1.05rem;margin-top:0.5rem;">
+  This respondent's <strong>ERS = ${demo_ers.toFixed(2)}</strong> —
+  ${Math.round(demo_ers * n_items_demo)} of ${n_items_demo} responses
+  (<span style="color:#d73027;">red</span>) landed on an endpoint.
+</div>`
+```
+
 ## Data and methods
 
 ### Dataset selection
@@ -254,20 +321,32 @@ and commit the updated `response_style_data/response_style_results.rds`.
 
 ```{r}
 #| label: fig-ers-ranked
-#| fig-cap: "Table-level mean ERS (proportion of responses at a scale endpoint), one point per table, ranked from lowest to highest. Error bars show +/- 1 SD across people within each table."
-#| fig-height: 8
+#| fig-cap: "Every table's mean ERS (proportion of responses at a scale endpoint), ranked from lowest to highest. Hover over a point to see which table it is. Error bars show +/- 1 SD across people within each table."
+#| fig-height: 6
 
 ers_plot_df <- summary_df %>%
   filter(!is.na(mean_ers)) %>%
   arrange(mean_ers) %>%
-  mutate(table_lab = factor(table, levels = table))
+  mutate(
+    rank    = row_number(),
+    tooltip = paste0(
+      "Table: ", table,
+      "<br>Mean ERS: ", round(mean_ers, 2),
+      "<br>SD ERS: ", round(sd_ers, 2),
+      "<br>n_items: ", n_items,
+      "<br>N: ", n_participants
+    )
+  )
 
-ggplot(ers_plot_df, aes(x = mean_ers, y = table_lab)) +
+p <- ggplot(ers_plot_df, aes(x = mean_ers, y = rank, text = tooltip)) +
   geom_errorbarh(aes(xmin = pmax(mean_ers - sd_ers, 0), xmax = pmin(mean_ers + sd_ers, 1)),
                   height = 0, colour = irw_grey) +
   geom_point(colour = irw_blue, size = 2) +
   labs(x = "Mean ERS (proportion of endpoint responses)", y = NULL) +
-  theme(axis.text.y = element_text(size = 7))
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+
+ggplotly(p, tooltip = "text") |>
+  layout(margin = list(t = 60))
 ```
 
 If ERS were a small, uniform nuisance, this ranking would be flat and low.
@@ -304,6 +383,9 @@ variability is itself the point — you cannot assume from a scale's category
 count or subject area alone whether style will be a nuisance or a confound in
 a given dataset.
 
+<details>
+<summary>Show full MRS table (all tables with a true midpoint)</summary>
+
 ```{r}
 #| label: tbl-mrs
 #| tbl-cap: "Tables with an odd number of categories (a true midpoint) support an MRS index; even-category tables are recorded as NA and excluded from this MRS summary rather than assigned an arbitrary category."
@@ -319,22 +401,35 @@ summary_df %>%
   knitr::kable()
 ```
 
+</details>
+
 ### Does controlling for style change the substantive conclusions?
 
 ```{r}
 #| label: fig-style-sensitivity-ranked
-#| fig-cap: "Style-sensitivity metric (mean absolute change in standardized loading, raw vs. ipsatized CFA) across tables where both fits converged cleanly."
+#| fig-cap: "Style-sensitivity metric (mean absolute change in standardized loading, raw vs. ipsatized CFA) across tables where both fits converged cleanly. Hover over a bar to see which table it is."
 #| fig-height: 6
 
 sens_df <- summary_df %>%
   filter(!is.na(style_sensitivity)) %>%
   arrange(style_sensitivity) %>%
-  mutate(table_lab = factor(table, levels = table))
+  mutate(
+    rank    = row_number(),
+    tooltip = paste0(
+      "Table: ", table,
+      "<br>Style sensitivity: ", round(style_sensitivity, 3),
+      "<br>n_items: ", n_items,
+      "<br>N: ", n_participants
+    )
+  )
 
-ggplot(sens_df, aes(x = style_sensitivity, y = table_lab)) +
-  geom_col(fill = irw_blue, width = 0.6) +
+p <- ggplot(sens_df, aes(x = style_sensitivity, y = rank, text = tooltip)) +
+  geom_col(fill = irw_blue, width = 0.6, orientation = "y") +
   labs(x = "Style sensitivity (mean |Δ standardized loading|)", y = NULL) +
-  theme(axis.text.y = element_text(size = 7))
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+
+ggplotly(p, tooltip = "text") |>
+  layout(margin = list(t = 60))
 ```
 
 We highlight the tables with the largest style-sensitivity metric — the
@@ -371,6 +466,25 @@ ggplot(example_loadings, aes(x = loading, y = item, colour = model)) +
   labs(x = "Standardized loading", y = NULL) +
   theme(legend.position = "bottom", strip.text = element_text(size = 9))
 ```
+
+@fig-loading-examples is where "style-sensitivity" stops being an abstract
+number and becomes a concrete analysis decision. Read each panel item by
+item: the grey dot is an item's loading from the raw responses, the red dot
+is the same item's loading after ipsatization, and the line between them is
+the size of the shift. In all three tables here the shift isn't confined to
+a couple of unstable items — nearly every item flips from a positive raw
+loading to a negative ipsatized one, or vice versa (`item_AD4` goes from
+-0.53 to +0.78; `item_LOC_1` from -0.74 to +0.59; `item_Empathy1` from +0.71
+to -0.50, and almost every other item in each of these three tables does
+the same). That is the practical stakes of this vignette's third question:
+if you used the raw-score loadings to decide which items are the strongest
+measures of the construct — or even just to check that a scale's items all
+point the same direction — a style control would hand you the *opposite*
+answer for the same data, not because the construct changed, but because
+what looked like signal was substantially response style. Which set of
+loadings is "correct" isn't something this comparison settles (see the
+ipsatization caveat below); the point is that the choice is consequential,
+not cosmetic.
 
 ## Limitations
 
