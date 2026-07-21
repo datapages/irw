@@ -67,6 +67,35 @@ if (cache_ok) {
 }
 
 knitr::opts_chunk$set(eval = cache_ok)
+
+q3demo_path <- "local_dependence_data/q3_demo_results.rds"
+q3demo_ok   <- file.exists(q3demo_path)
+
+if (q3demo_ok) {
+  .q3demo        <- readRDS(q3demo_path)
+  q3demo_long    <- .q3demo$long
+  q3demo_summary <- .q3demo$summary
+  q3demo_items   <- .q3demo$item_labels
+  q3demo_linked  <- .q3demo$linked_pair
+  q3demo_thresh  <- .q3demo$threshold
+} else {
+  q3demo_long <- tibble(rho = numeric(), item1 = character(), item2 = character(), q3 = numeric())
+  q3demo_summary <- tibble(
+    rho = numeric(), n_pairs = integer(), n_flagged = integer(), prop_flagged = numeric(),
+    max_abs_q3 = numeric(), mean_abs_q3 = numeric(), linked_pair_q3 = numeric()
+  )
+  q3demo_items  <- character()
+  q3demo_linked <- character()
+  q3demo_thresh <- 0.2
+}
+
+ojs_define(
+  q3demo_long_r    = q3demo_long,
+  q3demo_summary_r = q3demo_summary,
+  q3demo_items_r   = q3demo_items,
+  q3demo_linked_r  = q3demo_linked,
+  q3demo_thresh_r  = q3demo_thresh
+)
 ```
 
 ```{r}
@@ -119,7 +148,7 @@ relying on the numbers here.
 Every unidimensional IRT model used elsewhere on this site — the [2PL fits
 across cognitive datasets](2pl_across_datasets.qmd), the [IMV
 comparisons](imv.qmd), the CFA models in the [CFA tutorial](cfa.qmd) — rests
-on the same core assumption: **local independence**. Once you condition on a
+on a core assumption: **local independence**. Once you condition on a
 person's position on the latent trait, their responses to different items
 are assumed to be statistically independent. Practically, that means all the
 leftover covariance between two items should be explained by the single
@@ -138,6 +167,149 @@ correlated items), and reliability/information estimates can be optimistic.
 This vignette asks a simple empirical question: after fitting the standard
 model IRW vignettes already use, how often is local independence actually
 violated in practice, and does it concentrate anywhere identifiable?
+
+## What Q3 measures
+
+Q3 [@yen1984effects] is a *residual* correlation: fit the unidimensional
+model, subtract out what it predicts, and correlate what's left over
+between every pair of items.
+
+Formally, for items $j$ and $k$, let $\hat\theta_i$ be person $i$'s
+estimated position on the latent trait and $E[x_{ij} \mid \hat\theta_i]$
+the model-implied expected response (the item response function evaluated
+at $\hat\theta_i$). The residual is $e_{ij} = x_{ij} - E[x_{ij} \mid
+\hat\theta_i]$, and
+
+$$Q3_{jk} = \mathrm{cor}(e_{\cdot j},\, e_{\cdot k})$$
+
+across everyone who answered both items. If the fitted trait fully
+explains why items $j$ and $k$ move together, nothing should be left in
+the residuals to correlate — $Q3_{jk} \approx 0$. A large positive
+$Q3_{jk}$ means the two items still share variance the model doesn't know
+about: a shared passage or stimulus, overlapping wording, item cloning, a
+chaining or fatigue effect. A large negative $Q3_{jk}$ is less common but
+structurally possible — items that trade off against each other beyond
+what the trait predicts.
+
+Two structural details matter for reading the Q3 numbers below. First,
+$Q3_{jk}$ carries a small negative bias even under perfect local
+independence — averaged over all pairs its expectation is roughly
+$-1/(J-1)$ for $J$ items — because $\hat\theta$ is estimated from the same
+data it's being checked against. Second, the `r q3demo_thresh` cutoff used
+throughout this vignette is a convention, not a hard test: with dozens of
+pairs per table, a few will cross it by chance alone even when the model
+fits well. Treat the proportion of flagged pairs as a continuous severity
+signal, not a certified count of "true" locally dependent pairs — a point
+the small simulation below makes concrete.
+
+### A minimal demo: watching Q3 respond to a dependence you control
+
+Everything above is easier to see than to describe. The panel below
+simulates a tiny 8-item, 10,000-person 2PL test where every item loads on
+a single simulated trait — except `item_7` and `item_8`, which are built
+to also share an extra, independent factor at a strength ρ you control. At
+ρ = 0 the two items behave like every other pair (nothing to detect, by
+construction); as ρ climbs toward 1, more and more of their variance comes
+from that shared extra factor instead of the modeled trait. Every
+simulated dataset is refit with the same one-factor 2PL model used
+elsewhere in this vignette, and the resulting Q3 matrix and flagged-pair
+proportion are shown live.
+
+```{r}
+#| label: q3-demo-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (!q3demo_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Demo cache not found** — the interactive panel below will not appear. ",
+  "Generate it by running:\n\n",
+  "```r\nRscript vignettes/local_dependence_q3demo_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+```{ojs}
+//| echo: false
+
+q3demo_long    = transpose(q3demo_long_r)
+q3demo_summary = transpose(q3demo_summary_r)
+q3demo_items   = q3demo_items_r
+q3demo_linked  = q3demo_linked_r
+q3demo_thresh  = q3demo_thresh_r
+rho_levels     = [...new Set(q3demo_summary.map(d => d.rho))].sort((a, b) => a - b)
+```
+
+```{ojs}
+//| echo: false
+
+viewof demo_rho = Inputs.range(
+  [Math.min(...rho_levels), Math.max(...rho_levels)],
+  {
+    step: rho_levels.length > 1 ? rho_levels[1] - rho_levels[0] : 0.1,
+    value: rho_levels[0],
+    label: "Dependence strength (ρ)"
+  }
+)
+```
+
+```{ojs}
+//| echo: false
+
+nearest_rho = rho_levels.reduce((a, b) =>
+  Math.abs(b - demo_rho) < Math.abs(a - demo_rho) ? b : a
+)
+demo_matrix = q3demo_long.filter(d => d.rho === nearest_rho)
+demo_stats  = q3demo_summary.find(d => d.rho === nearest_rho)
+linked_cells = demo_matrix.filter(d =>
+  (d.item1 === q3demo_linked[0] && d.item2 === q3demo_linked[1]) ||
+  (d.item1 === q3demo_linked[1] && d.item2 === q3demo_linked[0])
+)
+
+demo_heatmap = Plot.plot({
+  width: 440,
+  height: 440,
+  marginLeft: 80,
+  marginBottom: 70,
+  color: {type: "diverging", scheme: "BuRd", domain: [-1, 1], legend: true, label: "Q3"},
+  x: {domain: q3demo_items, label: null, tickRotate: -90},
+  y: {domain: [...q3demo_items].reverse(), label: null},
+  marks: [
+    Plot.cell(demo_matrix, {x: "item1", y: "item2", fill: "q3"}),
+    Plot.text(demo_matrix, {
+      x: "item1", y: "item2",
+      text: d => d.q3.toFixed(2),
+      fill: d => Math.abs(d.q3) > 0.5 ? "white" : "black",
+      fontSize: 9
+    }),
+    Plot.cell(linked_cells, {x: "item1", y: "item2", stroke: "black", strokeWidth: 2.5, fill: "none"})
+  ]
+})
+
+demo_note = html`<div style="border-left:4px solid #2166ac; padding:0.6rem 1rem; margin:0.75rem 0; background:rgba(33,102,172,0.06);">
+  <strong>At ρ = ${demo_rho.toFixed(1)}:</strong> Q3 for the constructed pair
+  (<code>${q3demo_linked[0]}</code>, <code>${q3demo_linked[1]}</code>, outlined above) is
+  <strong>${demo_stats.linked_pair_q3.toFixed(2)}</strong>${Math.abs(demo_stats.linked_pair_q3) > q3demo_thresh ? " — flagged." : " — not flagged."}
+  Across the whole simulated test, <strong>${demo_stats.n_flagged} of ${demo_stats.n_pairs} pairs
+  (${(demo_stats.prop_flagged * 100).toFixed(1)}%)</strong> are flagged — the same
+  proportion-flagged metric plotted across real IRW tables above.
+</div>`
+
+html`<div style="display:flex; flex-wrap:wrap; align-items:flex-start; gap:1.5rem;">
+  <div>${demo_heatmap}</div>
+  <div style="flex:1; min-width:260px;">${demo_note}</div>
+</div>`
+```
+
+Watch the outlined (`item_7`, `item_8`) cell as you move the slider: it
+starts mildly negative (the small structural bias described above),
+crosses zero around ρ ≈ 0.3, and climbs past the flagging threshold by
+ρ ≈ 0.7 — exactly the pair that was constructed to be dependent. Other
+cells occasionally cross the threshold on their own even at ρ = 0, pure
+sampling noise across the 28 pairs tested at once; that's the same
+phenomenon that keeps the proportion-flagged metric in the main analysis
+below a heuristic severity signal rather than a precise count.
 
 ## Data and methods
 
@@ -251,7 +423,7 @@ share residual variance the single-trait model didn't capture.
 ```{r}
 #| label: fig-q3-heatmaps
 #| fig-cap: "Q3 residual correlation matrices for the table with the highest proportion of flagged pairs (left) and the cleanest table in this sample (right). Darker cells indicate stronger residual correlation between that item pair, in either direction."
-#| fig-height: 5.5
+#| fig-height: 6
 
 worst_table <- summary_df %>% slice_max(prop_flagged, n = 1, with_ties = FALSE) %>% pull(table)
 clean_table <- summary_df %>% slice_min(prop_flagged, n = 1, with_ties = FALSE) %>% pull(table)
@@ -275,11 +447,11 @@ ggplot(q3_pair_df, aes(x = item1, y = item2, fill = q3)) +
   scale_fill_gradient2(low = irw_blue, mid = "white", high = irw_red, midpoint = 0,
                         limits = c(-1, 1), name = "Q3") +
   scale_y_discrete(limits = rev) +
-  facet_wrap(~panel, scales = "free") +
+  facet_wrap(~panel, scales = "free", labeller = label_wrap_gen(width = 28)) +
   labs(x = NULL, y = NULL) +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 6),
         axis.text.y = element_text(size = 6),
-        strip.text = element_text(size = 9))
+        strip.text = element_text(size = 8, lineheight = 1.1))
 ```
 
 `r worst_table` is the table with the largest share of flagged pairs in this
