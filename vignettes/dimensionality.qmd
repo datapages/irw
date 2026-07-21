@@ -43,6 +43,11 @@ cache_ok   <- file.exists(cache_path)
 if (cache_ok) {
   .cache           <- readRDS(cache_path)
   summary_df       <- .cache$summary
+  # construct_type from IRW's tags is sometimes a comma-joined multi-label
+  # string (e.g. "Cognitive/educational, Behavioral"); group by the first
+  # (primary) label so the by-construct breakdown below isn't fragmented
+  # into dozens of near-singleton combinations.
+  summary_df$construct_type <- sub(",.*$", "", summary_df$construct_type)
   eigenvalues_list <- .cache$eigenvalues %||% list()
   candidate_tables <- .cache$candidate_tables
   date_run         <- .cache$date_run
@@ -252,7 +257,7 @@ see [below](#two-diagnostics-one-disagreement).
 
 ```{r}
 #| label: fig-ratio-by-construct
-#| fig-cap: "Eigenvalue ratio by construct_type. Each point is one table; diamonds mark the median within each type."
+#| fig-cap: "Eigenvalue ratio by construct_type (primary label, for tables tagged with more than one). Each point is one table; diamonds mark the median within each type."
 #| fig-height: 5
 
 construct_order <- summary_df %>%
@@ -279,7 +284,7 @@ ggplot(plot_df, aes(x = pmin(ratio_12, 15), y = construct_type)) +
 
 ```{r}
 #| label: tbl-by-construct
-#| tbl-cap: "Eigenvalue ratio and parallel-analysis factor counts by construct_type."
+#| tbl-cap: "Eigenvalue ratio and parallel-analysis factor counts by construct_type (primary label)."
 
 summary_df %>%
   filter(!is.na(construct_type)) %>%
