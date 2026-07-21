@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="dcterms.date" content="2026-07-21">
-<meta name="description" content="Hedge, Powell &amp; Sumner (2018) showed that classic conflict tasks (Flanker, Stroop, stop-signal) produce large, dependable group effects but poor individual-differences reliability, because the within-subject difference score that measures the effect cancels out most of the between-person variance. We test whether the same collapse appears in IRW cognitive-control data: the Hearts &amp; Flowers task, an alcohol Stroop, a stop-signal task, and three tasks (Stroop, Simon, ANT flanker) from the Enkavi et al.&nbsp;(2019) Self-Regulation Ontology battery.">
+<meta name="description" content="Hedge, Powell &amp; Sumner (2018) showed that classic conflict tasks (Flanker, Stroop, stop-signal) produce large, dependable group effects but poor individual-differences reliability, because the within-subject difference score that measures the effect cancels out most of the between-person variance. We test whether the same attenuation appears in IRW cognitive-control data: the Hearts &amp; Flowers task, an alcohol Stroop, a stop-signal task, and three tasks (Stroop, Simon, ANT flanker) from the Enkavi et al.&nbsp;(2019) Self-Regulation Ontology battery.">
 
 <title>The Reliability Paradox in Cognitive-Control Tasks – Item Response Warehouse</title>
 <style>
@@ -351,7 +351,7 @@ window.Quarto = {
 
 <div>
   <div class="description">
-    <p>Hedge, Powell &amp; Sumner (2018) showed that classic conflict tasks (Flanker, Stroop, stop-signal) produce large, dependable group effects but poor individual-differences reliability, because the within-subject difference score that measures the effect cancels out most of the between-person variance. We test whether the same collapse appears in IRW cognitive-control data: the Hearts &amp; Flowers task, an alcohol Stroop, a stop-signal task, and three tasks (Stroop, Simon, ANT flanker) from the Enkavi et al.&nbsp;(2019) Self-Regulation Ontology battery.</p>
+    <p>Hedge, Powell &amp; Sumner (2018) showed that classic conflict tasks (Flanker, Stroop, stop-signal) produce large, dependable group effects but poor individual-differences reliability, because the within-subject difference score that measures the effect cancels out most of the between-person variance. We test whether the same attenuation appears in IRW cognitive-control data: the Hearts &amp; Flowers task, an alcohol Stroop, a stop-signal task, and three tasks (Stroop, Simon, ANT flanker) from the Enkavi et al.&nbsp;(2019) Self-Regulation Ontology battery.</p>
   </div>
 </div>
 
@@ -604,25 +604,26 @@ Table&nbsp;1: Candidate tables surviving the keyword screen, and why each was ke
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>sh_plot_df <span class="ot">&lt;-</span> results <span class="sc">%&gt;%</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(trial_floor <span class="sc">==</span> <span class="dv">5</span>, <span class="sc">!</span><span class="fu">grepl</span>(<span class="st">"test-retest"</span>, reliability_type)) <span class="sc">%&gt;%</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">dataset_lab =</span> <span class="fu">factor</span>(dataset_labels[dataset], <span class="at">levels =</span> <span class="fu">rev</span>(dataset_labels)),</span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">reliability_type =</span> <span class="fu">factor</span>(reliability_type,</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>                               <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"congruent"</span>, <span class="st">"incongruent"</span>, <span class="st">"difference"</span>),</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>                               <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">"Congruent"</span>, <span class="st">"Incongruent"</span>, <span class="st">"Difference score"</span>)),</span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">measure_lab =</span> measure_labels[measure]</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>  )</span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(sh_plot_df, <span class="fu">aes</span>(<span class="at">x =</span> reliability_est, <span class="at">y =</span> dataset_lab, <span class="at">colour =</span> reliability_type)) <span class="sc">+</span></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="dv">0</span>, <span class="at">linetype =</span> <span class="st">"dashed"</span>, <span class="at">colour =</span> irw_grey) <span class="sc">+</span></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_errorbarh</span>(<span class="fu">aes</span>(<span class="at">xmin =</span> reliability_est <span class="sc">-</span> reliability_sd, <span class="at">xmax =</span> reliability_est <span class="sc">+</span> reliability_sd),</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>                  <span class="at">height =</span> <span class="dv">0</span>, <span class="at">position =</span> <span class="fu">position_dodge</span>(<span class="at">width =</span> <span class="fl">0.5</span>)) <span class="sc">+</span></span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="fl">2.6</span>, <span class="at">position =</span> <span class="fu">position_dodge</span>(<span class="at">width =</span> <span class="fl">0.5</span>)) <span class="sc">+</span></span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>measure_lab) <span class="sc">+</span></span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_colour_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">"Congruent"</span> <span class="ot">=</span> irw_grey, <span class="st">"Incongruent"</span> <span class="ot">=</span> <span class="st">"black"</span>,</span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>                                  <span class="st">"Difference score"</span> <span class="ot">=</span> irw_red), <span class="at">name =</span> <span class="cn">NULL</span>) <span class="sc">+</span></span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Split-half reliability (Spearman-Brown corrected)"</span>, <span class="at">y =</span> <span class="cn">NULL</span>) <span class="sc">+</span></span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"bottom"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(trial_floor <span class="sc">==</span> <span class="dv">5</span>, <span class="sc">!</span><span class="fu">grepl</span>(<span class="st">"test-retest"</span>, reliability_type),</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>         dataset <span class="sc">!=</span> <span class="st">"matzke_stopsignal_2019"</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">dataset_lab =</span> <span class="fu">factor</span>(dataset_labels[dataset], <span class="at">levels =</span> <span class="fu">rev</span>(dataset_labels)),</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">reliability_type =</span> <span class="fu">factor</span>(reliability_type,</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>                               <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"congruent"</span>, <span class="st">"incongruent"</span>, <span class="st">"difference"</span>),</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>                               <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">"Congruent"</span>, <span class="st">"Incongruent"</span>, <span class="st">"Difference score"</span>)),</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="at">measure_lab =</span> measure_labels[measure]</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(sh_plot_df, <span class="fu">aes</span>(<span class="at">x =</span> reliability_est, <span class="at">y =</span> dataset_lab, <span class="at">colour =</span> reliability_type)) <span class="sc">+</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="dv">0</span>, <span class="at">linetype =</span> <span class="st">"dashed"</span>, <span class="at">colour =</span> irw_grey) <span class="sc">+</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_errorbarh</span>(<span class="fu">aes</span>(<span class="at">xmin =</span> reliability_est <span class="sc">-</span> reliability_sd, <span class="at">xmax =</span> reliability_est <span class="sc">+</span> reliability_sd),</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>                  <span class="at">height =</span> <span class="dv">0</span>, <span class="at">position =</span> <span class="fu">position_dodge</span>(<span class="at">width =</span> <span class="fl">0.5</span>)) <span class="sc">+</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="fl">2.6</span>, <span class="at">position =</span> <span class="fu">position_dodge</span>(<span class="at">width =</span> <span class="fl">0.5</span>)) <span class="sc">+</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>measure_lab) <span class="sc">+</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_colour_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">"Congruent"</span> <span class="ot">=</span> irw_grey, <span class="st">"Incongruent"</span> <span class="ot">=</span> <span class="st">"black"</span>,</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>                                  <span class="st">"Difference score"</span> <span class="ot">=</span> irw_red), <span class="at">name =</span> <span class="cn">NULL</span>) <span class="sc">+</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Split-half reliability (Spearman-Brown corrected)"</span>, <span class="at">y =</span> <span class="cn">NULL</span>) <span class="sc">+</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"bottom"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
 <div id="fig-splithalf" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -631,7 +632,7 @@ Table&nbsp;1: Candidate tables surviving the keyword screen, and why each was ke
 <img src="hf_reliability_paradox_files/figure-html/fig-splithalf-1.png" class="img-fluid figure-img" width="672">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-splithalf-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;2: Split-half reliability (Spearman-Brown corrected; mean ± SD across splits) for each condition and the difference score, trial floor = 5. Difference-score reliability drops relative to the conditions it’s built from in every dataset variant except the stop-signal exception, though the size of the drop varies widely.
+Figure&nbsp;2: Split-half reliability (Spearman-Brown corrected; mean ± SD across splits) for each condition and the difference score, trial floor = 5, for the six congruency-style dataset variants. Difference-score reliability drops relative to the conditions it’s built from in every one of them, though the size of the drop varies widely. The stop-signal dataset is excluded here and shown separately in <a href="#stop-signal-a-structural-comparison">Stop-signal: a structural comparison</a>, since failed-stop RT isn’t a congruency contrast in the same sense.
 </figcaption>
 </figure>
 </div>
@@ -983,30 +984,108 @@ Table&nbsp;2: Split-half reliability by dataset, measure, and condition (trial f
 </div>
 </div>
 </details>
-<p>The pattern in <a href="#fig-splithalf" class="quarto-xref">Figure&nbsp;2</a> reproduces the core finding of <span class="citation" data-cites="hedge2018reliability">Hedge et al. (<a href="#ref-hedge2018reliability" role="doc-biblioref">2018</a>)</span> directly: congruent and incongruent RT reliabilities sit at .78-.99 across all seven dataset variants, but the RT difference-score reliability drops in every one of them except the stop-signal exception. The size of that drop, however, varies considerably. At one extreme, it collapses to near zero for the mixed-trial Hearts &amp; Flowers (0.04) and the alcohol Stroop (0.05). The blocked Hearts &amp; Flowers design (0.51) and the Enkavi et al.&nbsp;(2019) Simon task (0.23) retain a moderate amount. And the Enkavi Stroop (0.65) and ANT Flanker (0.69) retain a sizeable fraction of their component reliability, despite still being well below their congruent/incongruent components (~.93-.96). This is a useful complication of the “collapses to near zero” framing from the Motivation section: the direction of the effect (component &gt;&gt; difference) is essentially universal across these seven variants, but its magnitude is not — it depends on exactly how strongly the two conditions covary across people in a given task, sample, and design, which is itself variable. The Enkavi tasks — a much larger (N=523), adult, single-country online sample than the other datasets here — retaining more difference-score reliability than mixed-trial H&amp;F or the alcohol Stroop is consistent with sample composition (a wider age/ability range inflates between-person variance relative to trial-level noise) contributing to that variability, though we can’t isolate that from task differences with only one dataset per task.</p>
+<p>The pattern in <a href="#fig-splithalf" class="quarto-xref">Figure&nbsp;2</a> reproduces the core finding of <span class="citation" data-cites="hedge2018reliability">Hedge et al. (<a href="#ref-hedge2018reliability" role="doc-biblioref">2018</a>)</span> directly: congruent and incongruent RT reliabilities sit at .78-.99 across all six congruency-style dataset variants, but the RT difference-score reliability drops in every one of them. The size of that drop, however, varies considerably. At one extreme, it collapses to near zero for the mixed-trial Hearts &amp; Flowers (0.04) and the alcohol Stroop (0.05). The blocked Hearts &amp; Flowers design (0.51) and the Enkavi et al.&nbsp;(2019) Simon task (0.23) retain a moderate amount. And the Enkavi Stroop (0.65) and ANT Flanker (0.69) retain a sizeable fraction of their component reliability, despite still being well below their congruent/incongruent components (~.93-.96). This is a useful complication of the “collapses to near zero” framing from the Motivation section: the direction of the effect (component &gt;&gt; difference) is essentially universal across these six variants, but its magnitude is not — it depends on exactly how strongly the two conditions covary across people in a given task, sample, and design, which is itself variable. The Enkavi tasks — a much larger (N=523), adult, single-country online sample than the other datasets here — retaining more difference-score reliability than mixed-trial H&amp;F or the alcohol Stroop is consistent with sample composition (a wider age/ability range inflates between-person variance relative to trial-level noise) contributing to that variability, though we can’t isolate that from task differences with only one dataset per task.</p>
 <p>The blocked-vs-mixed-trial contrast within the same H&amp;F task is informative: Hedge et al.’s tasks intermix conditions within a block, and it’s exactly that design — the mixed-trial H&amp;F variant — that shows the most severe collapse. Separating congruent and incongruent trials into their own blocks (as the blocked H&amp;F variant does) leaves noticeably more difference-score reliability intact, consistent with the variance-shrinkage mechanism: block separation gives some room for per-block state (vigilance, strategy, warm-up) to vary independently across conditions, which lowers <span class="math inline">\(\mathrm{Cov}(A,B)\)</span> relative to <span class="math inline">\(\mathrm{Var}(A)\)</span> and <span class="math inline">\(\mathrm{Var}(B)\)</span> less than a fully intermixed design does.</p>
-<p>The stop-signal dataset is the exception: its difference-score reliability stays high (0.92). This is best read in light of the stop-signal deviation noted in Methods — failed-stop RT and go RT are driven by different aspects of the race model (a fast guess vs.&nbsp;the whole go-process distribution) and are less tightly coupled across people than two congruency conditions of the same trial type, so the variance-shrinkage mechanism has less to work with. This is a useful negative case: the paradox is not automatic whenever you subtract two RTs, it specifically depends on how correlated the two conditions are across people.</p>
+<p><strong>This contrast deserves a caution, though.</strong> Mean trials per condition are similar between the two variants (~9.5-11.1 for blocked, ~9.7-9.9 for mixed; see <a href="#trial-count-sensitivity">Trial-count sensitivity</a>), but the <em>retained samples</em> are not: the blocked split-half sample is 2259 respondents (of the 2,475 in <code>imps2025_hf</code>), while the mixed-trial sample is only 632 — about a quarter as many. Since per-condition trial counts are comparable for those who clear the floor in each variant, this gap isn’t the trial floor thinning out the mixed sample; it looks more like most respondents never received a “mixed test” block at all, so blocked and mixed aren’t a within-person manipulation on a shared sample but two considerably different-sized (and potentially differently-composed, e.g.&nbsp;by cohort or wave) subgroups of the full <code>imps2025_hf</code> respondent pool. We can’t rule out that this compositional difference, rather than the block/intermixed design itself, contributes to the reliability gap between them.</p>
+</section>
+<section id="stop-signal-a-structural-comparison" class="level3">
+<h3 class="anchored" data-anchor-id="stop-signal-a-structural-comparison">Stop-signal: a structural comparison</h3>
+<p>The stop-signal dataset was excluded from <a href="#fig-splithalf" class="quarto-xref">Figure&nbsp;2</a> above because it doesn’t share the congruent/incongruent structure of the other six variants, and its result is the opposite of the general pattern: its difference-score reliability stays high (0.92), barely below its congruent (go, 1.00) and incongruent (stop, 0.99) components. As detailed in Methods, this isn’t really a like-for-like difference score: <span class="math inline">\(D_{rt}\)</span> here is failed-stop RT minus go RT, not Hedge et al.’s race-model SSRT, so this figure is a structural comparison, not a validated inhibition measure. Failed-stop RT and go RT are driven by different aspects of the race model (a fast guess vs.&nbsp;the whole go-process distribution) and so are less tightly coupled across people than two congruency conditions of the same trial type — the variance-shrinkage mechanism has less to work with. That makes it a useful negative case (the paradox is not automatic whenever you subtract two RTs — it depends on how correlated the two quantities are across people), but not a direct replication attempt, and it should not be read alongside the congruency tasks above as if it were measuring the same kind of contrast. A proper replication would need the race-model SSRT integration method Hedge et al.&nbsp;use, which we do not implement here.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>ss_irw <span class="ot">&lt;-</span> results <span class="sc">%&gt;%</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(trial_floor <span class="sc">==</span> <span class="dv">5</span>, measure <span class="sc">==</span> <span class="st">"rt"</span>, <span class="sc">!</span><span class="fu">grepl</span>(<span class="st">"test-retest"</span>, reliability_type),</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>         dataset <span class="sc">==</span> <span class="st">"matzke_stopsignal_2019"</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">Condition =</span> <span class="fu">recode</span>(reliability_type,</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>                             <span class="at">congruent =</span> <span class="st">"Go"</span>, <span class="at">incongruent =</span> <span class="st">"Stop"</span>,</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>                             <span class="at">difference =</span> <span class="st">"Difference (failed-stop − go)"</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="at">Source =</span> <span class="st">"IRW, split-half"</span>, Condition,</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>            <span class="at">Reliability =</span> <span class="fu">round</span>(reliability_est, <span class="dv">2</span>))</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>ss_hedge <span class="ot">&lt;-</span> hedge_ref <span class="sc">%&gt;%</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(measure <span class="sc">==</span> <span class="st">"rt"</span>, task <span class="sc">==</span> <span class="st">"Stop-signal"</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="at">Source =</span> <span class="st">"Hedge et al. (2018), test-retest"</span>,</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>            <span class="at">Condition =</span> tools<span class="sc">::</span><span class="fu">toTitleCase</span>(condition),</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>            <span class="at">Reliability =</span> <span class="fu">round</span>(icc_mean, <span class="dv">2</span>))</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="fu">bind_rows</span>(ss_irw, ss_hedge) <span class="sc">%&gt;%</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div id="tbl-stopsignal" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-stopsignal-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;3: Stop-signal split-half reliability alongside Hedge et al.&nbsp;(2018) Table 1 (mean of their Studies 1 &amp; 2). The IRW ‘Difference’ row is failed-stop RT minus go RT, a structural stand-in for SSRT, not SSRT itself — the two are not the same quantity and shouldn’t be read as a validation of one against the other.
+</figcaption>
+<div aria-describedby="tbl-stopsignal-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 44%">
+<col style="width: 40%">
+<col style="width: 16%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Source</th>
+<th style="text-align: left;">Condition</th>
+<th style="text-align: right;">Reliability</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">IRW, split-half</td>
+<td style="text-align: left;">Go</td>
+<td style="text-align: right;">1.00</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">IRW, split-half</td>
+<td style="text-align: left;">Stop</td>
+<td style="text-align: right;">0.99</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">IRW, split-half</td>
+<td style="text-align: left;">Difference (failed-stop − go)</td>
+<td style="text-align: right;">0.92</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Hedge et al.&nbsp;(2018), test-retest</td>
+<td style="text-align: left;">Go</td>
+<td style="text-align: right;">0.46</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">Hedge et al.&nbsp;(2018), test-retest</td>
+<td style="text-align: left;">Ssrt</td>
+<td style="text-align: right;">0.42</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
 </section>
 <section id="where-does-the-variance-go" class="level3">
 <h3 class="anchored" data-anchor-id="where-does-the-variance-go">Where does the variance go?</h3>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>results <span class="sc">%&gt;%</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(trial_floor <span class="sc">==</span> <span class="dv">5</span>, measure <span class="sc">==</span> <span class="st">"rt"</span>, reliability_type <span class="sc">==</span> <span class="st">"difference"</span>) <span class="sc">%&gt;%</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">Dataset =</span> dataset_labels[dataset],</span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">Var(congruent)</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">round</span>(var_congruent, <span class="dv">4</span>),</span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">Var(incongruent)</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">round</span>(var_incongruent, <span class="dv">4</span>),</span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">Cov(cong, incong)</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">round</span>(cov_cong_incong, <span class="dv">4</span>),</span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">Var(difference)</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">round</span>(var_difference, <span class="dv">4</span>)</span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>results <span class="sc">%&gt;%</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(trial_floor <span class="sc">==</span> <span class="dv">5</span>, measure <span class="sc">==</span> <span class="st">"rt"</span>, reliability_type <span class="sc">==</span> <span class="st">"difference"</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">Dataset =</span> dataset_labels[dataset],</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">Var(congruent)</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">round</span>(var_congruent, <span class="dv">4</span>),</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">Var(incongruent)</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">round</span>(var_incongruent, <span class="dv">4</span>),</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">Cov(cong, incong)</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">round</span>(cov_cong_incong, <span class="dv">4</span>),</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="st">`</span><span class="at">Var(difference)</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">round</span>(var_difference, <span class="dv">4</span>)</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div id="tbl-variance" class="cell quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-variance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;3: Between-person variance components underlying the RT difference score (trial floor = 5). Var(D) = Var(incong) + Var(cong) − 2·Cov(cong, incong); a high covariance relative to the individual variances is what shrinks Var(D).
+Table&nbsp;4: Between-person variance components underlying the RT difference score (trial floor = 5). Var(D) = Var(incong) + Var(cong) − 2·Cov(cong, incong); a high covariance relative to the individual variances is what shrinks Var(D).
 </figcaption>
 <div aria-describedby="tbl-variance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <div class="cell-output-display">
@@ -1089,31 +1168,31 @@ Table&nbsp;3: Between-person variance components underlying the RT difference sc
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>vdf_row <span class="ot">&lt;-</span> results <span class="sc">%&gt;%</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(trial_floor <span class="sc">==</span> <span class="dv">5</span>, measure <span class="sc">==</span> <span class="st">"rt"</span>, reliability_type <span class="sc">==</span> <span class="st">"difference"</span>,</span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>         dataset <span class="sc">==</span> <span class="st">"alcoholstroop_jones2024"</span>)</span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>vdf <span class="ot">&lt;-</span> <span class="fu">tibble</span>(</span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">component =</span> <span class="fu">factor</span>(</span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">c</span>(<span class="st">"Var(congruent)"</span>, <span class="st">"Var(incongruent)"</span>, <span class="st">"2·Cov(cong, incong)"</span>, <span class="st">"Var(difference)"</span>),</span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"Var(congruent)"</span>, <span class="st">"Var(incongruent)"</span>, <span class="st">"2·Cov(cong, incong)"</span>, <span class="st">"Var(difference)"</span>)</span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  ),</span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">value =</span> <span class="fu">c</span>(vdf_row<span class="sc">$</span>var_congruent, vdf_row<span class="sc">$</span>var_incongruent,</span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>            <span class="dv">2</span> <span class="sc">*</span> vdf_row<span class="sc">$</span>cov_cong_incong, vdf_row<span class="sc">$</span>var_difference),</span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">role  =</span> <span class="fu">c</span>(<span class="st">"congruent"</span>, <span class="st">"incongruent"</span>, <span class="st">"subtracted"</span>, <span class="st">"result"</span>)</span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(vdf, <span class="fu">aes</span>(<span class="at">x =</span> component, <span class="at">y =</span> value, <span class="at">fill =</span> role)) <span class="sc">+</span></span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_col</span>(<span class="at">width =</span> <span class="fl">0.6</span>) <span class="sc">+</span></span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_text</span>(<span class="fu">aes</span>(<span class="at">label =</span> <span class="fu">sprintf</span>(<span class="st">"%.3f"</span>, value)), <span class="at">vjust =</span> <span class="sc">-</span><span class="fl">0.4</span>, <span class="at">size =</span> <span class="dv">4</span>) <span class="sc">+</span></span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="at">congruent =</span> irw_grey, <span class="at">incongruent =</span> <span class="st">"black"</span>,</span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>                               <span class="at">subtracted =</span> irw_blue, <span class="at">result =</span> irw_red),</span>
-<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>                     <span class="at">guide =</span> <span class="st">"none"</span>) <span class="sc">+</span></span>
-<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">"Variance (RT, seconds²)"</span>,</span>
-<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>       <span class="at">title =</span> <span class="fu">paste</span>(dataset_labels[<span class="st">"alcoholstroop_jones2024"</span>], <span class="st">"RT: where the variance goes"</span>)) <span class="sc">+</span></span>
-<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">expand_limits</span>(<span class="at">y =</span> <span class="fu">max</span>(vdf<span class="sc">$</span>value) <span class="sc">*</span> <span class="fl">1.15</span>) <span class="sc">+</span></span>
-<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="dv">13</span>) <span class="sc">+</span></span>
-<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">plot.title =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">12</span>, <span class="at">face =</span> <span class="st">"bold"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>vdf_row <span class="ot">&lt;-</span> results <span class="sc">%&gt;%</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(trial_floor <span class="sc">==</span> <span class="dv">5</span>, measure <span class="sc">==</span> <span class="st">"rt"</span>, reliability_type <span class="sc">==</span> <span class="st">"difference"</span>,</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>         dataset <span class="sc">==</span> <span class="st">"alcoholstroop_jones2024"</span>)</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>vdf <span class="ot">&lt;-</span> <span class="fu">tibble</span>(</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">component =</span> <span class="fu">factor</span>(</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    <span class="fu">c</span>(<span class="st">"Var(congruent)"</span>, <span class="st">"Var(incongruent)"</span>, <span class="st">"2·Cov(cong, incong)"</span>, <span class="st">"Var(difference)"</span>),</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"Var(congruent)"</span>, <span class="st">"Var(incongruent)"</span>, <span class="st">"2·Cov(cong, incong)"</span>, <span class="st">"Var(difference)"</span>)</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>  ),</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">value =</span> <span class="fu">c</span>(vdf_row<span class="sc">$</span>var_congruent, vdf_row<span class="sc">$</span>var_incongruent,</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>            <span class="dv">2</span> <span class="sc">*</span> vdf_row<span class="sc">$</span>cov_cong_incong, vdf_row<span class="sc">$</span>var_difference),</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">role  =</span> <span class="fu">c</span>(<span class="st">"congruent"</span>, <span class="st">"incongruent"</span>, <span class="st">"subtracted"</span>, <span class="st">"result"</span>)</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(vdf, <span class="fu">aes</span>(<span class="at">x =</span> component, <span class="at">y =</span> value, <span class="at">fill =</span> role)) <span class="sc">+</span></span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_col</span>(<span class="at">width =</span> <span class="fl">0.6</span>) <span class="sc">+</span></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_text</span>(<span class="fu">aes</span>(<span class="at">label =</span> <span class="fu">sprintf</span>(<span class="st">"%.3f"</span>, value)), <span class="at">vjust =</span> <span class="sc">-</span><span class="fl">0.4</span>, <span class="at">size =</span> <span class="dv">4</span>) <span class="sc">+</span></span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="at">congruent =</span> irw_grey, <span class="at">incongruent =</span> <span class="st">"black"</span>,</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>                               <span class="at">subtracted =</span> irw_blue, <span class="at">result =</span> irw_red),</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>                     <span class="at">guide =</span> <span class="st">"none"</span>) <span class="sc">+</span></span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">"Variance (RT, seconds²)"</span>,</span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>       <span class="at">title =</span> <span class="fu">paste</span>(dataset_labels[<span class="st">"alcoholstroop_jones2024"</span>], <span class="st">"RT: where the variance goes"</span>)) <span class="sc">+</span></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>  <span class="fu">expand_limits</span>(<span class="at">y =</span> <span class="fu">max</span>(vdf<span class="sc">$</span>value) <span class="sc">*</span> <span class="fl">1.15</span>) <span class="sc">+</span></span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="dv">13</span>) <span class="sc">+</span></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">plot.title =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">12</span>, <span class="at">face =</span> <span class="st">"bold"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
 <div id="fig-variance-decomp" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -1135,40 +1214,40 @@ Figure&nbsp;3: Variance decomposition for the alcohol Stroop RT difference score
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>retest_df <span class="ot">&lt;-</span> results <span class="sc">%&gt;%</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(dataset <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"imps2025_hf_blocked"</span>, <span class="st">"imps2025_hf_mixed"</span>,</span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>                         <span class="st">"enkavi_stroop"</span>, <span class="st">"enkavi_simon"</span>, <span class="st">"enkavi_ant_flanker"</span>),</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>         measure <span class="sc">==</span> <span class="st">"rt"</span>) <span class="sc">%&gt;%</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">design =</span> <span class="fu">case_when</span>(</span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>      <span class="fu">grepl</span>(<span class="st">"PLUS Fall -&gt; PLUS Spring"</span>, reliability_type) <span class="sc">~</span> <span class="st">"Test-retest (H&amp;F, PLUS cohort)"</span>,</span>
-<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>      <span class="fu">grepl</span>(<span class="st">"2021-2022 Fall -&gt; 2021-2022 Spring"</span>, reliability_type) <span class="sc">~</span> <span class="st">"Test-retest (H&amp;F, K cohort)"</span>,</span>
-<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>      <span class="fu">grepl</span>(<span class="st">"test-retest: 1 -&gt; 2"</span>, reliability_type) <span class="sc">~</span> <span class="st">"Test-retest (Enkavi et al. 2019, mean 111d)"</span>,</span>
-<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>      trial_floor <span class="sc">==</span> <span class="dv">5</span> <span class="sc">~</span> <span class="st">"Split-half (single session)"</span>,</span>
-<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="cn">NA_character_</span></span>
-<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">condition =</span> <span class="fu">case_when</span>(</span>
-<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>      <span class="fu">grepl</span>(<span class="st">"^congruent"</span>, reliability_type) <span class="sc">~</span> <span class="st">"Congruent"</span>,</span>
-<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>      <span class="fu">grepl</span>(<span class="st">"^incongruent"</span>, reliability_type) <span class="sc">~</span> <span class="st">"Incongruent"</span>,</span>
-<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>      <span class="fu">grepl</span>(<span class="st">"^difference"</span>, reliability_type) <span class="sc">~</span> <span class="st">"Difference score"</span>,</span>
-<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="cn">NA_character_</span></span>
-<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>    ),</span>
-<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">dataset_lab =</span> dataset_labels[dataset]</span>
-<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
-<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(design))</span>
-<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(retest_df, <span class="fu">aes</span>(<span class="at">x =</span> reliability_est, <span class="at">y =</span> condition, <span class="at">colour =</span> design)) <span class="sc">+</span></span>
-<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="dv">0</span>, <span class="at">linetype =</span> <span class="st">"dashed"</span>, <span class="at">colour =</span> irw_grey) <span class="sc">+</span></span>
-<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="fl">2.8</span>, <span class="at">position =</span> <span class="fu">position_dodge</span>(<span class="at">width =</span> <span class="fl">0.5</span>)) <span class="sc">+</span></span>
-<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>dataset_lab, <span class="at">ncol =</span> <span class="dv">2</span>) <span class="sc">+</span></span>
-<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_colour_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">"Split-half (single session)"</span> <span class="ot">=</span> irw_blue,</span>
-<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>                                  <span class="st">"Test-retest (H&amp;F, PLUS cohort)"</span> <span class="ot">=</span> irw_red,</span>
-<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>                                  <span class="st">"Test-retest (H&amp;F, K cohort)"</span> <span class="ot">=</span> <span class="st">"#f4a582"</span>,</span>
-<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>                                  <span class="st">"Test-retest (Enkavi et al. 2019, mean 111d)"</span> <span class="ot">=</span> <span class="st">"#1a9850"</span>),</span>
-<span id="cb6-31"><a href="#cb6-31" aria-hidden="true" tabindex="-1"></a>                       <span class="at">name =</span> <span class="cn">NULL</span>, <span class="at">guide =</span> <span class="fu">guide_legend</span>(<span class="at">nrow =</span> <span class="dv">2</span>)) <span class="sc">+</span></span>
-<span id="cb6-32"><a href="#cb6-32" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Reliability"</span>, <span class="at">y =</span> <span class="cn">NULL</span>,</span>
-<span id="cb6-33"><a href="#cb6-33" aria-hidden="true" tabindex="-1"></a>       <span class="at">caption =</span> <span class="st">"H&amp;F PLUS cohort: Fall -&gt; Spring, one school year. H&amp;F K cohort: 2021-22 Fall -&gt; Spring.</span><span class="sc">\n</span><span class="st">Enkavi et al. (2019): mean 111-day gap, range 60-228 days, Amazon Mechanical Turk adults."</span>) <span class="sc">+</span></span>
-<span id="cb6-34"><a href="#cb6-34" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"bottom"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>retest_df <span class="ot">&lt;-</span> results <span class="sc">%&gt;%</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(dataset <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"imps2025_hf_blocked"</span>, <span class="st">"imps2025_hf_mixed"</span>,</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>                         <span class="st">"enkavi_stroop"</span>, <span class="st">"enkavi_simon"</span>, <span class="st">"enkavi_ant_flanker"</span>),</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>         measure <span class="sc">==</span> <span class="st">"rt"</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">design =</span> <span class="fu">case_when</span>(</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>      <span class="fu">grepl</span>(<span class="st">"PLUS Fall -&gt; PLUS Spring"</span>, reliability_type) <span class="sc">~</span> <span class="st">"Test-retest (H&amp;F, PLUS cohort)"</span>,</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>      <span class="fu">grepl</span>(<span class="st">"2021-2022 Fall -&gt; 2021-2022 Spring"</span>, reliability_type) <span class="sc">~</span> <span class="st">"Test-retest (H&amp;F, K cohort)"</span>,</span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>      <span class="fu">grepl</span>(<span class="st">"test-retest: 1 -&gt; 2"</span>, reliability_type) <span class="sc">~</span> <span class="st">"Test-retest (Enkavi et al. 2019, mean 111d)"</span>,</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>      trial_floor <span class="sc">==</span> <span class="dv">5</span> <span class="sc">~</span> <span class="st">"Split-half (single session)"</span>,</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="cn">NA_character_</span></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">condition =</span> <span class="fu">case_when</span>(</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>      <span class="fu">grepl</span>(<span class="st">"^congruent"</span>, reliability_type) <span class="sc">~</span> <span class="st">"Congruent"</span>,</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>      <span class="fu">grepl</span>(<span class="st">"^incongruent"</span>, reliability_type) <span class="sc">~</span> <span class="st">"Incongruent"</span>,</span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>      <span class="fu">grepl</span>(<span class="st">"^difference"</span>, reliability_type) <span class="sc">~</span> <span class="st">"Difference score"</span>,</span>
+<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="cn">NA_character_</span></span>
+<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>    <span class="at">dataset_lab =</span> dataset_labels[dataset]</span>
+<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(<span class="sc">!</span><span class="fu">is.na</span>(design))</span>
+<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(retest_df, <span class="fu">aes</span>(<span class="at">x =</span> reliability_est, <span class="at">y =</span> condition, <span class="at">colour =</span> design)) <span class="sc">+</span></span>
+<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="dv">0</span>, <span class="at">linetype =</span> <span class="st">"dashed"</span>, <span class="at">colour =</span> irw_grey) <span class="sc">+</span></span>
+<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="fl">2.8</span>, <span class="at">position =</span> <span class="fu">position_dodge</span>(<span class="at">width =</span> <span class="fl">0.5</span>)) <span class="sc">+</span></span>
+<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>dataset_lab, <span class="at">ncol =</span> <span class="dv">2</span>) <span class="sc">+</span></span>
+<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_colour_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">"Split-half (single session)"</span> <span class="ot">=</span> irw_blue,</span>
+<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>                                  <span class="st">"Test-retest (H&amp;F, PLUS cohort)"</span> <span class="ot">=</span> irw_red,</span>
+<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>                                  <span class="st">"Test-retest (H&amp;F, K cohort)"</span> <span class="ot">=</span> <span class="st">"#f4a582"</span>,</span>
+<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>                                  <span class="st">"Test-retest (Enkavi et al. 2019, mean 111d)"</span> <span class="ot">=</span> <span class="st">"#1a9850"</span>),</span>
+<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>                       <span class="at">name =</span> <span class="cn">NULL</span>, <span class="at">guide =</span> <span class="fu">guide_legend</span>(<span class="at">nrow =</span> <span class="dv">2</span>)) <span class="sc">+</span></span>
+<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Reliability"</span>, <span class="at">y =</span> <span class="cn">NULL</span>,</span>
+<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>       <span class="at">caption =</span> <span class="st">"H&amp;F PLUS cohort: Fall -&gt; Spring, one school year. H&amp;F K cohort: 2021-22 Fall -&gt; Spring.</span><span class="sc">\n</span><span class="st">Enkavi et al. (2019): mean 111-day gap, range 60-228 days, Amazon Mechanical Turk adults."</span>) <span class="sc">+</span></span>
+<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"bottom"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
 <div id="fig-retest" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -1187,61 +1266,61 @@ Figure&nbsp;4: Split-half (single session) vs.&nbsp;true test-retest reliability
 </section>
 <section id="comparison-to-hedge-powell-sumner-2018" class="level3">
 <h3 class="anchored" data-anchor-id="comparison-to-hedge-powell-sumner-2018">Comparison to Hedge, Powell &amp; Sumner (2018)</h3>
-<p>The table below places our estimates next to the point estimates reported in Hedge et al.’s Table 1 (average of their Studies 1 and 2; two-way random-effects ICC, absolute agreement, ~3-week test-retest in adults). IRW rows are shown per comparable task: the split-half (single-session) estimate, which is the most directly comparable design for the alcohol Stroop and stop-signal datasets since they have no wave variable, plus a test-retest estimate for every dataset that has one (Hearts &amp; Flowers and the three Enkavi et al.&nbsp;2019 tasks) — of the two, the Enkavi test-retest rows are the closer match to Hedge et al.’s own true-test-retest, stable-adult design.</p>
+<p>The table below places our estimates next to the point estimates reported in Hedge et al.’s Table 1 (average of their Studies 1 and 2; two-way random-effects ICC, absolute agreement, ~3-week test-retest in adults), for the six congruency-style tasks. (The stop-signal dataset is compared separately in <a href="#stop-signal-a-structural-comparison">Stop-signal: a structural comparison</a>, since it isn’t a congruency contrast.) IRW rows are shown per comparable task: the split-half (single-session) estimate, which is the most directly comparable design for the alcohol Stroop since it has no wave variable, plus a test-retest estimate for every dataset that has one (Hearts &amp; Flowers and the three Enkavi et al.&nbsp;2019 tasks) — of the two, the Enkavi test-retest rows are the closer match to Hedge et al.’s own true-test-retest, stable-adult design.</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>irw_split <span class="ot">&lt;-</span> results <span class="sc">%&gt;%</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(trial_floor <span class="sc">==</span> <span class="dv">5</span>, measure <span class="sc">==</span> <span class="st">"rt"</span>, <span class="sc">!</span><span class="fu">grepl</span>(<span class="st">"test-retest"</span>, reliability_type)) <span class="sc">%&gt;%</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="at">pair_task =</span> dataset_labels[dataset], <span class="at">source =</span> <span class="st">"IRW, split-half"</span>,</span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>            <span class="at">condition =</span> reliability_type, <span class="at">reliability =</span> reliability_est)</span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>irw_retest_hf <span class="ot">&lt;-</span> results <span class="sc">%&gt;%</span></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(measure <span class="sc">==</span> <span class="st">"rt"</span>, <span class="fu">grepl</span>(<span class="st">"test-retest: PLUS Fall"</span>, reliability_type)) <span class="sc">%&gt;%</span></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">condition =</span> <span class="fu">sub</span>(<span class="st">" </span><span class="sc">\\</span><span class="st">(test-retest.*</span><span class="sc">\\</span><span class="st">)"</span>, <span class="st">""</span>, reliability_type)) <span class="sc">%&gt;%</span></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="at">pair_task =</span> dataset_labels[dataset], <span class="at">source =</span> <span class="st">"IRW, test-retest (H&amp;F, Fall-&gt;Spring)"</span>,</span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>            condition, <span class="at">reliability =</span> reliability_est)</span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a>irw_retest_enkavi <span class="ot">&lt;-</span> results <span class="sc">%&gt;%</span></span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(measure <span class="sc">==</span> <span class="st">"rt"</span>, <span class="fu">grepl</span>(<span class="st">"test-retest: 1 -&gt; 2"</span>, reliability_type)) <span class="sc">%&gt;%</span></span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">condition =</span> <span class="fu">sub</span>(<span class="st">" </span><span class="sc">\\</span><span class="st">(test-retest.*</span><span class="sc">\\</span><span class="st">)"</span>, <span class="st">""</span>, reliability_type)) <span class="sc">%&gt;%</span></span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="at">pair_task =</span> dataset_labels[dataset], <span class="at">source =</span> <span class="st">"IRW, test-retest (Enkavi, mean 111d)"</span>,</span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a>            condition, <span class="at">reliability =</span> reliability_est)</span>
-<span id="cb7-17"><a href="#cb7-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-18"><a href="#cb7-18" aria-hidden="true" tabindex="-1"></a>hedge_tbl <span class="ot">&lt;-</span> hedge_ref <span class="sc">%&gt;%</span></span>
-<span id="cb7-19"><a href="#cb7-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(measure <span class="sc">==</span> <span class="st">"rt"</span>) <span class="sc">%&gt;%</span></span>
-<span id="cb7-20"><a href="#cb7-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="at">pair_task =</span> task, <span class="at">source =</span> <span class="st">"Hedge et al. (2018), test-retest"</span>,</span>
-<span id="cb7-21"><a href="#cb7-21" aria-hidden="true" tabindex="-1"></a>            <span class="at">condition =</span> condition, <span class="at">reliability =</span> icc_mean)</span>
-<span id="cb7-22"><a href="#cb7-22" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-23"><a href="#cb7-23" aria-hidden="true" tabindex="-1"></a>pairing <span class="ot">&lt;-</span> <span class="fu">tribble</span>(</span>
-<span id="cb7-24"><a href="#cb7-24" aria-hidden="true" tabindex="-1"></a>  <span class="sc">~</span>pair_task_irw,                     <span class="sc">~</span>pair_task_hedge,</span>
-<span id="cb7-25"><a href="#cb7-25" aria-hidden="true" tabindex="-1"></a>  <span class="st">"Hearts &amp; Flowers (mixed-trial)"</span>,   <span class="st">"Flanker"</span>,</span>
-<span id="cb7-26"><a href="#cb7-26" aria-hidden="true" tabindex="-1"></a>  <span class="st">"Hearts &amp; Flowers (blocked)"</span>,       <span class="st">"Flanker"</span>,</span>
-<span id="cb7-27"><a href="#cb7-27" aria-hidden="true" tabindex="-1"></a>  <span class="st">"Alcohol Stroop"</span>,                   <span class="st">"Stroop"</span>,</span>
-<span id="cb7-28"><a href="#cb7-28" aria-hidden="true" tabindex="-1"></a>  <span class="st">"Stop-signal (OSARI)"</span>,              <span class="st">"Stop-signal"</span>,</span>
-<span id="cb7-29"><a href="#cb7-29" aria-hidden="true" tabindex="-1"></a>  <span class="st">"Stroop (Enkavi et al. 2019)"</span>,      <span class="st">"Stroop"</span>,</span>
-<span id="cb7-30"><a href="#cb7-30" aria-hidden="true" tabindex="-1"></a>  <span class="st">"ANT Flanker (Enkavi et al. 2019)"</span>, <span class="st">"Flanker"</span></span>
-<span id="cb7-31"><a href="#cb7-31" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb7-32"><a href="#cb7-32" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-33"><a href="#cb7-33" aria-hidden="true" tabindex="-1"></a>comparison <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(irw_split, irw_retest_hf, irw_retest_enkavi) <span class="sc">%&gt;%</span></span>
-<span id="cb7-34"><a href="#cb7-34" aria-hidden="true" tabindex="-1"></a>  <span class="fu">inner_join</span>(pairing, <span class="at">by =</span> <span class="fu">c</span>(<span class="st">"pair_task"</span> <span class="ot">=</span> <span class="st">"pair_task_irw"</span>)) <span class="sc">%&gt;%</span></span>
-<span id="cb7-35"><a href="#cb7-35" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="st">`</span><span class="at">Lab task analogue</span><span class="st">`</span> <span class="ot">=</span> pair_task_hedge, <span class="st">`</span><span class="at">IRW dataset</span><span class="st">`</span> <span class="ot">=</span> pair_task,</span>
-<span id="cb7-36"><a href="#cb7-36" aria-hidden="true" tabindex="-1"></a>            <span class="at">Source =</span> source, <span class="at">Condition =</span> tools<span class="sc">::</span><span class="fu">toTitleCase</span>(condition),</span>
-<span id="cb7-37"><a href="#cb7-37" aria-hidden="true" tabindex="-1"></a>            <span class="at">Reliability =</span> <span class="fu">round</span>(reliability, <span class="dv">2</span>)) <span class="sc">%&gt;%</span></span>
-<span id="cb7-38"><a href="#cb7-38" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bind_rows</span>(</span>
-<span id="cb7-39"><a href="#cb7-39" aria-hidden="true" tabindex="-1"></a>    hedge_tbl <span class="sc">%&gt;%</span></span>
-<span id="cb7-40"><a href="#cb7-40" aria-hidden="true" tabindex="-1"></a>      <span class="fu">transmute</span>(<span class="st">`</span><span class="at">Lab task analogue</span><span class="st">`</span> <span class="ot">=</span> pair_task, <span class="st">`</span><span class="at">IRW dataset</span><span class="st">`</span> <span class="ot">=</span> <span class="st">"—"</span>,</span>
-<span id="cb7-41"><a href="#cb7-41" aria-hidden="true" tabindex="-1"></a>                <span class="at">Source =</span> source, <span class="at">Condition =</span> tools<span class="sc">::</span><span class="fu">toTitleCase</span>(condition),</span>
-<span id="cb7-42"><a href="#cb7-42" aria-hidden="true" tabindex="-1"></a>                <span class="at">Reliability =</span> <span class="fu">round</span>(reliability, <span class="dv">2</span>))</span>
-<span id="cb7-43"><a href="#cb7-43" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
-<span id="cb7-44"><a href="#cb7-44" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="st">`</span><span class="at">Lab task analogue</span><span class="st">`</span>, Source, <span class="fu">factor</span>(Condition, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"Congruent"</span>, <span class="st">"Incongruent"</span>, <span class="st">"Difference"</span>, <span class="st">"Go"</span>, <span class="st">"Ssrt"</span>)))</span>
-<span id="cb7-45"><a href="#cb7-45" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-46"><a href="#cb7-46" aria-hidden="true" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(comparison)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>irw_split <span class="ot">&lt;-</span> results <span class="sc">%&gt;%</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(trial_floor <span class="sc">==</span> <span class="dv">5</span>, measure <span class="sc">==</span> <span class="st">"rt"</span>, <span class="sc">!</span><span class="fu">grepl</span>(<span class="st">"test-retest"</span>, reliability_type),</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>         dataset <span class="sc">!=</span> <span class="st">"matzke_stopsignal_2019"</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="at">pair_task =</span> dataset_labels[dataset], <span class="at">source =</span> <span class="st">"IRW, split-half"</span>,</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>            <span class="at">condition =</span> reliability_type, <span class="at">reliability =</span> reliability_est)</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>irw_retest_hf <span class="ot">&lt;-</span> results <span class="sc">%&gt;%</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(measure <span class="sc">==</span> <span class="st">"rt"</span>, <span class="fu">grepl</span>(<span class="st">"test-retest: PLUS Fall"</span>, reliability_type)) <span class="sc">%&gt;%</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">condition =</span> <span class="fu">sub</span>(<span class="st">" </span><span class="sc">\\</span><span class="st">(test-retest.*</span><span class="sc">\\</span><span class="st">)"</span>, <span class="st">""</span>, reliability_type)) <span class="sc">%&gt;%</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="at">pair_task =</span> dataset_labels[dataset], <span class="at">source =</span> <span class="st">"IRW, test-retest (H&amp;F, Fall-&gt;Spring)"</span>,</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>            condition, <span class="at">reliability =</span> reliability_est)</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>irw_retest_enkavi <span class="ot">&lt;-</span> results <span class="sc">%&gt;%</span></span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(measure <span class="sc">==</span> <span class="st">"rt"</span>, <span class="fu">grepl</span>(<span class="st">"test-retest: 1 -&gt; 2"</span>, reliability_type)) <span class="sc">%&gt;%</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">condition =</span> <span class="fu">sub</span>(<span class="st">" </span><span class="sc">\\</span><span class="st">(test-retest.*</span><span class="sc">\\</span><span class="st">)"</span>, <span class="st">""</span>, reliability_type)) <span class="sc">%&gt;%</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="at">pair_task =</span> dataset_labels[dataset], <span class="at">source =</span> <span class="st">"IRW, test-retest (Enkavi, mean 111d)"</span>,</span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>            condition, <span class="at">reliability =</span> reliability_est)</span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-19"><a href="#cb8-19" aria-hidden="true" tabindex="-1"></a>hedge_tbl <span class="ot">&lt;-</span> hedge_ref <span class="sc">%&gt;%</span></span>
+<span id="cb8-20"><a href="#cb8-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(measure <span class="sc">==</span> <span class="st">"rt"</span>, task <span class="sc">!=</span> <span class="st">"Stop-signal"</span>, task <span class="sc">!=</span> <span class="st">"Go/No-go"</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb8-21"><a href="#cb8-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="at">pair_task =</span> task, <span class="at">source =</span> <span class="st">"Hedge et al. (2018), test-retest"</span>,</span>
+<span id="cb8-22"><a href="#cb8-22" aria-hidden="true" tabindex="-1"></a>            <span class="at">condition =</span> condition, <span class="at">reliability =</span> icc_mean)</span>
+<span id="cb8-23"><a href="#cb8-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-24"><a href="#cb8-24" aria-hidden="true" tabindex="-1"></a>pairing <span class="ot">&lt;-</span> <span class="fu">tribble</span>(</span>
+<span id="cb8-25"><a href="#cb8-25" aria-hidden="true" tabindex="-1"></a>  <span class="sc">~</span>pair_task_irw,                     <span class="sc">~</span>pair_task_hedge,</span>
+<span id="cb8-26"><a href="#cb8-26" aria-hidden="true" tabindex="-1"></a>  <span class="st">"Hearts &amp; Flowers (mixed-trial)"</span>,   <span class="st">"Flanker"</span>,</span>
+<span id="cb8-27"><a href="#cb8-27" aria-hidden="true" tabindex="-1"></a>  <span class="st">"Hearts &amp; Flowers (blocked)"</span>,       <span class="st">"Flanker"</span>,</span>
+<span id="cb8-28"><a href="#cb8-28" aria-hidden="true" tabindex="-1"></a>  <span class="st">"Alcohol Stroop"</span>,                   <span class="st">"Stroop"</span>,</span>
+<span id="cb8-29"><a href="#cb8-29" aria-hidden="true" tabindex="-1"></a>  <span class="st">"Stroop (Enkavi et al. 2019)"</span>,      <span class="st">"Stroop"</span>,</span>
+<span id="cb8-30"><a href="#cb8-30" aria-hidden="true" tabindex="-1"></a>  <span class="st">"ANT Flanker (Enkavi et al. 2019)"</span>, <span class="st">"Flanker"</span></span>
+<span id="cb8-31"><a href="#cb8-31" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb8-32"><a href="#cb8-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-33"><a href="#cb8-33" aria-hidden="true" tabindex="-1"></a>comparison <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(irw_split, irw_retest_hf, irw_retest_enkavi) <span class="sc">%&gt;%</span></span>
+<span id="cb8-34"><a href="#cb8-34" aria-hidden="true" tabindex="-1"></a>  <span class="fu">inner_join</span>(pairing, <span class="at">by =</span> <span class="fu">c</span>(<span class="st">"pair_task"</span> <span class="ot">=</span> <span class="st">"pair_task_irw"</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb8-35"><a href="#cb8-35" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="st">`</span><span class="at">Lab task analogue</span><span class="st">`</span> <span class="ot">=</span> pair_task_hedge, <span class="st">`</span><span class="at">IRW dataset</span><span class="st">`</span> <span class="ot">=</span> pair_task,</span>
+<span id="cb8-36"><a href="#cb8-36" aria-hidden="true" tabindex="-1"></a>            <span class="at">Source =</span> source, <span class="at">Condition =</span> tools<span class="sc">::</span><span class="fu">toTitleCase</span>(condition),</span>
+<span id="cb8-37"><a href="#cb8-37" aria-hidden="true" tabindex="-1"></a>            <span class="at">Reliability =</span> <span class="fu">round</span>(reliability, <span class="dv">2</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb8-38"><a href="#cb8-38" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bind_rows</span>(</span>
+<span id="cb8-39"><a href="#cb8-39" aria-hidden="true" tabindex="-1"></a>    hedge_tbl <span class="sc">%&gt;%</span></span>
+<span id="cb8-40"><a href="#cb8-40" aria-hidden="true" tabindex="-1"></a>      <span class="fu">transmute</span>(<span class="st">`</span><span class="at">Lab task analogue</span><span class="st">`</span> <span class="ot">=</span> pair_task, <span class="st">`</span><span class="at">IRW dataset</span><span class="st">`</span> <span class="ot">=</span> <span class="st">"—"</span>,</span>
+<span id="cb8-41"><a href="#cb8-41" aria-hidden="true" tabindex="-1"></a>                <span class="at">Source =</span> source, <span class="at">Condition =</span> tools<span class="sc">::</span><span class="fu">toTitleCase</span>(condition),</span>
+<span id="cb8-42"><a href="#cb8-42" aria-hidden="true" tabindex="-1"></a>                <span class="at">Reliability =</span> <span class="fu">round</span>(reliability, <span class="dv">2</span>))</span>
+<span id="cb8-43"><a href="#cb8-43" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">%&gt;%</span></span>
+<span id="cb8-44"><a href="#cb8-44" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(<span class="st">`</span><span class="at">Lab task analogue</span><span class="st">`</span>, Source, <span class="fu">factor</span>(Condition, <span class="at">levels =</span> <span class="fu">c</span>(<span class="st">"Congruent"</span>, <span class="st">"Incongruent"</span>, <span class="st">"Difference"</span>, <span class="st">"Go"</span>, <span class="st">"Ssrt"</span>)))</span>
+<span id="cb8-45"><a href="#cb8-45" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-46"><a href="#cb8-46" aria-hidden="true" tabindex="-1"></a>knitr<span class="sc">::</span><span class="fu">kable</span>(comparison)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div id="tbl-hedge-comparison" class="cell quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-hedge-comparison-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;4: IRW reliability estimates alongside Hedge et al.&nbsp;(2018) Table 1 point estimates (mean of their Studies 1 &amp; 2). NA where a comparable estimate wasn’t computed (e.g.&nbsp;no test-retest wave for a dataset).
+Table&nbsp;5: IRW reliability estimates alongside Hedge et al.&nbsp;(2018) Table 1 point estimates (mean of their Studies 1 &amp; 2), for the six congruency-style tasks. NA where a comparable estimate wasn’t computed (e.g.&nbsp;no test-retest wave for a dataset). Stop-signal is shown separately below.
 </figcaption>
 <div aria-describedby="tbl-hedge-comparison-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <div class="cell-output-display">
@@ -1411,48 +1490,6 @@ Table&nbsp;4: IRW reliability estimates alongside Hedge et al.&nbsp;(2018) Table
 <td style="text-align: right;">0.07</td>
 </tr>
 <tr class="even">
-<td style="text-align: left;">Go/No-go</td>
-<td style="text-align: left;">—</td>
-<td style="text-align: left;">Hedge et al.&nbsp;(2018), test-retest</td>
-<td style="text-align: left;">Go</td>
-<td style="text-align: right;">0.69</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">Stop-signal</td>
-<td style="text-align: left;">—</td>
-<td style="text-align: left;">Hedge et al.&nbsp;(2018), test-retest</td>
-<td style="text-align: left;">Go</td>
-<td style="text-align: right;">0.46</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">Stop-signal</td>
-<td style="text-align: left;">—</td>
-<td style="text-align: left;">Hedge et al.&nbsp;(2018), test-retest</td>
-<td style="text-align: left;">Ssrt</td>
-<td style="text-align: right;">0.42</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">Stop-signal</td>
-<td style="text-align: left;">Stop-signal (OSARI)</td>
-<td style="text-align: left;">IRW, split-half</td>
-<td style="text-align: left;">Congruent</td>
-<td style="text-align: right;">1.00</td>
-</tr>
-<tr class="even">
-<td style="text-align: left;">Stop-signal</td>
-<td style="text-align: left;">Stop-signal (OSARI)</td>
-<td style="text-align: left;">IRW, split-half</td>
-<td style="text-align: left;">Incongruent</td>
-<td style="text-align: right;">0.99</td>
-</tr>
-<tr class="odd">
-<td style="text-align: left;">Stop-signal</td>
-<td style="text-align: left;">Stop-signal (OSARI)</td>
-<td style="text-align: left;">IRW, split-half</td>
-<td style="text-align: left;">Difference</td>
-<td style="text-align: right;">0.92</td>
-</tr>
-<tr class="even">
 <td style="text-align: left;">Stroop</td>
 <td style="text-align: left;">—</td>
 <td style="text-align: left;">Hedge et al.&nbsp;(2018), test-retest</td>
@@ -1543,25 +1580,25 @@ Table&nbsp;4: IRW reliability estimates alongside Hedge et al.&nbsp;(2018) Table
 </figure>
 </div>
 </div>
-<p>A few things stand out. First, the <em>direction</em> of the effect (condition reliability &gt;&gt; difference-score reliability) matches Hedge et al.&nbsp;in every task pair except the stop-signal analogue, for the reasons discussed above. Second, our absolute IRW split-half numbers for individual conditions run higher than Hedge et al.’s test-retest ICCs — expected, since split-half reliability has no opportunity for between-session instability to erode it, while ICC test-retest does. Third, the Enkavi test-retest rows are the closest design match to Hedge et al.’s own true-test-retest methodology among our datasets, but don’t line up on magnitude in a consistent direction: the Enkavi Flanker test-retest difference-score reliability (.34) is closer to Hedge et al.’s Flanker ICC (.49) than Enkavi’s own split-half estimate (.69) is, while for Stroop it’s the reverse — Enkavi’s split-half estimate (.65) is closer to Hedge et al.’s Stroop ICC (.63) than Enkavi’s own test-retest estimate (.44) is. We read this as a caution against over-interpreting small magnitude differences across these comparisons: different reliability estimators (Pearson split-half here vs. Hedge et al.’s two-way random-effects ICC), samples, and retest intervals all contribute noise to the exact numbers, even when the qualitative pattern (component &gt;&gt; difference) is consistent throughout.</p>
+<p>A few things stand out. First, the <em>direction</em> of the effect (condition reliability &gt;&gt; difference-score reliability) matches Hedge et al.&nbsp;in every task pair shown here (the stop-signal analogue, excluded from this table, runs the opposite way — see <a href="#stop-signal-a-structural-comparison">Stop-signal: a structural comparison</a>). Second, our absolute IRW split-half numbers for individual conditions run higher than Hedge et al.’s test-retest ICCs — expected, since split-half reliability has no opportunity for between-session instability to erode it, while ICC test-retest does. Third, the Enkavi test-retest rows are the closest design match to Hedge et al.’s own true-test-retest methodology among our datasets, but don’t line up on magnitude in a consistent direction: the Enkavi Flanker test-retest difference-score reliability (.34) is closer to Hedge et al.’s Flanker ICC (.49) than Enkavi’s own split-half estimate (.69) is, while for Stroop it’s the reverse — Enkavi’s split-half estimate (.65) is closer to Hedge et al.’s Stroop ICC (.63) than Enkavi’s own test-retest estimate (.44) is. We read this as a caution against over-interpreting small magnitude differences across these comparisons: different reliability estimators (Pearson split-half here vs. Hedge et al.’s two-way random-effects ICC), samples, and retest intervals all contribute noise to the exact numbers, even when the qualitative pattern (component &gt;&gt; difference) is consistent throughout.</p>
 </section>
 <section id="trial-count-sensitivity" class="level3">
 <h3 class="anchored" data-anchor-id="trial-count-sensitivity">Trial-count sensitivity</h3>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>results <span class="sc">%&gt;%</span></span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(measure <span class="sc">==</span> <span class="st">"rt"</span>, reliability_type <span class="sc">==</span> <span class="st">"difference"</span>, <span class="sc">!</span><span class="fu">grepl</span>(<span class="st">"test-retest"</span>, reliability_type)) <span class="sc">%&gt;%</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="at">Dataset =</span> dataset_labels[dataset], <span class="st">`</span><span class="at">Trial floor</span><span class="st">`</span> <span class="ot">=</span> trial_floor,</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">N respondents</span><span class="st">`</span> <span class="ot">=</span> n_respondents,</span>
-<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">Reliability (mean ± SD)</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">sprintf</span>(<span class="st">"%.2f ± %.2f"</span>, reliability_est, reliability_sd)) <span class="sc">%&gt;%</span></span>
-<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(Dataset, <span class="st">`</span><span class="at">Trial floor</span><span class="st">`</span>) <span class="sc">%&gt;%</span></span>
-<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>results <span class="sc">%&gt;%</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(measure <span class="sc">==</span> <span class="st">"rt"</span>, reliability_type <span class="sc">==</span> <span class="st">"difference"</span>, <span class="sc">!</span><span class="fu">grepl</span>(<span class="st">"test-retest"</span>, reliability_type)) <span class="sc">%&gt;%</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">transmute</span>(<span class="at">Dataset =</span> dataset_labels[dataset], <span class="st">`</span><span class="at">Trial floor</span><span class="st">`</span> <span class="ot">=</span> trial_floor,</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">N respondents</span><span class="st">`</span> <span class="ot">=</span> n_respondents,</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>            <span class="st">`</span><span class="at">Reliability (mean ± SD)</span><span class="st">`</span> <span class="ot">=</span> <span class="fu">sprintf</span>(<span class="st">"%.2f ± %.2f"</span>, reliability_est, reliability_sd)) <span class="sc">%&gt;%</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(Dataset, <span class="st">`</span><span class="at">Trial floor</span><span class="st">`</span>) <span class="sc">%&gt;%</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div id="tbl-sensitivity" class="cell quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-tbl figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-sensitivity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Table&nbsp;5: Split-half difference-score RT reliability at trial floors of 5 vs.&nbsp;10 trials/person/condition.
+Table&nbsp;6: Split-half difference-score RT reliability at trial floors of 5 vs.&nbsp;10 trials/person/condition.
 </figcaption>
 <div aria-describedby="tbl-sensitivity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 <div class="cell-output-display">
@@ -1677,7 +1714,7 @@ Table&nbsp;5: Split-half difference-score RT reliability at trial floors of 5 vs
 </section>
 <section id="discussion" class="level2">
 <h2 class="anchored" data-anchor-id="discussion">Discussion</h2>
-<p>The reliability paradox replicates in IRW cognitive-control data. Across six independent tasks (Hearts &amp; Flowers, alcohol Stroop, a stop-signal task, and the Enkavi et al.&nbsp;2019 Stroop, Simon, and ANT Flanker tasks) spanning split-half and true test-retest designs in both a developmental and a stable-adult sample, individual congruent and incongruent conditions are consistently far more reliable than the within-subject difference score built from them. The mechanism is exactly the one <span class="citation" data-cites="hedge2018reliability">Hedge et al. (<a href="#ref-hedge2018reliability" role="doc-biblioref">2018</a>)</span> describe: the two conditions are highly correlated across people, so most of their between-person variance cancels in the subtraction (<a href="#eq-vardiff" class="quarto-xref">Equation&nbsp;1</a>), while trial-level noise does not. <span class="citation" data-cites="enkavi2019">Enkavi et al. (<a href="#ref-enkavi2019" role="doc-biblioref">2019</a>)</span>’s own analysis of a much broader task battery reaches the same conclusion by a different route, which is reassuring convergent evidence that this isn’t an artifact of our specific pipeline.</p>
+<p>The reliability paradox replicates in IRW cognitive-control data — as an <strong>attenuation of variable size, not a uniform collapse to zero</strong>. Across six independent tasks (Hearts &amp; Flowers, alcohol Stroop, a stop-signal task, and the Enkavi et al.&nbsp;2019 Stroop, Simon, and ANT Flanker tasks) spanning split-half and true test-retest designs in both a developmental and a stable-adult sample, individual congruent and incongruent conditions are consistently far more reliable than the within-subject difference score built from them, but several of those difference scores — the blocked H&amp;F design, the Enkavi Simon task, and (most strikingly) the Enkavi Stroop and ANT Flanker tasks — retain moderate reliability rather than collapsing outright. The mechanism is exactly the one <span class="citation" data-cites="hedge2018reliability">Hedge et al. (<a href="#ref-hedge2018reliability" role="doc-biblioref">2018</a>)</span> describe: the two conditions are highly correlated across people, so most of their between-person variance cancels in the subtraction (<a href="#eq-vardiff" class="quarto-xref">Equation&nbsp;1</a>), while trial-level noise does not. <span class="citation" data-cites="enkavi2019">Enkavi et al. (<a href="#ref-enkavi2019" role="doc-biblioref">2019</a>)</span>’s own analysis of a much broader task battery reaches the same conclusion by a different route, which is reassuring convergent evidence that this isn’t an artifact of our specific pipeline.</p>
 <p><strong>The size of the collapse varies far more than its direction.</strong> Every congruency-style dataset here (i.e., excluding the stop-signal exception) shows the qualitative pattern, but RT difference-score reliability spans roughly .04 to .69 depending on the task, sample, and design — not a fixed “paradox constant.” The Enkavi tasks, run in a larger, adult, Amazon Mechanical Turk sample, generally retained more difference-score reliability than the mixed-trial H&amp;F or alcohol Stroop datasets did, though we can’t cleanly separate sample effects from task effects with only one dataset per task. Researchers relying on a congruency-style contrast score for individual-differences work should treat this as a genuinely task-and-sample-specific empirical question, not something to be predicted from task family alone.</p>
 <p><strong>This is a property of difference-score designs, not a general statement about IRW data.</strong> Most IRW tables are fixed-item-bank IRT designs, where ability is estimated from many items measuring one construct rather than subtracted between two conditions — the mechanism demonstrated here doesn’t apply to them, and this vignette should not be read as evidence that IRW data are broadly unreliable for individual-differences work. It applies specifically to trial-level tasks that measure an effect as a within-subject contrast between two positively-correlated conditions, which in the current IRW warehouse means Hearts &amp; Flowers, the alcohol Stroop, the matzke-etal-2019 stop-signal task, and the enkavi_2019_stroop, enkavi_2019_simon, and enkavi_2019_ant_flanker tasks (plus, presumably, any future task with the same congruent/incongruent or go/no-go structure — including the five other Enkavi et al.&nbsp;2019 tasks noted in Methods as candidates for a future extension).</p>
 <p><strong>The blocked-vs-mixed-trial finding is worth follow-up.</strong> That H&amp;F’s blocked design retains more difference-score reliability than its trial-intermixed mixed block is consistent with the variance-shrinkage mechanism, but we only have one task to check it in — none of the Enkavi tasks offer a blocked/mixed contrast of the same kind. If it holds up in other tasks, it would suggest a practical mitigation for researchers who need an individual-differences difference score badly enough to trade away some ecological validity: block, don’t intermix.</p>
@@ -1686,11 +1723,11 @@ Table&nbsp;5: Split-half difference-score RT reliability at trial floors of 5 vs
 <section id="reproducibility" class="level2">
 <h2 class="anchored" data-anchor-id="reproducibility">Reproducibility</h2>
 <p>Results were computed on July 17, 2026. To regenerate:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Re-run the compute script (from the project root)</span></span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="st">"vignettes/hf_reliability_compute.R"</span>)</span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Re-render this page</span></span>
-<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>quarto<span class="sc">::</span><span class="fu">quarto_render</span>(<span class="st">"vignettes/hf_reliability_paradox.qmd"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Re-run the compute script (from the project root)</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="st">"vignettes/hf_reliability_compute.R"</span>)</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Re-render this page</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>quarto<span class="sc">::</span><span class="fu">quarto_render</span>(<span class="st">"vignettes/hf_reliability_paradox.qmd"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <hr>
 </section>
 <section id="references" class="level2">
