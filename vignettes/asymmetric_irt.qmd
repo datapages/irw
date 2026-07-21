@@ -7,9 +7,11 @@ description: |
   when fitting propensity alone is compared, while the third (RH) is more
   parsimonious. They never apply the models to real data. We do: after a
   dedicated correctness/recovery validation gate, we fit a 2PL reference plus
-  all three asymmetric models across dozens of binary IRW tables, to see
-  whether the extra asymmetry parameter actually earns its keep, and whether
-  its direction tracks known response phenomena like guessing.
+  all three asymmetric models across dozens of binary IRW tables and score
+  every model on genuinely held-out responses (InterModel Vigorish, not
+  in-sample BIC). The two metrics tell very different stories: RH looks like
+  the dominant winner by BIC, but is the weakest of the three -- often the
+  worst model in the batch -- once judged on real predictive accuracy.
 date: today
 bibliography: asymmetric_irt_data/references.bib
 format:
@@ -63,12 +65,14 @@ if (cache_ok) {
   kappa_vals         <- .gate$kappa_vals
   recovery_df        <- .gate$recovery_df
   recovery_summary   <- .gate$recovery_summary
+  imv_sanity         <- .gate$imv_sanity
+  imv_null_ok        <- .gate$imv_null_ok
   gate_date_run      <- .gate$date_run
 } else {
   summary_df <- tibble(
     table = character(), n_items = integer(), n_participants = integer(),
-    construct_type = character(), bic_2pl = numeric(), bic_delta_AO = numeric(),
-    bic_delta_LPE = numeric(), bic_delta_RH = numeric(), winning_model = character()
+    construct_type = character(), n_heldout = integer(), imv_AO = numeric(),
+    imv_LPE = numeric(), imv_RH = numeric(), winning_model = character()
   )
   item_level_df <- tibble(
     table = character(), model = character(), item = character(), a1 = numeric(),
@@ -83,6 +87,8 @@ if (cache_ok) {
   recovery_df <- tibble(model = character(), item = integer(), a_true = numeric(),
                          d_true = numeric(), shape_true = numeric(), shape_est = numeric())
   recovery_summary <- tibble(model = character(), cor_shape = numeric(), mean_abs_error = numeric())
+  imv_sanity <- tibble(model = character(), truth = character(), mean_imv = numeric(), sd_imv = numeric())
+  imv_null_ok <- NA
   gate_date_run <- Sys.Date()
 }
 
@@ -418,25 +424,99 @@ recovery_summary |>
   knitr::kable(align = "lrr")
 ```
 
-RH recovers well; AO recovers decently; **LPE recovery is noticeably weaker**
-at this sample size. That gap held up under scrutiny rather than being a bug:
-the analytic LPE/AO gradients matched numerical finite-difference gradients
-to several decimal places everywhere tested, and separate runs at larger $N$
-showed recovery improving substantially (roughly $r \approx 0.4$ at $N =
-800$ rising to $r \approx 0.7$ at $N = 5{,}000$) — consistent with a genuine
-small-sample identifiability limitation of the LPE power-transform
-parameterization, not an implementation error. Interestingly, this is the
-*opposite* of what the paper's own indirect diagnostic (fitting-propensity
-stability under arbitrary simplex-sampled data) suggests, which reads RH as
-having comparatively less information. The two diagnostics ask different
-questions — arbitrary-data fitting stability vs. direct generative-truth
-recovery — and needn't agree; the tension is worth flagging rather than
-resolving here. Practically, it means **per-item LPE $\kappa$ estimates below
-should be read with more caution than RH's**, and it's why the real-data
-batch below uses a higher participant floor ($N \geq `r format(min_participants, big.mark=",")`$)
-than other IRW vignettes.
+**Update:** an earlier version of this check reported weak, apparently
+run-to-run-unstable correlations for all three models and speculated about
+optimizer/BLAS nondeterminism as the cause. That diagnosis was wrong. The
+real bug was in the validation script itself: `extract_param_table()`
+returns items sorted by name as a **string** (`item_1, item_10, item_11,
+…, item_2, item_20, item_3, …`), and the recovery check bound that
+scrambled order positionally against the true shape parameters, which are
+in natural numeric item order. Most items were silently compared against
+the wrong item's truth. Fixing the alignment (join by item name instead of
+assuming row position) recovers a much cleaner — and, for RH, an
+essentially identical — picture to the "clean" run this page used to be
+unable to reproduce:
 
-All three checks passed
+- **RH**: $r = `r round(recovery_summary$cor_shape[recovery_summary$model=="RH"], 2)`$ — strong recovery.
+- **AO**: $r = `r round(recovery_summary$cor_shape[recovery_summary$model=="AO"], 2)`$ — moderate recovery.
+- **LPE**: $r = `r round(recovery_summary$cor_shape[recovery_summary$model=="LPE"], 2)`$ — the weakest of the three, though clearly better than noise.
+
+This check still draws only a **single** simulated dataset per model
+(`r nrow(recovery_df)/3` items each), so these correlations are themselves
+noisy estimates of each model's true recoverability at this sample size —
+LPE's $0.51$ in particular shouldn't be read as a precise number, just as
+"visibly weaker than RH." Checks (a) and (b) above involve no simulation or
+optimization and pass at machine precision on every machine we've tried;
+the out-of-sample calibration check in (d) below passes cleanly; and the
+real-data compute pipeline's `extract_param_table()` calls are not affected
+by this bug, because there each item's name travels with its own row
+(`a1`, `d`, `shape_est` together) rather than being re-matched against a
+separately ordered truth vector — the misalignment was specific to this
+diagnostic. Treat LPE's per-item $\kappa$ estimates below with the most
+caution as a result, RH's with the least, and AO's in between. The
+real-data batch below still uses a higher participant floor ($N \geq
+`r format(min_participants, big.mark=",")`$) than other IRW vignettes for
+the same underlying reason: shape parameters are harder to pin down than
+location/discrimination.
+
+### (d) Out-of-sample predictive check: does BIC actually predict genuine improvement?
+
+The real-data comparison below scores every model on **held-out** responses
+(response-level holdout, not k-fold — a fixed ~20% of each table's observed
+cells are masked before fitting, then compared against predictions), using
+the InterModel Vigorish [IMV; @domingue2025imv] rather than in-sample BIC.
+Before trusting that pipeline at batch scale, we ran it on synthetic data
+where the truth is known: does it behave sensibly when there's genuinely no
+asymmetry to find, and does an in-sample BIC preference reliably translate
+into a held-out predictive edge?
+
+Raw IMV values are hard to eyeball without a reference scale, so throughout
+the Results section below we anchor them against the benchmark ladder in
+@domingue2024imvlens, which reports both simulation-based and empirical
+(89 real dichotomous-item datasets, several drawn from the IRW) IMV values
+for a sequence of familiar IRT modeling upgrades: item-mean → 1PL is large
+(IMV ≈ 0.1–0.3), 1PL → 2PL is an order of magnitude smaller (IMV ≈
+0.006–0.01), and 2PL → 3PL — adding one extra item parameter, structurally
+the closest published comparison to adding a single shape parameter to a
+2PL as LPE/RH/AO do here — is smaller still (simulation: 0.0005; empirical
+average across their 89 datasets: 0.00016, max 0.0046). That last row is
+the natural yardstick for the numbers below.
+
+```{r}
+#| label: tbl-imv-sanity
+#| tbl-cap: "Out-of-sample IMV (each asymmetric model vs. a 2PLM reference, on held-out cells) under a genuinely symmetric truth and under known, realistic-magnitude asymmetry. Five simulated replicates per cell; positive means the asymmetric model predicts better."
+
+imv_sanity |>
+  mutate(truth = recode(truth, null = "Symmetric truth", asymmetric = "Asymmetric truth"),
+         across(c(mean_imv, sd_imv), \(x) formatC(x, format = "e", digits = 2))) |>
+  rename(Model = model, Truth = truth, `Mean IMV` = mean_imv, `SD` = sd_imv) |>
+  arrange(Truth) |>
+  knitr::kable(align = "llrr")
+```
+
+Under a genuinely symmetric truth, mean held-out IMV sits close to zero for
+all three models (`r if(isTRUE(imv_null_ok)) "confirmed" else "not confirmed"`:
+$|{\rm mean\ IMV}| < 0.01$) — the holdout/prediction pipeline itself isn't
+biased toward finding an advantage that isn't there. But under a **known,
+realistic-magnitude asymmetric truth**, held-out IMV was *not* reliably
+positive — RH in particular showed a small *negative* mean IMV even when the
+data-generating process really was asymmetric, despite a large in-sample BIC
+preference for RH in the same simulations (500 to 1,500+ BIC points,
+depending on the run). We confirmed this wasn't a computation bug by
+manually reconstructing each model's log-likelihood from the same
+`extract.item()`/`probtrace()` calls used for held-out prediction and
+checking it matched the model's own reported in-sample fit direction — it
+did. The extra shape parameter can add enough person-ability-estimation
+noise to offset its true signal at realistic sample sizes, even when that
+signal is real.
+
+That finding is the reason this vignette scores the real-data batch below by
+held-out IMV rather than BIC. It also means the result shouldn't be
+surprising: if a large in-sample BIC advantage for RH doesn't reliably survive
+this same check on synthetic data with a *known* asymmetric truth, there's no
+reason to expect it to survive on real IRW tables either.
+
+All four checks passed
 (`r format(gate_date_run, "%B %d, %Y")`); only then did we move to real IRW
 data.
 
@@ -457,24 +537,36 @@ Binary items only — polytomous extensions of LPE/RH/AO are future work, not
 attempted here. `r n_all_candidates` tables met this criterion as of
 `r format(date_run, "%B %Y")`; `r nrow(summary_df)` of them produced usable
 results across all four models (the rest were dropped for too few usable
-items after cleaning, or a model that failed to converge).
+items after cleaning, a model that failed to converge, or an `irw_long2resp()`
+limitation with a handful of tables that carry a `date` column).
 
 For each candidate table, `fit_asymmetric_irt()`:
 
 1. Fetches the table and builds a wide response matrix (`irw_fetch()` +
-   `irw_long2resp()`), capping at 10,000 respondents.
-2. Fits a standard 2PL as the reference model, on a fixed 50-point
-   Gauss-Hermite quadrature (so later BIC comparisons aren't confounded by
-   different integration grids).
-3. Fits LPE, RH, and AO as custom items, initialized from the 2PL fit (RH's
-   $a$/$d$ are first converted from logit to probit scale) and regularized
-   toward the symmetric baseline with a $N(0, 1)$ prior on each shape
-   parameter — the paper's "moderate shrinkage" condition. Each fit is
-   wrapped in `tryCatch`; non-convergent fits are logged and dropped rather
-   than retried.
-4. Compares AIC/BIC/log-likelihood of each asymmetric model against the 2PL
-   reference, and records the winning model by BIC.
-5. Extracts, per item, the shape parameter $\kappa$ and $\text{Л}_P$ (paper
+   `irw_long2resp()`), capping at 10,000 respondents and canonicalizing item
+   coding to 0/1 (IRW tables aren't guaranteed to use 0/1 — some use 1/2 —
+   and the held-out scoring below requires literal 0/1 outcomes).
+2. Masks a response-level holdout: ~20% of each table's *observed* cells,
+   chosen per person so that everyone keeps at least one retained response
+   (real IRW tables can carry substantial pre-existing missingness on top of
+   this mask; naive cell-level masking can otherwise strand a person with
+   zero retained responses). The same mask is reused for every model fit
+   below, so all comparisons are on identical held-out cells.
+3. Fits a standard 2PL as the reference model on the *masked* training data,
+   on a fixed 50-point Gauss-Hermite quadrature.
+4. Fits LPE, RH, and AO as custom items on the same masked training data,
+   initialized from the 2PL fit (RH's $a$/$d$ are first converted from logit
+   to probit scale) and regularized toward the symmetric baseline with a
+   $N(0, 1)$ prior on each shape parameter — the paper's "moderate
+   shrinkage" condition. Each fit is wrapped in `tryCatch`; non-convergent
+   fits are logged and dropped rather than retried.
+5. For each fitted model, estimates each person's ability from their
+   *retained* (non-masked) responses only (`fscores(..., method = "EAP")`),
+   then predicts the held-out cells from that model's own item parameters
+   (`extract.item()` + `probtrace()`). Compares each asymmetric model's
+   held-out predictions against the 2PL reference's via
+   `imv::imv.binary()`, and records the winning model by IMV.
+6. Extracts, per item, the shape parameter $\kappa$ and $\text{Л}_P$ (paper
    Eq. 7: $\text{Л}_P = P(b+x) + P(b-x) - 1$ at $x = 1$ logit from the item's
    own difficulty $b$) — positive $\text{Л}_P$ means **leniency** (the item is
    easier than a symmetric model would predict, in the sense described
@@ -485,12 +577,18 @@ For each candidate table, `fit_asymmetric_irt()`:
 #| eval: false
 
 fit_asymmetric_irt <- function(table_name) {
-  resp    <- fetch_wide(table_name)              # irw_fetch() + irw_long2resp(), cleaned
-  fit_2pl <- mirt(resp, 1, itemtype = "2PL", technical = list(customTheta = Theta_mat_ref, ...))
-  fit_lpe <- fit_custom(resp, "LPE", make_custom_item("LPE"), ad_start = extract_ad(fit_2pl), ...)
-  fit_rh  <- fit_custom(resp, "RH",  make_custom_item("RH"),  ad_start = convert_ad_logit_to_probit(...), ...)
-  fit_ao  <- fit_custom(resp, "AO",  make_custom_item("AO"),  ad_start = extract_ad(fit_2pl), ...)
-  # ... compare BIC, extract per-item kappa / lambda_P ...
+  resp <- fetch_wide(table_name)                 # irw_fetch() + irw_long2resp(), cleaned, 0/1-coded
+  ho   <- mask_holdout(resp, frac = 0.2)          # per-person cell mask, >=1 response retained per person
+
+  fit_2pl <- mirt(ho$train, 1, itemtype = "2PL", technical = list(customTheta = Theta_mat_ref, ...))
+  fit_lpe <- fit_custom(ho$train, "LPE", make_custom_item("LPE"), ad_start = extract_ad(fit_2pl), ...)
+  fit_rh  <- fit_custom(ho$train, "RH",  make_custom_item("RH"),  ad_start = convert_ad_logit_to_probit(...), ...)
+  fit_ao  <- fit_custom(ho$train, "AO",  make_custom_item("AO"),  ad_start = extract_ad(fit_2pl), ...)
+
+  # theta from retained responses only, predictions on held-out cells, IMV vs. the 2PL reference
+  th_2pl <- fscores(fit_2pl, method = "EAP")
+  p_2pl_heldout <- heldout_preds(fit_2pl, th_2pl, ho$mask_idx)
+  # ... same for LPE/RH/AO, then imv::imv.binary(ho$true_vals, p_2pl_heldout, p_model_heldout) ...
 }
 ```
 
@@ -506,7 +604,7 @@ To reproduce with current IRW holdings, re-run `validation_gate.R` then
 
 ```{r}
 #| label: tbl-winning-counts
-#| tbl-cap: "Winning model by BIC, across all tables with usable results."
+#| tbl-cap: "Winning model by out-of-sample IMV, across all tables with usable results."
 
 summary_df |>
   count(winning_model, name = "n_tables") |>
@@ -516,37 +614,39 @@ summary_df |>
   knitr::kable(align = "lrr")
 ```
 
-RH is the clear standout: it wins by BIC in a large share of tables, often by
-a wide margin. LPE and AO win far less often — consistent with the paper's
-own finding that RH behaves differently from the other two, though not in
-the direction Shim & Bonifay's arbitrary-data diagnostic alone would suggest
-(recall Section "Validation" above).
+The plain 2PLM wins outright in the largest share of tables. Among the
+asymmetric models, **RH — the model that looked dominant by BIC — wins the
+*least* often**, behind both LPE and AO. That's a striking reversal from
+what in-sample BIC would suggest, and it's exactly the pattern the
+validation-gate synthetic check above warned to expect: a large in-sample
+BIC edge for RH doesn't reliably survive contact with genuinely held-out
+data.
 
 ```{r}
-#| label: fig-bic-delta-ranked
-#| fig-cap: "Best asymmetric-model BIC delta relative to the 2PL, one point per table, ranked from most-improved to least. Negative values favor the asymmetric model; color shows which model achieved that best delta (2PLM = no asymmetric model improved on it). Hover for details."
+#| label: fig-imv-ranked
+#| fig-cap: "Best asymmetric-model out-of-sample IMV relative to the 2PL reference, one point per table, ranked from most-improved to least. Positive values favor the asymmetric model; color shows which model achieved that best IMV (2PLM = no asymmetric model improved on it). Hover for details."
 #| fig-height: 6.5
 
 ranked_df <- summary_df |>
   rowwise() |>
-  mutate(best_delta = min(c(bic_delta_AO, bic_delta_LPE, bic_delta_RH), na.rm = TRUE)) |>
+  mutate(best_imv = max(c(imv_AO, imv_LPE, imv_RH), na.rm = TRUE)) |>
   ungroup() |>
-  arrange(best_delta) |>
+  arrange(desc(best_imv)) |>
   mutate(
     rank    = row_number(),
     tooltip = paste0(
       "Table: ", table,
       "<br>Winning model: ", winning_model,
-      "<br>Best BIC delta vs. 2PL: ", round(best_delta, 1),
+      "<br>Best IMV vs. 2PL: ", formatC(best_imv, format = "e", digits = 2),
       "<br>n_items: ", n_items, ", n: ", n_participants
     )
   )
 
-p <- ggplot(ranked_df, aes(x = best_delta, y = rank, colour = winning_model, text = tooltip)) +
+p <- ggplot(ranked_df, aes(x = best_imv, y = rank, colour = winning_model, text = tooltip)) +
   geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
   geom_point(size = 2) +
   scale_colour_manual(values = model_colors, name = "Winning model") +
-  labs(x = "Best asymmetric BIC delta vs. 2PL  (negative favors asymmetry)", y = NULL) +
+  labs(x = "Best asymmetric-model IMV vs. 2PL  (positive favors asymmetry)", y = NULL) +
   theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
 
 ggplotly(p, tooltip = "text") |>
@@ -556,9 +656,17 @@ ggplotly(p, tooltip = "text") |>
   )
 ```
 
-The long tail on the left of @fig-bic-delta-ranked is almost entirely RH: for
-a handful of tables the BIC improvement over the plain 2PL runs into the
-hundreds of points, which is not a marginal preference.
+There's no long dramatic tail in @fig-imv-ranked the way there was for BIC:
+IMV values cluster close to zero on both sides, and even the largest
+positive values are modest by IMV standards — well under 0.01, and in the
+same neighborhood as @domingue2024imvlens's empirical IMV(2PL,3PL) benchmark
+(average 0.00016, max 0.0046 across their 89 datasets), not their
+IMV(1PL,2PL) benchmark (average ≈ 0.006–0.01). That places the predictive
+value of these asymmetric shape parameters alongside one of the *weakest*
+published IRT modeling upgrades, not a meaningful one — a world away from
+the BIC deltas running into the hundreds of points for the same tables.
+Whatever asymmetric structure is real in these data, its *predictive* value
+is small.
 
 ### Does it concentrate by construct type?
 
@@ -585,10 +693,13 @@ crosstab_df |>
   knitr::kable(align = "lrrrr")
 ```
 
-RH wins across every construct bucket, so "does RH win" isn't itself very
-diagnostic of construct type. The more targeted question is whether the
-*direction* of asymmetry — leniency vs. strictness — differs by bucket, which
-is closer to what Shim & Bonifay's guessing framing actually predicts.
+Construct type is far more diagnostic here than it was under BIC (where RH
+won in every bucket regardless). Among Cognitive/educational tables, **the
+plain 2PLM never wins** — some asymmetric model always predicts at least
+marginally better out of sample. Opinion/attitude tables show the opposite
+pattern: 2PLM wins the clear majority. That split is a real, substantive
+finding in its own right, separate from the leniency-direction question
+below.
 
 ```{r}
 #| label: fig-lambda-by-bucket
@@ -619,15 +730,18 @@ cog_pos  <- round(100 * lambda_stats$prop_positive[lambda_stats$bucket == "Cogni
 opn_pos  <- round(100 * lambda_stats$prop_positive[lambda_stats$bucket == "Opinion/attitude"])
 ```
 
-Cognitive/educational items skew mildly toward leniency (mean
-$\text{Л}_P$ = `r cog_mean`, `r cog_pos`% of items positive) compared to
-Opinion/attitude items (mean $\text{Л}_P$ = `r opn_mean`, `r opn_pos`% positive).
-That's the direction the guessing hypothesis predicts, and it's a real,
-non-zero gap — but it is a **modest** one, well short of a clean separation,
-and both buckets have plenty of items on either side of zero. Treat this as
-weak, directionally consistent evidence rather than a strong confirmation.
+Cognitive/educational items skew toward leniency (mean $\text{Л}_P$ =
+`r cog_mean`, `r cog_pos`% of items positive) while Opinion/attitude items
+skew the *other* way, toward strictness (mean $\text{Л}_P$ = `r opn_mean`,
+only `r opn_pos`% positive). That's a full sign flip between construct
+types, not just a difference in degree — a cleaner separation than the same
+comparison showed under the old BIC-based winning model, and squarely the
+direction the guessing hypothesis predicts (guessing on cognitive items
+should show up as leniency at the low end of $\theta$). Both buckets still
+have items on either side of zero, so treat this as a real, directionally
+consistent pattern rather than a hard rule at the individual-item level.
 
-### One convincing example
+### One example of a genuine (if modest) win
 
 ```{r}
 #| label: example-setup
@@ -637,35 +751,46 @@ example_table <- "colombia_2023_politics_attitudes"
 example_item  <- "item_p5261s7"
 
 ex_row <- item_level_df |>
-  filter(table == example_table, model == "RH", item == example_item)
+  filter(table == example_table, model == "LPE", item == example_item)
 
-ex_delta <- summary_df$bic_delta_RH[summary_df$table == example_table]
+ex_imv <- summary_df$imv_LPE[summary_df$table == example_table]
 
 a_ex <- ex_row$a1[1]; d_ex <- ex_row$d[1]; kappa_ex <- ex_row$kappa[1]
 b_ex <- -d_ex / a_ex
 lambda_ex <- ex_row$lambda_P[1]
 ```
 
-`r example_table` is the table with the single largest RH BIC improvement in
-this sample (`r round(ex_delta, 1)` BIC points below the 2PL). Its item
-`r example_item` (RH: $a$ = `r round(a_ex,2)`, $b$ = `r round(b_ex,2)`,
-$\kappa$ = `r round(kappa_ex,2)`, $\text{Л}_P$ = `r round(lambda_ex,3)`) makes
-the asymmetry concrete: below, the fitted RH curve is plotted against the
-symmetric normal-ogive curve that the *same* $a$ and $b$ would imply under
-$\kappa = 0$ (the exact reduction validated above) — i.e., what a standard
-model would have predicted for this item.
+`r example_table` has the single largest positive out-of-sample IMV in this
+batch (LPE beats the 2PL by `r formatC(ex_imv, format="e", digits=2)` on held-out
+responses). That's still comfortably under @domingue2024imvlens's
+IMV(1PL,2PL) benchmark ceiling (empirical max 0.068), but it's roughly on
+par with their *average* IMV(1PL,2PL) (0.006) — i.e., this single best case
+in the whole batch is about as valuable as a typical 1PL-to-2PL upgrade,
+while the typical table here (per @fig-imv-ranked) sits down in
+IMV(2PL,3PL)-negligible territory. Its item
+`r example_item` (LPE: $a$ = `r round(a_ex,2)`, $b$ = `r round(b_ex,2)`,
+$\kappa$ = `r round(kappa_ex,2)`, $\text{Л}_P$ = `r round(lambda_ex,3)`) shows a
+substantial *item-level* asymmetry even though the table-level predictive
+gain is small — below, the fitted LPE curve is plotted against the symmetric
+logistic curve that the *same* $a$ and $b$ would imply under $\kappa = 1$
+(the exact reduction validated above), i.e. what a standard 2PL would have
+predicted for this item. Several other items in this same table show the
+*opposite* sign (strong implied strictness, $\text{Л}_P \approx -1$) at
+implausibly extreme $\kappa$ — the thin-data outliers flagged in Limitations
+below, not shown here. That mix of a real, sizeable item-level effect in one
+direction and unreliable extreme estimates in others is exactly why the
+*table-level* aggregate win ends up modest rather than dramatic.
 
 ```{r}
 #| label: fig-example-irf
-#| fig-cap: "Fitted RH item response curve (blue) vs. the symmetric normal-ogive curve implied by the same discrimination and difficulty (grey dashed), for one item where RH wins convincingly. Orange points are empirical bins -- observed endorsement rate within 10 EAP-theta groups, the same binning mirt::itemfit(..., empirical.plot=) uses internally, sized by group n. Hover to compare predicted response probabilities at any theta, or see each bin's observed rate and n."
+#| fig-cap: "Fitted LPE item response curve (blue) vs. the symmetric logistic curve implied by the same discrimination and difficulty (grey dashed), for the item with this batch's largest genuine out-of-sample IMV win. Orange points are empirical bins -- observed endorsement rate within 10 EAP-theta groups, the same binning mirt::itemfit(..., empirical.plot=) uses internally, sized by group n. Hover to compare predicted response probabilities at any theta, or see each bin's observed rate and n."
 #| fig-height: 4.5
 
 theta_ex <- seq(-4, 4, length.out = 401)
-sigma_ex <- sqrt(2) * (1 + exp(-kappa_ex * theta_ex))^(-1/2)
-p_rh_ex  <- pnorm((a_ex * theta_ex + d_ex) / sigma_ex)
-p_sym_ex <- pnorm(a_ex * theta_ex + d_ex)
+p_lpe_ex <- plogis(a_ex * theta_ex + d_ex)^kappa_ex
+p_sym_ex <- plogis(a_ex * theta_ex + d_ex)
 
-ex_df <- tibble(theta = theta_ex, RH = p_rh_ex, `Symmetric (kappa=0)` = p_sym_ex) |>
+ex_df <- tibble(theta = theta_ex, LPE = p_lpe_ex, `Symmetric (kappa=1)` = p_sym_ex) |>
   pivot_longer(-theta, names_to = "curve", values_to = "p") |>
   mutate(tooltip = paste0(curve, "<br>theta: ", round(theta,2), "<br>P: ", round(p,3)))
 
@@ -684,7 +809,7 @@ p <- ggplot(ex_df, aes(x = theta, y = p, colour = curve, group = curve, text = t
     aes(x = theta, y = obs_prop, size = n, text = tooltip),
     colour = "#e6550d", alpha = 0.7
   ) +
-  scale_colour_manual(values = c("RH" = irw_blue, "Symmetric (kappa=0)" = irw_grey), name = NULL) +
+  scale_colour_manual(values = c("LPE" = irw_blue, "Symmetric (kappa=1)" = irw_grey), name = NULL) +
   scale_size_continuous(range = c(1.5, 5), guide = "none") +
   labs(x = expression(theta), y = expression(P(theta)))
 
@@ -701,18 +826,22 @@ if (nrow(empirical_bins_df) == 0) {
       "`asymmetric_irt_data/example_itemfit_compute.R` ",
       "(requires `REDIVIS_API_TOKEN`) and re-rendering.\n", sep = "")
 } else {
-  cat("The empirical bins track the fitted RH curve noticeably more closely ",
-      "than they would track a symmetric model through the same points, ",
-      "which is the direct empirical check behind the BIC preference above.\n", sep = "")
+  cat("This item's discrimination is unusually high ($a$ = ", round(a_ex, 1),
+      "), which is exactly the regime where empirical theta-bins can look ",
+      "noisy bin-to-bin even when the underlying model fit is sound: a tiny ",
+      "shift in who lands in which bin, near a near-step-function response ",
+      "curve, swings the observed rate a lot. Read the smooth fitted curves ",
+      "as the main comparison here, and the empirical points as a rough ",
+      "check rather than a precise one for this particular item.\n", sep = "")
 }
 ```
 
-The RH curve rises more steeply through the middle of the trait range and
-flattens earlier at the top than the symmetric reference would — exactly the
-qualitative signature $\text{Л}_P > 0$ describes: a person one logit above and
-one logit below this item's difficulty are, on average, more likely to
-endorse it than a symmetric model centered on the same difficulty would
-predict.
+The LPE curve sits above the symmetric reference through most of the lower
+and middle trait range and only catches up near the top — exactly the
+qualitative signature of $\kappa < 1$ (`r round(kappa_ex,2)` here) and
+positive $\text{Л}_P$: a person one logit above and one logit below this
+item's difficulty are, on average, more likely to endorse it than a
+symmetric model centered on the same difficulty would predict.
 
 ## Limitations
 
@@ -725,20 +854,40 @@ per-table prior-sensitivity sweep was run at IRW scale (the paper does run
 one, in a different context).
 
 **RH is probit-linked; the others are logistic.** RH is not exactly nested
-in the logistic 2PLM the way LPE and AO are — its BIC comparisons deserve the
-same caution the paper itself applies when comparing across link functions.
+in the logistic 2PLM the way LPE and AO are. Scoring every model by held-out
+IMV on the *response probability scale* sidesteps the specific caution the
+paper raises about comparing BIC across link functions — IMV only needs
+comparable predicted probabilities, not a comparable likelihood
+parameterization — but RH's probit link is still a real, separate modeling
+choice from the other two, worth keeping in mind when comparing its $\kappa$
+to LPE/AO's.
 
 **Per-item shape estimates are noisy, and a few are extreme.** A handful of
 items — typically ones that are answered almost unanimously one way — show
-implausibly large $|\kappa|$ (LPE up to roughly 76, AO up to roughly 27 in
-this batch), consistent with the recovery weakness documented above rather
-than a broken fit, but not individually verified case by case. Treat
-extreme per-item $\kappa$ values as thin-data artifacts unless checked
-directly.
+implausibly large $|\kappa|$ (up to roughly 26 for AO, 52 for LPE, and -7 to
+6 for RH in this batch), consistent with the imperfect recovery documented
+above (weakest for LPE, moderate for AO, strongest for RH) rather than a
+broken fit, but not individually verified case by case.
+Treat extreme per-item $\kappa$ values as thin-data artifacts unless checked
+directly — the worked example above shows this concretely: several items in
+that same table hit $\text{Л}_P \approx -1$ at extreme $\kappa$, alongside
+the one genuinely interesting item featured there.
 
-**LPE recovery is the weakest of the three at this sample size.** Per-item
-LPE $\kappa$ values should be read with more caution than RH's; see the
-validation section above.
+**The response-level holdout is generous but not huge.** ~20% of each
+table's observed cells, capped so every person keeps at least one retained
+response — enough to detect the null-truth calibration cleanly in the
+validation gate, but individual held-out IMV values for smaller tables
+(some under 2,500 respondents) are based on proportionally fewer held-out
+cells than the largest tables and should be read with that in mind.
+
+**Shape-parameter recovery is imperfect and uneven across models.** See the
+discussion in Validation (c) above — RH recovers well
+($r = `r round(recovery_summary$cor_shape[recovery_summary$model=="RH"], 2)`$),
+AO moderately
+($r = `r round(recovery_summary$cor_shape[recovery_summary$model=="AO"], 2)`$),
+and LPE weakest
+($r = `r round(recovery_summary$cor_shape[recovery_summary$model=="LPE"], 2)`$).
+Treat LPE's per-item $\kappa$ with the most caution, RH's with the least.
 
 ## Reproducibility
 

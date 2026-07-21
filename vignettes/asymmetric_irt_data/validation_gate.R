@@ -147,11 +147,15 @@ recover_one_model <- function(model_type, seed) {
 
   recovered <- extract_param_table(fit$mod)
   shape_name <- shape_par_name(model_type)
+  # extract_param_table() sorts by item name lexicographically ("item_1",
+  # "item_10", "item_2", ...), not numerically -- realign explicitly by name
+  # rather than assuming recovered's row order matches seq_len(N_ITEMS).
+  shape_est_aligned <- recovered[[shape_name]][match(colnames(sim$dat), recovered$item)]
   recovery <- tibble(
     model = model_type,
     item = seq_len(N_ITEMS),
     a_true = sim$a_true, d_true = sim$d_true, shape_true = sim$shape_true,
-    shape_est = recovered[[shape_name]]
+    shape_est = shape_est_aligned
   )
   list(model = model_type, converged = isTRUE(fit$mod@OptimInfo$converged),
        message = NA_character_, recovery = recovery)
