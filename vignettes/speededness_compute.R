@@ -109,30 +109,57 @@ fit_speededness <- function(table_name) {
     return(NULL)
   }
 
-  # --- Item position: use `date` as a within-person presentation order when
-  #     it varies meaningfully across items for most people; otherwise fall
-  #     back to order of first appearance in the fetched data (a known
-  #     limitation -- flagged in the vignette rather than hidden) ---
-  if ("date" %in% names(df) && any(!is.na(df$date))) {
-    within_id_var <- df |>
-      group_by(id) |>
-      summarise(n_distinct_date = n_distinct(date[!is.na(date)]), .groups = "drop")
-    has_natural_order <- mean(within_id_var$n_distinct_date > 1, na.rm = TRUE) > 0.5
-  } else {
-    has_natural_order <- FALSE
+  # --- Item position: try a priority-ordered list of columns that could
+  #     encode within-person presentation order. `date` is the IRW-standard
+  #     column and comes first; `itemcov_order` is next since the `itemcov_`
+  #     prefix is itself an IRW-standard marker for a designed, item-level
+  #     field (per standard.qmd) rather than an incidental pass-through
+  #     column. The rest are non-standard trial/order-like columns some
+  #     tables carry under their own name (e.g. alcoholstroop_jones2024's
+  #     `trialnum`, gilbert_meta_102's `item_num`) that irw_filter()/
+  #     irw_fetch() pass through as-is -- found by surveying column names
+  #     across all 100 candidate tables. Deliberately excluded: `block`/
+  #     `block_id` (too coarse-grained to represent item-level order) and
+  #     `chosenposition` (found alongside `itemcov_order` in
+  #     vocab_assessment_3_to_8_year_old_children -- it's the position of
+  #     the *chosen response option*, not the item's presentation order).
+  #     A candidate is used only if it varies *within* most persons -- a
+  #     column that's constant per person (e.g. a block or session id, or
+  #     any `cov_`-prefixed column, which is person-invariant by IRW
+  #     standard convention) isn't presentation order and is correctly
+  #     skipped. If none qualify, position falls back to order of first
+  #     appearance in the fetched data (a real limitation -- flagged in the
+  #     vignette rather than hidden). ---
+  order_col_candidates <- c("date", "itemcov_order", "trialnum", "trial_num",
+                             "trial", "trial_occasion", "item_num",
+                             "position", "item_position", "item_order",
+                             "order", "seq", "sequence")
+
+  find_order_col <- function(df) {
+    for (col in order_col_candidates) {
+      if (!(col %in% names(df)) || all(is.na(df[[col]]))) next
+      within_id_var <- df |>
+        group_by(id) |>
+        summarise(n_distinct_val = n_distinct(.data[[col]][!is.na(.data[[col]])]),
+                  .groups = "drop")
+      if (mean(within_id_var$n_distinct_val > 1, na.rm = TRUE) > 0.5) return(col)
+    }
+    NULL
   }
 
-  if (has_natural_order) {
+  order_col <- find_order_col(df)
+
+  if (!is.null(order_col)) {
     df <- df |>
       group_by(id) |>
-      mutate(.rank = rank(date, ties.method = "first")) |>
+      mutate(.rank = rank(.data[[order_col]], ties.method = "first")) |>
       ungroup()
     item_order <- df |>
       group_by(item) |>
       summarise(position = median(.rank, na.rm = TRUE), .groups = "drop") |>
       arrange(position) |>
       mutate(position = row_number())
-    order_source <- "date (within-person presentation order)"
+    order_source <- paste0(order_col, " (within-person presentation order)")
   } else {
     item_order <- tibble(item = unique(df$item)) |>
       mutate(position = row_number())

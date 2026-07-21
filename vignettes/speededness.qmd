@@ -32,6 +32,15 @@ item_level_results  <- .cache$item_level_results
 candidate_tables    <- .cache$candidate_tables
 ```
 
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the
+analysis design, and the writing below — was produced largely by Claude
+(Anthropic), working from a task specification and with human review.
+Treat the methodological choices and interpretations accordingly, and
+check the compute script (`speededness_compute.R`) directly if you're
+relying on the numbers here.
+:::
+
 ## Research question
 
 Classical test theory draws a sharp distinction between **power tests**, where
@@ -47,8 +56,39 @@ the construct alone.
 Most IRW tables don't come labeled "speeded" or "power." But the two designs
 leave different fingerprints in the data: speeded tests show a rising rate of
 missing (not-reached) responses as item position increases, while power tests
-show a flat, position-independent missingness rate. We use this signature to
-screen the response-time-carrying tables in the IRW and classify each one.
+show a flat, position-independent missingness rate. @fig-schematic sketches
+the idealized version of this pattern before we look for it in real data; the
+rest of this page uses that signature to screen the response-time-carrying
+tables in the IRW and classify each one.
+
+```{r}
+#| label: fig-schematic
+#| fig-cap: "Illustrative pattern, not real data. Simulated proportion missing by item position for a hypothetical power test (flat) and a hypothetical speeded test (rising toward the end), the two signatures the rest of this page looks for."
+#| fig-height: 4
+
+set.seed(20260721)
+schematic_data <- tidyr::crossing(
+  position  = 1:30,
+  test_type = c("Hypothetical power test", "Hypothetical speeded test")
+) |>
+  mutate(
+    p_missing = case_when(
+      test_type == "Hypothetical power test" ~
+        pmax(0, 0.03 + rnorm(n(), 0, 0.012)),
+      test_type == "Hypothetical speeded test" ~
+        pmax(0, pmin(1, (position - 14) / 18 + rnorm(n(), 0, 0.03)))
+    )
+  )
+
+ggplot(schematic_data, aes(x = position, y = p_missing, colour = test_type)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "loess", se = FALSE, linewidth = 1, span = 0.9) +
+  scale_colour_manual(values = c("Hypothetical power test"   = "#2166ac",
+                                 "Hypothetical speeded test" = "#b2182b")) +
+  labs(x = "Item position", y = "Proportion missing", colour = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top")
+```
 
 ---
 
@@ -95,13 +135,19 @@ For each candidate table, `fit_speededness()`:
    looks like a single total-test-time value (more than 90% of respondents
    have only one distinct `rt` value) rather than a genuine per-response
    measurement.
-2. Derives an **item position** variable. When a `date` timestamp varies
-   meaningfully within respondents, position is each item's median rank in
-   that within-person timestamp order. Otherwise, position falls back to
-   order of first appearance in the fetched data — a real limitation, since
-   the IRW standard doesn't guarantee that row order reflects presentation
-   order. Tables using the fallback are flagged via `order_source` in the
-   results and should be read with that caveat in mind.
+2. Derives an **item position** variable. We try a priority-ordered list of
+   columns that could encode within-person presentation order — the
+   IRW-standard `date` timestamp first, then a handful of non-standard
+   trial/order-like columns some tables carry under their own name (e.g.
+   `trialnum`) — and use the first one that actually varies within most
+   respondents (a column that's constant per person, like a block or
+   session id, is correctly skipped). Position is then each item's median
+   rank in that column's within-person order. If none of the candidates
+   qualify, position falls back to order of first appearance in the fetched
+   data — a real limitation, since the IRW standard doesn't guarantee that
+   row order reflects presentation order. Every table's `order_source` in
+   the results records exactly which column (if any) was used, so fallback
+   tables can be identified and read with that caveat in mind.
 3. Computes the **omission trend**: proportion of missing responses at each
    item position, regressed on position. A positive, permutation-significant
    slope (position labels shuffled 500 times) is the classic speededness
@@ -145,6 +191,37 @@ fit_speededness <- function(table_name) {
 # checks and construct_type join)
 ```
 
+```{r}
+#| label: order-source-stats
+#| echo: false
+
+order_source_counts <- table_summary |> count(order_source)
+n_natural_order <- order_source_counts |>
+  filter(order_source != "first-appearance (no natural presentation order available)") |>
+  pull(n) |> sum()
+n_fallback_order <- order_source_counts |>
+  filter(order_source == "first-appearance (no natural presentation order available)") |>
+  pull(n) |> sum()
+pct_fallback <- round(100 * n_fallback_order / nrow(table_summary))
+```
+
+::: {.callout-warning}
+**Item position is inferred, and for most tables the inference is weak.**
+Only `r n_natural_order` of `r nrow(table_summary)` classified tables carry a
+variable we can use to recover a genuine within-person presentation order —
+either the IRW-standard `date` timestamp, or (for a few tables, like
+`alcoholstroop_jones2024`'s `trialnum`) a non-standard trial/order-like
+column that varies meaningfully within respondents. For the remaining
+`r n_fallback_order` tables (`r pct_fallback`%), no such column was found and
+item position falls back to the order items happen to appear in the fetched
+data — the IRW standard does not guarantee that reflects administration
+order at all. Everything downstream — @fig-omit-slopes, the omission-trend
+regression, and therefore each table's speeded/power classification —
+inherits this uncertainty. Treat classifications for fallback-order tables
+as suggestive, not conclusive, and check `order_source` in the results
+before relying on any one table's label.
+:::
+
 ---
 
 ## Step 3: Results
@@ -167,6 +244,25 @@ ggplot(table_summary, aes(x = omit_slope, fill = classification)) +
   ) +
   theme_minimal(base_size = 13)
 ```
+
+```{r}
+#| label: omit-slope-stats
+#| echo: false
+
+n_speeded <- sum(table_summary$classification == "likely speeded")
+n_power   <- sum(table_summary$classification == "likely power")
+pct_speeded <- round(100 * n_speeded / nrow(table_summary))
+```
+
+Most classified tables cluster tightly around zero, as expected: a genuine
+fixed time limit is the exception, not the rule, among IRW instruments.
+`r n_speeded` of `r nrow(table_summary)` tables (`r pct_speeded`%) clear the
+permutation-significance bar for a positive slope and are tagged
+`"likely speeded"` in @fig-omit-slopes (red); the remaining `r n_power` sit
+in the `"likely power"` bulk of the distribution (blue). The handful of
+`"likely speeded"` tables with the steepest slopes are exactly the ones
+worth checking first if you're deciding whether to model a specific table's
+not-reached items as informative missingness.
 
 ### Summary statistics
 
@@ -257,11 +353,13 @@ explicitly separate a speed and an accuracy process, or for pre-processing
 that treats not-reached items differently from items the respondent actually
 attempted and got wrong.
 
-**Limitations.** Where no natural presentation-order variable (`date`) is
-available, item position falls back to order of first appearance in the
-fetched data, which need not reflect the order items were actually
-administered — the `order_source` column in the results flags which tables
-rely on this fallback. The accuracy-by-position trend is reported as a raw
+**Limitations.** Item position is inferred, not observed directly (see the
+callout in Step 3) — where none of `date` or the other trial/order-like
+columns we check for varies meaningfully within a person, position falls
+back to order of first appearance in the fetched data, which need not
+reflect the order items were actually administered. The `order_source`
+column in the results records which column (if any) was used for every
+table, so this can be checked on a table-by-table basis. The accuracy-by-position trend is reported as a raw
 diagnostic only; it is confounded with any difficulty ordering of items and
 does not factor into classification. Classification itself is a screen, not
 a definitive test: the permutation-based significance threshold (p < .05)
