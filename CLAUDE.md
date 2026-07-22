@@ -64,17 +64,6 @@ All code runs with `echo: false`, `message: false`, `warning: false`, `error: fa
 
 ## TODOs
 
-- [x] Re-enable P3M in CI once `imv 0.3` is synced to Posit Package Manager — switched `imv` in `renv.lock` from GitHub to CRAN source
-- [x] Audit all vignettes and R scripts for manual IMV calculations and replace with `imv` R package calls (currently `vignettes/imv.qmd` already uses the package; check other vignettes for any ad-hoc implementations)
 - [ ] Do more with `construct_name` (measure description) from the tags sheet — currently excluded from `tag_vals` in `_load-data-explore.qmd:96` so it never appears in filters or the table. Options: (1) add it to the info callout box in `index.qmd` (~line 378), (2) add a free-text search filter for it, (3) show it as a column in the dataset table
-- [x] Apply card layout to the vignettes index page — same two-column grid style used on `research.qmd` (`.paper-grid`, `.paper-card`, etc.)
-- [x] Add plotly hover annotations to other vignette figures — applied to `fig-dataset-medians` in `2pl_across_datasets.qmd` and `fig-independence-fit` in `dutch_identity.qmd`
-- [x] Group the vignettes index into genres instead of one undifferentiated grid — done: Tutorials / Assumption audits across IRW / Replicating published findings / Cross-dataset analyses. Expanded card descriptions and added a key-paper cite/link where a specific paper anchors the vignette.
-- [x] Harmonize style across "empirical survey" vignettes already on `main`. **Canonical scaffold:** `## Motivation` → `## Data and methods` → `## Results` → `## Limitations` → `## Reproducibility` → `## References`. Done 2026-07-21, one commit per vignette:
-  - [x] `2pl_across_datasets.qmd` — rescaffolded, fixed the `source()` reproducibility bug, named-var palette, added an ICC schematic (a=0.5/1/2) to Motivation.
-  - [x] `item_text_difficulty.qmd` — rescaffolded, named-var palette, added a new interactive within-dataset-correlation figure (previously that argument had no supporting plot).
-  - [x] `gender_dif.qmd` — rescaffolded, named-var palette, added the References section it was missing entirely (Holland & Thayer 1985/1988, Zumbo 1999, Jodoin & Gierl 2001 — each verified against difR's own docs/source before citing) plus the matching citation-generation step in `gender_dif_compute.R`.
-  - [x] `hf_reliability_paradox.qmd` — split `## Discussion` into Discussion (synthesis) + a new `## Limitations`; added `ggplotly()` to the two multi-dataset figures.
-  - [x] `rt_imv.qmd` — rescaffolded, added a new `## Limitations` section, added `ggplotly()` (fixed a legend/axis-title overlap in the process).
-  - [x] `il_hte.qmd` — added the dataset-selection documentation this vignette never had in prose, plus a new `## Limitations` section, both grounded in `il_hte_compute.R`. Already used `plot_ly()` directly (no `ggplotly()` needed — the original review's string-grep missed this).
-  - **Still open:** speededness and asymmetric_irt (on their own branches, not yet merged) and any future survey vignette must conform to this same scaffold/palette/interactivity convention before merging to `main`.
+
+Vignette-branch status, merge history, and the survey-vignette harmonization scaffold/checklist are tracked in Claude's memory, not here — see `project_vignette_harmonization_2026_07_21.md` and `project_vignette_branches_status.md`.
