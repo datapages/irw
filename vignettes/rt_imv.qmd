@@ -27,6 +27,7 @@ library(dplyr)
 library(tidyr)
 library(tibble)
 library(ggplot2)
+library(plotly)
 
 theme_set(theme_minimal(base_size = 13))
 irw_blue <- "#2166ac"
@@ -50,13 +51,17 @@ if (cache_ok) {
 n_datasets <- nrow(results)
 ```
 
-## Overview
+## Motivation
 
 IRT models predict binary accuracy from a latent ability estimate — but they
 ignore *when* a person responded. Response time (RT) carries its own signal
 about item-person fit: very fast incorrect responses may reflect guessing, while
 slow correct responses may reflect effortful retrieval. The question is whether
 RT adds *predictive* value over and above the IRT probability.
+
+---
+
+## Data and methods
 
 We answer this using the **InterModel Vigorish** [IMV; @domingue2022speed], a
 log-score measure of how much one model's predictions improve on another's. For
@@ -78,7 +83,10 @@ computed from `rt_cwi` on the full dataset and stored as pre-computed columns.
 Precomputing the basis (rather than evaluating `bs()` inline) ensures that
 `imv()`'s internal model updates operate on the same feature matrix.
 
-## Datasets
+### Datasets
+
+Datasets are restricted to those with at least 150 respondents (`N >= 150`)
+for stable random-effects estimation.
 
 ```{r}
 #| label: tbl-datasets
@@ -106,12 +114,20 @@ plot_df <- results |>
   mutate(table_name = reorder(table_name, imv_spline)) |>
   pivot_longer(c(imv_linear, imv_spline),
                names_to = "comparison", values_to = "imv") |>
-  mutate(comparison = recode(comparison,
-    imv_linear = "Linear RT  (M0 → M1)",
-    imv_spline = "Spline RT  (M0 → M2)"
-  ))
+  mutate(
+    comparison = recode(comparison,
+      imv_linear = "Linear RT  (M0 → M1)",
+      imv_spline = "Spline RT  (M0 → M2)"
+    ),
+    tooltip = paste0(
+      "Dataset: ", table_name,
+      "<br>Comparison: ", comparison,
+      "<br>IMV: ", round(imv, 4),
+      "<br>N: ", N, "  J: ", J
+    )
+  )
 
-ggplot(plot_df, aes(x = imv, y = table_name, colour = comparison)) +
+p <- ggplot(plot_df, aes(x = imv, y = table_name, colour = comparison, text = tooltip)) +
   geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
   geom_point(size = 3, position = position_dodge(width = 0.4)) +
   scale_colour_manual(
@@ -121,6 +137,12 @@ ggplot(plot_df, aes(x = imv, y = table_name, colour = comparison)) +
   ) +
   labs(x = "IMV gain over IRT-only baseline", y = NULL) +
   theme(legend.position = "bottom")
+
+ggplotly(p, tooltip = "text") |>
+  layout(
+    legend = list(orientation = "h", y = -0.25),
+    margin = list(b = 80)
+  )
 ```
 
 ```{r}
@@ -143,10 +165,28 @@ the spline gain is `r round(med_spline, 4)`
 ## Discussion
 
 **RT adds modest but consistent predictive value.** Positive IMV for both
-linear and spline RT indicates that response time generally adds value in prediction of accuracy. 
+linear and spline RT indicates that response time generally adds value in prediction of accuracy.
 
 **In some cases, the gains come from adding RT nonlinearly.** RT can be a highly nonlinear predictor of response time. Indeed, the relationship between response time and accuracy may even be nonmonotonic.
 
+---
+
+## Limitations
+
+**Only a narrow slice of the RT signal is tested here.** `rt_cwi` isolates the
+*within-item* micro speed-accuracy tradeoff (is this person faster or slower
+than average *on this item*); it doesn't examine between-item RT variation or
+a person's overall response speed across the whole test, either of which
+could carry additional predictive signal not captured by this comparison.
+
+**The IRT baseline is Rasch, not 2PL.** M0 fixes equal item discrimination
+(a random-item Rasch model). Whether RT's predictive gain changes once
+discrimination is allowed to vary by item — as in the [2PL
+vignette](2pl_across_datasets.qmd) — is not tested here.
+
+**Small datasets are excluded.** The `N >= 150` floor drops any dataset too
+small for stable random-effects estimation, so the median IMV gains above
+describe the datasets that clear that bar, not IRW's full RT-bearing holdings.
 
 ---
 
