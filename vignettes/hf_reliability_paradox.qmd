@@ -31,6 +31,7 @@ library(dplyr)
 library(tidyr)
 library(tibble)
 library(ggplot2)
+library(plotly)
 
 theme_set(theme_minimal(base_size = 13))
 irw_blue <- "#2166ac"
@@ -231,7 +232,7 @@ noncontrast DVs they were built from (median ICC 0.17 vs. 0.50) — the same
 qualitative pattern as @hedge2018reliability, in a much broader battery, and
 the Stroop effect is one of the examples they use to illustrate it.
 
-## Methods
+## Data and methods
 
 ### Candidate dataset search
 
@@ -396,10 +397,17 @@ sh_plot_df <- results %>%
     reliability_type = factor(reliability_type,
                                levels = c("congruent", "incongruent", "difference"),
                                labels = c("Congruent", "Incongruent", "Difference score")),
-    measure_lab = measure_labels[measure]
+    measure_lab = measure_labels[measure],
+    tooltip = paste0(
+      "Dataset: ", dataset_lab,
+      "<br>Condition: ", reliability_type,
+      "<br>Measure: ", measure_lab,
+      "<br>Reliability: ", sprintf("%.2f", reliability_est), " ± ", sprintf("%.2f", reliability_sd),
+      "<br>N: ", n_respondents
+    )
   )
 
-ggplot(sh_plot_df, aes(x = reliability_est, y = dataset_lab, colour = reliability_type)) +
+p_sh <- ggplot(sh_plot_df, aes(x = reliability_est, y = dataset_lab, colour = reliability_type, text = tooltip)) +
   geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
   geom_errorbarh(aes(xmin = reliability_est - reliability_sd, xmax = reliability_est + reliability_sd),
                   height = 0, position = position_dodge(width = 0.5)) +
@@ -409,6 +417,8 @@ ggplot(sh_plot_df, aes(x = reliability_est, y = dataset_lab, colour = reliabilit
                                   "Difference score" = irw_red), name = NULL) +
   labs(x = "Split-half reliability (Spearman-Brown corrected)", y = NULL) +
   theme(legend.position = "bottom")
+
+ggplotly(p_sh, tooltip = "text")
 ```
 
 <details>
@@ -641,11 +651,17 @@ retest_df <- results %>%
       grepl("^difference", reliability_type) ~ "Difference score",
       TRUE ~ NA_character_
     ),
-    dataset_lab = dataset_labels[dataset]
+    dataset_lab = dataset_labels[dataset],
+    tooltip = paste0(
+      "Dataset: ", dataset_labels[dataset],
+      "<br>Design: ", design,
+      "<br>Condition: ", condition,
+      "<br>Reliability: ", sprintf("%.2f", reliability_est)
+    )
   ) %>%
   filter(!is.na(design))
 
-ggplot(retest_df, aes(x = reliability_est, y = condition, colour = design)) +
+p_retest <- ggplot(retest_df, aes(x = reliability_est, y = condition, colour = design, text = tooltip)) +
   geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
   geom_point(size = 2.8, position = position_dodge(width = 0.5)) +
   facet_wrap(~dataset_lab, ncol = 2) +
@@ -654,9 +670,19 @@ ggplot(retest_df, aes(x = reliability_est, y = condition, colour = design)) +
                                   "Test-retest (H&F, K cohort)" = "#f4a582",
                                   "Test-retest (Enkavi et al. 2019, mean 111d)" = "#1a9850"),
                        name = NULL, guide = guide_legend(nrow = 2)) +
-  labs(x = "Reliability", y = NULL,
-       caption = "H&F PLUS cohort: Fall -> Spring, one school year. H&F K cohort: 2021-22 Fall -> Spring.\nEnkavi et al. (2019): mean 111-day gap, range 60-228 days, Amazon Mechanical Turk adults.") +
+  labs(x = "Reliability", y = NULL) +
   theme(legend.position = "bottom")
+
+ggplotly(p_retest, tooltip = "text") |>
+  layout(
+    legend = list(orientation = "h", y = -0.15),
+    annotations = list(list(
+      text      = "H&F PLUS cohort: Fall -> Spring, one school year. H&F K cohort: 2021-22 Fall -> Spring. Enkavi et al. (2019): mean 111-day gap, range 60-228 days, Amazon Mechanical Turk adults.",
+      showarrow = FALSE, xref = "paper", yref = "paper",
+      x = 0, y = -0.25, xanchor = "left", yanchor = "top",
+      font = list(size = 10, color = "grey50")
+    ))
+  )
 ```
 
 Test-retest reliabilities are lower than split-half across the board, as
@@ -822,6 +848,8 @@ for individual-differences work should treat this as a genuinely
 task-and-sample-specific empirical question, not something to be predicted
 from task family alone.
 
+## Limitations
+
 **This is a property of difference-score designs, not a general statement
 about IRW data.** Most IRW tables are fixed-item-bank IRT designs, where
 ability is estimated from many items measuring one construct rather than
@@ -834,8 +862,8 @@ IRW warehouse means Hearts & Flowers, the alcohol Stroop, the
 matzke-etal-2019 stop-signal task, and the enkavi_2019_stroop,
 enkavi_2019_simon, and enkavi_2019_ant_flanker tasks (plus, presumably, any
 future task with the same congruent/incongruent or go/no-go structure —
-including the five other Enkavi et al. 2019 tasks noted in Methods as
-candidates for a future extension).
+including the five other Enkavi et al. 2019 tasks noted in Data and methods
+as candidates for a future extension).
 
 **The blocked-vs-mixed-trial finding is worth follow-up.** That H&F's
 blocked design retains more difference-score reliability than its
