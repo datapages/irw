@@ -1,0 +1,372 @@
+---
+title: "Statistical Fit vs. Predictive Value: M2/Item-Fit and IMV"
+description: |
+  Traditional IRT fit statistics (M2, item-level S-X2) test whether a model
+  is statistically distinguishable from the data-generating process. IMV
+  asks a different question: how much does the model actually improve
+  prediction? We compute both across IRW tables and ask whether
+  statistically-flagged tables actually show worse IMV, or whether the two
+  diagnostics diverge.
+date: today
+bibliography: fit_vs_imv_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(plotly)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+cache_path <- "fit_vs_imv_data/fit_vs_imv_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache           <- readRDS(cache_path)
+  summary_df       <- .cache$summary
+  candidate_tables <- .cache$candidate_tables
+  date_run         <- .cache$date_run
+  is_pilot         <- isTRUE(.cache$pilot)
+  sig_alpha        <- .cache$sig_alpha %||% 0.05
+  r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
+  r_n_tables_run   <- length(candidate_tables)
+} else {
+  summary_df <- tibble(
+    table = character(), n_items = integer(), n_participants = integer(),
+    construct_type = character(), imv_mean = numeric(), imv_sd = numeric(),
+    imv_ci_lower = numeric(), imv_ci_upper = numeric(), M2 = numeric(),
+    M2_df = numeric(), M2_p = numeric(), M2_RMSEA = numeric(),
+    n_items_flagged = integer(), prop_items_flagged = numeric(),
+    M2_flagged = logical(), itemfit_flagged = logical()
+  )
+  candidate_tables <- character()
+  date_run         <- Sys.Date()
+  is_pilot         <- FALSE
+  sig_alpha        <- 0.05
+  r_all_candidates <- 0L
+  r_n_tables_run   <- 0L
+}
+
+knitr::opts_chunk$set(eval = cache_ok)
+```
+
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (!cache_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Cache not found** — figures and tables will not appear. Generate results ",
+  "by running the compute script, then re-render:\n\n",
+  "```r\nRscript vignettes/fit_vs_imv_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+```{r}
+#| label: pilot-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (cache_ok && is_pilot) cat(
+  "::: {.callout-warning}\n",
+  "**Draft preview, pilot run.** This render uses a small pilot sample of ",
+  r_n_tables_run, " tables (out of ", r_all_candidates, " eligible dichotomous ",
+  "tables) to validate the pipeline and page layout before a full batch run. ",
+  "All numbers here are real computed results — not placeholders — but treat ",
+  "the *distributions* as a small, noisy preview rather than a representative ",
+  "picture. Re-run `fit_vs_imv_compute.R` with `PILOT <- FALSE` to scale up.\n",
+  ":::\n", sep = ""
+)
+```
+
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the
+analysis design, and the writing below — was produced largely by Claude
+(Anthropic), working from a task specification and with human review.
+Treat the methodological choices and interpretations accordingly, and
+check the compute script (`fit_vs_imv_compute.R`) directly if you're
+relying on the numbers here.
+:::
+
+## Motivation
+
+Traditional IRT fit assessment asks whether a model's predictions are
+*statistically* distinguishable from the data — limited-information tests
+like M2 [@sinharay2025assessment], item-level statistics like S-X2, and
+residual diagnostics all test some version of "is there detectable misfit?"
+But as Sinharay's [-@sinharay2025assessment] review of the field discusses,
+statistical misfit and *practically consequential* misfit are not the same
+thing: a large-sample table can show significant misfit that barely changes
+person scores or predictions, while a smaller table's real misfit can go
+statistically undetected.
+
+The **InterModel Vigorish** [IMV; @domingue2025imv] offers a different lens:
+instead of testing whether two models differ statistically, it measures how
+much one model's held-out predictive accuracy improves on another's — see
+the [IMV tutorial](imv.qmd) for the calculation itself on a single dataset.
+This vignette asks two questions across many IRW tables at once: (1) how
+large is IMV, typically, when a 2PL adds a discrimination parameter to a
+Rasch/1PL baseline? and (2) do tables that traditional statistics flag as
+poor-fitting actually show lower IMV gains from that richer model — or do
+the two diagnostics diverge, flagging different tables as "notable" for
+different reasons?
+
+---
+
+## Data and methods
+
+### Dataset selection
+
+```{r}
+#| label: filter-datasets
+#| eval: false
+
+all_candidates <- irw_filter(
+  n_categories   = 2,
+  n_items        = c(5, 40),
+  n_participants = c(500, Inf)
+)
+```
+
+This pilot is restricted to **dichotomous tables only**, matching `imv.qmd`'s
+own Rasch-vs-2PL comparison exactly. Polytomous tables would need a
+different baseline/richer-model pair (e.g. a constrained vs. a graded
+response model) that hasn't been validated here yet — left for a future
+extension rather than attempted with an unverified comparison.
+`r r_all_candidates` dichotomous tables met the item/participant criteria as
+of `r format(date_run, "%B %Y")`.
+`r if (is_pilot) "This page currently runs on a small pilot subset (see the warning above); a full pass would analyze all of them." else paste0("This pass analyzes all ", r_n_tables_run, " of them.")`
+
+### Per-table computation
+
+For each candidate table, `fit_and_compare()`:
+
+1. Fetches the table and builds a wide response matrix, downsampling to at
+   most 10,000 respondents and dropping zero-variance items (mirrors the
+   [2PL across datasets](2pl_across_datasets.qmd) pipeline).
+2. Fits a Rasch/1PL baseline and a 2PL model with a weak lognormal prior on
+   discrimination — the identical specification used in `imv.qmd` and the
+   2PL vignette.
+3. Computes **IMV(Rasch, 2PL)** via the `imv` package's `imv()` function,
+   which performs 5-fold cross-validation internally.
+4. Computes two statistical fit diagnostics on the 2PL model, per
+   Sinharay's survey: **M2** (`mirt::M2()`, a limited-information overall
+   fit test) and **item-level S-X2** (`mirt::itemfit()`, default
+   `fit_stats = "S_X2"`). These two are chosen for being well-supported and
+   computationally tractable at this scale — not an attempt at Sinharay's
+   full survey of fit procedures.
+5. Classifies the table as statistically flagged or not by each method,
+   using the conventional (uncorrected) `r sig_alpha` significance
+   threshold — an arbitrary convention, not a validated cutoff, the same
+   caveat that applies to the [local dependence](local_dependence.qmd)
+   vignette's Q3 threshold.
+6. Records: item/respondent counts, `construct_type`, IMV (mean, SD, and
+   95% CI across folds), M2 (statistic, df, p-value, RMSEA), and the
+   proportion of items individually flagged by S-X2.
+
+```{r}
+#| label: fit-function
+#| eval: false
+
+fit_and_compare <- function(table_name) {
+  resp <- fetch_wide(table_name)  # irw_fetch() + irw_long2resp(), cleaned
+  m0   <- mirt(resp, 1, "Rasch")
+  m1   <- mirt(resp, model_2pl_with_lognormal_prior, itemtype = "2PL")
+  imv_res  <- imv(m0, m1)                 # 5-fold CV internally
+  m2_res   <- M2(m1, calcNull = FALSE)    # limited-information fit
+  ifit_res <- itemfit(m1)                 # per-item S-X2
+  # ... store imv_res$mean, m2_res$p, m2_res$RMSEA, prop(ifit_res$p.S_X2 < .05) ...
+}
+```
+
+Of the `r r_n_tables_run` candidate tables in this pass, `r nrow(summary_df)`
+produced usable results (the rest were dropped for too few usable items or a
+model/diagnostic that failed outright).
+
+::: {.callout-note}
+To reproduce with current IRW holdings, re-run `fit_vs_imv_compute.R` and
+commit the updated `fit_vs_imv_data/fit_vs_imv_results.rds`.
+:::
+
+## Results
+
+### How large is IMV, across real datasets?
+
+```{r}
+#| label: fig-imv-dist
+#| fig-cap: "Distribution of IMV(Rasch, 2PL) across sampled IRW tables. Each point is one table; error bars show the 95% CI across the 5 cross-validation folds."
+#| fig-height: 4.5
+
+imv_plot_df <- summary_df |>
+  arrange(imv_mean) |>
+  mutate(
+    rank    = row_number(),
+    tooltip = paste0(
+      "Table: ", table,
+      "<br>IMV: ", round(imv_mean, 4),
+      "<br>95% CI: [", round(imv_ci_lower, 4), ", ", round(imv_ci_upper, 4), "]",
+      "<br>n_items: ", n_items,
+      "<br>N: ", n_participants
+    )
+  )
+
+p <- ggplot(imv_plot_df, aes(x = imv_mean, y = rank, text = tooltip)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_errorbarh(aes(xmin = imv_ci_lower, xmax = imv_ci_upper), height = 0, colour = irw_grey) +
+  geom_point(colour = irw_blue, size = 2.2) +
+  labs(x = "IMV(Rasch, 2PL)", y = NULL) +
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+
+ggplotly(p, tooltip = "text")
+```
+
+```{r}
+#| label: imv-dist-inline
+#| echo: false
+
+med_imv <- median(summary_df$imv_mean, na.rm = TRUE)
+```
+
+The median IMV gain from adding a 2PL discrimination parameter over Rasch is
+`r round(med_imv, 4)` across this sample. For context, `gilbert_meta_2` — the
+same table used in the [IMV tutorial](imv.qmd) — has an IMV of
+`r if ("gilbert_meta_2" %in% summary_df$table) round(summary_df$imv_mean[summary_df$table == "gilbert_meta_2"], 4) else "not in this pilot sample"`
+here, which should match that vignette's own number up to Monte Carlo /
+cross-validation-fold noise.
+
+### Does statistical misfit track predictive gain?
+
+```{r}
+#| label: fig-imv-vs-m2
+#| fig-cap: "IMV(Rasch, 2PL) against the 2PL model's M2-based RMSEA. If statistical and practical significance agreed perfectly, worse-fitting (higher-RMSEA) tables would show systematically higher IMV. Colour marks whether the table's item-level S-X2 flags any items."
+#| fig-height: 4.5
+
+div_plot_df <- summary_df |>
+  filter(!is.na(M2_RMSEA), !is.na(imv_mean)) |>
+  mutate(
+    itemfit_label = if_else(itemfit_flagged, "≥1 item flagged (S-X2)", "No items flagged"),
+    tooltip = paste0(
+      "Table: ", table,
+      "<br>IMV: ", round(imv_mean, 4),
+      "<br>M2 RMSEA: ", round(M2_RMSEA, 4),
+      "<br>M2 p: ", signif(M2_p, 3),
+      "<br>Items flagged: ", n_items_flagged, " / ", n_items
+    )
+  )
+
+p2 <- ggplot(div_plot_df, aes(x = M2_RMSEA, y = imv_mean, colour = itemfit_label, text = tooltip)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_point(size = 2.8, alpha = 0.85) +
+  scale_colour_manual(values = c("≥1 item flagged (S-X2)" = irw_red, "No items flagged" = irw_blue), name = NULL) +
+  labs(x = "M2 RMSEA (2PL model)", y = "IMV(Rasch, 2PL)") +
+  theme(legend.position = "bottom")
+
+ggplotly(p2, tooltip = "text") |>
+  layout(legend = list(orientation = "h", y = -0.2), margin = list(b = 80))
+```
+
+`r sum(summary_df$M2_flagged, na.rm = TRUE)` of `r sum(!is.na(summary_df$M2_flagged))`
+tables are flagged by M2 at α = `r sig_alpha`, and
+`r sum(summary_df$itemfit_flagged, na.rm = TRUE)` of `r sum(!is.na(summary_df$itemfit_flagged))`
+have at least one item individually flagged by S-X2. With only
+`r nrow(summary_df)` tables in this pilot, this figure is meant to confirm
+the pipeline produces sensible, sane numbers — not to support a real
+divergence claim. A full batch run is needed before drawing conclusions
+about whether statistically-flagged tables systematically differ in IMV.
+
+### All tables
+
+```{r}
+#| label: tbl-all
+#| tbl-cap: "All tables in this pilot run: item/respondent counts, IMV, and statistical fit diagnostics."
+
+summary_df |>
+  transmute(
+    Table = table,
+    Items = n_items,
+    N = n_participants,
+    `Construct type` = construct_type,
+    IMV = round(imv_mean, 4),
+    `M2 RMSEA` = round(M2_RMSEA, 4),
+    `M2 p` = signif(M2_p, 3),
+    `Items flagged (S-X2)` = paste0(n_items_flagged, " / ", n_items)
+  ) |>
+  arrange(desc(IMV)) |>
+  knitr::kable()
+```
+
+---
+
+## Limitations
+
+**This is a pilot, not a full run.** `r nrow(summary_df)` tables is nowhere
+near enough to characterize the real relationship between statistical fit
+and IMV, or to identify genuine divergent cases — the point of this pass is
+to confirm the pipeline (fetch → fit → IMV → M2/itemfit → store) works
+end-to-end and produces sane numbers, matching known results
+(`gilbert_meta_2` against `imv.qmd`) where possible.
+
+**Dichotomous tables only.** Polytomous tables are excluded until a
+validated baseline/richer-model pair exists for them.
+
+**Two fit statistics, not Sinharay's full survey.** M2 and S-X2 are two
+well-supported, computationally tractable diagnostics; residual-based and
+other limited-information diagnostics Sinharay discusses are not
+implemented here.
+
+**Uncorrected significance threshold.** α = `r sig_alpha` per table (M2) and
+per item (S-X2) with no multiple-comparison correction — a stated
+convention, not a validated cutoff.
+
+**IMV has its own assumptions.** Cross-validated predictive gain depends on
+sample size, item count, and the specific models compared; it is one useful
+lens on model value, not a final verdict on which diagnostic is "right."
+
+---
+
+## Reproducibility
+
+Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+# 1. Re-run the compute script (from the project root)
+source("vignettes/fit_vs_imv_compute.R")
+
+# 2. Re-render this page
+quarto::quarto_render("vignettes/fit_vs_imv.qmd")
+```
+
+::: {.callout-tip}
+To cite the datasets used, run:
+
+```r
+irw_save_bibtex(summary_df$table, output_file = "fit_vs_imv_data/references.bib")
+```
+:::
+
+---
+
+## References
