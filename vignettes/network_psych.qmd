@@ -548,10 +548,10 @@ is a reasonable place to expect exactly that disagreement.
   refitting.** `bootnet::estimateNetwork()`'s `EBICglasso` preset does not
   call `qgraph::cor_auto()` by default — as of `bootnet` 1.4, the
   `EBICglasso` default set switched from `corMethod = "cor_auto"` to
-  plain Pearson correlations (`cor`). Neither `bootnet` nor `qgraph` is
-  pinned in `renv.lock` (still not fixed — see below), so an earlier pass
-  of this vignette likely ran on whatever version was on the machine at
-  the time and may have silently treated 7-point Likert integers as
+  plain Pearson correlations (`cor`). Neither `bootnet` nor `qgraph` was
+  pinned in `renv.lock` at the time (now fixed — see below), so an earlier
+  pass of this vignette likely ran on whatever version was on the machine
+  at the time and may have silently treated 7-point Likert integers as
   literally continuous. This pass instead passes `corMethod = "cor_auto"`
   explicitly (polychoric/polyserial correlations for ordinal items) with
   `corArgs = list(forcePD = TRUE)`, since a polychoric correlation matrix
@@ -592,11 +592,12 @@ is a reasonable place to expect exactly that disagreement.
   caches were built on their own candidate pools (different item-count
   caps), so not every table here has a match in both — see the match-rate
   numbers in Data and methods.
-- **`bootnet` and `qgraph` aren't pinned in `renv.lock`.** Unlike this
-  site's other dependencies, this pass ran against whatever versions of
-  these two packages happened to be installed, which is how the `cor_auto`
-  default-behavior change above went unnoticed. Pinning both is part of
-  the same follow-up as the `corMethod`/GPCM fixes.
+- **`bootnet` and `qgraph` were not pinned in `renv.lock` when this pass
+  was run.** This pass ran against whatever versions of these two packages
+  happened to be installed, which is how the `cor_auto` default-behavior
+  change above went unnoticed. Both are now pinned in `renv.lock`, which
+  prevents a silent version drift like this going forward but doesn't
+  retroactively confirm which version produced the results above.
 
 ## Reproducibility
 
