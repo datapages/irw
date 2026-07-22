@@ -1,12 +1,15 @@
 # fit_vs_imv_compute.R
 #
 # Does a table's statistical fit diagnostics (M2 limited-information test,
-# S-X2 item fit) agree with its predictive-accuracy gain (IMV) from adding a
-# discrimination parameter (Rasch -> 2PL)? Motivated by Sinharay (2025)'s
-# review of IRT fit assessment, which raises the statistical-vs-practical-
-# significance gap this vignette tests empirically. Also serves as a
-# multi-table look at how large IMV(Rasch, 2PL) typically is across real IRW
-# instruments (the "enhanced IMV vignette" idea folded into this one).
+# item-level S-X2, person-level Zh) agree with its predictive-accuracy gain
+# (IMV) from adding a discrimination parameter (Rasch -> 2PL)? Motivated by
+# Sinharay & Monroe (2025)'s review of IRT fit assessment, whose own
+# real-data demonstration reports several diagnostics jointly (including a
+# person-fit statistic) and whose conclusions explicitly flag predictive-fit
+# approaches (Stenhaug & Domingue, 2022 -- the same lineage IMV comes from)
+# as not covered in their review. Also serves as a multi-table look at how
+# large IMV(Rasch, 2PL) typically is across real IRW instruments (the
+# "enhanced IMV vignette" idea folded into this one).
 #
 # PILOT NOTE: this run is restricted to dichotomous tables only, matching
 # imv.qmd's own Rasch-vs-2PL comparison exactly. Polytomous tables need a
@@ -154,13 +157,30 @@ fit_and_compare <- function(table_name) {
     NULL
   })
 
-  if (is.null(m2_res) && is.null(ifit_res)) {
-    message("    skipped: both statistical fit diagnostics failed")
+  # Person-fit: mirt::personfit()'s Zh column is Drasgow, Levine & Williams'
+  # (1985) l_z statistic -- one of the three person-fit statistics Sinharay
+  # & Monroe name in their review (alongside Tatsuoka's caution indices and
+  # Snijders' (2001) more refined l_z*, which their own appendix code uses
+  # via the PerFit package). We use Zh/l_z rather than l_z* to avoid PerFit's
+  # heavy transitive dependency chain (kernlab/hdrcde/ks/rainbow/fds/fda);
+  # stated explicitly in the vignette text as a substitution, not silently.
+  pfit_res <- tryCatch(personfit(m1), error = function(e) {
+    message("    personfit() failed: ", conditionMessage(e))
+    NULL
+  })
+
+  if (is.null(m2_res) && is.null(ifit_res) && is.null(pfit_res)) {
+    message("    skipped: all statistical fit diagnostics failed")
     return(NULL)
   }
 
   n_items_flagged    <- if (!is.null(ifit_res)) sum(ifit_res$p.S_X2 < SIG_ALPHA, na.rm = TRUE) else NA_integer_
   prop_items_flagged <- if (!is.null(ifit_res)) n_items_flagged / nrow(ifit_res) else NA_real_
+
+  # Two-tailed critical value matching SIG_ALPHA (Zh ~ N(0,1) under the null)
+  zh_crit <- qnorm(1 - SIG_ALPHA / 2)
+  n_persons_flagged    <- if (!is.null(pfit_res)) sum(abs(pfit_res$Zh) > zh_crit, na.rm = TRUE) else NA_integer_
+  prop_persons_flagged <- if (!is.null(pfit_res)) n_persons_flagged / nrow(pfit_res) else NA_real_
 
   meta_row <- if (!is.null(tags_meta)) tags_meta[tags_meta$table == table_name, ] else NULL
   construct_type <- if (!is.null(meta_row) && nrow(meta_row) > 0) meta_row$construct_type[1] else NA_character_
@@ -178,10 +198,13 @@ fit_and_compare <- function(table_name) {
     M2_df               = if (!is.null(m2_res)) m2_res$df[1] else NA_real_,
     M2_p                = if (!is.null(m2_res)) m2_res$p[1] else NA_real_,
     M2_RMSEA            = if (!is.null(m2_res)) m2_res$RMSEA[1] else NA_real_,
-    n_items_flagged     = n_items_flagged,
-    prop_items_flagged  = prop_items_flagged,
-    M2_flagged          = if (!is.null(m2_res)) m2_res$p[1] < SIG_ALPHA else NA,
-    itemfit_flagged     = if (!is.na(prop_items_flagged)) prop_items_flagged > 0 else NA
+    n_items_flagged      = n_items_flagged,
+    prop_items_flagged   = prop_items_flagged,
+    n_persons_flagged    = n_persons_flagged,
+    prop_persons_flagged = prop_persons_flagged,
+    M2_flagged           = if (!is.null(m2_res)) m2_res$p[1] < SIG_ALPHA else NA,
+    itemfit_flagged      = if (!is.na(prop_items_flagged)) prop_items_flagged > 0 else NA,
+    personfit_flagged    = if (!is.na(prop_persons_flagged)) prop_persons_flagged > 0 else NA
   )
 }
 
@@ -251,7 +274,7 @@ tryCatch(
 manual_entries <- c(
   "@article{sinharay2025assessment,
   title   = {Assessment of fit of item response theory models: {A} critical review of the status quo and some future directions},
-  author  = {Sinharay, Sandip},
+  author  = {Sinharay, Sandip and Monroe, Scott},
   journal = {British Journal of Mathematical and Statistical Psychology},
   volume  = {78},
   pages   = {711--733},
@@ -267,6 +290,36 @@ manual_entries <- c(
   pages   = {1034--1054},
   year    = {2025},
   doi     = {10.1007/s11336-024-09977-2}
+}",
+  "@article{sinharayhaberman2014,
+  title   = {How often is the misfit of item response theory models practically significant?},
+  author  = {Sinharay, Sandip and Haberman, Shelby J.},
+  journal = {Educational Measurement: Issues and Practice},
+  volume  = {33},
+  number  = {1},
+  pages   = {23--35},
+  year    = {2014},
+  doi     = {10.1111/emip.12024}
+}",
+  "@article{zhao2017promis,
+  title   = {Impact of {IRT} item misfit on score estimates and severity classifications: {An} examination of {PROMIS} depression and pain interference item banks},
+  author  = {Zhao, Yue},
+  journal = {Quality of Life Research},
+  volume  = {26},
+  number  = {3},
+  pages   = {555--564},
+  year    = {2017},
+  doi     = {10.1007/s11136-016-1467-3}
+}",
+  "@article{stenhaug2022predictive,
+  title   = {Predictive fit metrics for item response models},
+  author  = {Stenhaug, Benjamin A. and Domingue, Benjamin W.},
+  journal = {Applied Psychological Measurement},
+  volume  = {46},
+  number  = {2},
+  pages   = {136--155},
+  year    = {2022},
+  doi     = {10.1177/01466216211066603}
 }"
 )
 
