@@ -24,13 +24,19 @@ library(dplyr)
 library(ggplot2)
 library(tidyr)
 library(tibble)
+library(plotly)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
 
 .cache          <- readRDS("itemtextdata/item_text_difficulty_results.rds")
 all_data        <- .cache$all_data
 eligible_tables <- .cache$eligible_tables
 ```
 
-## Research question
+## Motivation
 
 Cognitive items vary enormously in difficulty. Some of that variation is substantive —
 harder content is harder to answer. But some may be linguistic: items written in more
@@ -44,7 +50,9 @@ linguistic features, and ask how much variance those features explain.
 
 ---
 
-## Step 1: Select datasets with item text
+## Data and methods
+
+### Selecting datasets with item text
 
 We restrict to cognitive/educational dichotomous English tables that have item text
 available via `irw_itemtext()`. Not all IRW tables have item text — this analysis
@@ -70,9 +78,7 @@ This yielded `r length(eligible_tables)` tables
 (as of `r format(.cache$date_run, "%B %Y")`), covering
 `r n_distinct(all_data$table)` tables with usable item text after joining.
 
----
-
-## Step 2: Compute proportion correct and extract text features
+### Computing proportion correct and text features
 
 For each table we (1) fetch response data, (2) fetch item text, (3) compute proportion
 correct per item, and (4) join the two on the `item` identifier.
@@ -108,9 +114,9 @@ We then extract two simple text features using base R:
 
 ---
 
-## Step 3: Distributions of features and outcome
+## Results
 
-### Proportion correct
+### Distributions of features and outcome
 
 ```{r}
 #| label: fig-propcorrect
@@ -118,12 +124,9 @@ We then extract two simple text features using base R:
 #| fig-height: 3.5
 
 ggplot(all_data, aes(x = prop_correct)) +
-  geom_histogram(bins = 40, fill = "#2166ac", colour = "white", alpha = 0.8) +
-  labs(x = "Proportion correct", y = "Count") +
-  theme_minimal(base_size = 13)
+  geom_histogram(bins = 40, fill = irw_blue, colour = "white", alpha = 0.8) +
+  labs(x = "Proportion correct", y = "Count")
 ```
-
-### Text features
 
 ```{r}
 #| label: fig-features
@@ -138,15 +141,12 @@ all_data |>
     avg_word_len = "Avg word length"
   )) |>
   ggplot(aes(x = value)) +
-  geom_histogram(bins = 40, fill = "#2166ac", colour = "white", alpha = 0.8) +
+  geom_histogram(bins = 40, fill = irw_blue, colour = "white", alpha = 0.8) +
   facet_wrap(~feature, scales = "free_x") +
-  labs(x = NULL, y = "Count") +
-  theme_minimal(base_size = 13)
+  labs(x = NULL, y = "Count")
 ```
 
----
-
-## Step 4: Within-dataset relationships
+### Within-dataset relationships
 
 Pooling all items together can be misleading — overall correlations between text
 features and difficulty are heavily influenced by which datasets happen to have longer
@@ -171,35 +171,57 @@ within_cors
 ```
 
 ```{r}
+#| label: fig-within-cor-dist
+#| fig-cap: "Within-dataset correlation between each text feature and proportion correct, one point per dataset. Scattered around zero (rather than consistently one sign) would suggest any pooled relationship is a dataset-level artifact, not a genuine text-difficulty signal. Hover to identify datasets."
+#| fig-height: 3.5
+
+within_long <- within_cors |>
+  pivot_longer(c(r_word_count, r_avg_wlen), names_to = "feature", values_to = "r") |>
+  mutate(
+    feature = recode(feature, r_word_count = "Word count", r_avg_wlen = "Avg word length"),
+    tooltip = paste0(
+      "Dataset: ", table,
+      "<br>r: ", r,
+      "<br>n_items: ", n_items
+    )
+  )
+
+p <- ggplot(within_long, aes(x = r, y = feature, text = tooltip)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_jitter(height = 0.15, colour = irw_blue, alpha = 0.6) +
+  labs(x = "Within-dataset correlation with proportion correct", y = NULL)
+
+ggplotly(p, tooltip = "text")
+```
+
+```{r}
 #| label: fig-scatter-facet
 #| fig-cap: "Word count vs. proportion correct, separately per dataset. Lines are OLS fits."
 #| fig-height: 8
 
 ggplot(all_data, aes(x = word_count, y = prop_correct)) +
-  geom_point(alpha = 0.4, size = 0.9, colour = "#2166ac") +
-  geom_smooth(method = "lm", se = FALSE, colour = "#d6604d", linewidth = 0.7) +
+  geom_point(alpha = 0.4, size = 0.9, colour = irw_blue) +
+  geom_smooth(method = "lm", se = FALSE, colour = irw_red, linewidth = 0.7) +
   facet_wrap(~table, scales = "free") +
-  labs(x = "Word count", y = "Proportion correct") +
-  theme_minimal(base_size = 10) +
-  theme(strip.text = element_text(size = 7))
+  theme(strip.text = element_text(size = 7)) +
+  labs(x = "Word count", y = "Proportion correct")
 ```
+
+Longer items could be harder (more to parse) or easier (more context provided).
+Looking within datasets, as above, avoids the confound that some instruments simply use
+longer items throughout — a pooled correlation across all items would just reflect
+which datasets happen to use longer or shorter wording.
 
 ---
 
-## What to notice
+## Limitations
 
-**Heterogeneity across datasets.** If the within-dataset correlations are scattered
-around zero (some positive, some negative), that suggests any overall pooled
-relationship is an artifact of dataset-level confounds rather than a genuine
-text-difficulty signal.
-
-**Direction of word count effect.** Longer items could be harder (more to parse) or
-easier (more context provided). Looking within datasets avoids the confound that
-some instruments simply use longer items throughout.
-
-**Limitations.** Proportion correct conflates item difficulty with sample ability.
-The natural next step is to use *b* parameters from the 2PL vignette instead, which
-are ability-adjusted.
+Proportion correct conflates item difficulty with sample ability — a "hard" item in a
+high-ability sample can look easy, and vice versa. The natural next step is to use *b*
+parameters from the [2PL vignette](2pl_across_datasets.qmd) instead, which are
+ability-adjusted. The text features here are also intentionally simple (word count,
+average word length); a real linguistic-complexity analysis would want features like
+negation, syntactic depth, or vocabulary rarity, which this vignette does not attempt.
 
 ---
 
