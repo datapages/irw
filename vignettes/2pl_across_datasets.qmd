@@ -1,8 +1,8 @@
 ---
 title: "2PL Discrimination Parameters Across Cognitive Datasets"
 description: |
-  A Tier 2 IRW vignette demonstrating multi-dataset IRT analysis. We use `irw_filter()` 
-  to select dichotomous cognitive/educational datasets, fit a 2PL model to each, and 
+  A Tier 2 IRW vignette demonstrating multi-dataset IRT analysis. We use `irw_filter()`
+  to select dichotomous cognitive/educational datasets, fit a 2PL model to each, and
   examine what discrimination parameters look like in the wild.
 format:
   html:
@@ -23,13 +23,18 @@ library(dplyr)
 library(ggplot2)
 library(plotly)
 
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+
 # Load precomputed results (produced by 2pl_across_datasets_compute.R)
 .cache           <- readRDS("2pldata/2pl_across_datasets_results.rds")
 all_results      <- .cache$all_results
 cognitive_tables <- .cache$cognitive_tables
 ```
 
-## Research question
+## Motivation
 
 Item discrimination — the *a* parameter in a 2PL model — captures how sharply an item
 separates high- and low-ability respondents. Methodologists often assume *a* ≈ 1 as a
@@ -42,9 +47,37 @@ fit a 2PL to each, and examine the resulting distribution of *a* estimates acros
 instruments. What would otherwise require assembling dozens of datasets by hand is a few
 lines of code.
 
+Concretely, *a* controls the steepness of an item's characteristic curve — how quickly
+the probability of a correct response rises with ability. A low *a* item barely
+discriminates between low- and high-ability respondents at all; a high *a* item behaves
+almost like a step function, sharply separating respondents just below vs. just above
+its difficulty:
+
+```{r}
+#| label: fig-icc-schematic
+#| fig-cap: "Item characteristic curves at three discrimination values, all centred at the same difficulty (b = 0). The Rasch model fixes every item's curve to look like the middle one (a = 1), regardless of how steep the item actually behaves in real data."
+#| fig-height: 3.5
+
+schematic_df <- tidyr::expand_grid(
+  theta = seq(-4, 4, by = 0.05),
+  a     = c(0.5, 1, 2)
+) |>
+  mutate(
+    p     = 1 / (1 + exp(-a * theta)),
+    label = factor(paste0("a = ", a), levels = c("a = 0.5", "a = 1", "a = 2"))
+  )
+
+ggplot(schematic_df, aes(x = theta, y = p, colour = label)) +
+  geom_line(linewidth = 0.9) +
+  scale_colour_manual(values = c(irw_grey, irw_blue, irw_red), name = NULL) +
+  labs(x = expression("Ability (" * theta * ")"), y = "P(correct)")
+```
+
 ---
 
-## Step 1: Select datasets using metadata
+## Data and methods
+
+### Selecting datasets
 
 We use `irw_filter()` to find dichotomous datasets (`n_categories == 2`) tagged as
 **Cognitive/educational**, with at least 10 items and 500 respondents, and a response
@@ -71,9 +104,7 @@ To reproduce with current IRW holdings, re-run `2pl_across_datasets_compute.R` a
 commit the updated `2pldata/2pl_across_datasets_results.rds`.
 :::
 
----
-
-## Step 2: Fit a 2PL to each dataset
+### Fitting a 2PL to each dataset
 
 We write a function that (1) fetches a table, (2) downsamples to at most 10,000
 respondents to keep memory use manageable, (3) reshapes from long to wide format,
@@ -138,7 +169,7 @@ all_results <- map(cognitive_tables, fit_2pl) |>
 
 ---
 
-## Step 3: Examine discrimination distributions
+## Results
 
 ### Distribution of *a* across all items
 
@@ -150,15 +181,27 @@ all_results <- map(cognitive_tables, fit_2pl) |>
 all_results |>
   mutate(a_win = pmin(a, 4)) |>
   ggplot(aes(x = a_win)) +
-  geom_density(fill = "#2166ac", colour = "#2166ac", alpha = 0.4, linewidth = 0.8) +
-  geom_vline(xintercept = 1, linetype = "dashed", colour = "grey40") +
+  geom_density(fill = irw_blue, colour = irw_blue, alpha = 0.4, linewidth = 0.8) +
+  geom_vline(xintercept = 1, linetype = "dashed", colour = irw_grey) +
   labs(
     x       = "Discrimination (a)",
     y       = "Density",
     caption = "Dashed line at a = 1 (Rasch assumption). Values winsorised at 4."
-  ) +
-  theme_minimal(base_size = 13)
+  )
 ```
+
+```{r}
+#| label: a-density-inline
+#| echo: false
+
+pct_above_1 <- round(100 * mean(all_results$a > 1, na.rm = TRUE))
+```
+
+The dashed line at *a* = 1 marks where the Rasch model parks every item, regardless of
+how it actually behaves (as in the schematic above). `r pct_above_1`% of items in this
+sample have *a* > 1. If the distribution is centred well above 1, or has a long right
+tail, that suggests the equal-discrimination constraint is doing real work — and
+possibly distorting person ability estimates for items at the extremes.
 
 ### Dataset-level medians
 
@@ -188,14 +231,13 @@ dataset_summary <- all_results |>
   )
 
 p <- ggplot(dataset_summary, aes(x = rank, y = median_a, text = tooltip)) +
-  geom_point(aes(size = n_items), colour = "#2166ac", alpha = 0.7) +
-  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey40") +
+  geom_point(aes(size = n_items), colour = irw_blue, alpha = 0.7) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = irw_grey) +
   scale_size_continuous(range = c(2, 7), name = "# items") +
   labs(
     x = "Dataset (ranked by median a)",
     y = "Median discrimination (a)"
-  ) +
-  theme_minimal(base_size = 13)
+  )
 
 ggplotly(p, tooltip = "text") |>
   layout(
@@ -209,6 +251,10 @@ ggplotly(p, tooltip = "text") |>
     ))
   )
 ```
+
+The per-dataset median plot is often more informative than the pooled density above.
+If median *a* varies widely across datasets, that points to instrument design or
+sample homogeneity as a driver, not just item-level noise.
 
 ### Summary statistics
 
@@ -229,23 +275,21 @@ all_results |>
 
 ---
 
-## What to notice
+## Limitations
 
-**The Rasch assumption.** The dashed line at *a* = 1 marks where the Rasch model
-parks every item. If the distribution is centred well above 1, or has a long right
-tail, that suggests the equal-discrimination constraint is doing real work — and
-possibly distorting person ability estimates for items at the extremes.
+We downsample to 10,000 respondents per dataset, so estimates for large-scale
+assessments are based on a random subset. For the purpose of characterising the
+distribution of *a* this is acceptable — 10,000 respondents is more than enough for
+stable 2PL estimation — but it means we are not using the full IRW data for those
+tables. Some tables may also come from the same instrument administered in different
+populations; `irw_info()` can help identify these, and we have not deduplicated by
+instrument here, so a single widely-administered test could be over-represented in the
+pooled distribution above.
 
-**Between-dataset variance.** The per-dataset median plot is often more informative
-than the pooled density. If median *a* varies widely across datasets, that points to
-instrument design or sample homogeneity as a driver, not just item-level noise.
-
-**Limitations.** We downsample to 10,000 respondents per dataset, so estimates for
-large-scale assessments are based on a random subset. For the purpose of characterising
-the distribution of *a* this is acceptable — 10,000 respondents is more than enough
-for stable 2PL estimation — but it means we are not using the full IRW data.
-Some tables may also come from the same instrument administered in different
-populations; `irw_info()` can help identify these.
+This vignette only compares *a* to the Rasch model's implicit *a* = 1; it doesn't test
+whether freeing discrimination actually improves *fit* for any given dataset (see
+"Extending this vignette" below) or examine the *b* (difficulty) parameters that
+`all_results` also contains.
 
 ---
 
@@ -270,10 +314,10 @@ using `r length(cognitive_tables)` IRW tables. To reproduce:
 
 ```r
 # 1. Re-run the compute script (from project root)
-source("2pl_across_datasets_compute.R")
+source("vignettes/2pl_across_datasets_compute.R")
 
 # 2. Re-render this page
-quarto::quarto_render("2pl_across_datasets.qmd")
+quarto::quarto_render("vignettes/2pl_across_datasets.qmd")
 ```
 
 ::: {.callout-tip}
