@@ -213,3 +213,69 @@ mclapply(to_run, process_one,
          mc.preschedule = FALSE)
 
 message("\nDone. ", length(already_done()), " datasets in ", out_dir)
+
+# ── 5. Generate citations ─────────────────────────────────────────────────────
+#    irw_save_bibtex() takes the full vector of table names in one call and
+#    overwrites bib_file each run, so the four hand-written method citations
+#    below (Holland & Thayer's MH procedure and ETS delta scale, Zumbo's DIF
+#    handbook, Jodoin & Gierl's R^2 effect-size scale -- all verified against
+#    the difR package's own documentation/source, matching this script's
+#    delta_mh formula and the 0.035/0.07 thresholds used in the vignette) are
+#    appended afterward rather than written into bib_file directly.
+
+bib_file <- file.path(out_dir, "references.bib")
+
+tryCatch(
+  irw_save_bibtex(already_done(), output_file = bib_file),
+  error = function(e) message("  bibtex generation failed: ", conditionMessage(e))
+)
+
+manual_entries <- c(
+  "@techreport{hollandthayer1985delta,
+  title       = {An alternate definition of the {ETS} delta scale of item difficulty},
+  author      = {Holland, Paul W. and Thayer, Dorothy T.},
+  institution = {Educational Testing Service},
+  address     = {Princeton, NJ},
+  number      = {RR-85-43},
+  year        = {1985},
+  doi         = {10.1002/j.2330-8516.1985.tb00128.x}
+}",
+  "@incollection{hollandthayer1988mh,
+  title     = {Differential item performance and the {Mantel-Haenszel} procedure},
+  author    = {Holland, Paul W. and Thayer, Dorothy T.},
+  booktitle = {Test Validity},
+  editor    = {Wainer, Howard and Braun, Henry I.},
+  publisher = {Lawrence Erlbaum Associates},
+  address   = {Hillsdale, NJ},
+  year      = {1988}
+}",
+  "@techreport{zumbo1999handbook,
+  title       = {A Handbook on the Theory and Methods of Differential Item Functioning (DIF): Logistic Regression Modeling as a Unitary Framework for Binary and {Likert}-Type (Ordinal) Item Scores},
+  author      = {Zumbo, Bruno D.},
+  institution = {Directorate of Human Resources Research and Evaluation, Department of National Defense},
+  address     = {Ottawa, ON},
+  year        = {1999}
+}",
+  "@article{jodoingierl2001effect,
+  title   = {Evaluating Type {I} error and power rates using an effect size measure with the logistic regression procedure for {DIF} detection},
+  author  = {Jodoin, Michael G. and Gierl, Mark J.},
+  journal = {Applied Measurement in Education},
+  volume  = {14},
+  number  = {4},
+  pages   = {329--349},
+  year    = {2001},
+  doi     = {10.1207/S15324818AME1404_2}
+}"
+)
+
+entry_key <- function(entry) sub("^@\\w+\\{([^,]+),.*$", "\\1", trimws(entry))
+existing_keys <- if (file.exists(bib_file)) {
+  bib_lines <- readLines(bib_file)
+  key_lines <- grep("^@\\w+\\{", bib_lines, value = TRUE)
+  vapply(key_lines, entry_key, character(1), USE.NAMES = FALSE)
+} else character(0)
+new_entries <- manual_entries[!vapply(manual_entries, entry_key, character(1)) %in% existing_keys]
+if (length(new_entries) > 0) {
+  cat(paste0(new_entries, "\n"), file = bib_file, append = TRUE, sep = "\n")
+  message(length(new_entries), " manual citation(s) appended to ", bib_file)
+}

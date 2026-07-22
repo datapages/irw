@@ -5,6 +5,7 @@ description: |
   IRW datasets that record this covariate. We apply two DIF families — Mantel-Haenszel
   (uniform DIF, with ETS Δ effect sizes) and logistic regression (uniform and non-uniform
   DIF) — to each dataset and ask: how prevalent is gender DIF, and do the two methods agree?
+bibliography: gender_dif_data/references.bib
 format:
   html:
     code-fold: true
@@ -24,6 +25,11 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(plotly)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
 
 out_dir <- "gender_dif_data"
 fs      <- list.files(out_dir, pattern = "\\.rds$", full.names = TRUE)
@@ -67,7 +73,7 @@ ds_summary <- bind_rows(lapply(names(results), function(nm) {
                                  stringr::str_trunc(35), sep = " ")
   )
 
-pal <- c(MH = "#2166ac", `Logistic (uniform)` = "#d6604d",
+pal <- c(MH = irw_blue, `Logistic (uniform)` = "#d6604d",
          `Logistic (non-uniform)` = "#4dac26")
 ```
 
@@ -80,7 +86,7 @@ check the compute script (`gender_dif_compute.R`) directly if you're
 relying on the numbers here.
 :::
 
-## Research question
+## Motivation
 
 Differential item functioning (DIF) occurs when an item is systematically easier or
 harder for one group than another, *after controlling for the underlying trait*. Gender
@@ -92,7 +98,7 @@ flagged?
 
 ---
 
-## Approach
+## Data and methods
 
 ### Dataset selection
 
@@ -129,11 +135,12 @@ For each dataset we:
 | **Mantel-Haenszel** | `difR::difMH` | `difR::difGMH` | Uniform DIF only |
 | **Logistic regression** | `difR::difLogistic` | `difR::difPolyLogistic` | Uniform + non-uniform DIF |
 
-The MH family uses total score as the matching criterion and produces the **ETS Δ**
-effect size (= −2.35 × ln α̂~MH~) for dichotomous items: |Δ| < 1 negligible (A),
-1–1.5 moderate (B), > 1.5 large (C). The logistic family fits ordinal regression
-models per item and decomposes DIF into a uniform component (group main effect) and
-a non-uniform component (group × score interaction).
+The MH family [@hollandthayer1988mh] uses total score as the matching criterion and
+produces the **ETS Δ** effect size (= −2.35 × ln α̂~MH~) for dichotomous items
+[@hollandthayer1985delta]: |Δ| < 1 negligible (A), 1–1.5 moderate (B), > 1.5 large (C).
+The logistic family fits ordinal regression models per item and decomposes DIF into a
+uniform component (group main effect) and a non-uniform component (group × score
+interaction).
 
 The full compute script is at `vignettes/gender_dif_compute.R`.
 
@@ -207,7 +214,6 @@ p <- ggplot(plot_df, aes(
   scale_x_continuous(labels = scales::percent_format(), limits = c(0, 1.05)) +
   scale_colour_manual(values = pal, name = "Method") +
   labs(x = "Proportion of items with DIF", y = NULL) +
-  theme_minimal(base_size = 13) +
   theme(
     panel.grid.major.y = element_line(colour = "grey92"),
     axis.text.y        = element_blank()
@@ -247,6 +253,13 @@ bind_rows(
 ) |> rename(Method = method)
 ```
 
+DIF is real and common by both methods, and the IRW's scale makes this a uniquely broad
+cross-domain baseline — gender DIF is not confined to a few pathological instruments.
+But the logistic non-uniform component (group × score interaction) flags noticeably
+fewer items than either uniform measure, consistent with the broader measurement
+literature: most gender DIF found here looks like a uniform difficulty shift rather
+than a slope difference.
+
 ### Significance vs. effect size: the key divergence
 
 A central finding of this analysis is that MH significance and ΔR² effect size can
@@ -282,12 +295,11 @@ p_div <- ggplot(div_df, aes(x = prop_mh, y = median_r2,
   geom_hline(yintercept = c(0.035, 0.07), linetype = "dashed", colour = "grey60") +
   geom_point(alpha = 0.8) +
   scale_x_continuous(labels = scales::percent_format(), limits = c(0, 1.05)) +
-  scale_colour_manual(values = c(Dichotomous = "#2166ac", Polytomous = "#4dac26"),
+  scale_colour_manual(values = c(Dichotomous = irw_blue, Polytomous = "#4dac26"),
                       name = "Item type") +
   scale_size_continuous(range = c(3, 9), name = "N", guide = "none") +
   labs(x = "Proportion of items flagged by MH (α = 0.05)",
-       y = "Median ΔR² (logistic uniform)") +
-  theme_minimal(base_size = 13)
+       y = "Median ΔR² (logistic uniform)")
 
 # Threshold labels are added as native plotly annotations (xref = "paper") rather
 # than a ggplot annotate() layer, which ggplotly() clips at the left panel edge.
@@ -333,12 +345,16 @@ items_df |>
   geom_hline(yintercept = 0.035, linetype = "dashed", colour = "#d6604d") +
   geom_boxplot(outlier.size = 0.8, alpha = 0.8) +
   facet_wrap(~item_type, scales = "free_y") +
-  scale_fill_manual(values = c(Dichotomous = "#2166ac", Polytomous = "#4dac26"),
+  scale_fill_manual(values = c(Dichotomous = irw_blue, Polytomous = "#4dac26"),
                     guide = "none") +
   labs(x = NULL, y = expression(Delta * R^2 ~ "(logistic uniform)")) +
-  theme_minimal(base_size = 13) +
   theme(axis.text.x = element_text(angle = 15, hjust = 1))
 ```
+
+Even where MH significance is high, the majority of items have ΔR² below 0.035 — the
+conventional "negligible" threshold [@jodoingierl2001effect]. Datasets with genuinely
+large per-item effects (ΔR² > 0.07) are the exception. Read on its own, significance-only
+DIF reporting would inflate the apparent prevalence of meaningful gender bias.
 
 ### P-value distributions
 
@@ -362,18 +378,18 @@ items_df |>
   filter(!is.na(p)) |>
   ggplot(aes(x = p)) +
   geom_histogram(binwidth = 0.05, boundary = 0,
-                 fill = "#2166ac", colour = "white", alpha = 0.75) +
+                 fill = irw_blue, colour = "white", alpha = 0.75) +
   geom_vline(xintercept = 0.05, linetype = "dashed", colour = "#d6604d") +
   facet_wrap(~method) +
-  labs(x = "p-value", y = "Count") +
-  theme_minimal(base_size = 13)
+  labs(x = "p-value", y = "Count")
 ```
 
 ### ETS Δ effect sizes (dichotomous datasets)
 
-For dichotomous items the MH odds ratio translates to the ETS Δ scale, which classifies
-DIF severity: |Δ| < 1 = negligible (A), 1–1.5 = moderate (B), > 1.5 = large (C).
-Positive Δ means the item is harder for the focal group.
+For dichotomous items the MH odds ratio translates to the ETS Δ scale
+[@hollandthayer1985delta], which classifies DIF severity: |Δ| < 1 = negligible (A),
+1–1.5 = moderate (B), > 1.5 = large (C). Positive Δ means the item is harder for the
+focal group.
 
 ```{r}
 #| label: fig-delta
@@ -385,13 +401,12 @@ delta_df <- items_df |> filter(!is.na(delta_mh))
 if (nrow(delta_df) > 0) {
   ggplot(delta_df, aes(x = delta_mh)) +
     geom_histogram(binwidth = 0.25, boundary = 0,
-                   fill = "#2166ac", colour = "white", alpha = 0.75) +
+                   fill = irw_blue, colour = "white", alpha = 0.75) +
     geom_vline(xintercept = c(-1.5, -1, 1, 1.5),
                linetype = "dashed", colour = "#d6604d") +
     annotate("text", x = c(-1.25, 0, 1.25), y = Inf,
              label = c("B", "A", "B"), vjust = 1.5, size = 3.5, colour = "grey40") +
-    labs(x = "ETS Δ", y = "Count") +
-    theme_minimal(base_size = 13)
+    labs(x = "ETS Δ", y = "Count")
 } else {
   message("No dichotomous datasets in current results.")
 }
@@ -399,11 +414,11 @@ if (nrow(delta_df) > 0) {
 
 ### Logistic R² effect sizes (uniform DIF)
 
-The logistic regression approach produces a pseudo-R² difference (Zumbo 1999) for each
-item: the increase in model fit when a group term is added. This provides a
+The logistic regression approach produces a pseudo-R² difference [@zumbo1999handbook]
+for each item: the increase in model fit when a group term is added. This provides a
 sample-size-independent effect size for both dichotomous and polytomous items.
-Conventional cutoffs: < 0.035 negligible, 0.035–0.07 moderate, > 0.07 large
-(Jodoin & Gierl 2001).
+Conventional cutoffs [@jodoingierl2001effect]: < 0.035 negligible, 0.035–0.07 moderate,
+> 0.07 large.
 
 ```{r}
 #| label: fig-delta-r2
@@ -424,10 +439,9 @@ if (nrow(r2_df) > 0) {
     annotate("text", x = c(0.017, 0.0525, 0.11), y = Inf,
              label = c("Negligible", "Moderate", "Large"),
              vjust = 1.5, size = 3.5, colour = "grey40") +
-    scale_fill_manual(values = c(Dichotomous = "#2166ac", Polytomous = "#4dac26"),
+    scale_fill_manual(values = c(Dichotomous = irw_blue, Polytomous = "#4dac26"),
                       name = "Item type") +
-    labs(x = expression(Delta*R^2~"(uniform DIF)"), y = "Count") +
-    theme_minimal(base_size = 13)
+    labs(x = expression(Delta*R^2~"(uniform DIF)"), y = "Count")
 } else {
   message("delta_r2_unif not available — rerun compute script.")
 }
@@ -435,39 +449,20 @@ if (nrow(r2_df) > 0) {
 
 ---
 
-## What to notice
+## Limitations
 
-**MH significance and effect size come apart for polytomous items.** Many polytomous
-datasets show near-universal MH flagging (prop_mh ≈ 1) while median ΔR² stays in
-negligible territory. This is a consequence of how the Generalized Mantel-Haenszel test
-works: it conditions on the observed total score, which is itself contaminated when
-groups differ on the underlying trait mean (as is common for personality and
-psychological scales by gender). In those cases, GMH accumulates to p ≈ 0 for every
-item even when no item is individually biased. The logistic ΔR² is not susceptible to
-this artifact because it models the group effect directly rather than aggregating
-stratified tables.
+All analyses use uncorrected α = 0.05; Benjamini-Hochberg correction within each dataset
+would reduce flagging rates. The GMH anticonservatism for polytomous items persists even
+with purification when group trait-mean differences are large — this is a fundamental
+limitation of total-score matching for polytomous data [@hollandthayer1988mh], not a
+tuning issue. Logistic ΔR² is the more reliable metric in those settings. For polytomous
+datasets with more than 20 items, `difPolyLogistic` was skipped due to computational
+cost; those datasets contribute MH results only.
 
-**Effect sizes are mostly negligible.** Even where MH significance is high, the
-majority of items have ΔR² below 0.035 — the conventional threshold for a "negligible"
-effect. Datasets with genuinely large per-item effects (ΔR² > 0.07) are the exception.
-Significance-only DIF reporting inflates the apparent prevalence of meaningful gender
-bias.
-
-**DIF is nonetheless real and common.** The logistic results — less prone to the
-contamination artifact — still flag a substantial proportion of items across datasets,
-and some datasets show non-trivial ΔR². The IRW's scale makes this a uniquely broad
-cross-domain baseline: gender DIF is not confined to a few pathological instruments.
-
-**Non-uniform DIF is less common than uniform.** The logistic non-uniform component
-(group × score interaction) flags fewer items than the uniform component, consistent
-with the broader measurement literature.
-
-**Limitations.** All analyses use uncorrected α = 0.05; BH correction within each
-dataset would reduce flagging rates. The GMH anticonservatism for polytomous items
-persists even with purification when group trait-mean differences are large — this is
-a fundamental limitation of total-score matching for polytomous data, not a tuning
-issue. Logistic ΔR² is the more reliable metric in those settings. For polytomous
-datasets with more than 20 items, `difPolyLogistic` was skipped due to computational cost; those datasets contribute MH results only.
+More generally: this vignette reports statistical *and* effect-size measures of DIF, but
+doesn't establish which flagged items are substantively meaningful for score
+interpretation in any given instrument, or attempt any correction for the fact that
+gender is only one of many possible DIF grouping variables IRW tables could support.
 
 ---
 
@@ -486,3 +481,5 @@ The compute script writes one `.rds` file per dataset to `vignettes/gender_dif_d
 Delete those files to force a fresh run. The vignette renders on whatever results are
 present — no need to wait for the full run to complete.
 :::
+
+## References
