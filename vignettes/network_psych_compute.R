@@ -137,9 +137,21 @@ fit_network <- function(table_name) {
   if (n_categories == 2) {
     network_default <- "IsingFit"
     irt_itemtype     <- "2PL"
+    cor_method       <- NULL
   } else if (n_categories >= 3 && n_categories <= 7) {
     network_default <- "EBICglasso"
-    irt_itemtype     <- "graded"
+    # GPCM, not GRM: Marsman, van den Bergh, & Haslbeck (2025) derive the
+    # network-model <-> IRT-model equivalence for ordinal items via the
+    # generalized partial credit model, not the graded response model --
+    # so GPCM is the theoretically matched choice for this vignette's core
+    # comparison on polytomous tables (see Limitations in network_psych.qmd).
+    irt_itemtype     <- "gpcm"
+    # bootnet's "EBICglasso" default set stopped calling qgraph::cor_auto()
+    # (which estimates polychoric/polyserial correlations for ordinal data)
+    # as of bootnet 1.4, falling back to plain Pearson correlations unless
+    # corMethod is passed explicitly. Pin it here rather than rely on
+    # whatever the installed bootnet version's default happens to be.
+    cor_method       <- "cor_auto"
   } else {
     message("    skipped: n_categories = ", n_categories, " outside {2} u {3..7}")
     return(NULL)
@@ -149,7 +161,17 @@ fit_network <- function(table_name) {
 
   net <- tryCatch(
     suppressWarnings(suppressMessages(
-      estimateNetwork(resp, default = network_default, verbose = FALSE)
+      if (is.null(cor_method)) {
+        estimateNetwork(resp, default = network_default, verbose = FALSE)
+      } else {
+        # cor_auto()'s polychoric matrix isn't guaranteed positive-definite
+        # (common with several ordinal items and pairwise-estimated
+        # correlations); bootnet's default is to error out rather than
+        # correct it, so force the nearest valid correlation matrix instead
+        # of dropping every table that hits this.
+        estimateNetwork(resp, default = network_default, corMethod = cor_method,
+                         corArgs = list(forcePD = TRUE), verbose = FALSE)
+      }
     )),
     error = function(e) {
       message("    ", network_default, " failed: ", conditionMessage(e))
@@ -338,6 +360,26 @@ manual_entries <- c(
   publisher = {Wiley},
   year      = {2018},
   doi       = {10.1002/9781118489772.ch30}
+}",
+  "@article{marsman2018introduction,
+  title   = {An introduction to network psychometrics: {R}elating {I}sing network models to item response theory models},
+  author  = {Marsman, Maarten and Borsboom, Denny and Kruis, Jonas and Epskamp, Sacha and van Bork, Ria and Waldorp, Lourens J. and van der Maas, Han L. J. and Maris, Gunter},
+  journal = {Multivariate Behavioral Research},
+  volume  = {53},
+  number  = {1},
+  pages   = {15--35},
+  year    = {2018},
+  doi     = {10.1080/00273171.2017.1379379}
+}",
+  "@article{marsman2025bayesian,
+  title   = {Bayesian analysis of the ordinal {M}arkov random field},
+  author  = {Marsman, Maarten and van den Bergh, Don and Haslbeck, Jonas M. B.},
+  journal = {Psychometrika},
+  volume  = {90},
+  number  = {1},
+  pages   = {146--182},
+  year    = {2025},
+  doi     = {10.1017/psy.2024.4}
 }"
 )
 

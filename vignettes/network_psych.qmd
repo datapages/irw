@@ -135,8 +135,13 @@ These two accounts aren't just philosophically different — they make a
 shared, testable prediction. Van der Maas et al. (2006)
 [@vandermaas2006dynamical] and Epskamp, Maris, van Borkulo, & Borsboom
 (2018) [@epskamp2018testing] show that if a single dominant common cause
-really does explain a set of items, the two descriptions should coincide:
-a node's **centrality** (how strongly and directly it connects to every
+really does explain a set of items, the two descriptions should coincide.
+This isn't just an informal observation: Marsman et al. (2018)
+[@marsman2018introduction] prove a formal statistical equivalence between
+the Ising model and the 2PL for binary items, and Marsman, van den Bergh,
+& Haslbeck (2025) [@marsman2025bayesian] extend that equivalence to
+ordinal items -- with a wrinkle noted in Data and methods below. Under
+that equivalence, a node's **centrality** (how strongly and directly it connects to every
 other node) should track that item's **IRT discrimination**, and the
 estimated network should look densely and fairly uniformly connected —
 not clustered into visibly separate sub-groups. This vignette tests that
@@ -175,10 +180,17 @@ For each candidate table, `fit_network()`:
    at most 10,000 respondents and dropping zero-variance items, mirroring
    the other IRT vignettes on this site.
 2. Estimates a regularized network with `bootnet::estimateNetwork()`:
-   `IsingFit` for binary items, `EBICglasso` for polytomous items
-   (treating ordinal Likert data as continuous — standard network-
-   literature practice, an approximation rather than an exact ordinal
-   network model; see Limitations).
+   `IsingFit` for binary items, `EBICglasso` for polytomous items. The
+   polytomous correlations are computed via `qgraph::cor_auto()`
+   (`corMethod = "cor_auto"`, `corArgs = list(forcePD = TRUE)`), which
+   estimates polychoric correlations for ordinal data and projects to the
+   nearest valid correlation matrix when the polychoric estimate isn't
+   positive-definite — this still treats the *graph* estimation step as
+   Gaussian, an approximation relative to an exact ordinal network model,
+   but does not additionally treat Likert categories as literally
+   continuous integers (see Limitations for why both of those still fall
+   short of the ordinal Markov random field with a proven IRT
+   equivalence).
 3. Computes node centrality with `qgraph::centrality_auto()`. In a
    genuinely weighted network this returns a `Strength` column (each
    item's summed edge weight); a fully empty regularized network — every
@@ -186,9 +198,11 @@ For each candidate table, `fit_network()`:
    to `Degree` instead. That's still a real, informative result (kept in
    the data below), just not one with a meaningful strength-discrimination
    correlation, so that comparison is left `NA` for those tables.
-4. Fits the same one-factor model used elsewhere on this site — 2PL for
-   binary, the graded response model for polytomous — and extracts item
-   discrimination.
+4. Fits a one-factor IRT model and extracts item discrimination: 2PL for
+   binary items; the **generalized partial credit model (GPCM)**, not the
+   graded response model used elsewhere on this site, for polytomous items
+   — GPCM is the model with a proven equivalence to the ordinal network
+   model this vignette's polytomous branch estimates (see Limitations).
 5. Records the correlation between node strength and discrimination
    across items — the vignette's core comparison — plus network density
    (proportion of possible edges present) and `construct_type`/
@@ -206,9 +220,13 @@ For each candidate table, `fit_network()`:
 
 fit_network <- function(table_name) {
   resp <- fetch_wide(table_name)  # irw_fetch() + irw_long2resp(), cleaned
-  net  <- estimateNetwork(resp, default = if (n_categories == 2) "IsingFit" else "EBICglasso")
+  net  <- if (n_categories == 2) {
+    estimateNetwork(resp, default = "IsingFit")
+  } else {
+    estimateNetwork(resp, default = "EBICglasso", corMethod = "cor_auto")
+  }
   cent <- centrality_auto(net$graph)
-  fit  <- mirt(resp, 1, itemtype = if (n_categories == 2) "2PL" else "graded")
+  fit  <- mirt(resp, 1, itemtype = if (n_categories == 2) "2PL" else "gpcm")
   a    <- coef(fit, simplify = TRUE)$items[, "a1"]
   cor(cent$node.centrality$Strength, a)  # the core comparison
 }
@@ -237,7 +255,7 @@ depends on) and commit the updated
 
 ```{r}
 #| label: fig-example-network
-#| fig-cap: "Estimated network (left) and IRT discrimination parameters (right) for the table with the strongest strength-discrimination correlation in this sample (top) and the weakest (bottom). Top: a dense, uniformly-connected graph with node positions that roughly track item discrimination -- exactly what Epskamp et al.'s theory predicts under a strong single factor. Bottom: edge thickness and node position barely track discrimination at all."
+#| fig-cap: "Estimated network (left) and IRT discrimination parameters (right) for the table with the strongest strength-discrimination correlation in this sample (top) and the weakest (bottom). Edge color shows sign: blue = positive partial correlation, red = negative. Top: a dense, uniformly-connected, uniformly positive graph with node positions that roughly track item discrimination -- exactly what Epskamp et al.'s theory predicts under a strong single factor. Bottom: edge thickness and node position barely track discrimination at all, and every edge is negative."
 #| fig-height: 10
 #| fig-width: 11
 
@@ -263,7 +281,7 @@ plot_example_pair <- function(table_name, label) {
 
   par(mar = c(4, 1, 4, 1))
   qgraph::qgraph(g, layout = "spring", labels = names(s),
-                 label.cex = 0.9, vsize = 11, edge.color = irw_blue,
+                 label.cex = 0.9, vsize = 11, posCol = irw_blue, negCol = irw_red,
                  title = paste0(label, ": ", table_name, "\nestimated network"),
                  title.cex = 1)
 
@@ -288,6 +306,13 @@ hi_density <- summary_df$network_density[summary_df$table == hi_table]
 lo_density <- summary_df$network_density[summary_df$table == lo_table]
 lo_a       <- discriminations_list[[lo_table]]
 n_lo_neg_a <- sum(lo_a < 0)
+lo_g       <- graphs_list[[lo_table]]
+lo_all_neg <- all(lo_g[upper.tri(lo_g)] <= 0)
+lo_irt_model <- if (summary_df$n_categories[summary_df$table == lo_table] == 2) {
+  "2PL model"
+} else {
+  "graded response model"
+}
 ```
 
 `r hi_table` has a strength-discrimination correlation of `r round(hi_cor, 2)`
@@ -296,11 +321,11 @@ n_lo_neg_a <- sum(lo_a < 0)
 descriptions of the same items agree much less about which ones matter
 most, to the point of actively disagreeing about direction.
 
-What makes the contrast worth dwelling on is what *doesn't* differ between
-them: both networks are fully connected (density
-`r round(hi_density, 2)` and `r round(lo_density, 2)` respectively — every
-possible edge present in both). Density and uniformity, the other half of
-Epskamp et al.'s prediction, look identical here; only the
+What makes the contrast worth dwelling on is what *doesn't* differ much
+between them: both networks are comparably dense (density
+`r round(hi_density, 2)` and `r round(lo_density, 2)` respectively).
+Density and uniformity, the other half of
+Epskamp et al.'s prediction, don't distinguish these two cases well; only the
 strength-discrimination correlation reveals that one table matches the
 single-common-cause story and the other doesn't. A network that merely
 *looks* dense and uniform is not, on its own, evidence that IRT and
@@ -309,11 +334,10 @@ counterexample.
 
 The disagreement in `r lo_table` isn't subtle, either:
 `r n_lo_neg_a` of its `r length(lo_a)` items get a *negative* IRT
-discrimination, meaning the 2PL model estimates them as running opposite
-the trait it fit from the rest — yet the network still connects every one
-of those items to every other about as strongly as any pair in
-`r hi_table`. The two frameworks aren't just disagreeing on a matter of
-degree; they disagree on which items belong together at all. Practically,
+discrimination, meaning the `r lo_irt_model` estimates them as running
+opposite the trait it fit from the rest.
+`r if (lo_all_neg) "Every edge in the estimated network is negative (visible from the red edges above), not merely non-uniform in strength -- the two frameworks aren't just disagreeing on a matter of degree; the network sees a single tightly (negatively) coupled cluster where IRT sees a trait some items run backward on." else "The network still connects those items to every other about as strongly as any pair in hi_table, despite the sign disagreement in the IRT fit."`
+Practically,
 that matters most for anyone using either statistic to pick or drop items
 — shortening a scale by discrimination, or by network centrality, is not
 a neutral choice, and a table like this one is exactly where the two
@@ -321,11 +345,44 @@ selections would part ways. Compare both examples to the aggregate
 picture below: most tables fall somewhere between these two extremes, but
 not always close to the middle.
 
+```{r}
+#| label: clifford-aside-inline
+#| echo: false
+
+clifford_table <- "clifford_2018_police_blame"
+clifford_present <- clifford_table %in% summary_df$table
+if (clifford_present) {
+  clifford_cor <- summary_df$strength_a_cor[summary_df$table == clifford_table]
+}
+```
+
+::: {.callout-note collapse="true"}
+#### A worked case for *why* a single common cause can fail, not just that it does
+
+`r if (clifford_present) paste0("One table worth a specific look regardless of where it happens to fall in the ranking above -- its strength-discrimination correlation this pass is ", round(clifford_cor, 2), " -- is ", clifford_table, ".") else paste0(clifford_table, " didn't appear among this pass's usable tables, but the underlying item design below is worth keeping in mind for similar multi-target blame/attribution items elsewhere in IRW.")` Each item asks the identically-worded "how much blame does X
+deserve" about a different target in the 2018 Sacramento police shooting of
+Stephon Clark -- state officials and the responding officers on one side,
+and the victim himself (`item_blame_clark`) on the other. Blaming the
+victim is a substantively different judgment from blaming officials, and
+the raw item correlations bear that out: `item_blame_clark` correlates
+negatively with every other item (fetched directly from IRW, not shown
+here), while the official-blame items mostly correlate positively with
+each other. That's a real bipolar attitude structure, not a data-entry or
+reverse-coding artifact -- there's no oppositely-worded item to un-reverse;
+every item shares the same "how much blame" wording, only the target
+changes. It's a reminder that a low (or negative) strength-discrimination
+correlation doesn't always mean the same thing: sometimes it's a
+genuinely multidimensional or bipolar construct like this one, and
+sometimes -- as with the current lowest-correlation example above -- the
+network and the IRT model simply weight the same roughly-unidimensional
+items differently.
+:::
+
 ### Does strength track discrimination in general?
 
 ```{r}
 #| label: fig-cor-ranked
-#| fig-cap: "Correlation between network node strength and IRT discrimination, one point per table, ranked from lowest to highest. Values near 1 match the theoretical prediction under a strong single factor; low or negative values indicate a breakdown. Hover over a point to see which table it is."
+#| fig-cap: "Correlation between network node strength and IRT discrimination, one point per table. The y-axis carries no information of its own -- it is each table's rank by that correlation (low to high), used only to spread overlapping points out vertically so individual tables are separable; read the plot along the x-axis only. Values near 1 match the theoretical prediction under a strong single factor; low or negative values indicate a breakdown. Hover over a point to see which table it is."
 #| fig-height: 6
 
 ranked_df <- summary_df %>%
@@ -345,7 +402,8 @@ ranked_df <- summary_df %>%
 p <- ggplot(ranked_df, aes(x = strength_a_cor, y = rank, text = tooltip)) +
   geom_point(colour = irw_blue, size = 1.6, alpha = 0.7) +
   geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
-  labs(x = "Correlation: node strength vs. IRT discrimination", y = NULL) +
+  labs(x = "Correlation: node strength vs. IRT discrimination",
+       y = "Rank (spreads points out only -- carries no meaning of its own)") +
   theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
 
 ggplotly(p, tooltip = "text") |> layout(margin = list(t = 60))
@@ -486,9 +544,36 @@ is a reasonable place to expect exactly that disagreement.
 
 ## Limitations
 
-- **EBICglasso on ordinal data** treats Likert-type responses as
-  continuous, standard practice in the network-psychometrics literature
-  but an approximation, not an exact ordinal network model.
+- **EBICglasso on ordinal data, two gaps found and one fixed by
+  refitting.** `bootnet::estimateNetwork()`'s `EBICglasso` preset does not
+  call `qgraph::cor_auto()` by default — as of `bootnet` 1.4, the
+  `EBICglasso` default set switched from `corMethod = "cor_auto"` to
+  plain Pearson correlations (`cor`). Neither `bootnet` nor `qgraph` is
+  pinned in `renv.lock` (still not fixed — see below), so an earlier pass
+  of this vignette likely ran on whatever version was on the machine at
+  the time and may have silently treated 7-point Likert integers as
+  literally continuous. This pass instead passes `corMethod = "cor_auto"`
+  explicitly (polychoric/polyserial correlations for ordinal items) with
+  `corArgs = list(forcePD = TRUE)`, since a polychoric correlation matrix
+  over several ordinal items is not always positive-definite and
+  `bootnet` errors out by default rather than correcting it; `forcePD`
+  projects to the nearest valid correlation matrix instead. The impact was
+  real and sometimes large: `clifford_2018_police_blame`, the lowest
+  strength-discrimination correlation table in an earlier pass of this
+  vignette (r = −0.69), moved to r = 0.09 once the network side used
+  polychoric correlations and the IRT side used GPCM instead of GRM (next
+  point) — a different table is now the lowest-correlation example (see
+  the worked-case callout above). Separately, and regardless of that fix:
+  even an exact polychoric-correlation Gaussian graphical model is still
+  not the network model with a proven equivalence to an ordinal IRT
+  model. Marsman, van den Bergh, & Haslbeck (2025) [@marsman2025bayesian]
+  derive that equivalence for the **ordinal Markov random field**, and
+  show it corresponds to the **generalized partial credit model (GPCM)**,
+  not the graded response model most applied network-IRT comparisons use
+  for polytomous items — this vignette now fits GPCM for that reason (see
+  Data and methods), but an exact ordinal-MRF network fit (rather than a
+  Gaussian approximation on polychoric correlations) is still not
+  implemented here.
 - **Network estimation is more sample- and tuning-sensitive** than fitting
   a single IRT model. Small tables in this sample should be read
   cautiously; an empty regularized network (no edges survive
@@ -507,6 +592,11 @@ is a reasonable place to expect exactly that disagreement.
   caches were built on their own candidate pools (different item-count
   caps), so not every table here has a match in both — see the match-rate
   numbers in Data and methods.
+- **`bootnet` and `qgraph` aren't pinned in `renv.lock`.** Unlike this
+  site's other dependencies, this pass ran against whatever versions of
+  these two packages happened to be installed, which is how the `cor_auto`
+  default-behavior change above went unnoticed. Pinning both is part of
+  the same follow-up as the `corMethod`/GPCM fixes.
 
 ## Reproducibility
 
