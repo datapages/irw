@@ -26,6 +26,7 @@ library(dplyr)
 library(tidyr)
 library(tibble)
 library(ggplot2)
+library(plotly)
 
 theme_set(theme_minimal(base_size = 13))
 irw_blue <- "#2166ac"
@@ -51,7 +52,7 @@ if (cache_ok) {
 }
 ```
 
-## Overview
+## Motivation
 
 Many RCTs in education, economics, and health research use psychometric
 instruments — tests, surveys, symptom checklists — as outcome measures. A
@@ -62,12 +63,37 @@ the intervention's content may show a large positive effect while an unrelated
 item shows none.
 
 This item-level variation is called **item-level heterogeneous treatment
-effects** (IL-HTE) [@gilbert2025estimating]. Formally, if the log-odds of a
-correct response for item $i$ by person $j$ follows
+effects** (IL-HTE) [@gilbert2025estimating]. Beyond masking item-level
+variation, IL-HTE has a less obvious consequence for causal identification.
+When item-level effects are correlated with item difficulty, a conventional
+treatment-by-covariate interaction model — the standard tool for asking "who
+benefits most?" — can produce biased estimates even when no true person-level
+heterogeneity exists. @gilbert2024disentangling prove this analytically and
+demonstrate it through simulation. We illustrate both insights below using RCT
+datasets from the IRW.
+
+---
+
+## Data and methods
+
+### Dataset selection
+
+We use IRW tables that record a binary `treat` indicator and have at least 100
+participants (`irw_filter(var = "treat", n_participants = c(100, Inf))`). For
+datasets with a `wave` column (multiple follow-up waves), only wave 1 is used.
+Items are restricted to those with exactly two response categories; datasets
+with fewer than three dichotomous items after that restriction are dropped.
+Respondent counts are downsampled to at most 5,000 IDs for large datasets to
+keep model fitting tractable.
+
+### The IL-HTE model
+
+Formally, if the log-odds of a correct response for item $i$ by person $j$
+follows
 
 $$
 \begin{align}
-    \text{logit}(\Pr(Y_{ij} = 1)) = \eta_{ij} &= \theta_j + b_{i} + \zeta_i T_j \\ 
+    \text{logit}(\Pr(Y_{ij} = 1)) = \eta_{ij} &= \theta_j + b_{i} + \zeta_i T_j \\
     \theta_j &= \beta_0 + \beta_1 T_j + \varepsilon_j \\
     \begin{bmatrix}
         b_i \\
@@ -91,30 +117,46 @@ respond heterogeneously to treatment. In `lme4` notation this is:
 glmer(resp ~ treat + (1|id) + (treat|item), family = binomial)
 ```
 
-Beyond masking item-level variation, IL-HTE has a less obvious consequence
-for causal identification. When $\zeta_i$ is correlated with item difficulty
-$b_i$ (parameterized as $\rho \ne 0$), a conventional treatment-by-covariate
-interaction model — the standard tool for asking "who benefits most?" — can
-produce biased estimates even when no true person-level heterogeneity exists.
-@gilbert2024disentangling prove this analytically and demonstrate it through
-simulation. We illustrate both insights below using RCT datasets from the IRW.
+We fit this model to each dataset, extract empirical Bayes estimates of the
+item-specific effects $\hat\beta_1 + \hat\zeta_i$, and standardize by
+$\hat\sigma_\theta$ — the person-level SD from a baseline random-intercepts
+model with no treatment slope — so that effects are comparable across
+datasets. Statistical significance of $\sigma_\zeta$ uses a likelihood-ratio
+test against that baseline model, with the standard boundary correction of
+halving the reported p-value (the null variance of zero sits at the edge of
+the parameter space).
 
-## Item-level treatment effects
+### Model comparison for the identification problem
 
-We fit the IL-HTE model to each dataset, extract empirical Bayes estimates of
-the item-specific effects $\hat\beta_1 + \hat\zeta_i$, and standardize by
-$\hat\sigma_\theta$ — the person-level SD from the baseline random-intercepts
-model — so that effects are comparable across datasets. The ATE $\hat\beta_1$
-is shown as a large point; individual item effects as small points. Datasets
-are ordered by ATE. Color encodes whether the IL-HTE variance $\sigma_\zeta$
-is statistically significant (likelihood ratio test, $p < 0.05$, with the
-boundary correction of dividing the reported $p$-value by 2).
+We illustrate the identification problem empirically by fitting two
+additional models per dataset, wherever a pretest covariate is available:
+
+- **M_B** (constant item effects + person HTE):
+  `resp ~ treat + cov + treat:cov + (1|item) + (1|id)`
+- **M_C** (flexible EIRM — IL-HTE + person HTE):
+  `resp ~ treat + cov + treat:cov + (treat|item) + (1|id)`
+
+where `cov` is the standardized pretest score: `std_baseline` where the
+dataset provides it, or otherwise whichever `cov_`-prefixed column is most
+correlated with the response in the control arm alone. Datasets with no
+usable pretest covariate contribute to the item-level-effects analysis above
+but are excluded from this comparison. The $\hat\beta_3$ coefficient on
+`treat:cov` represents the treatment-by-covariate interaction; M_B estimates
+it without allowing for IL-HTE, M_C estimates it alongside IL-HTE.
+
+---
+
+## Results
+
+### Item-level treatment effects
+
+The ATE $\hat\beta_1$ is shown as a large point; individual item effects as
+small points. Datasets are ordered by ATE. Color encodes whether the IL-HTE
+variance $\sigma_\zeta$ is statistically significant.
 
 ```{r}
 #| label: fig-item-effects
 #| fig-cap: "Empirical Bayes estimates of item-specific treatment effects, standardized by σ_θ. Small points: individual item effects (β₁ + ζ̂ᵢ)/σ_θ. Hover over the large dot to see dataset details."
-
-library(plotly)
 
 tab_order <- summary_df |> arrange(ate_std) |> pull(tab)
 
@@ -193,11 +235,10 @@ Across `r n_tot` datasets, `r n_sig` show statistically significant IL-HTE
 ATE obscures meaningful variation in which aspects of the outcome respond to
 the intervention — information that would be invisible in a sum-score analysis.
 
-## The identification problem
+### The identification problem
 
-A more subtle consequence of IL-HTE concerns the estimation of
-treatment-by-covariate interactions. @gilbert2024disentangling show
-analytically that when $\rho \ne 0$, the two distinct data-generating
+@gilbert2024disentangling show analytically that when item-level effects are
+correlated with item difficulty ($\rho \ne 0$), two distinct data-generating
 processes — (1) true person-level HTE via a treatment × pretest interaction,
 and (2) item-level HTE correlated with item difficulty — produce *identical*
 patterns in sum-score outcomes. A model that omits IL-HTE therefore cannot
@@ -209,17 +250,6 @@ treatment), treatment "stretches" the item difficulty distribution — the ratio
 $\sigma_b^\text{treat}/\sigma_b^\text{ctrl}$ exceeds 1 — and the
 constant-item model attributes this variation to a spurious negative
 treatment-by-pretest interaction.
-
-We illustrate this empirically by fitting two additional models per dataset:
-
-- **M_B** (constant item effects + person HTE):
-  `resp ~ treat + cov + treat:cov + (1|item) + (1|id)`
-- **M_C** (flexible EIRM — IL-HTE + person HTE):
-  `resp ~ treat + cov + treat:cov + (treat|item) + (1|id)`
-
-where `cov` is the standardized pretest score. The $\hat\beta_3$ coefficient
-on `treat:cov` represents the treatment-by-covariate interaction; M_B
-estimates it without allowing for IL-HTE, M_C estimates it alongside IL-HTE.
 
 ```{r}
 #| label: fig-identification
@@ -277,6 +307,30 @@ This pattern arises because the correlation between item easiness and
 item-specific treatment effects ($\rho$) creates the appearance of
 heterogeneity by pretest score in a sum-score analysis, even if none exists
 at the person level.
+
+---
+
+## Limitations
+
+**Dichotomous items only.** Items are restricted to those with exactly two
+response categories; polytomous RCT outcome instruments either lose those
+items or, if fewer than three dichotomous items remain, are dropped from the
+analysis entirely. IL-HTE in polytomous outcomes is not examined here.
+
+**Only the first wave is used.** For datasets with multiple follow-up waves,
+we use wave 1 only — this vignette doesn't examine whether item-level
+treatment effects change over time or across follow-up assessments.
+
+**The pretest covariate is chosen from the data.** Where a dataset has more
+than one `cov_`-prefixed candidate, we pick whichever is most correlated with
+the response in the control arm — a data-driven choice made before fitting
+M_B and M_C, rather than a pre-registered or theory-driven selection. This
+could inflate the apparent size of the M_B/M_C divergence relative to a
+design that fixed the covariate in advance.
+
+**Large datasets are downsampled** to at most 5,000 respondent IDs, so
+results for the largest RCTs in this collection are based on a random subset
+rather than the full sample.
 
 ---
 
