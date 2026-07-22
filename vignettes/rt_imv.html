@@ -6,7 +6,7 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="dcterms.date" content="2026-07-21">
+<meta name="dcterms.date" content="2026-07-22">
 <meta name="description" content="How much does knowing how fast a person responded improve predictions of whether they answered correctly? We fit Rasch IRT to binary accuracy data from IRW datasets with response times, then quantify the gain from adding within-item-centered log(RT) using the InterModel Vigorish (IMV). Motivated by Domingue et al.&nbsp;(2022).">
 
 <title>Response Time and Accuracy: An IMV Analysis – Item Response Warehouse</title>
@@ -135,6 +135,15 @@ function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
 gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </script>
+<link href="../site_libs/htmltools-fill-0.5.8.1/fill.css" rel="stylesheet">
+<script src="../site_libs/htmlwidgets-1.6.4/htmlwidgets.js"></script>
+<script src="../site_libs/plotly-binding-4.12.0/plotly.js"></script>
+<script src="../site_libs/typedarray-0.1/typedarray.min.js"></script>
+<script src="../site_libs/jquery-3.5.1/jquery.min.js"></script>
+<link href="../site_libs/crosstalk-1.2.2/css/crosstalk.min.css" rel="stylesheet">
+<script src="../site_libs/crosstalk-1.2.2/js/crosstalk.min.js"></script>
+<link href="../site_libs/plotly-htmlwidgets-css-2.25.2/plotly-htmlwidgets.css" rel="stylesheet">
+<script src="../site_libs/plotly-main-2.25.2/plotly-latest.min.js"></script>
 
 
 </head>
@@ -303,10 +312,11 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
     <h2 id="toc-title">On this page</h2>
    
   <ul class="collapse">
-  <li><a href="#overview" id="toc-overview" class="nav-link active" data-scroll-target="#overview">Overview</a></li>
-  <li><a href="#datasets" id="toc-datasets" class="nav-link" data-scroll-target="#datasets">Datasets</a></li>
+  <li><a href="#motivation" id="toc-motivation" class="nav-link active" data-scroll-target="#motivation">Motivation</a></li>
+  <li><a href="#data-and-methods" id="toc-data-and-methods" class="nav-link" data-scroll-target="#data-and-methods">Data and methods</a></li>
   <li><a href="#results" id="toc-results" class="nav-link" data-scroll-target="#results">Results</a></li>
   <li><a href="#discussion" id="toc-discussion" class="nav-link" data-scroll-target="#discussion">Discussion</a></li>
+  <li><a href="#limitations" id="toc-limitations" class="nav-link" data-scroll-target="#limitations">Limitations</a></li>
   <li><a href="#reproducibility" id="toc-reproducibility" class="nav-link" data-scroll-target="#reproducibility">Reproducibility</a></li>
   <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
   </ul>
@@ -333,7 +343,7 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">July 21, 2026</p>
+      <p class="date">July 22, 2026</p>
     </div>
   </div>
   
@@ -345,9 +355,13 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </header>
 
 
-<section id="overview" class="level2">
-<h2 class="anchored" data-anchor-id="overview">Overview</h2>
+<section id="motivation" class="level2">
+<h2 class="anchored" data-anchor-id="motivation">Motivation</h2>
 <p>IRT models predict binary accuracy from a latent ability estimate — but they ignore <em>when</em> a person responded. Response time (RT) carries its own signal about item-person fit: very fast incorrect responses may reflect guessing, while slow correct responses may reflect effortful retrieval. The question is whether RT adds <em>predictive</em> value over and above the IRT probability.</p>
+<hr>
+</section>
+<section id="data-and-methods" class="level2">
+<h2 class="anchored" data-anchor-id="data-and-methods">Data and methods</h2>
 <p>We answer this using the <strong>InterModel Vigorish</strong> [IMV; <span class="citation" data-cites="domingue2022speed">Domingue et al. (<a href="#ref-domingue2022speed" role="doc-biblioref">2022</a>)</span>], a log-score measure of how much one model’s predictions improve on another’s. For each IRW dataset with RT and binary accuracy, we compare three nested models:</p>
 <ul>
 <li><strong>M0</strong>: <code>resp ~ (1|item) + (1|id)</code> — a random-item Rasch model <span class="citation" data-cites="deboeck2011lmer">(<a href="#ref-deboeck2011lmer" role="doc-biblioref">De Boeck et al. 2011</a>)</span> with crossed random effects for item difficulty and person ability, no RT</li>
@@ -356,9 +370,9 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </ul>
 <p><code>rt_cwi = log(rt) − mean_item(log(rt))</code> centers RT within items, isolating the <em>micro-speed–accuracy tradeoff</em>: is this person faster or slower than average on this item, and does that predict correctness? The random effects for item and person replace a separately-fitted Rasch model, estimating item difficulty and person ability jointly with the RT effect.</p>
 <p><code>spl1</code>–<code>spl4</code> are the four columns of a B-spline basis (<code>bs(rt_cwi, df=4)</code>) computed from <code>rt_cwi</code> on the full dataset and stored as pre-computed columns. Precomputing the basis (rather than evaluating <code>bs()</code> inline) ensures that <code>imv()</code>’s internal model updates operate on the same feature matrix.</p>
-</section>
-<section id="datasets" class="level2">
-<h2 class="anchored" data-anchor-id="datasets">Datasets</h2>
+<section id="datasets" class="level3">
+<h3 class="anchored" data-anchor-id="datasets">Datasets</h3>
+<p>Datasets are restricted to those with at least 150 respondents (<code>N &gt;= 150</code>) for stable random-effects estimation.</p>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
@@ -503,6 +517,7 @@ Table&nbsp;1: IRW datasets used in this analysis. All have binary accuracy respo
 </div>
 </div>
 </section>
+</section>
 <section id="results" class="level2">
 <h2 class="anchored" data-anchor-id="results">Results</h2>
 <section id="does-rt-improve-predictions-over-irt" class="level3">
@@ -514,33 +529,46 @@ Table&nbsp;1: IRW datasets used in this analysis. All have binary accuracy respo
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">table_name =</span> <span class="fu">reorder</span>(table_name, imv_spline)) <span class="sc">|&gt;</span></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="fu">c</span>(imv_linear, imv_spline),</span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>               <span class="at">names_to =</span> <span class="st">"comparison"</span>, <span class="at">values_to =</span> <span class="st">"imv"</span>) <span class="sc">|&gt;</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">comparison =</span> <span class="fu">recode</span>(comparison,</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">imv_linear =</span> <span class="st">"Linear RT  (M0 → M1)"</span>,</span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="at">imv_spline =</span> <span class="st">"Spline RT  (M0 → M2)"</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  ))</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(plot_df, <span class="fu">aes</span>(<span class="at">x =</span> imv, <span class="at">y =</span> table_name, <span class="at">colour =</span> comparison)) <span class="sc">+</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="dv">0</span>, <span class="at">linetype =</span> <span class="st">"dashed"</span>, <span class="at">colour =</span> irw_grey) <span class="sc">+</span></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="dv">3</span>, <span class="at">position =</span> <span class="fu">position_dodge</span>(<span class="at">width =</span> <span class="fl">0.4</span>)) <span class="sc">+</span></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_colour_manual</span>(</span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">values =</span> <span class="fu">c</span>(<span class="st">"Linear RT  (M0 → M1)"</span> <span class="ot">=</span> irw_blue,</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>               <span class="st">"Spline RT  (M0 → M2)"</span> <span class="ot">=</span> irw_red),</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="at">name =</span> <span class="cn">NULL</span></span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"IMV gain over IRT-only baseline"</span>, <span class="at">y =</span> <span class="cn">NULL</span>) <span class="sc">+</span></span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"bottom"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">comparison =</span> <span class="fu">recode</span>(comparison,</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>      <span class="at">imv_linear =</span> <span class="st">"Linear RT  (M0 → M1)"</span>,</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>      <span class="at">imv_spline =</span> <span class="st">"Spline RT  (M0 → M2)"</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="at">tooltip =</span> <span class="fu">paste0</span>(</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>      <span class="st">"Dataset: "</span>, table_name,</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>      <span class="st">"&lt;br&gt;Comparison: "</span>, comparison,</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>      <span class="st">"&lt;br&gt;IMV: "</span>, <span class="fu">round</span>(imv, <span class="dv">4</span>),</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>      <span class="st">"&lt;br&gt;N: "</span>, N, <span class="st">"  J: "</span>, J</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>p <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(plot_df, <span class="fu">aes</span>(<span class="at">x =</span> imv, <span class="at">y =</span> table_name, <span class="at">colour =</span> comparison, <span class="at">text =</span> tooltip)) <span class="sc">+</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="dv">0</span>, <span class="at">linetype =</span> <span class="st">"dashed"</span>, <span class="at">colour =</span> irw_grey) <span class="sc">+</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">size =</span> <span class="dv">3</span>, <span class="at">position =</span> <span class="fu">position_dodge</span>(<span class="at">width =</span> <span class="fl">0.4</span>)) <span class="sc">+</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_colour_manual</span>(</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    <span class="at">values =</span> <span class="fu">c</span>(<span class="st">"Linear RT  (M0 → M1)"</span> <span class="ot">=</span> irw_blue,</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>               <span class="st">"Spline RT  (M0 → M2)"</span> <span class="ot">=</span> irw_red),</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="at">name =</span> <span class="cn">NULL</span></span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"IMV gain over IRT-only baseline"</span>, <span class="at">y =</span> <span class="cn">NULL</span>) <span class="sc">+</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"bottom"</span>)</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplotly</span>(p, <span class="at">tooltip =</span> <span class="st">"text"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>  <span class="fu">layout</span>(</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>    <span class="at">legend =</span> <span class="fu">list</span>(<span class="at">orientation =</span> <span class="st">"h"</span>, <span class="at">y =</span> <span class="sc">-</span><span class="fl">0.25</span>),</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a>    <span class="at">margin =</span> <span class="fu">list</span>(<span class="at">b =</span> <span class="dv">80</span>)</span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>  )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
-<div class="cell-output-display">
-<div id="fig-imv-main" class="quarto-float quarto-figure quarto-figure-center anchored">
+<div id="fig-imv-main" class="cell-output-display quarto-float quarto-figure quarto-figure-center anchored">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-imv-main-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="rt_imv_files/figure-html/fig-imv-main-1.png" class="img-fluid figure-img" width="672">
+<div class="plotly html-widget html-fill-item" id="htmlwidget-6b22a5ccfea40d4ca9d6" style="width:100%;height:417px;"></div>
+<script type="application/json" data-for="htmlwidget-6b22a5ccfea40d4ca9d6">{"x":{"data":[{"x":[0,0],"y":[0.40000000000000002,18.600000000000001],"text":"","type":"scatter","mode":"lines","line":{"width":1.8897637795275593,"color":"rgba(127,127,127,1)","dash":"dash"},"hoveron":"points","showlegend":false,"xaxis":"x","yaxis":"y","hoverinfo":"text","frame":null},{"x":[0.029775186496557832,0.031130049235530102,0.020140728593654969,0.0042859267044046924,-5.288617232626784e-05,0.0086726437736767553,0.0054120046492920227,-0.00015858323785280257,0.018768556924394903,0.0097126032472556571,0.0009812304447204582,0.0029128577048145566,-5.3583374041200707e-05,0.007280841506881278,0.0054290835806739155,0.00045681616700468447,0.0072211214651902687,-0.00086693069358559707],"y":[15.9,17.899999999999999,16.899999999999999,8.9000000000000004,4.9000000000000004,9.9000000000000004,11.9,1.8999999999999999,12.9,10.9,3.8999999999999999,14.9,0.90000000000000002,6.9000000000000004,13.9,5.9000000000000004,7.9000000000000004,2.8999999999999999],"text":["Dataset: mgkt<br>Comparison: Linear RT  (M0 → M1)<br>IMV: 0.0298<br>N: 2095  J: 32","Dataset: fullscaleiq_vocab<br>Comparison: Linear RT  (M0 → M1)<br>IMV: 0.0311<br>N: 252  J: 7","Dataset: fullscaleiq_mentalrotation<br>Comparison: Linear RT  (M0 → M1)<br>IMV: 0.0201<br>N: 682  J: 6","Dataset: zhang-eye-2022<br>Comparison: Linear RT  (M0 → M1)<br>IMV: 0.0043<br>N: 202  J: 36","Dataset: test_taking_much_2025_mr<br>Comparison: Linear RT  (M0 → M1)<br>IMV: -1e-04<br>N: 502  J: 27","Dataset: wilmer-mrmet-normative-data-set-2022<br>Comparison: Linear RT  (M0 → M1)<br>IMV: 0.0087<br>N: 500  J: 37","Dataset: gilbert_meta_104<br>Comparison: Linear RT  (M0 → M1)<br>IMV: 0.0054<br>N: 511  J: 9","Dataset: much_tte_2025_matrixreasoning<br>Comparison: Linear RT  (M0 → M1)<br>IMV: -2e-04<br>N: 502  J: 20","Dataset: credentialform_lnirt<br>Comparison: Linear RT  (M0 → M1)<br>IMV: 0.0188<br>N: 556  J: 200","Dataset: chess_lnirt<br>Comparison: Linear RT  (M0 → M1)<br>IMV: 0.0097<br>N: 256  J: 40","Dataset: gilbert_meta_102<br>Comparison: Linear RT  (M0 → M1)<br>IMV: 0.001<br>N: 502  J: 36","Dataset: himmelstein-admc_raw-2025<br>Comparison: Linear RT  (M0 → M1)<br>IMV: 0.0029<br>N: 645  J: 10","Dataset: roar_gijbels2024<br>Comparison: Linear RT  (M0 → M1)<br>IMV: -1e-04<br>N: 260  J: 57","Dataset: himmelstein-impossible_question-2025<br>Comparison: Linear RT  (M0 → M1)<br>IMV: 0.0073<br>N: 766  J: 90","Dataset: himmelstein-number_series-2025<br>Comparison: Linear RT  (M0 → M1)<br>IMV: 0.0054<br>N: 584  J: 9","Dataset: nomt_hooper_2024_study2<br>Comparison: Linear RT  (M0 → M1)<br>IMV: 5e-04<br>N: 393  J: 144","Dataset: vocab_assessment_3_to_8_year_old_children<br>Comparison: Linear RT  (M0 → M1)<br>IMV: 0.0072<br>N: 500  J: 47","Dataset: gilbert_meta_103<br>Comparison: Linear RT  (M0 → M1)<br>IMV: -9e-04<br>N: 519  J: 29"],"type":"scatter","mode":"markers","marker":{"autocolorscale":false,"color":"rgba(33,102,172,1)","opacity":1,"size":11.338582677165356,"symbol":"circle","line":{"width":1.8897637795275593,"color":"rgba(33,102,172,1)"}},"hoveron":"points","name":"Linear RT  (M0 → M1)","legendgroup":"Linear RT  (M0 → M1)","showlegend":true,"xaxis":"x","yaxis":"y","hoverinfo":"text","frame":null},{"x":[0.040764429596061059,0.11165085309847624,0.046966124590054288,0.0081100504928670655,0.0010493424950930815,0.01015135620219567,0.012114550336495061,4.5225511586532307e-05,0.019249892057620958,0.011952737547678505,0.0010297099965319685,0.031535765189947607,-0.0001488704118451564,0.0073775336059598512,0.020801296704490713,0.0020267852033759534,0.0074566877796615506,4.9696374154508001e-05],"y":[16.100000000000001,18.100000000000001,17.100000000000001,9.0999999999999996,5.0999999999999996,10.1,12.1,2.1000000000000001,13.1,11.1,4.0999999999999996,15.1,1.1000000000000001,7.0999999999999996,14.1,6.0999999999999996,8.0999999999999996,3.1000000000000001],"text":["Dataset: mgkt<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.0408<br>N: 2095  J: 32","Dataset: fullscaleiq_vocab<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.1117<br>N: 252  J: 7","Dataset: fullscaleiq_mentalrotation<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.047<br>N: 682  J: 6","Dataset: zhang-eye-2022<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.0081<br>N: 202  J: 36","Dataset: test_taking_much_2025_mr<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.001<br>N: 502  J: 27","Dataset: wilmer-mrmet-normative-data-set-2022<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.0102<br>N: 500  J: 37","Dataset: gilbert_meta_104<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.0121<br>N: 511  J: 9","Dataset: much_tte_2025_matrixreasoning<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0<br>N: 502  J: 20","Dataset: credentialform_lnirt<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.0192<br>N: 556  J: 200","Dataset: chess_lnirt<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.012<br>N: 256  J: 40","Dataset: gilbert_meta_102<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.001<br>N: 502  J: 36","Dataset: himmelstein-admc_raw-2025<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.0315<br>N: 645  J: 10","Dataset: roar_gijbels2024<br>Comparison: Spline RT  (M0 → M2)<br>IMV: -1e-04<br>N: 260  J: 57","Dataset: himmelstein-impossible_question-2025<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.0074<br>N: 766  J: 90","Dataset: himmelstein-number_series-2025<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.0208<br>N: 584  J: 9","Dataset: nomt_hooper_2024_study2<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.002<br>N: 393  J: 144","Dataset: vocab_assessment_3_to_8_year_old_children<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0.0075<br>N: 500  J: 47","Dataset: gilbert_meta_103<br>Comparison: Spline RT  (M0 → M2)<br>IMV: 0<br>N: 519  J: 29"],"type":"scatter","mode":"markers","marker":{"autocolorscale":false,"color":"rgba(215,48,39,1)","opacity":1,"size":11.338582677165356,"symbol":"circle","line":{"width":1.8897637795275593,"color":"rgba(215,48,39,1)"}},"hoveron":"points","name":"Spline RT  (M0 → M2)","legendgroup":"Spline RT  (M0 → M2)","showlegend":true,"xaxis":"x","yaxis":"y","hoverinfo":"text","frame":null}],"layout":{"margin":{"t":24.634288086342885,"r":8.6342880863428828,"b":80,"l":296.15608136156084},"paper_bgcolor":"rgba(255,255,255,1)","font":{"color":"rgba(0,0,0,1)","family":"","size":17.268576172685766},"xaxis":{"domain":[0,1],"automargin":true,"type":"linear","autorange":false,"range":[-0.0064928198831886892,0.11727674228807933],"tickmode":"array","ticktext":["0.00","0.03","0.06","0.09"],"tickvals":[0,0.029999999999999995,0.059999999999999998,0.089999999999999997],"categoryorder":"array","categoryarray":["0.00","0.03","0.06","0.09"],"nticks":null,"ticks":"","tickcolor":null,"ticklen":4.3171440431714414,"tickwidth":0,"showticklabels":true,"tickfont":{"color":"rgba(77,77,77,1)","family":"","size":13.814860938148611},"tickangle":-0,"showline":false,"linecolor":null,"linewidth":0,"showgrid":true,"gridcolor":"rgba(235,235,235,1)","gridwidth":0.78493528057662576,"zeroline":false,"anchor":"y","title":{"text":"IMV gain over IRT-only baseline","font":{"color":"rgba(0,0,0,1)","family":"","size":17.268576172685766}},"hoverformat":".2f"},"yaxis":{"domain":[0,1],"automargin":true,"type":"linear","autorange":false,"range":[0.40000000000000002,18.600000000000001],"tickmode":"array","ticktext":["roar_gijbels2024","much_tte_2025_matrixreasoning","gilbert_meta_103","gilbert_meta_102","test_taking_much_2025_mr","nomt_hooper_2024_study2","himmelstein-impossible_question-2025","vocab_assessment_3_to_8_year_old_children","zhang-eye-2022","wilmer-mrmet-normative-data-set-2022","chess_lnirt","gilbert_meta_104","credentialform_lnirt","himmelstein-number_series-2025","himmelstein-admc_raw-2025","mgkt","fullscaleiq_mentalrotation","fullscaleiq_vocab"],"tickvals":[1,2,3,4,5,5.9999999999999991,7,8,9,10,11,12,13,14,15,16,17,18],"categoryorder":"array","categoryarray":["roar_gijbels2024","much_tte_2025_matrixreasoning","gilbert_meta_103","gilbert_meta_102","test_taking_much_2025_mr","nomt_hooper_2024_study2","himmelstein-impossible_question-2025","vocab_assessment_3_to_8_year_old_children","zhang-eye-2022","wilmer-mrmet-normative-data-set-2022","chess_lnirt","gilbert_meta_104","credentialform_lnirt","himmelstein-number_series-2025","himmelstein-admc_raw-2025","mgkt","fullscaleiq_mentalrotation","fullscaleiq_vocab"],"nticks":null,"ticks":"","tickcolor":null,"ticklen":4.3171440431714414,"tickwidth":0,"showticklabels":true,"tickfont":{"color":"rgba(77,77,77,1)","family":"","size":13.814860938148611},"tickangle":-0,"showline":false,"linecolor":null,"linewidth":0,"showgrid":true,"gridcolor":"rgba(235,235,235,1)","gridwidth":0.78493528057662576,"zeroline":false,"anchor":"x","title":{"text":"","font":{"color":"rgba(0,0,0,1)","family":"","size":17.268576172685766}},"hoverformat":".2f"},"shapes":[],"showlegend":true,"legend":{"bgcolor":null,"bordercolor":null,"borderwidth":0,"font":{"color":"rgba(0,0,0,1)","family":"","size":13.814860938148611},"orientation":"h","x":0.5,"y":-0.25,"xanchor":"center","yanchor":"top","title":{"text":"","font":{"color":"rgba(0,0,0,1)","family":"","size":17.268576172685766}}},"hovermode":"closest","barmode":"relative"},"config":{"doubleClick":"reset","modeBarButtonsToAdd":["hoverclosest","hovercompare"],"showSendToCloud":false},"source":"A","attrs":{"23ff2a2ec61e":{"xintercept":{},"type":"scatter"},"23ff1ecfe08d":{"x":{},"y":{},"colour":{},"text":{}}},"cur_data":"23ff2a2ec61e","visdat":{"23ff2a2ec61e":["function (y) ","x"],"23ff1ecfe08d":["function (y) ","x"]},"highlight":{"on":"plotly_click","persistent":false,"dynamic":false,"selectize":false,"opacityDim":0.20000000000000001,"selected":{"opacity":1},"debounce":0},"shinyEvents":["plotly_hover","plotly_click","plotly_selected","plotly_relayout","plotly_brushed","plotly_brushing","plotly_clickannotation","plotly_doubleclick","plotly_deselect","plotly_afterplot","plotly_sunburstclick"],"base_url":"https://plot.ly"},"evals":[],"jsHooks":[]}</script>
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-imv-main-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figure&nbsp;1: IMV gain from adding RT to IRT predictions. Blue = linear RT (M0→M1); red = spline RT (M0→M2). Positive values indicate RT improves predictions. Datasets ordered by spline IMV.
 </figcaption>
 </figure>
-</div>
 </div>
 </div>
 <p>Across 18 datasets, the median IMV gain from adding linear RT is 0.0054 (78% of datasets positive); the spline gain is 0.0091 (94% positive).</p>
@@ -551,6 +579,13 @@ Figure&nbsp;1: IMV gain from adding RT to IRT predictions. Blue = linear RT (M0�
 <h2 class="anchored" data-anchor-id="discussion">Discussion</h2>
 <p><strong>RT adds modest but consistent predictive value.</strong> Positive IMV for both linear and spline RT indicates that response time generally adds value in prediction of accuracy.</p>
 <p><strong>In some cases, the gains come from adding RT nonlinearly.</strong> RT can be a highly nonlinear predictor of response time. Indeed, the relationship between response time and accuracy may even be nonmonotonic.</p>
+<hr>
+</section>
+<section id="limitations" class="level2">
+<h2 class="anchored" data-anchor-id="limitations">Limitations</h2>
+<p><strong>Only a narrow slice of the RT signal is tested here.</strong> <code>rt_cwi</code> isolates the <em>within-item</em> micro speed-accuracy tradeoff (is this person faster or slower than average <em>on this item</em>); it doesn’t examine between-item RT variation or a person’s overall response speed across the whole test, either of which could carry additional predictive signal not captured by this comparison.</p>
+<p><strong>The IRT baseline is Rasch, not 2PL.</strong> M0 fixes equal item discrimination (a random-item Rasch model). Whether RT’s predictive gain changes once discrimination is allowed to vary by item — as in the <a href="../vignettes/2pl_across_datasets.html">2PL vignette</a> — is not tested here.</p>
+<p><strong>Small datasets are excluded.</strong> The <code>N &gt;= 150</code> floor drops any dataset too small for stable random-effects estimation, so the median IMV gains above describe the datasets that clear that bar, not IRW’s full RT-bearing holdings.</p>
 <hr>
 </section>
 <section id="reproducibility" class="level2">

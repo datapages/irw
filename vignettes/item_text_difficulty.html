@@ -6,7 +6,7 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="dcterms.date" content="2026-07-21">
+<meta name="dcterms.date" content="2026-07-22">
 <meta name="description" content="A Tier 2 IRW vignette linking item text to empirical difficulty. We extract simple linguistic features from item text and ask how well they predict proportion correct across cognitive datasets.">
 
 <title>Does Item Language Predict Difficulty? Text Features Across Cognitive Datasets – Item Response Warehouse</title>
@@ -116,6 +116,15 @@ function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
 gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </script>
+<link href="../site_libs/htmltools-fill-0.5.8.1/fill.css" rel="stylesheet">
+<script src="../site_libs/htmlwidgets-1.6.4/htmlwidgets.js"></script>
+<script src="../site_libs/plotly-binding-4.12.0/plotly.js"></script>
+<script src="../site_libs/typedarray-0.1/typedarray.min.js"></script>
+<script src="../site_libs/jquery-3.5.1/jquery.min.js"></script>
+<link href="../site_libs/crosstalk-1.2.2/css/crosstalk.min.css" rel="stylesheet">
+<script src="../site_libs/crosstalk-1.2.2/js/crosstalk.min.js"></script>
+<link href="../site_libs/plotly-htmlwidgets-css-2.25.2/plotly-htmlwidgets.css" rel="stylesheet">
+<script src="../site_libs/plotly-main-2.25.2/plotly-latest.min.js"></script>
 
 
 </head>
@@ -284,12 +293,10 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
     <h2 id="toc-title">On this page</h2>
    
   <ul class="collapse">
-  <li><a href="#research-question" id="toc-research-question" class="nav-link active" data-scroll-target="#research-question">Research question</a></li>
-  <li><a href="#step-1-select-datasets-with-item-text" id="toc-step-1-select-datasets-with-item-text" class="nav-link" data-scroll-target="#step-1-select-datasets-with-item-text">Step 1: Select datasets with item text</a></li>
-  <li><a href="#step-2-compute-proportion-correct-and-extract-text-features" id="toc-step-2-compute-proportion-correct-and-extract-text-features" class="nav-link" data-scroll-target="#step-2-compute-proportion-correct-and-extract-text-features">Step 2: Compute proportion correct and extract text features</a></li>
-  <li><a href="#step-3-distributions-of-features-and-outcome" id="toc-step-3-distributions-of-features-and-outcome" class="nav-link" data-scroll-target="#step-3-distributions-of-features-and-outcome">Step 3: Distributions of features and outcome</a></li>
-  <li><a href="#step-4-within-dataset-relationships" id="toc-step-4-within-dataset-relationships" class="nav-link" data-scroll-target="#step-4-within-dataset-relationships">Step 4: Within-dataset relationships</a></li>
-  <li><a href="#what-to-notice" id="toc-what-to-notice" class="nav-link" data-scroll-target="#what-to-notice">What to notice</a></li>
+  <li><a href="#motivation" id="toc-motivation" class="nav-link active" data-scroll-target="#motivation">Motivation</a></li>
+  <li><a href="#data-and-methods" id="toc-data-and-methods" class="nav-link" data-scroll-target="#data-and-methods">Data and methods</a></li>
+  <li><a href="#results" id="toc-results" class="nav-link" data-scroll-target="#results">Results</a></li>
+  <li><a href="#limitations" id="toc-limitations" class="nav-link" data-scroll-target="#limitations">Limitations</a></li>
   <li><a href="#reproducibility" id="toc-reproducibility" class="nav-link" data-scroll-target="#reproducibility">Reproducibility</a></li>
   </ul>
 </nav>
@@ -315,7 +322,7 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">July 21, 2026</p>
+      <p class="date">July 22, 2026</p>
     </div>
   </div>
   
@@ -327,14 +334,16 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </header>
 
 
-<section id="research-question" class="level2">
-<h2 class="anchored" data-anchor-id="research-question">Research question</h2>
+<section id="motivation" class="level2">
+<h2 class="anchored" data-anchor-id="motivation">Motivation</h2>
 <p>Cognitive items vary enormously in difficulty. Some of that variation is substantive — harder content is harder to answer. But some may be linguistic: items written in more complex language, or containing negation, may be harder to process independent of their content. Can simple text features extracted from item wording predict how often respondents answer correctly?</p>
 <p>The IRW’s item text layer makes this question tractable. For tables where both response data and item text are available, we can compute proportion correct per item, extract linguistic features, and ask how much variance those features explain.</p>
 <hr>
 </section>
-<section id="step-1-select-datasets-with-item-text" class="level2">
-<h2 class="anchored" data-anchor-id="step-1-select-datasets-with-item-text">Step 1: Select datasets with item text</h2>
+<section id="data-and-methods" class="level2">
+<h2 class="anchored" data-anchor-id="data-and-methods">Data and methods</h2>
+<section id="selecting-datasets-with-item-text" class="level3">
+<h3 class="anchored" data-anchor-id="selecting-datasets-with-item-text">Selecting datasets with item text</h3>
 <p>We restrict to cognitive/educational dichotomous English tables that have item text available via <code>irw_itemtext()</code>. Not all IRW tables have item text — this analysis uses only those that do.</p>
 <div class="cell">
 <details class="code-fold">
@@ -352,10 +361,9 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </details>
 </div>
 <p>This yielded 18 tables (as of May 2026), covering 15 tables with usable item text after joining.</p>
-<hr>
 </section>
-<section id="step-2-compute-proportion-correct-and-extract-text-features" class="level2">
-<h2 class="anchored" data-anchor-id="step-2-compute-proportion-correct-and-extract-text-features">Step 2: Compute proportion correct and extract text features</h2>
+<section id="computing-proportion-correct-and-text-features" class="level3">
+<h3 class="anchored" data-anchor-id="computing-proportion-correct-and-text-features">Computing proportion correct and text features</h3>
 <p>For each table we (1) fetch response data, (2) fetch item text, (3) compute proportion correct per item, and (4) join the two on the <code>item</code> identifier.</p>
 <div class="cell">
 <details class="code-fold">
@@ -403,17 +411,17 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </table>
 <hr>
 </section>
-<section id="step-3-distributions-of-features-and-outcome" class="level2">
-<h2 class="anchored" data-anchor-id="step-3-distributions-of-features-and-outcome">Step 3: Distributions of features and outcome</h2>
-<section id="proportion-correct" class="level3">
-<h3 class="anchored" data-anchor-id="proportion-correct">Proportion correct</h3>
+</section>
+<section id="results" class="level2">
+<h2 class="anchored" data-anchor-id="results">Results</h2>
+<section id="distributions-of-features-and-outcome" class="level3">
+<h3 class="anchored" data-anchor-id="distributions-of-features-and-outcome">Distributions of features and outcome</h3>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(all_data, <span class="fu">aes</span>(<span class="at">x =</span> prop_correct)) <span class="sc">+</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_histogram</span>(<span class="at">bins =</span> <span class="dv">40</span>, <span class="at">fill =</span> <span class="st">"#2166ac"</span>, <span class="at">colour =</span> <span class="st">"white"</span>, <span class="at">alpha =</span> <span class="fl">0.8</span>) <span class="sc">+</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Proportion correct"</span>, <span class="at">y =</span> <span class="st">"Count"</span>) <span class="sc">+</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="dv">13</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_histogram</span>(<span class="at">bins =</span> <span class="dv">40</span>, <span class="at">fill =</span> irw_blue, <span class="at">colour =</span> <span class="st">"white"</span>, <span class="at">alpha =</span> <span class="fl">0.8</span>) <span class="sc">+</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Proportion correct"</span>, <span class="at">y =</span> <span class="st">"Count"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
 <div id="fig-propcorrect" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -428,9 +436,6 @@ Figure&nbsp;1: Distribution of proportion correct across items. Each observation
 </div>
 </div>
 </div>
-</section>
-<section id="text-features" class="level3">
-<h3 class="anchored" data-anchor-id="text-features">Text features</h3>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
@@ -442,10 +447,9 @@ Figure&nbsp;1: Distribution of proportion correct across items. Each observation
 <span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="at">avg_word_len =</span> <span class="st">"Avg word length"</span></span>
 <span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>  )) <span class="sc">|&gt;</span></span>
 <span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">ggplot</span>(<span class="fu">aes</span>(<span class="at">x =</span> value)) <span class="sc">+</span></span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_histogram</span>(<span class="at">bins =</span> <span class="dv">40</span>, <span class="at">fill =</span> <span class="st">"#2166ac"</span>, <span class="at">colour =</span> <span class="st">"white"</span>, <span class="at">alpha =</span> <span class="fl">0.8</span>) <span class="sc">+</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_histogram</span>(<span class="at">bins =</span> <span class="dv">40</span>, <span class="at">fill =</span> irw_blue, <span class="at">colour =</span> <span class="st">"white"</span>, <span class="at">alpha =</span> <span class="fl">0.8</span>) <span class="sc">+</span></span>
 <span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>feature, <span class="at">scales =</span> <span class="st">"free_x"</span>) <span class="sc">+</span></span>
-<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">"Count"</span>) <span class="sc">+</span></span>
-<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="dv">13</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="st">"Count"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
 <div id="fig-features" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -460,11 +464,9 @@ Figure&nbsp;2: Distributions of word count and average word length across items.
 </div>
 </div>
 </div>
-<hr>
 </section>
-</section>
-<section id="step-4-within-dataset-relationships" class="level2">
-<h2 class="anchored" data-anchor-id="step-4-within-dataset-relationships">Step 4: Within-dataset relationships</h2>
+<section id="within-dataset-relationships" class="level3">
+<h3 class="anchored" data-anchor-id="within-dataset-relationships">Within-dataset relationships</h3>
 <p>Pooling all items together can be misleading — overall correlations between text features and difficulty are heavily influenced by which datasets happen to have longer or shorter items, not by within-instrument variation. Instead, we compute the correlation between each feature and proportion correct <em>separately per dataset</em>, then look at the distribution of those correlations across the 15 datasets.</p>
 <div class="cell">
 <details class="code-fold">
@@ -590,13 +592,45 @@ Figure&nbsp;2: Distributions of word count and average word length across items.
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(all_data, <span class="fu">aes</span>(<span class="at">x =</span> word_count, <span class="at">y =</span> prop_correct)) <span class="sc">+</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.4</span>, <span class="at">size =</span> <span class="fl">0.9</span>, <span class="at">colour =</span> <span class="st">"#2166ac"</span>) <span class="sc">+</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_smooth</span>(<span class="at">method =</span> <span class="st">"lm"</span>, <span class="at">se =</span> <span class="cn">FALSE</span>, <span class="at">colour =</span> <span class="st">"#d6604d"</span>, <span class="at">linewidth =</span> <span class="fl">0.7</span>) <span class="sc">+</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>table, <span class="at">scales =</span> <span class="st">"free"</span>) <span class="sc">+</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Word count"</span>, <span class="at">y =</span> <span class="st">"Proportion correct"</span>) <span class="sc">+</span></span>
-<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>(<span class="at">base_size =</span> <span class="dv">10</span>) <span class="sc">+</span></span>
-<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">strip.text =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">7</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>within_long <span class="ot">&lt;-</span> within_cors <span class="sc">|&gt;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">pivot_longer</span>(<span class="fu">c</span>(r_word_count, r_avg_wlen), <span class="at">names_to =</span> <span class="st">"feature"</span>, <span class="at">values_to =</span> <span class="st">"r"</span>) <span class="sc">|&gt;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">feature =</span> <span class="fu">recode</span>(feature, <span class="at">r_word_count =</span> <span class="st">"Word count"</span>, <span class="at">r_avg_wlen =</span> <span class="st">"Avg word length"</span>),</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">tooltip =</span> <span class="fu">paste0</span>(</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>      <span class="st">"Dataset: "</span>, table,</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>      <span class="st">"&lt;br&gt;r: "</span>, r,</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>      <span class="st">"&lt;br&gt;n_items: "</span>, n_items</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>p <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(within_long, <span class="fu">aes</span>(<span class="at">x =</span> r, <span class="at">y =</span> feature, <span class="at">text =</span> tooltip)) <span class="sc">+</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_vline</span>(<span class="at">xintercept =</span> <span class="dv">0</span>, <span class="at">linetype =</span> <span class="st">"dashed"</span>, <span class="at">colour =</span> irw_grey) <span class="sc">+</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_jitter</span>(<span class="at">height =</span> <span class="fl">0.15</span>, <span class="at">colour =</span> irw_blue, <span class="at">alpha =</span> <span class="fl">0.6</span>) <span class="sc">+</span></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Within-dataset correlation with proportion correct"</span>, <span class="at">y =</span> <span class="cn">NULL</span>)</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplotly</span>(p, <span class="at">tooltip =</span> <span class="st">"text"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div id="fig-within-cor-dist" class="cell-output-display quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-within-cor-dist-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="plotly html-widget html-fill-item" id="htmlwidget-09efd4d42525d357509c" style="width:100%;height:325px;"></div>
+<script type="application/json" data-for="htmlwidget-09efd4d42525d357509c">{"x":{"data":[{"x":[0,0],"y":[0.40000000000000002,2.6000000000000001],"text":"","type":"scatter","mode":"lines","line":{"width":1.8897637795275593,"color":"rgba(127,127,127,1)","dash":"dash"},"hoveron":"points","showlegend":false,"xaxis":"x","yaxis":"y","hoverinfo":"text","frame":null},{"x":[-0.15041958357766269,-0.44733947681635622,-0.21059240131638943,0.037909720124676832,-0.30228333054296669,-0.056233666244894273,0.29685332426056266,0.11929058977216482,-0.28830179408751427,0.16339184946753085,-0.39341178937256338,-0.2909118240047246,null,-0.38905537462979556,-0.11234995732828974,-0.026181891394779094,0.0399412683006376,-0.20334038737602533,-0.45150008911639455,0.91845805038139228,-0.42196006041578948,0.043691767239943141,-0.62683508921600883,-0.58882423065602774,null,0.60766859452426436,null,null,-0.32794299602136018,-0.22669448022544386],"y":[1.953167015616782,1.0080545008648187,1.8593643359141425,1.0037456665420905,1.9075837783748284,0.88337515403982247,1.9904805399244652,1.086273098597303,2.0436086961766704,0.95437183883041143,2.0430970029905438,0.95956386297475549,1.8629960942082107,0.95889570941217239,2.0246640127152205,1.1010415918426588,1.9775229111779482,0.87166110167745503,1.869873672281392,0.92564256605692208,2.0928943005157636,1.082028262829408,1.8627835484221578,0.97736714105121791,2.0490929692750797,0.94268456287682056,1.9687036743154749,0.85422869815956803,2.0136526248650624,1.0510766781168059],"text":["Dataset: florida_twins_auth<br>r: -0.15<br>n_items: 100","Dataset: florida_twins_auth<br>r: -0.45<br>n_items: 100","Dataset: frac20<br>r: -0.21<br>n_items: 20","Dataset: frac20<br>r: 0.04<br>n_items: 20","Dataset: gilbert_meta_11<br>r: -0.3<br>n_items: 24","Dataset: gilbert_meta_11<br>r: -0.06<br>n_items: 24","Dataset: gilbert_meta_2<br>r: 0.3<br>n_items: 20","Dataset: gilbert_meta_2<br>r: 0.12<br>n_items: 20","Dataset: gilbert_meta_37<br>r: -0.29<br>n_items: 21","Dataset: gilbert_meta_37<br>r: 0.16<br>n_items: 21","Dataset: gilbert_meta_7<br>r: -0.39<br>n_items: 36","Dataset: gilbert_meta_7<br>r: -0.29<br>n_items: 36","Dataset: gilbert_meta_78<br>r: NA<br>n_items: 189","Dataset: gilbert_meta_78<br>r: -0.39<br>n_items: 189","Dataset: gilbert_meta_8<br>r: -0.11<br>n_items: 29","Dataset: gilbert_meta_8<br>r: -0.03<br>n_items: 29","Dataset: mpsycho_rwdq<br>r: 0.04<br>n_items: 18","Dataset: mpsycho_rwdq<br>r: -0.2<br>n_items: 18","Dataset: polca_cheating<br>r: -0.45<br>n_items: 4","Dataset: polca_cheating<br>r: 0.92<br>n_items: 4","Dataset: preschool_sel_akt<br>r: -0.42<br>n_items: 17","Dataset: preschool_sel_akt<br>r: 0.04<br>n_items: 17","Dataset: preschool_sel_box<br>r: -0.63<br>n_items: 20","Dataset: preschool_sel_box<br>r: -0.59<br>n_items: 20","Dataset: preschool_sel_dn<br>r: NA<br>n_items: 14","Dataset: preschool_sel_dn<br>r: 0.61<br>n_items: 14","Dataset: preschool_sel_htks<br>r: NA<br>n_items: 10","Dataset: preschool_sel_htks<br>r: NA<br>n_items: 10","Dataset: preschool_sel_pl<br>r: -0.33<br>n_items: 39","Dataset: preschool_sel_pl<br>r: -0.23<br>n_items: 39"],"type":"scatter","mode":"markers","marker":{"autocolorscale":false,"color":"rgba(33,102,172,1)","opacity":0.59999999999999998,"size":5.6692913385826778,"symbol":"circle","line":{"width":1.8897637795275593,"color":"rgba(33,102,172,1)"}},"hoveron":"points","showlegend":false,"xaxis":"x","yaxis":"y","hoverinfo":"text","frame":null}],"layout":{"margin":{"t":24.634288086342885,"r":8.6342880863428828,"b":44.034869240348698,"l":116.56288916562892},"paper_bgcolor":"rgba(255,255,255,1)","font":{"color":"rgba(0,0,0,1)","family":"","size":17.268576172685766},"xaxis":{"domain":[0,1],"automargin":true,"type":"linear","autorange":false,"range":[-0.70409974619587889,0.99572270736126234],"tickmode":"array","ticktext":["-0.5","0.0","0.5"],"tickvals":[-0.5,0,0.5],"categoryorder":"array","categoryarray":["-0.5","0.0","0.5"],"nticks":null,"ticks":"","tickcolor":null,"ticklen":4.3171440431714414,"tickwidth":0,"showticklabels":true,"tickfont":{"color":"rgba(77,77,77,1)","family":"","size":13.814860938148611},"tickangle":-0,"showline":false,"linecolor":null,"linewidth":0,"showgrid":true,"gridcolor":"rgba(235,235,235,1)","gridwidth":0.78493528057662576,"zeroline":false,"anchor":"y","title":{"text":"Within-dataset correlation with proportion correct","font":{"color":"rgba(0,0,0,1)","family":"","size":17.268576172685766}},"hoverformat":".2f"},"yaxis":{"domain":[0,1],"automargin":true,"type":"linear","autorange":false,"range":[0.40000000000000002,2.6000000000000001],"tickmode":"array","ticktext":["Avg word length","Word count"],"tickvals":[1,2],"categoryorder":"array","categoryarray":["Avg word length","Word count"],"nticks":null,"ticks":"","tickcolor":null,"ticklen":4.3171440431714414,"tickwidth":0,"showticklabels":true,"tickfont":{"color":"rgba(77,77,77,1)","family":"","size":13.814860938148611},"tickangle":-0,"showline":false,"linecolor":null,"linewidth":0,"showgrid":true,"gridcolor":"rgba(235,235,235,1)","gridwidth":0.78493528057662576,"zeroline":false,"anchor":"x","title":{"text":"","font":{"color":"rgba(0,0,0,1)","family":"","size":17.268576172685766}},"hoverformat":".2f"},"shapes":[],"showlegend":false,"legend":{"bgcolor":null,"bordercolor":null,"borderwidth":0,"font":{"color":"rgba(0,0,0,1)","family":"","size":13.814860938148611}},"hovermode":"closest","barmode":"relative"},"config":{"doubleClick":"reset","modeBarButtonsToAdd":["hoverclosest","hovercompare"],"showSendToCloud":false},"source":"A","attrs":{"24a82372e5a7":{"xintercept":{},"type":"scatter"},"24a87cc1a2fe":{"x":{},"y":{},"text":{}}},"cur_data":"24a82372e5a7","visdat":{"24a82372e5a7":["function (y) ","x"],"24a87cc1a2fe":["function (y) ","x"]},"highlight":{"on":"plotly_click","persistent":false,"dynamic":false,"selectize":false,"opacityDim":0.20000000000000001,"selected":{"opacity":1},"debounce":0},"shinyEvents":["plotly_hover","plotly_click","plotly_selected","plotly_relayout","plotly_brushed","plotly_brushing","plotly_clickannotation","plotly_doubleclick","plotly_deselect","plotly_afterplot","plotly_sunburstclick"],"base_url":"https://plot.ly"},"evals":[],"jsHooks":[]}</script>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-within-cor-dist-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;3: Within-dataset correlation between each text feature and proportion correct, one point per dataset. Scattered around zero (rather than consistently one sign) would suggest any pooled relationship is a dataset-level artifact, not a genuine text-difficulty signal. Hover to identify datasets.
+</figcaption>
+</figure>
+</div>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(all_data, <span class="fu">aes</span>(<span class="at">x =</span> word_count, <span class="at">y =</span> prop_correct)) <span class="sc">+</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">alpha =</span> <span class="fl">0.4</span>, <span class="at">size =</span> <span class="fl">0.9</span>, <span class="at">colour =</span> irw_blue) <span class="sc">+</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_smooth</span>(<span class="at">method =</span> <span class="st">"lm"</span>, <span class="at">se =</span> <span class="cn">FALSE</span>, <span class="at">colour =</span> irw_red, <span class="at">linewidth =</span> <span class="fl">0.7</span>) <span class="sc">+</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>table, <span class="at">scales =</span> <span class="st">"free"</span>) <span class="sc">+</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">strip.text =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">7</span>)) <span class="sc">+</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Word count"</span>, <span class="at">y =</span> <span class="st">"Proportion correct"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output-display">
 <div id="fig-scatter-facet" class="quarto-float quarto-figure quarto-figure-center anchored">
@@ -605,26 +639,26 @@ Figure&nbsp;2: Distributions of word count and average word length across items.
 <img src="item_text_difficulty_files/figure-html/fig-scatter-facet-1.png" class="img-fluid figure-img" width="672">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-scatter-facet-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-Figure&nbsp;3: Word count vs.&nbsp;proportion correct, separately per dataset. Lines are OLS fits.
+Figure&nbsp;4: Word count vs.&nbsp;proportion correct, separately per dataset. Lines are OLS fits.
 </figcaption>
 </figure>
 </div>
 </div>
 </div>
+<p>Longer items could be harder (more to parse) or easier (more context provided). Looking within datasets, as above, avoids the confound that some instruments simply use longer items throughout — a pooled correlation across all items would just reflect which datasets happen to use longer or shorter wording.</p>
 <hr>
 </section>
-<section id="what-to-notice" class="level2">
-<h2 class="anchored" data-anchor-id="what-to-notice">What to notice</h2>
-<p><strong>Heterogeneity across datasets.</strong> If the within-dataset correlations are scattered around zero (some positive, some negative), that suggests any overall pooled relationship is an artifact of dataset-level confounds rather than a genuine text-difficulty signal.</p>
-<p><strong>Direction of word count effect.</strong> Longer items could be harder (more to parse) or easier (more context provided). Looking within datasets avoids the confound that some instruments simply use longer items throughout.</p>
-<p><strong>Limitations.</strong> Proportion correct conflates item difficulty with sample ability. The natural next step is to use <em>b</em> parameters from the 2PL vignette instead, which are ability-adjusted.</p>
+</section>
+<section id="limitations" class="level2">
+<h2 class="anchored" data-anchor-id="limitations">Limitations</h2>
+<p>Proportion correct conflates item difficulty with sample ability — a “hard” item in a high-ability sample can look easy, and vice versa. The natural next step is to use <em>b</em> parameters from the <a href="../vignettes/2pl_across_datasets.html">2PL vignette</a> instead, which are ability-adjusted. The text features here are also intentionally simple (word count, average word length); a real linguistic-complexity analysis would want features like negation, syntactic depth, or vocabulary rarity, which this vignette does not attempt.</p>
 <hr>
 </section>
 <section id="reproducibility" class="level2">
 <h2 class="anchored" data-anchor-id="reproducibility">Reproducibility</h2>
 <p>Results computed on May 05, 2026 using 18 IRW tables. To reproduce:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="st">"vignettes/item_text_difficulty_compute.R"</span>)</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>quarto<span class="sc">::</span><span class="fu">quarto_render</span>(<span class="st">"vignettes/item_text_difficulty.qmd"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="st">"vignettes/item_text_difficulty_compute.R"</span>)</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>quarto<span class="sc">::</span><span class="fu">quarto_render</span>(<span class="st">"vignettes/item_text_difficulty.qmd"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="callout callout-style-default callout-tip no-icon callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -636,10 +670,10 @@ Tip
 </div>
 <div class="callout-body-container callout-body">
 <p>To cite datasets used:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (tbl <span class="cf">in</span> eligible_tables) {</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">irw_save_bibtex</span>(tbl, <span class="at">output_file =</span> <span class="st">"itemtextdata/irw_references.bib"</span>,</span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>                  <span class="at">append =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (tbl <span class="cf">in</span> eligible_tables) {</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">irw_save_bibtex</span>(tbl, <span class="at">output_file =</span> <span class="st">"itemtextdata/irw_references.bib"</span>,</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>                  <span class="at">append =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div>
 </div>
 
