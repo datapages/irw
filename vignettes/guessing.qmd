@@ -1,0 +1,461 @@
+---
+title: "Guessing in Multiple-Choice Data: Which Correction Helps Out-of-Sample?"
+description: |
+  When guessing is present in multiple-choice data, which correction actually
+  helps out-of-sample -- and when does the correction itself become a
+  liability? Three published lenses on guessing (ability-based guessing,
+  person-level purification, and a two-class mixture "safety valve") plus the
+  standard IRT baselines, compared on real IRW tables using out-of-sample IMV.
+date: today
+bibliography: guessingdata/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: false
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+
+theme_set(theme_minimal(base_size = 13))
+model_colors <- c(
+  Rasch    = "#2a78d6",
+  "1PLg"   = "#eb6834",
+  "3PL"    = "#1baf7a",
+  "1PL-AG" = "#e87ba4",
+  Mixture  = "#4a3aa7"
+)
+
+results_path      <- "guessingdata/guessing_results.rds"
+provisional_path  <- "guessingdata/guessing_results_provisional.rds"
+cache_ok <- file.exists(results_path) || file.exists(provisional_path)
+is_provisional <- !file.exists(results_path) && file.exists(provisional_path)
+
+if (cache_ok) {
+  .res       <- readRDS(if (file.exists(results_path)) results_path else provisional_path)
+  summary_df <- .res$summary
+  tables_df  <- .res$tables
+  date_run   <- .res$date_run
+  holdout_frac <- .res$holdout_frac
+  subsample_n  <- .res$subsample_n
+  n_complete_provisional <- .res$n_complete %||% NA_integer_
+  n_total_planned        <- .res$n_total_planned %||% NA_integer_
+} else {
+  summary_df <- tibble(
+    table = character(), m = integer(), m_verified = logical(),
+    n_items = integer(), n_participants = integer(), n_heldout = integer(),
+    converged_rasch = logical(), converged_2pl = logical(),
+    converged_1plg = logical(), converged_3pl = logical(),
+    converged_ag = logical(), converged_mix = logical(),
+    pi_hat = numeric(), alpha_hat = numeric(), se_alpha = numeric(),
+    lr_stat = numeric(), lr_p = numeric(), frac_flagged = numeric(),
+    imv_1plg_mix = numeric(), imv_1plg_ag = numeric(),
+    imv_rasch_purified = numeric(), imv_3pl_mix = numeric(), imv_3pl_ag = numeric()
+  )
+  date_run <- Sys.Date(); holdout_frac <- 0.2; subsample_n <- 3000
+  is_provisional <- FALSE
+}
+```
+
+```{r}
+#| label: provisional-banner
+#| results: asis
+if (cache_ok && isTRUE(is_provisional)) {
+  cat(sprintf(
+    "\n::: {.callout-warning}\n**Provisional preview.** %d of %d planned tables have finished fitting so far; this page reflects those %d only and will change once the remaining tables complete.\n:::\n",
+    n_complete_provisional, n_total_planned, n_complete_provisional
+  ))
+}
+```
+
+## Motivation
+
+Multiple-choice items let respondents get a question right without knowing
+the answer. Three literatures locate that guessing behavior in three
+different places, and each proposes a different fix:
+
+- **@sanmartin2006** locate it in a **person &times; item interaction**: the
+  1PL-AG model lets the probability of a correct guess itself depend on
+  ability, via a weight $\alpha$ on top of a per-item floor. When $\alpha=0$
+  the model reduces to a fixed per-item floor (1PL-G); $\alpha \ne 0$ means
+  more able examinees guess more successfully -- partial knowledge leaking
+  into the "guess" itself.
+- **@torresirribarra2026** locate it at the **person level, in the
+  calibration sample**: rather than adding a guessing parameter to the item
+  response function, their Method A flags examinees whose response pattern
+  looks more like a flat guessing process than a Rasch process, removes them
+  from calibration, and refits. No new item parameter is introduced; the
+  item parameters themselves are what improve.
+- **@xiao2026safetyvalve** (the "Safety Valve" paper) locate it in a
+  **discrete latent class**: a two-class mixture in which one class responds
+  according to a Rasch model and the other responds at a fixed chance level,
+  with the mixing proportion $\pi$ estimated from the data. As
+  $\hat\pi \to 1$ the model collapses to a plain Rasch model, so (per their
+  central finding) it costs almost nothing when guessing is absent, while a
+  fixed-floor 1PLg can pay a large, asymmetric predictive penalty when its
+  assumed floor doesn't match the population.
+
+None of these three papers puts all three lenses, plus the standard
+Rasch/2PL/1PLg/3PL baselines, on one predictive scale across a battery of
+real datasets. That's the contribution here: fit all seven specifications on
+real IRW tables and score every one of them on genuinely held-out responses,
+using the InterModel Vigorish [IMV; @domingue2025imv].
+
+## Explore the model shapes
+
+Rasch and 1PLg apply the same floor to every examinee, regardless of whether
+they're guessing or working the problem. 1PL-AG tilts that floor by ability.
+The Mixture model only applies the floor to the estimated share of guessers.
+Drag the sliders below to see how the five item characteristic curves (ICCs)
+relate to one another.
+
+```{=html}
+<div class="guess-widget" style="border:1px solid #dee2e6;border-radius:6px;padding:1rem 1.25rem;margin:1rem 0;">
+  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px 24px;margin-bottom:0.75rem;">
+    <label style="font-size:0.9rem;">Item difficulty (b)
+      <input id="guess-b" type="range" min="-1" max="3" step="0.1" value="1.5" style="width:100%;">
+      <span id="guess-b-val" style="font-family:monospace;font-size:0.85rem;"></span>
+    </label>
+    <label style="font-size:0.9rem;">Chance level (g, for an m-option item)
+      <input id="guess-g" type="range" min="0.1" max="0.5" step="0.05" value="0.25" style="width:100%;">
+      <span id="guess-g-val" style="font-family:monospace;font-size:0.85rem;"></span>
+    </label>
+    <label style="font-size:0.9rem;">Ability weight in guessing (1PL-AG &alpha;)
+      <input id="guess-alpha" type="range" min="0" max="1" step="0.05" value="0.2" style="width:100%;">
+      <span id="guess-alpha-val" style="font-family:monospace;font-size:0.85rem;"></span>
+    </label>
+    <label style="font-size:0.9rem;">Engaged proportion (Mixture &pi;)
+      <input id="guess-pi" type="range" min="0.5" max="1" step="0.01" value="0.85" style="width:100%;">
+      <span id="guess-pi-val" style="font-family:monospace;font-size:0.85rem;"></span>
+    </label>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:6px;font-size:0.82rem;">
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#2a78d6;"></span> Rasch</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#eb6834;"></span> 1PLg</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#1baf7a;"></span> 3PL</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#e87ba4;"></span> 1PL-AG</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#4a3aa7;"></span> Mixture</span>
+  </div>
+  <svg id="guess-svg" viewBox="0 0 640 380" style="width:100%;max-width:640px;height:auto;display:block;"></svg>
+  <p style="font-size:0.85rem;color:#666;margin-top:0.5rem;">
+    Rasch and 1PLg apply the same floor to every examinee. 1PL-AG tilts the
+    floor by ability. The Mixture model only applies the floor to the
+    estimated share of guessers.
+  </p>
+</div>
+
+<script>
+(function() {
+  function plogis(x) { return 1 / (1 + Math.exp(-x)); }
+  function qlogis(p) { return Math.log(p / (1 - p)); }
+
+  var ids = ["b", "g", "alpha", "pi"];
+  var els = {}, valEls = {};
+  ids.forEach(function(id) {
+    els[id] = document.getElementById("guess-" + id);
+    valEls[id] = document.getElementById("guess-" + id + "-val");
+  });
+  var svg = document.getElementById("guess-svg");
+
+  var W = 640, H = 380, mL = 50, mR = 20, mT = 10, mB = 40;
+  var plotW = W - mL - mR, plotH = H - mT - mB;
+  function px(theta) { return mL + (theta + 4) / 8 * plotW; }
+  function py(p) { return mT + (1 - p) * plotH; }
+
+  function pathFor(fn) {
+    var d = "";
+    for (var i = 0; i <= 160; i++) {
+      var theta = -4 + i * (8 / 160);
+      var x = px(theta), y = py(fn(theta));
+      d += (i === 0 ? "M" : "L") + x.toFixed(2) + "," + y.toFixed(2) + " ";
+    }
+    return d;
+  }
+
+  function staticAxesSvg() {
+    var s = "";
+    s += '<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (mT + plotH) + '" stroke="#888"/>';
+    s += '<line x1="' + mL + '" y1="' + (mT + plotH) + '" x2="' + (mL + plotW) + '" y2="' + (mT + plotH) + '" stroke="#888"/>';
+    [-4, -2, 0, 2, 4].forEach(function(t) {
+      var x = px(t);
+      s += '<line x1="' + x + '" y1="' + (mT + plotH) + '" x2="' + x + '" y2="' + (mT + plotH + 5) + '" stroke="#888"/>';
+      s += '<text x="' + x + '" y="' + (mT + plotH + 18) + '" font-size="11" text-anchor="middle" fill="#333">' + t + '</text>';
+    });
+    [0, 0.25, 0.5, 0.75, 1].forEach(function(p) {
+      var y = py(p);
+      s += '<line x1="' + (mL - 5) + '" y1="' + y + '" x2="' + mL + '" y2="' + y + '" stroke="#888"/>';
+      s += '<text x="' + (mL - 9) + '" y="' + (y + 4) + '" font-size="11" text-anchor="end" fill="#333">' + p + '</text>';
+    });
+    s += '<text x="' + (mL + plotW / 2) + '" y="' + (H - 4) + '" font-size="12" text-anchor="middle" fill="#333">&#952; (ability)</text>';
+    s += '<text x="12" y="' + (mT + plotH / 2) + '" font-size="12" text-anchor="middle" fill="#333" transform="rotate(-90 12 ' + (mT + plotH / 2) + ')">P(correct)</text>';
+    return s;
+  }
+
+  function draw() {
+    var b = parseFloat(els.b.value), g = parseFloat(els.g.value),
+        alpha = parseFloat(els.alpha.value), pi = parseFloat(els.pi.value);
+    valEls.b.textContent = "b = " + b.toFixed(1);
+    valEls.g.textContent = "g = " + g.toFixed(2);
+    valEls.alpha.textContent = "α = " + alpha.toFixed(2);
+    valEls.pi.textContent = "π = " + pi.toFixed(2);
+    var gamma = qlogis(g);
+
+    var rasch    = function(t) { return plogis(t - b); };
+    var oneplg   = function(t) { return g + (1 - g) * plogis(t - b); };
+    var threepl  = function(t) { return g + (1 - g) * plogis(1.5 * (t - b)); };
+    var ag       = function(t) { var p = plogis(t - b); return p + (1 - p) * plogis(alpha * t + gamma); };
+    var mixture  = function(t) { return pi * plogis(t - b) + (1 - pi) * g; };
+
+    var curves = [
+      { fn: rasch,   color: "#2a78d6" },
+      { fn: oneplg,  color: "#eb6834" },
+      { fn: threepl, color: "#1baf7a" },
+      { fn: ag,      color: "#e87ba4" },
+      { fn: mixture, color: "#4a3aa7" }
+    ];
+
+    var html = staticAxesSvg();
+    curves.forEach(function(c) {
+      html += '<path d="' + pathFor(c.fn) + '" fill="none" stroke="' + c.color + '" stroke-width="2.5"/>';
+    });
+    svg.innerHTML = html;
+  }
+
+  ids.forEach(function(id) { els[id].addEventListener("input", draw); });
+  draw();
+})();
+</script>
+```
+
+## Data and methods
+
+### Data selection
+
+Guessing corrections only make sense for genuine single-answer,
+multiple-choice items with a well-defined chance level -- so the candidate
+pool needed to satisfy several requirements simultaneously: dichotomous
+(correct/incorrect) responses, `construct_type == "Cognitive/educational"`
+(guessing is a multiple-choice-test phenomenon, not a Likert/personality-item
+one), sufficient sample size for the two custom estimators below to be
+stable, and -- critically -- a verifiable, homogeneous number of response
+options $m$ per table, since every model here needs a chance level $1/m$.
+
+A first pass required IRW item text (to count response options directly)
+plus `construct_type`/`n_categories`/`n_participants` metadata filters. That
+produced 26 metadata-plausible candidates, but manual inspection of the
+actual item text excluded most of them: some "options" columns turned out to
+be scoring-rubric labels (Correct/Incorrect/Self-correct) rather than
+response alternatives an examinee chooses from; some items were "choose
+**two** words" formats with a non-standard chance structure; one was an
+Agree/Disagree/Not-Sure belief inventory rather than a distractor-based
+knowledge test. Only three tables survived as genuine, item-text-verified,
+single-answer MC with a homogeneous option count: `gilbert_meta_1` (m=4),
+`gilbert_meta_102` (m=5), and `gilbert_meta_103` (m=5), all from the same
+underlying literacy-intervention study.
+
+That pool alone was thin and not very representative of the high-stakes
+settings where guessing corrections matter most. ENEM (Brazil's national
+university-admissions exam) carries no item text in IRW, so its response
+options can't be verified from IRW data directly -- but ENEM's format is
+externally documented as a stable 5-option (A-E) multiple choice test across
+subjects and years. We use that documented value ($m=5$) for 8 ENEM
+tables spanning 2013, 2014, 2019, and 2024 and all four subject areas
+(`mt`=math, `lc`=languages, `ch`=human sciences, `cn`=natural sciences),
+restricted to the density=1 table/years (every respondent answered the
+identical fixed item set, no rotated-booklet missingness). Each ENEM table
+has roughly a million respondents; we work with a fixed-seed random
+subsample of `r subsample_n` per table for compute tractability. **This is
+an assumed, not IRW-verified, value of $m$** -- flagged explicitly rather
+than silently treated as equivalent to the item-text-verified tables.
+
+Per **@xiao2026safetyvalve** (Section 3.2), two-alternative forced-choice
+(2AFC) items are excluded from this design on principle, not just by
+happenstance: at $g_{\text{fit}}=0.5$ the Rasch model already predicts
+roughly 0.5 on sufficiently difficult items, so the Mixture model's two
+classes are not empirically separable -- the guessing class predicts a flat
+0.5 that the engaged class already produces for low-ability respondents on
+hard items. All tables used here have $m \ge 4$, safely inside the
+class-separated region the Safety Valve paper establishes.
+
+```{r}
+#| label: table-list
+if (cache_ok) {
+  tables_df |>
+    mutate(source = ifelse(m_verified, "item-text-verified", "documented (ENEM)")) |>
+    select(table, m, source) |>
+    knitr::kable(col.names = c("Table", "m", "Source"), align = "lrl",
+                 caption = "Tables used")
+}
+```
+
+### Models fit
+
+Seven specifications per table:
+
+1. **Rasch** -- no guessing correction.
+2. **2PL** -- `mirt`, lognormal(0,1) prior on $a_1$ (this site's existing
+   convention; see `imv.qmd`).
+3. **1PLg** -- fixed floor $g=1/m$, discrimination fixed at 1, difficulty
+   free (built via a constrained 3PL in `mirt`).
+4. **3PL** -- `mirt`, lognormal(0,1) prior on $a_1$ (same as 2PL, chosen for
+   internal consistency rather than replicating the Safety Valve paper's
+   tighter lnorm(0,0.5)) and Beta(5,17) on $g$ (mean $\approx 0.23$), per
+   the Safety Valve paper's Study 5.
+5. **1PL-AG** [@sanmartin2006] -- standalone marginal-likelihood estimator
+   (`vignettes/guessing_helpers.R::fit_1pl_ag()`), quadrature-integrated,
+   with an analytic gradient verified against finite differences before use.
+   Reports the likelihood-ratio test of $\alpha=0$.
+6. **Mixture** ("safety valve") [@xiao2026safetyvalve] -- standalone
+   estimator (`fit_mixture()`), multi-start over
+   $\pi_0 \in \{0.6, 0.75, 0.9, 0.97\}$, gradient likewise verified.
+7. **Purified Rasch** (Method A) [@torresirribarra2026] -- flags examinees
+   whose response pattern favors a flat-guessing likelihood over the Rasch
+   likelihood, removes them, refits Rasch on the retained sample
+   (`purify_rasch()`). Its held-out predictions are evaluated on the full
+   sample (including flagged persons), since the promise of purification is
+   better item parameters, not that flagged persons are themselves predicted
+   well.
+
+Before use on real data, `fit_1pl_ag()` and `fit_mixture()` were validated
+by simulation: both correctly return a non-significant likelihood-ratio test
+/ $\hat\pi \approx 1$ under a true null (no guessing), and both recover
+known parameters reasonably well under a true alternative (Mixture recovery
+was excellent; 1PL-AG's $\beta$ recovered well but its $\gamma$ was noisy at
+moderate sample sizes -- a limitation the source paper documents for its own
+real-data application, not an implementation defect. See Limitations below.
+
+### Cross-validation
+
+A single 80/20 response-level (cell) holdout per table, masked once and
+reused across all seven model fits, per this codebase's existing convention
+([[feedback_cv_holdout]]; @stenhaug2022) -- masking is per-person and always
+leaves at least one retained response. This is a **single split**, not the
+20 repeated splits used in the Safety Valve paper's own empirical section;
+that simplification was made deliberately for this first run.
+
+## Results
+
+```{r}
+#| label: results-table
+if (cache_ok && nrow(summary_df) > 0) {
+  summary_df |>
+    mutate(
+      alpha_lbl = sprintf("%.3f (p=%.3f)", alpha_hat, lr_p),
+      pi_lbl    = sprintf("%.3f", pi_hat)
+    ) |>
+    mutate(across(c(frac_flagged, imv_1plg_mix, imv_1plg_ag,
+                     imv_rasch_purified, imv_3pl_mix, imv_3pl_ag),
+                  ~ ifelse(is.na(.x), NA, round(.x, 4)))) |>
+    select(table, m, n_participants, n_items, n_heldout,
+           pi_lbl, alpha_lbl, frac_flagged,
+           imv_1plg_mix, imv_1plg_ag, imv_rasch_purified, imv_3pl_mix, imv_3pl_ag) |>
+    knitr::kable(
+      align = "lrrrrrlrrrrr",
+      col.names = c("Table", "m", "N", "J", "N held-out",
+                    "π̂ (Mixture)", "α̂ (1PL-AG, p)", "Frac. flagged (Purified)",
+                    "IMV(1PLg,Mix)", "IMV(1PLg,AG)", "IMV(Rasch,Purified)",
+                    "IMV(3PL,Mix)", "IMV(3PL,AG)"),
+      caption = paste0("Per-table results (single ", holdout_frac * 100,
+                        "% held-out split per table)")
+    )
+} else {
+  cat("Results not yet computed -- run vignettes/guessing_compute.R.")
+}
+```
+
+```{r}
+#| label: highlight-picks
+if (cache_ok && nrow(summary_df) > 0) {
+  no_guess_tbl <- summary_df |> arrange(desc(pi_hat)) |> slice(1)
+  guess_tbl    <- summary_df |> arrange(pi_hat) |> slice(1)
+  disagree_tbl <- summary_df |>
+    filter(!is.na(imv_1plg_mix), !is.na(imv_1plg_ag)) |>
+    mutate(disagree = abs(sign(imv_1plg_mix) - sign(imv_1plg_ag))) |>
+    arrange(desc(disagree)) |> slice(1)
+}
+```
+
+```{r}
+#| label: what-to-notice
+#| results: asis
+if (cache_ok && nrow(summary_df) > 0) {
+  cat("### What to notice\n\n")
+
+  no_guess_lbl <- if (no_guess_tbl$pi_hat > 0.95) "Safety-valve-suppressed / least guessing detected" else "Least guessing detected (of tables run so far)"
+  cat(sprintf(
+    "**%s**: `%s` has \\u03c0\\u0302 = %.3f -- the Mixture model assigns the largest engaged share of the tables run so far, with IMV over the 1PLg of %s. %s\n\n",
+    no_guess_lbl, no_guess_tbl$table, no_guess_tbl$pi_hat,
+    ifelse(is.na(no_guess_tbl$imv_1plg_mix), "not available (1PLg did not converge)", sprintf("%.4f", no_guess_tbl$imv_1plg_mix)),
+    if (no_guess_tbl$pi_hat > 0.95) "A near-zero IMV here is not a failure of the Mixture model; it is the safety-valve property working as intended -- there is nothing for it to correct." else ""
+  ))
+
+  cat(sprintf(
+    "**Substantial guessing detected**: `%s` has \\u03c0\\u0302 = %.3f, meaning the Mixture model assigns roughly %.0f%% of response weight to the guessing class, with an IMV over the 1PLg of %s.\n\n",
+    guess_tbl$table, guess_tbl$pi_hat, 100 * (1 - guess_tbl$pi_hat),
+    ifelse(is.na(guess_tbl$imv_1plg_mix), "not available (1PLg did not converge)", sprintf("%.4f", guess_tbl$imv_1plg_mix))
+  ))
+
+  if (nrow(disagree_tbl) > 0 && disagree_tbl$disagree > 0) {
+    cat(sprintf(
+      "**Where methods disagree**: `%s` shows the 1PLg-vs-Mixture and 1PLg-vs-1PL-AG comparisons pointing in different directions (IMV(1PLg,Mix) = %.4f vs. IMV(1PLg,AG) = %.4f) -- a reminder that these three lenses model genuinely different mechanisms and won't always agree on which correction (if any) is worth its complexity.\n\n",
+      disagree_tbl$table, disagree_tbl$imv_1plg_mix, disagree_tbl$imv_1plg_ag
+    ))
+  }
+}
+```
+
+## Limitations
+
+- **ENEM's $m=5$ is an assumed, not verified, value.** IRW carries no item
+  text for these tables; the value comes from documented exam structure, not
+  from counting options in the data itself. If that assumption is wrong for
+  any particular year/subject, every ENEM result here inherits the error.
+- **1PL-AG's $\gamma$ (and, to a lesser extent, $\alpha$) can be noisy.**
+  Simulation validation recovered $\beta$ well but $\gamma$ poorly at
+  moderate sample sizes -- consistent with @sanmartin2006's own real-data
+  application, where some items had standard errors above 100. Point
+  estimates of $\hat\alpha$ should be read alongside its LR test, not in
+  isolation.
+- **Single 80/20 split, not repeated cross-validation.** IMV estimates here
+  reflect one holdout draw per table; they are not averaged over multiple
+  splits the way the Safety Valve paper's own empirical section is.
+- **Secondary (gilbert_meta_*) tables come from one study family.** All
+  three item-text-verified tables share an underlying literacy-intervention
+  study; they are not independent evidence of generalizability beyond that
+  context.
+- **Purified Rasch (Method A) assumes person-level, not item-level,
+  guessing** -- an examinee is modeled as either guessing on everything or
+  nothing, per @torresirribarra2026's own stated simplification relative to
+  the (person &times; item) process that actually generates guessing.
+
+## Reproducibility
+
+Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+# 1. Fit all 7 specifications across all tables (from the project root)
+source("vignettes/guessing_compute.R")
+
+# 2. Re-render this page
+quarto::quarto_render("vignettes/guessing.qmd")
+```
+
+::: {.callout-tip}
+To cite the datasets used, run:
+
+```r
+irw_save_bibtex(summary_df$table, output_file = "guessingdata/irw_references.bib")
+```
+:::
+
+## References
