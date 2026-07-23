@@ -199,8 +199,18 @@ fit_one_table <- function(table_name, m, m_verified) {
   preds$plg <- if (converged$plg) heldout_preds_mirt(fit_plg, ho$mask_idx) else NA
 
   # --- 3PL, lnorm(0,1) on a1 + Beta(5,17) on g ---
+  # NOTE: mirt's 3PL stores g on a transformed (unconstrained) internal scale,
+  # not the raw [0,1] scale -- a plain "beta" PRIOR evaluates the Beta density
+  # on that wrong scale, badly miscalibrating the effective prior on g (this
+  # was diagnosed after an earlier run collapsed every table's 3PL guessing
+  # parameter to ~0.5 regardless of true chance level). "expbeta" applies
+  # plogis() first, exactly as mirt's own docs specify for 3PL/4PL lower
+  # asymptotes: "(items, expbeta, alpha, beta) for the beta distribution
+  # after applying the function plogis to the input value (note, this is
+  # specifically for applying a beta prior to the lower-bound parameters in
+  # 3/4PL models)".
   s3 <- paste0("F = 1-", ni,
-               "\nPRIOR = (1-", ni, ", a1, lnorm, 0.0, 1.0), (1-", ni, ", g, beta, 5, 17)")
+               "\nPRIOR = (1-", ni, ", a1, lnorm, 0.0, 1.0), (1-", ni, ", g, expbeta, 5, 17)")
   fit_3pl <- tryCatch(mirt(ho$train, mirt.model(s3), itemtype = "3PL", verbose = FALSE,
                             technical = list(NCYCLES = EM_CYCLES)),
                        error = function(e) NULL)

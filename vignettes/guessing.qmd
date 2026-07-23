@@ -345,6 +345,25 @@ that simplification was made deliberately for this first run.
 
 ## Results
 
+::: {.callout-warning}
+**The `IMV(3PL,Mix)` and `IMV(3PL,AG)` columns below are known unreliable and should not be
+read as findings.** The free 3PL fits used `mirt`'s `beta` prior on the guessing parameter
+`g`, but `mirt` stores `g` internally on a transformed scale, not the raw
+[0,1] probability scale -- `beta` evaluates the Beta(5,17) density on the wrong scale
+entirely, and the fix (`expbeta`, which applies `plogis()` first, exactly as `mirt`'s own
+documentation specifies for 3PL/4PL lower asymptotes) was verified but not yet re-run
+across the batch. The symptom is systematic: every table's 3PL guessing parameter
+collapsed to $g \approx 0.5$ regardless of true chance level, producing predicted
+probabilities floored near 0.5 and artificially huge (and wrong) `IMV(3PL,*)` values
+(confirmed on `enem_2014_1mil_ch`: mean predicted P(correct) of 0.52 against a true base
+rate of 0.29). All other columns (`π̂`, `α̂`, `IMV(1PLg,Mix)`, `IMV(1PLg,AG)`,
+`IMV(Rasch,Purified)`) are unaffected -- the bug is isolated to the free-3PL comparisons,
+confirmed by checking `mirt`'s handling of `pars='values'` (used by the other models here)
+versus its `PRIOR` mechanism (used only for 3PL and 2PL; 2PL's `a1` prior does not have
+this issue, only 3PL's `g` prior does). Left in the table below for transparency rather
+than hidden, per instruction, but treat every `IMV(3PL,*)` entry as not yet a real result.
+:::
+
 ```{r}
 #| label: results-table
 if (cache_ok && nrow(summary_df) > 0) {
