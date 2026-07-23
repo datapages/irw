@@ -99,6 +99,24 @@ if (file.exists(itemfit_path)) {
   empirical_bins_df <- tibble(theta = numeric(), n = numeric(), obs_prop = numeric(), exp_prop = numeric())
 }
 
+convergence_path <- "asymmetric_irt_data/convergence_sim.rds"
+if (file.exists(convergence_path)) {
+  .conv                <- readRDS(convergence_path)
+  convergence_summary  <- .conv$convergence_summary
+  convergence_n_grid   <- .conv$n_grid
+  convergence_j_items  <- .conv$j_items
+  convergence_reps     <- .conv$reps
+  convergence_date_run <- .conv$date_run
+} else {
+  convergence_summary <- tibble(
+    model = character(), n = integer(), n_fits = integer(),
+    bias_shape = numeric(), rmse_shape = numeric(),
+    bias_a = numeric(), rmse_a = numeric(), bias_d = numeric(), rmse_d = numeric()
+  )
+  convergence_n_grid <- integer(); convergence_j_items <- NA_integer_
+  convergence_reps <- NA_integer_; convergence_date_run <- Sys.Date()
+}
+
 knitr::opts_chunk$set(eval = cache_ok)
 ```
 
@@ -520,6 +538,96 @@ All four checks passed
 (`r format(gate_date_run, "%B %d, %Y")`); only then did we move to real IRW
 data.
 
+### (e) Consistency: do estimates converge as sample size grows?
+
+Check (c) above confirms recovery is in the right ballpark at a single
+sample size ($N = 2{,}000$) — the same scale used for the real-data batch.
+It says nothing about whether the estimator actually **converges**: whether
+bias and variance keep shrinking as $N$ grows, the way a well-behaved
+MLE/MAP estimator should. Added as a follow-up to the original four-check
+gate (not a prerequisite for it — the real-data batch above was already
+complete when this was run), this check refits all three models across a
+sample-size grid from `r if (length(convergence_n_grid)) format(min(convergence_n_grid), big.mark=",") else "…"`
+to `r if (length(convergence_n_grid)) format(max(convergence_n_grid), big.mark=",") else "…"`
+persons, holding `r convergence_j_items` items' true parameters fixed
+throughout so that "bias at this $N$" is well defined, and redrawing
+`r convergence_reps` replicate person samples at every sample size.
+
+```{r}
+#| label: fig-convergence-shape
+#| fig-cap: "RMSE of the recovered shape parameter (AO: eta on the log-kappa scale; LPE: S; RH: delta) vs. sample size, one line per model. Points are averaged across items and replicates at each N; converged fits only. A consistent estimator should trend toward zero as N grows."
+#| fig-height: 4.5
+
+ggplot(convergence_summary, aes(x = n, y = rmse_shape, colour = model)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 2) +
+  scale_x_log10(labels = scales::label_comma()) +
+  scale_colour_manual(values = model_colors) +
+  labs(x = "N (persons, log scale)", y = "RMSE of shape parameter", colour = "Model")
+```
+
+```{r}
+#| label: tbl-convergence-summary
+#| tbl-cap: "Bias and RMSE of the recovered shape parameter, plus RMSE of discrimination (a) and difficulty (d), by model and sample size. Converged fits only, averaged across items and replicates."
+
+convergence_summary |>
+  mutate(across(c(bias_shape, rmse_shape, bias_a, rmse_a, bias_d, rmse_d), \(x) round(x, 3))) |>
+  arrange(model, n) |>
+  rename(Model = model, N = n, `Fits` = n_fits, `Bias (shape)` = bias_shape,
+         `RMSE (shape)` = rmse_shape, `RMSE (a)` = rmse_a, `RMSE (d)` = rmse_d) |>
+  select(Model, N, Fits, `Bias (shape)`, `RMSE (shape)`, `RMSE (a)`, `RMSE (d)`) |>
+  knitr::kable(align = "lrrrrrr")
+```
+
+```{r}
+#| label: convergence-stats
+#| echo: false
+
+conv_extreme <- convergence_summary |>
+  group_by(model) |>
+  filter(n %in% range(n)) |>
+  summarise(rmse_lo = rmse_shape[which.min(n)], rmse_hi = rmse_shape[which.max(n)], .groups = "drop") |>
+  mutate(shrink = round(100 * (1 - rmse_hi / rmse_lo)))
+```
+
+RMSE of the shape parameter falls with $N$ for all three models — by
+`r if(nrow(conv_extreme)) conv_extreme$shrink[conv_extreme$model=="AO"] else "…"`%
+for AO (
+`r if(nrow(conv_extreme)) round(conv_extreme$rmse_lo[conv_extreme$model=="AO"],2) else "…"`
+to
+`r if(nrow(conv_extreme)) round(conv_extreme$rmse_hi[conv_extreme$model=="AO"],2) else "…"`),
+`r if(nrow(conv_extreme)) conv_extreme$shrink[conv_extreme$model=="LPE"] else "…"`%
+for LPE (
+`r if(nrow(conv_extreme)) round(conv_extreme$rmse_lo[conv_extreme$model=="LPE"],2) else "…"`
+to
+`r if(nrow(conv_extreme)) round(conv_extreme$rmse_hi[conv_extreme$model=="LPE"],2) else "…"`),
+and
+`r if(nrow(conv_extreme)) conv_extreme$shrink[conv_extreme$model=="RH"] else "…"`%
+for RH (
+`r if(nrow(conv_extreme)) round(conv_extreme$rmse_lo[conv_extreme$model=="RH"],2) else "…"`
+to
+`r if(nrow(conv_extreme)) round(conv_extreme$rmse_hi[conv_extreme$model=="RH"],2) else "…"`),
+moving from the smallest to the largest $N$ tested. The trend isn't
+perfectly monotone at every step for every model — with only 8 replicates
+per cell there's real sampling noise in each point in @fig-convergence-shape
+— but none of the three plateaus or reverses direction, which is what a
+consistent estimator should look like. (The raw RMSE values aren't directly
+comparable *across* models: each model's true shape values were drawn from
+a different range, matching check (c)'s convention, so a larger RMSE for
+one model at a given $N$ can just as easily reflect a wider true-parameter
+scale as a harder estimation problem. The within-model trend across $N$ is
+the finding here, not the between-model ranking.) That supports treating
+check (c)'s single-$N$ recovery numbers, and the real-data batch's per-item
+$\kappa$ estimates below, as genuinely improvable with more data rather
+than stuck at some irreducible floor. It does not make them precise at the
+sample sizes IRW tables actually offer: even at the largest $N$ tested
+here, shape-parameter RMSE is still several times larger than discrimination
+or difficulty RMSE at the same $N$ (see @tbl-convergence-summary) —
+consistent with check (c)'s finding that shape parameters are harder to pin
+down than location/discrimination, and the reason for this vignette's
+higher-than-usual participant floor
+($N \geq `r format(min_participants, big.mark=",")`$).
+
 ## Data and methods
 
 ```{r}
@@ -903,7 +1011,10 @@ source("vignettes/asymmetric_irt_compute.R")
 # 3. Re-fit the single worked example and extract its empirical theta bins
 source("vignettes/asymmetric_irt_data/example_itemfit_compute.R")
 
-# 4. Re-render this page
+# 4. Re-run the sample-size convergence sweep (validation gate check (e))
+source("vignettes/asymmetric_irt_data/convergence_sim_compute.R")
+
+# 5. Re-render this page
 quarto::quarto_render("vignettes/asymmetric_irt.qmd")
 ```
 
