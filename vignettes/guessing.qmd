@@ -476,23 +476,22 @@ if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
 #| fig-width: 9
 #| fig-height: 5.5
 if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
-  ggplot(imv_vs_rasch_df, aes(x = table, y = imv, fill = model)) +
+  ggplot(imv_vs_rasch_df, aes(x = model, y = imv, fill = table)) +
     geom_col(position = position_dodge2(preserve = "single")) +
     geom_hline(yintercept = 0, color = "grey30", linewidth = 0.3) +
-    scale_fill_manual(values = model_colors, breaks = model_order) +
+    scale_fill_brewer(palette = "Paired") +
     coord_flip() +
-    labs(x = NULL, y = "IMV(Rasch, model)", fill = "Model",
-         title = "Predictive gain (or cost) relative to Rasch, grouped within table") +
+    labs(x = NULL, y = "IMV(Rasch, model)", fill = "Table",
+         title = "Predictive gain (or cost) relative to Rasch, grouped by model") +
     theme(legend.position = "bottom")
 }
 ```
 
-Bars are grouped (not stacked) within each table -- each of the six models
-gets its own bar, positive ones extending right of zero and negative ones
-extending left, so models can be compared directly against each other
-within a table rather than only against their cumulative sum.
-`IMV(Rasch,3PL)` (green) is included per the caveat above; treat its
-bar as not-yet-real.
+Bars are grouped by model (not by table) -- each model's bar group shows
+one bar per table, so you can see how consistently (or not) a given
+correction performs across tables, rather than comparing models within a
+single table. The `3PL` group is included per the caveat above; treat
+those bars as not-yet-real.
 
 ```{r}
 #| label: highlight-picks
