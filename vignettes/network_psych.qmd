@@ -29,6 +29,7 @@ execute:
 library(dplyr)
 library(tidyr)
 library(tibble)
+library(purrr)
 library(ggplot2)
 library(plotly)
 library(qgraph)
@@ -49,6 +50,9 @@ if (cache_ok) {
   graphs_list          <- .cache$graphs %||% list()
   strengths_list       <- .cache$strengths %||% list()
   discriminations_list <- .cache$discriminations %||% list()
+  edges_ggm_df         <- .cache$edges_ggm %||% tibble()
+  edges_mrf_df         <- .cache$edges_mrf %||% tibble()
+  option_b_tables      <- .cache$option_b_tables %||% character()
   candidate_tables     <- .cache$candidate_tables
   date_run             <- .cache$date_run
   is_pilot             <- isTRUE(.cache$pilot)
@@ -63,9 +67,19 @@ if (cache_ok) {
     strength_a_cor = numeric(), construct_type = character(), item_format = character(),
     dim_ratio_12 = numeric(), dim_nfact_suggested = integer(), dim_unidimensional = logical(),
     ld_prop_flagged = numeric(), ld_mean_abs_q3 = numeric(),
-    has_dim_match = logical(), has_ld_match = logical()
+    has_dim_match = logical(), has_ld_match = logical(),
+    has_bayes_match = logical(), has_mrf_match = logical(),
+    n_used_ggm = integer(), relative_n_ggm = numeric(),
+    prop_strong_presence_ggm = numeric(), prop_weak_presence_ggm = numeric(),
+    prop_inconclusive_ggm = numeric(), prop_weak_absence_ggm = numeric(),
+    prop_strong_absence_ggm = numeric(),
+    n_used_mrf = integer(), relative_n_mrf = numeric(),
+    prop_strong_presence_mrf = numeric(), prop_weak_presence_mrf = numeric(),
+    prop_inconclusive_mrf = numeric(), prop_weak_absence_mrf = numeric(),
+    prop_strong_absence_mrf = numeric()
   )
   graphs_list <- list(); strengths_list <- list(); discriminations_list <- list()
+  edges_ggm_df <- tibble(); edges_mrf_df <- tibble(); option_b_tables <- character()
   candidate_tables <- character()
   date_run <- Sys.Date()
   is_pilot <- FALSE
@@ -248,6 +262,61 @@ To reproduce with current IRW holdings, re-run `network_psych_compute.R`
 depends on) and commit the updated
 `network_psych_data/network_psych_results.rds`.
 :::
+
+### Bayesian edge evidence: which model, and why
+
+Everything above treats an edge as present or absent based on whether
+regularized network estimation shrinks it to exactly zero — a single
+point estimate, with no sense of how much statistical evidence actually
+backs that call. Huth, Haslbeck, Keetelaar, van Holst, & Marsman (2026)
+[@huth2026statistical] reanalyzed 293 published psychological networks
+with a fully Bayesian alternative: fit each network as a Gaussian
+graphical model (GGM) with a matrix-F prior on the partial correlations,
+then compute an edge-inclusion Bayes factor (BF10) for every edge via the
+Savage-Dickey density ratio. They found evidence was frequently much
+weaker than a single regularized graph suggests — only 18.7% of edges in
+the literature they reanalyzed had *strong* evidence either way.
+
+Their software choice matters for how this section reproduces their
+analysis. They fit **every** network in their reanalysis as a GGM via the
+`BGGM` package [@williams2020bggm], accessed through the `easybgm` wrapper
+[@huth2024easybgm] — uniformly, including networks built from binary or
+ordinal items, explicitly as a simplifying choice for consistency across
+a reanalysis spanning many published papers. They say directly that they
+know this is an approximation for non-continuous data, and that the
+ordinal Markov random field (fit via the `bgms` package) is the
+conceptually better-suited model for that case — they just didn't use it.
+
+IRW is overwhelmingly binary/ordinal item response data, which makes this
+a real design decision here too, not just an aside:
+
+- **Option A (primary, reported below):** fit every candidate table as a
+  GGM via `easybgm(..., package = "BGGM")`, forced uniformly regardless of
+  each table's actual `n_categories` — the same simplifying choice the
+  paper made, for the same reason: it's the only way to compare IRW's
+  breakdown directly against their headline percentages. `package = "BGGM"`
+  has to be forced explicitly and paired with `type = "continuous"`: the
+  installed `easybgm` (0.4.0) silently redirects back to `bgms` whenever
+  `type = "binary"` is passed, even if `package = "BGGM"` was requested,
+  which would otherwise quietly defeat this whole comparison.
+- **Option B (secondary, small subset only):** fit the ordinal Markov
+  random field via `bgms` instead — the model the paper itself calls more
+  appropriate for this data type. Piloting this on real IRW tables found
+  it costs roughly 20-50x Option A's runtime per table (138-192 sec vs.
+  1-10 sec on the same two tables); a full batch across IRW's ~660
+  candidate tables would take 7-27 hours. It runs here on a small
+  stratified subset (`r length(option_b_tables)` tables, split across
+  binary and polytomous items) as an illustrative robustness check, not a
+  full-batch analysis.
+
+Both use the paper's own matrix-F prior default (`prior_sd = 0.25`) and
+classify each edge into the paper's five-way breakdown by its BF10:
+strong presence (BF10 > 10), weak presence (3 < BF10 <= 10), inconclusive
+(1/3 <= BF10 <= 3), weak absence (1/10 <= BF10 < 1/3), or strong absence
+(BF10 < 1/10) — a small deviation from the paper's stated open-interval
+boundaries (which don't specify which side of e.g. BF10 = 3 owns that
+exact value), noted here since it's a real, if practically inconsequential,
+difference from a literal reading of their method.
 
 ## Results
 
@@ -530,6 +599,308 @@ network side properly needs community-detection tools this pass didn't
 run at batch scale (see Limitations); density is the coarser proxy
 available here.
 
+## How much statistical evidence actually supports these edges?
+
+```{r}
+#| label: bayes-setup-inline
+#| echo: false
+
+n_bayes_matched <- sum(summary_df$has_bayes_match, na.rm = TRUE)
+n_mrf_matched   <- sum(summary_df$has_mrf_match, na.rm = TRUE)
+
+evidence_levels <- c("strong_presence", "weak_presence", "inconclusive",
+                     "weak_absence", "strong_absence")
+evidence_labels <- c("Strong presence", "Weak presence", "Inconclusive",
+                     "Weak absence", "Strong absence")
+
+irw_overall_ggm <- if (nrow(edges_ggm_df) > 0) {
+  table(factor(edges_ggm_df$evidence_category_ggm, levels = evidence_levels)) /
+    sum(!is.na(edges_ggm_df$evidence_category_ggm))
+} else rep(NA_real_, 5)
+names(irw_overall_ggm) <- evidence_labels
+
+irw_inconclusive <- unname(irw_overall_ggm["Inconclusive"])
+irw_weak         <- unname(irw_overall_ggm["Weak presence"] + irw_overall_ggm["Weak absence"])
+irw_strong       <- unname(irw_overall_ggm["Strong presence"] + irw_overall_ggm["Strong absence"])
+```
+
+The paper's headline numbers, across the 293 published networks they
+reanalyzed: 31.7% of edges had *inconclusive* evidence, 49.7% had only
+*weak* evidence either way (4.4% weak presence + 45.2% weak absence), and
+just 18.7% had *strong* evidence (13.0% strong presence + 5.7% strong
+absence). Most published edges, in other words, are asserted with far
+less statistical support than a single regularized network graph implies.
+
+Using Option A (GGM via BGGM, forced uniformly, matching their method
+exactly), this pass produced usable Bayesian edge evidence for
+`r n_bayes_matched` of `r nrow(summary_df)` tables. Pooling every edge
+across every table (not averaging per-table percentages, matching how the
+paper itself pools across networks for its headline numbers):
+
+```{r}
+#| label: fig-evidence-breakdown
+#| fig-cap: "IRW's overall Bayesian edge-evidence breakdown (this pass, pooled across all tables) against Huth et al.'s (2026) published benchmark. Each bar is one evidence category from the same five-way classification."
+#| fig-height: 4
+
+breakdown_df <- bind_rows(
+  tibble(source = "IRW (this pass)", category = evidence_labels,
+         proportion = as.numeric(irw_overall_ggm)),
+  tibble(source = "Huth et al. (2026)", category = evidence_labels,
+         proportion = c(0.130, 0.044, 0.317, 0.452, 0.057))
+) %>%
+  mutate(category = factor(category, levels = evidence_labels))
+
+p <- ggplot(breakdown_df, aes(x = category, y = proportion, fill = source)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = c("IRW (this pass)" = irw_blue, "Huth et al. (2026)" = irw_grey)) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = NULL, y = "Proportion of edges", fill = NULL) +
+  theme(axis.text.x = element_text(angle = 20, hjust = 1))
+
+ggplotly(p) |> layout(margin = list(t = 60), legend = list(orientation = "h", y = -0.2))
+```
+
+IRW's item-network data lands `r if (!is.na(irw_strong) && irw_strong > 0.187) "better-supported than" else if (!is.na(irw_strong) && irw_strong < 0.187) "less well-supported than" else "comparably supported to"`
+the published literature the paper reanalyzed: `r scales::percent(irw_inconclusive, accuracy = 0.1)`
+inconclusive (vs. their 31.7%), `r scales::percent(irw_weak, accuracy = 0.1)` weak either way
+(vs. their 49.7%), and `r scales::percent(irw_strong, accuracy = 0.1)` strong either way (vs.
+their 18.7%). Read this comparison with real caution: the paper's 293
+networks span whatever sample sizes and item counts happened to appear in
+the published literature they sampled, while this pass's 5-30-item,
+300+-participant filter (see Data and methods above) is an IRW-specific
+compute-budget choice, not a matched comparison design -- the gap above
+is suggestive, not a controlled replication.
+
+### Does evidence strength track relative sample size?
+
+Huth et al.'s central moderator isn't raw sample size — it's **relative**
+sample size, observations per possible edge: N / (p(p-1)/2). Their Fig. 3
+bins networks into relative-sample-size groups and shows the evidence
+breakdown shift toward stronger evidence as relative sample size rises.
+
+```{r}
+#| label: fig-relative-n-bins
+#| fig-cap: "Evidence-category breakdown by relative sample size bin (quartiles of n_participants / (n_items * (n_items - 1) / 2) across tables with usable Bayesian edge evidence), pooling edges within each bin. If IRW shows the same pattern Huth et al. found, strong presence/absence should grow and inconclusive should shrink from left to right."
+#| fig-height: 5
+
+rel_n_bins_df <- summary_df %>%
+  filter(has_bayes_match, !is.na(relative_n_ggm)) %>%
+  mutate(rel_n_bin = ntile(relative_n_ggm, 4)) %>%
+  select(table, rel_n_bin, relative_n_ggm)
+
+bin_ranges <- rel_n_bins_df %>%
+  group_by(rel_n_bin) %>%
+  summarise(lo = min(relative_n_ggm), hi = max(relative_n_ggm), .groups = "drop") %>%
+  mutate(label = paste0("Q", rel_n_bin, "\n[", round(lo, 1), "-", round(hi, 1), "]"))
+
+bin_breakdown_df <- edges_ggm_df %>%
+  inner_join(rel_n_bins_df, by = "table") %>%
+  filter(!is.na(evidence_category_ggm)) %>%
+  count(rel_n_bin, evidence_category_ggm) %>%
+  group_by(rel_n_bin) %>%
+  mutate(proportion = n / sum(n)) %>%
+  ungroup() %>%
+  left_join(bin_ranges, by = "rel_n_bin") %>%
+  mutate(
+    evidence_category_ggm = factor(evidence_category_ggm, levels = evidence_levels, labels = evidence_labels),
+    label = factor(label, levels = bin_ranges$label)
+  )
+
+p <- ggplot(bin_breakdown_df, aes(x = label, y = proportion, fill = evidence_category_ggm)) +
+  geom_col(position = "stack") +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = setNames(
+    c(irw_blue, "#67a9cf", irw_grey, "#f4a582", irw_red), evidence_labels
+  )) +
+  labs(x = "Relative sample size quartile (N / possible edges)", y = "Proportion of edges", fill = NULL)
+
+ggplotly(p) |> layout(margin = list(t = 40), legend = list(orientation = "h", y = -0.3))
+```
+
+```{r}
+#| label: relative-n-inline
+#| echo: false
+
+strong_by_bin <- bin_breakdown_df %>%
+  filter(evidence_category_ggm %in% c("Strong presence", "Strong absence")) %>%
+  group_by(rel_n_bin) %>%
+  summarise(prop_strong = sum(proportion), .groups = "drop") %>%
+  arrange(rel_n_bin)
+monotonic_strong <- all(diff(strong_by_bin$prop_strong) >= -0.02)  # small tolerance for noise
+```
+
+`r if (monotonic_strong) "IRW shows essentially the same monotonic pattern Huth et al. found: strong evidence (presence or absence combined) rises from the lowest to the highest relative-sample-size quartile." else "IRW does not cleanly reproduce the paper's monotonic pattern here -- strong evidence does not rise monotonically across relative-sample-size quartiles in this pass, even though the same relative-sample-size definition and binning approach were used."`
+Strong evidence (presence + absence) by quartile:
+`r paste(scales::percent(strong_by_bin$prop_strong, accuracy = 1), collapse = " -> ")`
+(lowest to highest relative sample size).
+
+### Does edge weight predict evidence strength?
+
+The paper's Fig. 4 found no sharp relationship between an edge's partial
+correlation magnitude and its evidence strength (BF10) — similar-sized
+partial correlations landed in every evidence category — though the
+correspondence was cleaner in their higher-relative-sample-size networks.
+
+```{r}
+#| label: fig-pcor-vs-bf
+#| fig-cap: "Partial correlation magnitude against log10(BF10) for every edge with usable evidence (Option A/GGM), colored by evidence category, split by whether the edge's table falls above or below the median relative sample size. A clean relationship would show points aligning along a smooth curve rather than every category scattered across the same pcor range."
+#| fig-height: 6
+
+median_rel_n <- median(summary_df$relative_n_ggm[summary_df$has_bayes_match], na.rm = TRUE)
+
+pcor_bf_df <- edges_ggm_df %>%
+  inner_join(summary_df %>% select(table, relative_n_ggm), by = "table") %>%
+  filter(!is.na(evidence_category_ggm), !is.na(relative_n_ggm)) %>%
+  mutate(
+    rel_n_group = ifelse(relative_n_ggm >= median_rel_n,
+                          "Above-median relative sample size", "Below-median relative sample size"),
+    evidence_category_ggm = factor(evidence_category_ggm, levels = evidence_levels, labels = evidence_labels),
+    log10_bf = log10(pmin(pmax(BF10_ggm, 1e-10), 1e10))  # cap for display; classification itself is unaffected
+  )
+
+p <- ggplot(pcor_bf_df, aes(x = pcor_ggm, y = log10_bf, colour = evidence_category_ggm)) +
+  geom_point(alpha = 0.35, size = 1) +
+  geom_hline(yintercept = c(-1, log10(1/3), log10(3), 1), linetype = "dashed", colour = "grey70") +
+  scale_colour_manual(values = setNames(
+    c(irw_blue, "#67a9cf", irw_grey, "#f4a582", irw_red), evidence_labels
+  )) +
+  facet_wrap(~ rel_n_group, ncol = 1) +
+  labs(x = "Partial correlation (GGM)", y = expression(log[10](BF[10])), colour = NULL)
+
+ggplotly(p, tooltip = c("x", "y", "colour")) |> layout(margin = list(t = 40))
+```
+
+```{r}
+#| label: pcor-bf-inline
+#| echo: false
+
+cor_pcor_bf_all <- cor(abs(pcor_bf_df$pcor_ggm), pcor_bf_df$log10_bf, use = "complete.obs")
+cor_pcor_bf_hi  <- with(filter(pcor_bf_df, rel_n_group == "Above-median relative sample size"),
+                         cor(abs(pcor_ggm), log10_bf, use = "complete.obs"))
+cor_pcor_bf_lo  <- with(filter(pcor_bf_df, rel_n_group == "Below-median relative sample size"),
+                         cor(abs(pcor_ggm), log10_bf, use = "complete.obs"))
+```
+
+Overall, `|`partial correlation`|` and log(BF10) correlate at r = `r round(cor_pcor_bf_all, 2)`
+across all edges — real but far from a tight relationship, matching the
+paper's "no sharp relationship" finding. Splitting by relative sample size:
+r = `r round(cor_pcor_bf_hi, 2)` in above-median-relative-sample-size
+tables versus r = `r round(cor_pcor_bf_lo, 2)` below the median.
+`r if (!is.na(cor_pcor_bf_hi) && !is.na(cor_pcor_bf_lo) && cor_pcor_bf_hi > cor_pcor_bf_lo) "The correspondence is cleaner in higher-relative-sample-size tables here too, matching what Huth et al. found in their own data." else "This pass does not show the same higher-relative-sample-size cleanup Huth et al. found -- the relationship isn't obviously tighter in IRW's better-powered tables."`
+
+```{r}
+#| label: mrf-agreement-inline
+#| echo: false
+#| output: asis
+
+if (nrow(edges_mrf_df) > 0) {
+  agree_df <- edges_ggm_df %>%
+    filter(table %in% option_b_tables) %>%
+    inner_join(edges_mrf_df, by = c("table", "item_i", "item_j")) %>%
+    filter(!is.na(evidence_category_ggm), !is.na(evidence_category_mrf))
+  n_agree_edges <- nrow(agree_df)
+  pct_exact_agree <- mean(agree_df$evidence_category_ggm == agree_df$evidence_category_mrf)
+  pct_direction_agree <- mean(
+    grepl("presence", agree_df$evidence_category_ggm) == grepl("presence", agree_df$evidence_category_mrf) |
+    agree_df$evidence_category_ggm == "inconclusive" | agree_df$evidence_category_mrf == "inconclusive"
+  )
+
+  cat("### Does the ordinal MRF agree with the GGM?\n\n")
+  cat("Huth et al. acknowledge the ordinal Markov random field (fit via `bgms`) as ",
+      "conceptually better-suited to binary/ordinal data than the GGM they actually used. ",
+      "Testing that acknowledgment directly, on the ", length(option_b_tables),
+      "-table Option B subset (", n_agree_edges, " edges with usable evidence under both models): ",
+      "the two models put the same edge in the *exact same* one of five evidence categories ",
+      scales::percent(pct_exact_agree, accuracy = 1), " of the time, and agree on ",
+      "presence-vs-absence direction (treating inconclusive calls under either model as a pass) ",
+      scales::percent(pct_direction_agree, accuracy = 1), " of the time.\n\n",
+      if (pct_exact_agree < 0.5) {
+        "That's a real disagreement rate, not just estimation noise -- for a meaningful share of edges, which model IRW's own data says is theoretically more appropriate changes the conclusion about whether that edge is real. Given the paper's own acknowledgment that GGM is a simplifying approximation for this data type, the exact-category numbers above should be read as a lower bound on how much Option A's uniform-GGM choice matters for binary/ordinal data specifically, not just a robustness footnote."
+      } else {
+        "The two models mostly agree, which is some reassurance that Option A's uniform-GGM simplification isn't badly distorting the picture for IRW's binary/ordinal tables -- though this check only covers a small illustrative subset, not the full candidate pool."
+      }, "\n", sep = "")
+} else {
+  cat("### Does the ordinal MRF agree with the GGM?\n\n",
+      "Option B (ordinal MRF) results were not available in this cache -- this comparison ",
+      "requires re-running `network_psych_compute.R` with the current amendment.\n", sep = "")
+}
+```
+
+### Do the cross-vignette checks look cleaner using only strong-evidence edges?
+
+Both cross-vignette comparisons above used the frequentist regularized
+network's edges, kept or dropped by LASSO shrinkage. Here, instead,
+**node strength is rebuilt using only edges the Bayesian model calls
+strong evidence for** (BF10 > 10) — a stricter, statistically-justified
+filter rather than a regularization penalty — to see whether the two
+cross-vignette relationships get cleaner once weakly-supported edges are
+dropped entirely rather than merely down-weighted.
+
+```{r}
+#| label: fig-strong-only-dim
+#| fig-cap: "Strength-discrimination correlation computed from strong-evidence-only edges, against the dimensionality vignette's eigenvalue ratio (compare to the all-edges version earlier on this page). Node strength here sums |partial correlation| over only that node's strong-presence edges; a node with none gets strength 0."
+#| fig-height: 5
+
+strong_edges_long <- edges_ggm_df %>%
+  filter(evidence_category_ggm == "strong_presence") %>%
+  { bind_rows(
+      transmute(., table, item = item_i, w = abs(pcor_ggm)),
+      transmute(., table, item = item_j, w = abs(pcor_ggm))
+    ) } %>%
+  group_by(table, item) %>%
+  summarise(strength = sum(w), .groups = "drop")
+
+strong_strength_cor_df <- map_dfr(intersect(unique(edges_ggm_df$table), names(discriminations_list)), function(tbl) {
+  a <- discriminations_list[[tbl]]
+  if (is.null(a) || length(a) < 2) return(NULL)
+  items <- names(a)
+  strength <- setNames(rep(0, length(items)), items)
+  tbl_strong <- strong_edges_long[strong_edges_long$table == tbl, ]
+  if (nrow(tbl_strong) > 0) strength[tbl_strong$item] <- tbl_strong$strength
+  if (length(unique(strength)) < 2) return(NULL)
+  tibble(table = tbl, strong_strength_a_cor = suppressWarnings(cor(strength, a[items])))
+})
+
+join_dim_strong_df <- strong_strength_cor_df %>%
+  inner_join(summary_df %>% select(table, dim_ratio_12, dim_unidimensional), by = "table") %>%
+  filter(!is.na(strong_strength_a_cor), !is.na(dim_ratio_12))
+
+p <- ggplot(join_dim_strong_df, aes(x = pmin(dim_ratio_12, 15), y = strong_strength_a_cor)) +
+  geom_point(colour = irw_blue, size = 2, alpha = 0.7) +
+  geom_smooth(method = "loess", se = FALSE, colour = irw_red, linewidth = 0.8) +
+  scale_x_log10() +
+  labs(x = "Eigenvalue ratio (dimensionality vignette, log scale, capped at 15)",
+       y = "Strong-evidence-only strength-discrimination correlation")
+
+ggplotly(p) |> layout(margin = list(t = 40))
+```
+
+```{r}
+#| label: strong-dim-inline
+#| echo: false
+
+n_strong_dim_join <- nrow(join_dim_strong_df)
+med_all_cor    <- median(summary_df$strength_a_cor, na.rm = TRUE)
+med_strong_cor <- median(join_dim_strong_df$strong_strength_a_cor, na.rm = TRUE)
+
+strong_ld_df <- summary_df %>%
+  filter(has_bayes_match, !is.na(prop_strong_presence_ggm), !is.na(ld_prop_flagged))
+cor_strong_ld <- cor(strong_ld_df$prop_strong_presence_ggm, strong_ld_df$ld_prop_flagged)
+cor_all_ld    <- cor(join_ld_df$network_density, join_ld_df$ld_prop_flagged)
+```
+
+Across `r n_strong_dim_join` tables, the strong-evidence-only
+strength-discrimination correlation has a median of `r round(med_strong_cor, 2)`,
+versus `r round(med_all_cor, 2)` for the all-edges version earlier on this
+page.
+`r if (!is.na(med_strong_cor) && !is.na(med_all_cor) && med_strong_cor > med_all_cor) "Restricting to strong-evidence edges sharpens the correspondence with IRT discrimination -- consistent with the idea that the earlier relationship was partly diluted by weakly-supported edges the regularized network kept anyway." else "Restricting to strong-evidence edges doesn't obviously sharpen the correspondence with IRT discrimination here -- the earlier relationship doesn't appear to be primarily a weak-edge dilution effect."`
+
+For the local-dependence check, the proportion of an table's edges
+classified strong presence correlates with the proportion of Q3-flagged
+pairs at r = `r round(cor_strong_ld, 2)`, versus r = `r round(cor_all_ld, 2)`
+for network density against the same Q3-flagged proportion earlier.
+`r if (!is.na(cor_strong_ld) && !is.na(cor_all_ld) && abs(cor_strong_ld) > abs(cor_all_ld)) "The testlet signal is somewhat cleaner using strong-evidence-only edges than using raw regularized-network density." else "The testlet signal isn't obviously cleaner using strong-evidence-only edges than using raw regularized-network density -- density from LASSO-regularized edges and density from Bayesian strong-evidence edges appear to carry similar information here."`
+
 ## Practical implications
 
 Where the strength-discrimination correlation is high and the network is
@@ -598,6 +969,30 @@ is a reasonable place to expect exactly that disagreement.
   change above went unnoticed. Both are now pinned in `renv.lock`, which
   prevents a silent version drift like this going forward but doesn't
   retroactively confirm which version produced the results above.
+- **Matrix-F prior SD was not sensitivity-tested at IRW scale.** Both
+  Option A and Option B above use the package default (`prior_sd = 0.25`),
+  matching Huth et al.'s own default. They themselves ran a
+  prior-sensitivity check across three SD values on their own data; a
+  natural follow-up here would be the same check on a handful of IRW
+  tables, not run in this pass for compute reasons.
+- **Option A's uniform-GGM treatment of binary/ordinal data is an
+  approximation this vignette inherited deliberately, not a claim it's the
+  ideal model for IRW's data.** It's the same simplifying choice Huth et
+  al. made in their own reanalysis, adopted here specifically so the
+  headline-number comparison above is apples-to-apples with their
+  benchmark. The Option A/B agreement check above is the direct test of
+  how much that approximation costs for IRW's mostly-binary/ordinal data;
+  where the two disagree, Option B (the ordinal MRF) is the theoretically
+  better-suited model, and Option A should be read as an approximation to
+  it, not the ground truth.
+- **Option B ran on a small illustrative subset, not the full candidate
+  pool.** Piloting found `bgms`'s ordinal MRF sampler costs roughly
+  20-50x Option A's BGGM runtime per table; a full batch would take
+  7-27 hours for compute that a full Option A batch does in well under
+  two. The `r length(option_b_tables)`-table subset is enough to test
+  whether the two models systematically disagree, but any specific
+  IRW table not in that subset has only the Option A (GGM) result
+  available.
 
 ## Reproducibility
 

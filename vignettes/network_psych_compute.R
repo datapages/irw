@@ -27,6 +27,7 @@ library(dplyr)
 library(purrr)
 library(furrr)
 library(tibble)
+library(easybgm)   # amendment: Bayesian edge evidence (Huth et al. 2026); loads BGGM and bgms
 
 set.seed(20260722)
 
@@ -46,6 +47,25 @@ PILOT_N_TABLES   <- 18
 
 DIM_CACHE <- "vignettes/dimensionality_data/dimensionality_results.rds"
 LD_CACHE  <- "vignettes/local_dependence_data/local_dependence_results.rds"
+
+# Amendment: Bayesian edge evidence (Huth, Haslbeck, Keetelaar, van Holst, &
+# Marsman, 2026, Nature Human Behaviour). Option A (primary) fits every table
+# as a GGM via BGGM/easybgm, uniformly across binary/ordinal/continuous items,
+# matching the paper's own simplifying choice exactly -- this is what makes
+# the headline-number comparison in the vignette apples-to-apples. Option B
+# (secondary, small subset only) fits the ordinal Markov random field via
+# bgms instead, the model the paper itself calls conceptually more
+# appropriate for this data type but didn't use. See "Runtime piloting" below
+# for why Option B is capped at a small subset rather than run at full batch.
+BGGM_PRIOR_SD        <- 0.25   # paper's matrix-F prior default (BGGM/easybgm default too)
+BGGM_TIME_BUDGET_SEC <- 120    # piloted worst case (28 items, ~12,500 respondents): ~10 sec
+MRF_TIME_BUDGET_SEC  <- 600    # piloted worst case (30 items, 664 respondents): ~192 sec
+MIN_BGGM_N           <- 30     # sanity floor after listwise-deletion of missing rows
+N_OPTION_B_TABLES     <- 20    # bgms ordinal MRF piloted at ~20-50x BGGM's runtime per table
+                                # (138-192 sec vs 1-10 sec on the same tables) -- full-batch
+                                # Option B across ~660 candidates would take 7-27 hours, so it
+                                # runs as an illustrative robustness check on a small stratified
+                                # subset only, not the full candidate pool.
 
 # ==============================================================================
 # 0. Hard prerequisite gate
@@ -104,6 +124,180 @@ tags_meta <- tryCatch(irw_tags(tables = tables), error = function(e) {
   message("irw_tags() failed: ", conditionMessage(e))
   NULL
 })
+
+# Stratified subset for Option B (ordinal MRF via bgms) -- half binary, half
+# polytomous, so the agreement-with-Option-A check below isn't confined to
+# one item type. Sampled once here (not per-worker) so re-running the batch
+# with the same seed reproduces the same subset.
+option_b_tables <- {
+  b <- intersect(binary_tables, tables)
+  p <- intersect(poly_tables, tables)
+  n_b <- min(N_OPTION_B_TABLES %/% 2, length(b))
+  n_p <- min(N_OPTION_B_TABLES - n_b, length(p))
+  c(if (n_b > 0) sample(b, n_b) else character(0),
+    if (n_p > 0) sample(p, n_p) else character(0))
+}
+message("Option B (ordinal MRF) illustrative subset: ", length(option_b_tables), " tables.")
+
+# ==============================================================================
+# 1b. Bayesian edge evidence (Huth et al. 2026 amendment)
+# ==============================================================================
+
+# Paper's exact five-way classification, open-interval convention: every BF10
+# value falls in exactly one category (no gaps, no overlaps). Note deviation
+# from a strictly open-interval read of the paper's stated thresholds: the
+# inconclusive band is closed on both ends here so the five categories
+# partition the real line; the paper describes the boundary as open (e.g.
+# "1/3 < BF10 < 3") without saying which neighboring category owns the
+# boundary value itself. Continuous posterior BF10 draws make an edge landing
+# exactly on 3, 1/3, 10, or 1/10 a measure-zero event in practice.
+#
+# Implemented as explicit ordered comparisons rather than cut(): bgms
+# (Option B) legitimately returns BF10 = Inf for edges with posterior
+# inclusion probability 1, and base R's cut() returns NA for a value equal
+# to its own Inf breakpoint (Inf < Inf is FALSE, so it matches no bin) --
+# confirmed against real bgms output during piloting, where 15/276 edges on
+# one table silently dropped out of every category. Explicit comparisons
+# handle Inf/-Inf correctly; genuine NaN (a failed edge estimate, not
+# observed in piloting but not ruled out at batch scale) still propagates to
+# NA here, and evidence_proportions() below excludes NA from both the
+# numerator and denominator rather than silently miscounting it.
+classify_bf_evidence <- function(bf10) {
+  dplyr::case_when(
+    bf10 > 10   ~ "strong_presence",
+    bf10 > 3    ~ "weak_presence",
+    bf10 >= 1/3 ~ "inconclusive",
+    bf10 >= 1/10 ~ "weak_absence",
+    bf10 < 1/10 ~ "strong_absence",
+    TRUE        ~ NA_character_
+  )
+}
+
+edges_from_bggm_fit <- function(fit, table_name, item_names, n_used, suffix) {
+  pcor <- fit$parameters
+  bf   <- fit$inc_BF
+  pip  <- fit$inc_probs
+  ni   <- length(item_names)
+  ut   <- upper.tri(pcor)
+  edges <- tibble(
+    table    = table_name,
+    item_i   = item_names[row(pcor)[ut]],
+    item_j   = item_names[col(pcor)[ut]],
+    pcor     = pcor[ut],
+    BF10     = bf[ut],
+    inc_prob = pip[ut]
+  )
+  edges$evidence_category <- classify_bf_evidence(edges$BF10)
+  names(edges)[-(1:3)] <- paste0(names(edges)[-(1:3)], "_", suffix)
+  edges
+}
+
+evidence_proportions <- function(categories, suffix) {
+  levels <- c("strong_presence", "weak_presence", "inconclusive",
+              "weak_absence", "strong_absence")
+  props <- setNames(as.list(rep(NA_real_, length(levels))),
+                     paste0("prop_", levels, "_", suffix))
+  # Drop NA categories (a genuinely unclassifiable edge, e.g. a failed BF10
+  # estimate) from both the numerator and denominator, so the five
+  # proportions still sum to 1 over the edges that *were* classified rather
+  # than silently undercounting against the full edge count.
+  n_na <- sum(is.na(categories))
+  categories <- categories[!is.na(categories)]
+  if (n_na > 0) {
+    message("    ", n_na, " edge(s) excluded from evidence proportions (unclassifiable BF10)")
+  }
+  if (length(categories) > 0) {
+    tab <- table(factor(categories, levels = levels)) / length(categories)
+    props[paste0("prop_", levels, "_", suffix)] <- as.list(as.numeric(tab))
+  }
+  as_tibble(props)
+}
+
+# Option A (primary): GGM via BGGM, forced uniformly across item types. Reuses
+# the already-fetched, already-cleaned `resp` from fit_network() rather than
+# re-fetching. type = "continuous" is forced regardless of n_categories --
+# easybgm() silently redirects package = "BGGM" back to bgms whenever
+# type = "binary" is passed (checked against the installed easybgm 0.4.0
+# source directly), which would silently defeat Option A's whole point of a
+# uniform GGM comparison, so type must never be anything but "continuous"
+# here.
+fit_bayesian_edge_evidence <- function(resp, table_name, time_budget_sec = BGGM_TIME_BUDGET_SEC) {
+  resp_num <- as.matrix(sapply(resp, as.numeric))
+  resp_num <- na.omit(resp_num)  # BGGM::explore()'s own default (impute = FALSE) does this
+                                  # internally too; done explicitly here so n_used below
+                                  # reflects the actual sample the evidence is based on.
+  n_used <- nrow(resp_num)
+  if (n_used < MIN_BGGM_N) {
+    message("    Bayesian edge evidence skipped: only ", n_used, " complete rows")
+    return(NULL)
+  }
+
+  fit <- tryCatch(
+    R.utils::withTimeout(
+      easybgm(data = resp_num, type = "continuous", package = "BGGM",
+              prior_sd = BGGM_PRIOR_SD, progress = FALSE),
+      timeout = time_budget_sec, onTimeout = "error"
+    ),
+    error = function(e) {
+      message("    Bayesian edge evidence (BGGM) failed/timed out: ", conditionMessage(e))
+      NULL
+    }
+  )
+  if (is.null(fit)) return(NULL)
+
+  ni    <- ncol(resp_num)
+  edges <- edges_from_bggm_fit(fit, table_name, colnames(resp_num), n_used, "ggm")
+  props <- evidence_proportions(edges$evidence_category_ggm, "ggm")
+
+  list(
+    edges   = edges,
+    summary = bind_cols(
+      tibble(n_used_ggm = n_used,
+             relative_n_ggm = n_used / (ni * (ni - 1) / 2)),
+      props
+    )
+  )
+}
+
+# Option B (secondary, small subset only -- see N_OPTION_B_TABLES above):
+# ordinal Markov random field via bgms, easybgm's own default routing for
+# binary/ordinal data (no package override, unlike Option A).
+fit_ordinal_mrf_edge_evidence <- function(resp, table_name, n_categories,
+                                           time_budget_sec = MRF_TIME_BUDGET_SEC) {
+  resp_num <- as.matrix(sapply(resp, as.numeric))
+  resp_num <- na.omit(resp_num)
+  n_used <- nrow(resp_num)
+  if (n_used < MIN_BGGM_N) {
+    message("    Ordinal MRF edge evidence skipped: only ", n_used, " complete rows")
+    return(NULL)
+  }
+
+  mrf_type <- if (n_categories == 2) "binary" else "ordinal"
+  fit <- tryCatch(
+    R.utils::withTimeout(
+      easybgm(data = resp_num, type = mrf_type, progress = FALSE),
+      timeout = time_budget_sec, onTimeout = "error"
+    ),
+    error = function(e) {
+      message("    Ordinal MRF edge evidence (bgms) failed/timed out: ", conditionMessage(e))
+      NULL
+    }
+  )
+  if (is.null(fit)) return(NULL)
+
+  ni    <- ncol(resp_num)
+  edges <- edges_from_bggm_fit(fit, table_name, colnames(resp_num), n_used, "mrf")
+  props <- evidence_proportions(edges$evidence_category_mrf, "mrf")
+
+  list(
+    edges   = edges,
+    summary = bind_cols(
+      tibble(n_used_mrf = n_used,
+             relative_n_mrf = n_used / (ni * (ni - 1) / 2)),
+      props
+    )
+  )
+}
 
 # ==============================================================================
 # 2. Per-table computation
@@ -237,28 +431,63 @@ fit_network <- function(table_name) {
   dim_row <- dim_summary[dim_summary$table == table_name, ]
   ld_row  <- ld_summary[ld_summary$table == table_name, ]
 
+  # Amendment: Bayesian edge evidence (Huth et al. 2026). Reuses `resp` --
+  # already fetched, downsampled, and zero-variance-dropped above -- rather
+  # than fetching again.
+  bayes <- tryCatch(fit_bayesian_edge_evidence(resp, table_name), error = function(e) {
+    message("    Bayesian edge evidence wrapper failed: ", conditionMessage(e))
+    NULL
+  })
+  mrf <- if (table_name %in% option_b_tables) {
+    tryCatch(fit_ordinal_mrf_edge_evidence(resp, table_name, n_categories), error = function(e) {
+      message("    Ordinal MRF edge evidence wrapper failed: ", conditionMessage(e))
+      NULL
+    })
+  } else NULL
+
+  bayes_summary_cols <- if (!is.null(bayes)) bayes$summary else tibble(
+    n_used_ggm = NA_integer_, relative_n_ggm = NA_real_,
+    prop_strong_presence_ggm = NA_real_, prop_weak_presence_ggm = NA_real_,
+    prop_inconclusive_ggm = NA_real_, prop_weak_absence_ggm = NA_real_,
+    prop_strong_absence_ggm = NA_real_
+  )
+  mrf_summary_cols <- if (!is.null(mrf)) mrf$summary else tibble(
+    n_used_mrf = NA_integer_, relative_n_mrf = NA_real_,
+    prop_strong_presence_mrf = NA_real_, prop_weak_presence_mrf = NA_real_,
+    prop_inconclusive_mrf = NA_real_, prop_weak_absence_mrf = NA_real_,
+    prop_strong_absence_mrf = NA_real_
+  )
+
   list(
-    summary = tibble(
-      table               = table_name,
-      n_items             = ni,
-      n_participants      = nrow(resp),
-      n_categories        = n_categories,
-      network_method      = network_default,
-      network_density     = density,
-      strength_a_cor      = strength_a_cor,
-      construct_type      = construct_type,
-      item_format         = item_format,
-      dim_ratio_12        = if (nrow(dim_row) > 0) dim_row$ratio_12[1] else NA_real_,
-      dim_nfact_suggested = if (nrow(dim_row) > 0) dim_row$nfact_suggested[1] else NA_integer_,
-      dim_unidimensional  = if (nrow(dim_row) > 0) dim_row$unidimensional_pa[1] else NA,
-      ld_prop_flagged     = if (nrow(ld_row) > 0) ld_row$prop_flagged[1] else NA_real_,
-      ld_mean_abs_q3      = if (nrow(ld_row) > 0) ld_row$mean_abs_q3[1] else NA_real_,
-      has_dim_match       = nrow(dim_row) > 0,
-      has_ld_match        = nrow(ld_row) > 0
+    summary = bind_cols(
+      tibble(
+        table               = table_name,
+        n_items             = ni,
+        n_participants      = nrow(resp),
+        n_categories        = n_categories,
+        network_method      = network_default,
+        network_density     = density,
+        strength_a_cor      = strength_a_cor,
+        construct_type      = construct_type,
+        item_format         = item_format,
+        dim_ratio_12        = if (nrow(dim_row) > 0) dim_row$ratio_12[1] else NA_real_,
+        dim_nfact_suggested = if (nrow(dim_row) > 0) dim_row$nfact_suggested[1] else NA_integer_,
+        dim_unidimensional  = if (nrow(dim_row) > 0) dim_row$unidimensional_pa[1] else NA,
+        ld_prop_flagged     = if (nrow(ld_row) > 0) ld_row$prop_flagged[1] else NA_real_,
+        ld_mean_abs_q3      = if (nrow(ld_row) > 0) ld_row$mean_abs_q3[1] else NA_real_,
+        has_dim_match       = nrow(dim_row) > 0,
+        has_ld_match        = nrow(ld_row) > 0,
+        has_bayes_match     = !is.null(bayes),
+        has_mrf_match       = !is.null(mrf)
+      ),
+      bayes_summary_cols,
+      mrf_summary_cols
     ),
-    graph    = graph,
-    strength = strength,
-    a        = a
+    graph      = graph,
+    strength   = strength,
+    a          = a,
+    edges_ggm  = if (!is.null(bayes)) bayes$edges else NULL,
+    edges_mrf  = if (!is.null(mrf)) mrf$edges else NULL
   )
 }
 
@@ -270,8 +499,18 @@ fit_network <- function(table_name) {
 fit_to_disk <- function(table_name) {
   out_file <- file.path(fits_dir, paste0(table_name, ".rds"))
   if (file.exists(out_file)) {
-    message("  Skipping (already done): ", table_name)
-    return(invisible(NULL))
+    cached <- tryCatch(readRDS(out_file), error = function(e) NULL)
+    # Amendment: pre-existing per-table caches from before the Bayesian edge
+    # evidence amendment lack the "edges_ggm" element entirely (not just a
+    # NULL value -- a NULL there can also mean the amendment ran but that
+    # table's Bayesian fit failed/timed out, which should still count as
+    # done). Only a genuinely old-format cache gets re-run.
+    if (!is.null(cached) && "edges_ggm" %in% names(cached)) {
+      message("  Skipping (already done): ", table_name)
+      return(invisible(NULL))
+    }
+    message("  Re-running (old-format cache predates Bayesian edge evidence amendment): ",
+            table_name)
   }
   result <- tryCatch(fit_network(table_name), error = function(e) {
     message("    unexpected error for ", table_name, ": ", conditionMessage(e))
@@ -301,14 +540,26 @@ all_graphs    <- set_names(map(all_raw, "graph"), result_names)
 all_strengths <- set_names(map(all_raw, "strength"), result_names)
 all_a         <- set_names(map(all_raw, "a"), result_names)
 
-n_dim_matched <- sum(all_summary$has_dim_match)
-n_ld_matched  <- sum(all_summary$has_ld_match)
+# Edge-level Bayesian evidence (amendment): one row per item pair per table,
+# used for the paper's Fig. 3/Fig. 4 replications and the strong-evidence-only
+# cross-vignette re-check in the qmd.
+all_edges_ggm <- map(all_raw, "edges_ggm") |> compact() |> bind_rows()
+all_edges_mrf <- map(all_raw, "edges_mrf") |> compact() |> bind_rows()
+
+n_dim_matched   <- sum(all_summary$has_dim_match)
+n_ld_matched    <- sum(all_summary$has_ld_match)
+n_bayes_matched <- sum(all_summary$has_bayes_match)
+n_mrf_matched   <- sum(all_summary$has_mrf_match)
 message("\nDone. ", nrow(all_summary), " tables with usable network results out of ",
         length(tables), " candidates.")
 message("  quality check: ", n_dim_matched, "/", nrow(all_summary),
         " found a matching dimensionality-vignette entry.")
 message("  quality check: ", n_ld_matched, "/", nrow(all_summary),
         " found a matching local-dependence-vignette entry.")
+message("  quality check: ", n_bayes_matched, "/", nrow(all_summary),
+        " produced usable Bayesian edge evidence (Option A, GGM).")
+message("  quality check: ", n_mrf_matched, "/", length(option_b_tables),
+        " Option B (ordinal MRF) subset tables produced usable results.")
 
 # ==============================================================================
 # 5. Save combined output
@@ -320,6 +571,9 @@ saveRDS(
     graphs           = all_graphs,
     strengths        = all_strengths,
     discriminations  = all_a,
+    edges_ggm        = all_edges_ggm,
+    edges_mrf        = all_edges_mrf,
+    option_b_tables  = option_b_tables,
     candidate_tables = tables,
     n_all_candidates = length(all_candidates),
     n_binary_all     = length(binary_tables),
@@ -380,6 +634,35 @@ manual_entries <- c(
   pages   = {146--182},
   year    = {2025},
   doi     = {10.1017/psy.2024.4}
+}",
+  "@article{huth2026statistical,
+  title   = {Statistical evidence in psychological networks},
+  author  = {Huth, Karoline B. S. and Haslbeck, Jonas M. B. and Keetelaar, Sara and van Holst, Ruth J. and Marsman, Maarten},
+  journal = {Nature Human Behaviour},
+  volume  = {10},
+  number  = {2},
+  pages   = {333--346},
+  year    = {2026},
+  doi     = {10.1038/s41562-025-02314-2}
+}",
+  "@article{williams2020bggm,
+  title   = {{BGGM}: {B}ayesian {G}aussian graphical models in {R}},
+  author  = {Williams, Donald R. and Mulder, Joris},
+  journal = {Journal of Open Source Software},
+  volume  = {5},
+  number  = {51},
+  pages   = {2111},
+  year    = {2020},
+  doi     = {10.21105/joss.02111}
+}",
+  "@article{huth2024easybgm,
+  title   = {Simplifying {B}ayesian analysis of graphical models for the social sciences with easybgm: {A} user-friendly {R}-package},
+  author  = {Huth, Karoline B. S. and Keetelaar, Sara and Sekulovski, Nikola and van den Bergh, Don and Marsman, Maarten},
+  journal = {Advances.in/Psychology},
+  volume  = {2},
+  pages   = {e66366},
+  year    = {2024},
+  doi     = {10.56296/aip00010}
 }"
 )
 
