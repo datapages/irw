@@ -205,7 +205,7 @@ relate to one another.
   });
   var svg = document.getElementById("guess-svg");
 
-  var W = 640, H = 380, mL = 50, mR = 20, mT = 10, mB = 40;
+  var W = 640, H = 380, mL = 50, mR = 68, mT = 10, mB = 40;
   var plotW = W - mL - mR, plotH = H - mT - mB;
   function px(theta) { return mL + (theta + 4) / 8 * plotW; }
   function py(p) { return mT + (1 - p) * plotH; }
@@ -255,17 +255,38 @@ relate to one another.
     var mixture  = function(t) { return pi * plogis(t - b) + (1 - pi) * g; };
 
     var curves = [
-      { fn: rasch,   color: "#2a78d6" },
-      { fn: oneplg,  color: "#eb6834" },
-      { fn: threepl, color: "#1baf7a" },
-      { fn: ag,      color: "#e87ba4" },
-      { fn: mixture, color: "#4a3aa7" }
+      { name: "Rasch",   fn: rasch,   color: "#2a78d6" },
+      { name: "1PLg",    fn: oneplg,  color: "#eb6834" },
+      { name: "3PL",     fn: threepl, color: "#1baf7a" },
+      { name: "1PL-AG",  fn: ag,      color: "#e87ba4" },
+      { name: "Mixture", fn: mixture, color: "#4a3aa7" }
     ];
 
     var html = staticAxesSvg();
     curves.forEach(function(c) {
       html += '<path d="' + pathFor(c.fn) + '" fill="none" stroke="' + c.color + '" stroke-width="2.5"/>';
     });
+
+    // Direct end-of-line labels at theta=4 (right edge), so the text sits
+    // level with the curve it names. Curves often converge near P=1 at high
+    // theta, so labels are decluttered with a minimum vertical gap, sorted
+    // by their true endpoint height (closest match to the curve retained).
+    var labels = curves.map(function(c) {
+      return { name: c.name, color: c.color, y: py(c.fn(4)) };
+    });
+    labels.sort(function(a, b) { return a.y - b.y; });
+    var minGap = 13;
+    for (var li = 1; li < labels.length; li++) {
+      if (labels[li].y - labels[li - 1].y < minGap) {
+        labels[li].y = labels[li - 1].y + minGap;
+      }
+    }
+    labels.forEach(function(lab) {
+      lab.y = Math.max(mT + 8, Math.min(mT + plotH, lab.y));
+      html += '<text x="' + (mL + plotW + 6) + '" y="' + (lab.y + 4) +
+              '" font-size="11" font-weight="600" fill="' + lab.color + '">' + lab.name + '</text>';
+    });
+
     svg.innerHTML = html;
   }
 
@@ -456,22 +477,22 @@ if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
 #| fig-height: 5.5
 if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
   ggplot(imv_vs_rasch_df, aes(x = table, y = imv, fill = model)) +
-    geom_col(position = "stack") +
+    geom_col(position = position_dodge2(preserve = "single")) +
     geom_hline(yintercept = 0, color = "grey30", linewidth = 0.3) +
     scale_fill_manual(values = model_colors, breaks = model_order) +
     coord_flip() +
     labs(x = NULL, y = "IMV(Rasch, model)", fill = "Model",
-         title = "Predictive gain (or cost) relative to Rasch, stacked within table") +
+         title = "Predictive gain (or cost) relative to Rasch, grouped within table") +
     theme(legend.position = "bottom")
 }
 ```
 
-Stacking is within-table only -- each bar sums that table's six IMV(Rasch,
-model) values, with positive contributions extending right of zero and
-negative ones extending left, so the bar's net position (not any single
-segment) shows the overall balance of gains and costs for that table.
+Bars are grouped (not stacked) within each table -- each of the six models
+gets its own bar, positive ones extending right of zero and negative ones
+extending left, so models can be compared directly against each other
+within a table rather than only against their cumulative sum.
 `IMV(Rasch,3PL)` (green) is included per the caveat above; treat its
-segment as not-yet-real.
+bar as not-yet-real.
 
 ```{r}
 #| label: highlight-picks
