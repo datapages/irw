@@ -23,6 +23,7 @@
 
 library(irw)
 library(lsirm12pl)
+library(mirt)
 library(dplyr)
 library(purrr)
 library(furrr)
@@ -40,7 +41,8 @@ dir.create(fits_dir, recursive = TRUE, showWarnings = FALSE)
 # ------------------------------------------------------------------------------
 # 1. Scouting-set table list
 #
-#    Selection logic (see task spec / vignette Motivation section for detail):
+#    Original 5-table scouting pass (see task spec / vignette Motivation
+#    section for detail):
 #    - g308_sirt, chakraborty2026_IWAH_IRW: the only two IRW tables found (out
 #      of ~800 checked for the local-dependence vignette) to carry a usable
 #      item_family grouping -- i.e. ground truth on which items *should*
@@ -62,18 +64,49 @@ dir.create(fits_dir, recursive = TRUE, showWarnings = FALSE)
 #      23 items, 317 participants -- a presumed-Rasch-like negative control,
 #      sized well within the paper's tractable range.
 #
-#    Cap: 5 tables (within the spec's ~5-6 budget), each N/I small enough for
-#    MCMC to be tractable per-table (downsampling applied below where needed).
+#    Expansion (2026-07-23), after the scouting pass cleared the go/no-go bar
+#    and raised a "what predicts a positive finding" question worth more data
+#    points to check:
+#    - brain_hemisphere, artistic_preferences, depression_anxiety_stress,
+#      fisher_temperment, face_memory_test: the remaining 5 tables classified
+#      "likely speeded" by the same speededness screen (completes that bucket
+#      -- all 7 "likely speeded" tables from the original classification are
+#      now included, not just the 2 that happened to be dichotomous/small).
+#    - sd3ypl_klimczak_2019_ses, BPAQ_Christopher_2024_PSS10,
+#      prpt_hellmann_2021_conscientiousness, chen2026_sc, disgust_berger2014,
+#      autism_blotner_2025_s1_aq: a *blind* random sample (seed 20260723) from
+#      irw_filter(n_items = c(5, 60), n_participants = c(100, 5000)), excluding
+#      every table already in the study set -- deliberately not hand-picked
+#      for any hypothesis, to see what typical, unremarkable IRW tables look
+#      like under LSIRM without the selection bias of picking known-structure
+#      or known-diagnostic tables.
+#
+#    16 tables total. Downsampling (below) keeps each table's MCMC cost
+#    bounded regardless of raw size.
 
 scouting_tables <- c(
+  # original scouting pass
   "g308_sirt",
   "chakraborty2026_IWAH_IRW",
   "credentialform_lnirt",
   "nature_relatedness",
-  "blum_2018_imak_bin"
+  "blum_2018_imak_bin",
+  # remainder of the "likely speeded" bucket
+  "brain_hemisphere",
+  "artistic_preferences",
+  "depression_anxiety_stress",
+  "fisher_temperment",
+  "face_memory_test",
+  # blind random exploratory sample
+  "sd3ypl_klimczak_2019_ses",
+  "BPAQ_Christopher_2024_PSS10",
+  "prpt_hellmann_2021_conscientiousness",
+  "chen2026_sc",
+  "disgust_berger2014",
+  "autism_blotner_2025_s1_aq"
 )
 
-message("Scouting set: ", length(scouting_tables), " tables")
+message("Study set: ", length(scouting_tables), " tables")
 
 # ------------------------------------------------------------------------------
 # 2. Helpers
@@ -248,7 +281,7 @@ fit_to_disk <- function(table_name) {
   if (!is.null(result)) saveRDS(result, out_file)
 }
 
-plan(multisession, workers = min(4, parallel::detectCores() %/% 2))
+plan(multisession, workers = min(8, parallel::detectCores() %/% 2))
 message("\nFitting ", length(scouting_tables), " tables (", if (SCOUT) "scout" else "full", " settings)...")
 future_map(scouting_tables, fit_to_disk)
 plan(sequential)
@@ -264,6 +297,39 @@ all_raw <- map(scouting_tables, function(tbl) {
 }) |> compact()
 
 message("\nDone. ", length(all_raw), " of ", length(scouting_tables), " tables produced usable fits.")
+
+# ------------------------------------------------------------------------------
+# 4.5. Null-calibration check
+#
+#    Every polytomous/graded table in the study set came back with a
+#    decisively high inclusion probability for gamma > 0 (>0.96 across all
+#    13), while the 3 dichotomous tables split as expected (2 null, 1
+#    strong). Before trusting 13 "positive" findings at face value, check
+#    whether lsirmgrm_ss() is simply biased toward gamma > 0 on well-behaved
+#    graded-response data with *no* true interaction structure: simulate a
+#    clean single-factor GRM dataset (realistic discrimination and
+#    thresholds, N/I matched to the study set, gamma = 0 by construction)
+#    and confirm the estimator recovers a low inclusion probability.
+# ------------------------------------------------------------------------------
+
+null_calibration_file <- file.path(fits_dir, paste0("null_calibration_check", suffix, ".rds"))
+if (!file.exists(null_calibration_file)) {
+  message("\nRunning null-calibration check (simulated GRM data, no true interaction)...")
+  set.seed(1)
+  a <- matrix(rlnorm(20, 0, 0.3), ncol = 1)
+  d <- matrix(t(apply(matrix(rnorm(20 * 4), ncol = 4), 1, function(x) sort(x, decreasing = TRUE))), ncol = 4)
+  sim_dat <- simdata(a, d, N = 700, itemtype = "graded")
+  storage.mode(sim_dat) <- "numeric"
+
+  mcmc_args <- if (SCOUT) list(niter = 3000, nburn = 1000, nthin = 2) else list(niter = 15000, nburn = 2500, nthin = 5)
+  sim_fit <- do.call(lsirmgrm_ss, c(list(data = sim_dat, ndim = 2, verbose = FALSE), mcmc_args))
+
+  saveRDS(list(pi_estimate = sim_fit$pi_estimate, gamma_mean = mean(sim_fit$gamma_estimate)),
+          null_calibration_file)
+}
+null_calibration <- readRDS(null_calibration_file)
+message("Null-calibration check: pi_estimate = ", round(null_calibration$pi_estimate, 4),
+        ", gamma_mean = ", round(null_calibration$gamma_mean, 4))
 
 summary_df <- map_dfr(all_raw, function(r) {
   gamma_ci <- quantile(r$gamma_samples, c(0.025, 0.975), na.rm = TRUE)
@@ -300,6 +366,7 @@ saveRDS(
     item_family      = item_family_list,
     scouting_tables  = scouting_tables,
     scout            = SCOUT,
+    null_calibration = null_calibration,
     date_run         = Sys.Date(),
     session          = sessionInfo()
   ),

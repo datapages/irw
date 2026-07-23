@@ -6,10 +6,9 @@ description: |
   Model (LSIRM) adds a single respondent-item distance term and turns the
   same question into a picture: an "interaction map" where items and
   respondents that share unexplained structure are pulled close together.
-  We fit it to a small scouting set of IRW tables chosen to bracket the
-  diagnostic -- known testlet structure, suspected speededness, and a
-  presumed-Rasch-like negative control -- to see whether the geometry
-  recovers what other diagnostics already tell us.
+  We fit it to 16 IRW tables -- known testlet structure, suspected
+  speededness, and blind exploratory draws -- and find a split by response
+  format so clean it forced a validity check on the estimator itself.
 date: today
 bibliography: lsirmdata/references.bib
 format:
@@ -176,14 +175,15 @@ WAIC comparison was needed.
 
 ## Data and methods
 
-### Scouting-set selection
+### Study-set selection
 
-Rather than batch-fitting LSIRM across all of IRW -- MCMC here is far more
-expensive per table than the mirt-based models used elsewhere on this site,
-and the original paper's own examples ran 30-60 minutes per table at
-N~200-700, I~7-24 -- this pass deliberately selects `r length(scouting_tables)`
-tables chosen to bracket the diagnostic, each with a specific reason for
-being included:
+MCMC here is far more expensive per table than the mirt-based models used
+elsewhere on this site -- the original paper's own examples ran 30-60
+minutes per table at N~200-700, I~7-24 -- so this vignette deliberately
+selects `r length(scouting_tables)` tables rather than batch-fitting across
+all of IRW, in two rounds:
+
+**Round 1 (hypothesis-driven, 5 tables)**, chosen to bracket the diagnostic:
 
 ```{r}
 #| label: scouting-set
@@ -193,9 +193,7 @@ being included:
 #    which items *should* cluster if LSIRM is picking up real dependence.
 #    Cross-referencing the local-dependence vignette's own item_family
 #    census: only 2 of ~800 IRW tables carry a usable grouping at all.
-#    g308_sirt is dichotomous; chakraborty2026_IWAH_IRW is graded (included
-#    as a second confirmatory case via the GRM variant, even though it
-#    doesn't meet the original dichotomous-only criterion for this bucket).
+#    g308_sirt is dichotomous; chakraborty2026_IWAH_IRW is graded.
 
 # 2. Tables suspected of speededness -- candidates for the "respondents
 #    cluster near the last items" pattern described in the LSIRM paper's
@@ -206,25 +204,53 @@ being included:
 
 # 3. A presumed-Rasch-like negative control with no known family/testlet
 #    structure and no speededness suspicion: blum_2018_imak_bin.
+```
 
-scouting_tables <- c("g308_sirt", "chakraborty2026_IWAH_IRW",
-                     "credentialform_lnirt", "nature_relatedness",
-                     "blum_2018_imak_bin")
+**Round 2 (expansion, 11 more tables)**, added after Round 1 cleared the
+go/no-go bar and raised a "what predicts a positive finding" question that
+needed more data points:
+
+```{r}
+#| label: expansion-set
+#| eval: false
+
+# 4. The remaining 5 tables classified "likely speeded" by the same
+#    speededness screen, completing that bucket in full: brain_hemisphere,
+#    artistic_preferences, depression_anxiety_stress, fisher_temperment,
+#    face_memory_test.
+
+# 5. A *blind* random sample (seed 20260723) of 6 more tables from
+#    irw_filter(n_items = c(5, 60), n_participants = c(100, 5000)),
+#    excluding every table already in the study set -- deliberately not
+#    hand-picked for any hypothesis: sd3ypl_klimczak_2019_ses,
+#    BPAQ_Christopher_2024_PSS10, prpt_hellmann_2021_conscientiousness,
+#    chen2026_sc, disgust_berger2014, autism_blotner_2025_s1_aq.
 ```
 
 ```{r}
 #| label: tbl-scouting-set
-#| tbl-cap: "The scouting set: five tables chosen to bracket the diagnostic, not a representative sample of IRW."
+#| tbl-cap: "The full 16-table study set. 'Domain' is a rough characterization from each table's construct/context (cognitive-ability task vs. personality/attitude/clinical self-report scale), not an IRW metadata field -- flagged because it turns out to matter (see below)."
 
 summary_df |>
-  mutate(role = case_when(
-    table == "g308_sirt"                ~ "item_family (dichotomous)",
-    table == "chakraborty2026_IWAH_IRW" ~ "item_family (graded)",
-    table == "credentialform_lnirt"     ~ "speededness suspect (dichotomous)",
-    table == "nature_relatedness"       ~ "speededness suspect (graded)",
-    table == "blum_2018_imak_bin"       ~ "negative control"
-  )) |>
-  select(table, role, n_items, n_participants, n_categories) |>
+  mutate(
+    role = case_when(
+      table == "g308_sirt"                    ~ "item_family",
+      table == "chakraborty2026_IWAH_IRW"     ~ "item_family",
+      table %in% c("credentialform_lnirt", "nature_relatedness",
+                   "brain_hemisphere", "artistic_preferences",
+                   "depression_anxiety_stress", "fisher_temperment",
+                   "face_memory_test")         ~ "speededness suspect",
+      table == "blum_2018_imak_bin"           ~ "negative control",
+      TRUE                                     ~ "blind exploratory"
+    ),
+    domain = case_when(
+      table %in% c("g308_sirt", "credentialform_lnirt", "blum_2018_imak_bin") ~ "cognitive/ability",
+      table == "face_memory_test" ~ "cognitive/ability (graded)",
+      TRUE ~ "personality/attitude/clinical"
+    )
+  ) |>
+  select(table, role, domain, n_items, n_participants, n_categories) |>
+  arrange(role, domain) |>
   knitr::kable()
 ```
 
@@ -242,10 +268,13 @@ For each table, `fit_lsirm()` in the compute script:
    datasets](2pl_across_datasets.qmd). Item downsampling always keeps the
    true last 10 items by presentation order (so the "stragglers near the
    end" check below stays meaningful) and systematically samples the rest;
-   this only triggered for `credentialform_lnirt` (200 -> 40 items).
+   this triggered for every table with more than 40 items
+   (`credentialform_lnirt`, `depression_anxiety_stress`, `fisher_temperment`,
+   `face_memory_test`, `artistic_preferences`).
 3. Fits the 1PL LSIRM with spike-and-slab (`lsirm1pl_ss()`) for dichotomous
    tables, or the graded-response variant (`lsirmgrm_ss()`) for polytomous
-   tables, both with a 2D latent space, matching the original paper's
+   tables, both with a 2D latent space and the full 15,000-iteration MCMC
+   settings (2,500 burn-in, thinned by 5), matching the original paper's
    defaults.
 4. Records posterior mean item and respondent positions, the $\gamma$
    posterior mean and 95% credible interval, the inclusion probability, and
@@ -274,34 +303,38 @@ To reproduce with current IRW holdings, re-run
 
 ```{r}
 #| label: tbl-gamma
-#| tbl-cap: "Posterior mean gamma (with 95% credible interval) and posterior inclusion probability for gamma > 0, one row per table. Inclusion probability above 0.5 favors the latent-space model over an ordinary Rasch fit; below 0.5 favors Rasch."
+#| tbl-cap: "Posterior mean gamma (with 95% credible interval) and posterior inclusion probability for gamma > 0, one row per table, sorted by response format then by P(gamma > 0). Inclusion probability above 0.5 favors the latent-space model over an ordinary Rasch fit; below 0.5 favors Rasch."
 
 summary_df |>
   mutate(
+    format   = ifelse(is_dichotomous, "dichotomous", "polytomous/graded"),
     gamma_ci = sprintf("%.2f [%.2f, %.2f]", gamma_mean, gamma_lo, gamma_hi),
     favors   = ifelse(pi_estimate > 0.5, "Latent space (gamma > 0)", "Rasch (gamma = 0)")
   ) |>
-  select(table, gamma_ci, pi_estimate, favors) |>
-  knitr::kable(col.names = c("Table", "Gamma [95% CI]", "P(gamma > 0)", "Model favored"),
+  arrange(is_dichotomous, desc(pi_estimate)) |>
+  select(table, format, gamma_ci, pi_estimate, favors) |>
+  knitr::kable(col.names = c("Table", "Format", "Gamma [95% CI]", "P(gamma > 0)", "Model favored"),
                digits = 3)
 ```
 
-Three of the five tables show a clear, decisive signal for the interaction
-term (inclusion probability > 0.98): `chakraborty2026_IWAH_IRW` (known
-item_family structure), `credentialform_lnirt` and `nature_relatedness`
-(both speededness suspects). Two show the opposite: `blum_2018_imak_bin`
-(the negative control, as intended) and, more surprisingly,
-`g308_sirt` -- the *dichotomous* item_family table. That contrast is
-explored directly in the case study below rather than treated as a loose
-end.
+The pattern that jumps out is not subtle: **every one of the 13
+polytomous/graded tables** -- including all 6 blind, hypothesis-free
+exploratory tables -- shows a decisive inclusion probability above 0.96.
+The 3 dichotomous tables split as originally scoped: two near-zero
+(`g308_sirt`, `blum_2018_imak_bin`) and one decisive
+(`credentialform_lnirt`, now the single highest inclusion probability in
+the whole set at 0.9996). A split that tracks response format this cleanly,
+appearing the moment the study set was widened with unrelated blind
+tables, is exactly the kind of pattern that deserves a validity check
+before being taken as a real substantive finding -- see the next section.
 
 ### Interaction maps
 
 ```{r}
 #| label: fig-interaction-maps
-#| fig-cap: "Interaction maps for all five scouting-set tables. Points are posterior mean positions in the shared 2D latent space: circles are respondents, triangles are items. Items sharing a known item_family grouping (where available) are colored; all other points are grey. Panels are titled with each table's posterior inclusion probability for gamma > 0."
-#| fig-height: 8
-#| fig-width: 10
+#| fig-cap: "Interaction maps for all 16 study-set tables, grouped by response format (dichotomous first) and sorted by posterior inclusion probability within format. Points are posterior mean positions in the shared 2D latent space: circles are respondents, triangles are items. Items sharing a known item_family grouping (where available) are colored; all other points are grey. Panel titles show each table's posterior inclusion probability for gamma > 0."
+#| fig-height: 16
+#| fig-width: 12
 
 build_position_df <- function(tbl) {
   pos <- positions[[tbl]]
@@ -319,30 +352,107 @@ build_position_df <- function(tbl) {
 
 position_df <- bind_rows(lapply(summary_df$table, build_position_df))
 
+panel_order <- summary_df |> arrange(is_dichotomous, desc(pi_estimate)) |> pull(table)
 panel_labels <- setNames(
   sprintf("%s (P[gamma>0] = %.2f)", summary_df$table, summary_df$pi_estimate),
   summary_df$table
 )
-position_df$panel <- panel_labels[position_df$table]
+position_df$panel <- factor(panel_labels[position_df$table], levels = panel_labels[panel_order])
 
 ggplot(position_df, aes(x = dim1, y = dim2, shape = type)) +
-  geom_point(data = filter(position_df, is.na(family)), colour = irw_grey, alpha = 0.5, size = 1.6) +
-  geom_point(data = filter(position_df, !is.na(family)), aes(colour = family), size = 2.4) +
+  geom_point(data = filter(position_df, is.na(family)), colour = irw_grey, alpha = 0.5, size = 1.4) +
+  geom_point(data = filter(position_df, !is.na(family)), aes(colour = family), size = 2.2) +
   scale_shape_manual(values = c(respondent = 16, item = 17)) +
-  facet_wrap(~panel, scales = "free", ncol = 2) +
+  facet_wrap(~panel, scales = "free", ncol = 4) +
   labs(x = NULL, y = NULL, shape = NULL, colour = "item_family") +
-  theme(legend.position = "bottom", strip.text = element_text(size = 9))
+  theme(legend.position = "bottom", strip.text = element_text(size = 8))
 ```
 
-The two high-inclusion-probability tables with distinguishable item
-subgroups (`chakraborty2026_IWAH_IRW` by `item_family`) show visibly
-tighter item clustering by group than the negative control's diffuse
-scatter; `credentialform_lnirt` and `nature_relatedness` show broad,
-non-null spread consistent with a real but less group-structured
-interaction. `g308_sirt` and `blum_2018_imak_bin` both look close to
-patternless noise -- consistent with their near-zero inclusion
-probabilities, where the fitted positions carry little information (the
-model has effectively decided it doesn't need them).
+`chakraborty2026_IWAH_IRW` (top group, colored by `item_family`) shows
+visibly tighter item clustering by group than the two near-null dichotomous
+panels' diffuse scatter. Beyond that one labeled case, though, the maps
+mostly demonstrate the same thing the gamma table does: broad, structured
+spread across nearly every polytomous panel regardless of role
+(speededness suspect or blind exploratory), and near-patternless noise in
+`g308_sirt` and `blum_2018_imak_bin`.
+
+## Is this really about response format, or is the estimator biased?
+
+A split this clean -- every polytomous table positive, most dichotomous
+tables null -- is more consistent with an estimator quirk than with 13
+independent substantive discoveries, so before interpreting it, the
+question needs to be turned on the tool itself: does `lsirmgrm_ss()`
+report high inclusion probability on *any* graded-response data, even data
+built with zero true interaction?
+
+```{r}
+#| label: null-calibration
+#| eval: false
+
+# Simulate a clean single-factor GRM dataset: realistic item discrimination
+# and category thresholds, N/I matched to the study set, gamma = 0 by
+# construction (no interaction structure of any kind).
+a <- matrix(rlnorm(20, 0, 0.3), ncol = 1)
+d <- matrix(t(apply(matrix(rnorm(20 * 4), ncol = 4), 1, function(x) sort(x, decreasing = TRUE))), ncol = 4)
+sim_dat <- mirt::simdata(a, d, N = 700, itemtype = "graded")
+sim_fit <- lsirmgrm_ss(sim_dat, ndim = 2, niter = 15000, nburn = 2500, nthin = 5)
+```
+
+```{r}
+#| label: tbl-null-calibration
+#| tbl-cap: "Null-calibration check: lsirmgrm_ss() fit to simulated single-factor GRM data with no true interaction structure, versus the range of results actually observed across the 13 real polytomous study-set tables."
+
+tibble(
+  case             = c("Simulated null GRM data (this check)", "Real polytomous tables (range, n=13)"),
+  pi_estimate      = c(.cache$null_calibration$pi_estimate,
+                       paste0(sprintf("%.3f", min(summary_df$pi_estimate[!summary_df$is_dichotomous])),
+                              " to ",
+                              sprintf("%.3f", max(summary_df$pi_estimate[!summary_df$is_dichotomous])))),
+  gamma            = c(sprintf("%.3f", .cache$null_calibration$gamma_mean),
+                       paste0(sprintf("%.2f", min(summary_df$gamma_mean[!summary_df$is_dichotomous])),
+                              " to ",
+                              sprintf("%.2f", max(summary_df$gamma_mean[!summary_df$is_dichotomous]))))
+) |>
+  knitr::kable(col.names = c("Case", "P(gamma > 0)", "Gamma"))
+```
+
+The estimator passes this check: on data simulated with no true interaction
+whatsoever, `lsirmgrm_ss()` correctly recovers a near-zero inclusion
+probability (`r sprintf("%.3f", .cache$null_calibration$pi_estimate)`) and
+a near-zero gamma. That rules out the crudest possible explanation (the
+graded spike-and-slab implementation always says yes), and shifts the
+weight of evidence toward this being a real property of the tables
+themselves rather than a software bug -- but it does not fully resolve the
+question, and the study-set design confounds two things that would need to
+be teased apart to go further:
+
+**Response format and instrument domain are nearly perfectly aliased in
+this study set.** Every dichotomous table here is a cognitive-ability task
+(testlet reading comprehension, a credentialing exam, figural analogies);
+every polytomous table (with one partial exception, `face_memory_test`, a
+graded confidence/memory task rather than a personality scale) is a
+Likert-type personality, attitude, or clinical self-report scale
+(conscientiousness, disgust sensitivity, autism screening, depression/
+anxiety/stress, and so on). Likert personality batteries are well known to
+carry genuine item redundancy -- reverse-worded twins, near-duplicate
+phrasing, shared method variance, halo and acquiescence response styles --
+in a way ability tests are usually designed to avoid. So "format predicts a
+positive finding" in this particular batch may really be "domain predicts a
+positive finding," with format riding along as a near-perfect proxy rather
+than a causal driver in its own right. Disentangling the two would need
+either a polytomous cognitive-ability battery or a dichotomous personality
+scale (rare in IRW, per the format breakdown in the [local dependence
+vignette](local_dependence.qmd)) in the study set -- neither was available
+in this pass.
+
+**One simulation is a spot check, not an exhaustive calibration.** The null
+data above uses a fairly benign single-factor GRM with independently drawn,
+moderate item discriminations. Real personality-scale data can have
+features the simulation doesn't -- skewed trait distributions, floor/
+ceiling effects, more categories with sparse endorsement -- that could in
+principle inflate gamma through a channel other than genuine content
+overlap. This check makes the "always positive on polytomous data" story
+less likely, not impossible.
 
 ## Case study: LSIRM and Q3 on the same two tables
 
@@ -371,8 +481,8 @@ tibble(
 The two diagnostics agree closely. `chakraborty2026_IWAH_IRW` -- a scale
 where `item_family` groups the *same base item repeated across measurement
 rounds* -- shows both a high proportion of Q3-flagged pairs (26%) and a
-near-certain LSIRM inclusion probability (0.99); `g308_sirt` shows both a
-low flagged proportion (2%) and a near-zero inclusion probability (0.01).
+near-certain LSIRM inclusion probability (0.995); `g308_sirt` shows both a
+low flagged proportion (2%) and a near-zero inclusion probability (0.003).
 That agreement is reassuring on its own (two very different diagnostics
 landing on the same conclusion from the same data), but `g308_sirt` is
 also the more interesting result: its source paper -- "A Comparison of
@@ -392,14 +502,14 @@ The original LSIRM paper's discussion section describes a specific
 signature worth checking directly: in a speeded test, respondents who
 don't finish should cluster near the *last* items in the interaction map,
 because the shared "ran out of time" interaction is exactly the kind of
-structure the distance term is built to absorb. Both `credentialform_lnirt`
-and `nature_relatedness` were flagged `"likely speeded"` by the
-(unmerged) speededness-vignette branch's independent omission-pattern
-screen, making them direct candidates.
+structure the distance term is built to absorb. All 7 tables classified
+`"likely speeded"` by the (unmerged) speededness-vignette branch's
+independent omission-pattern screen are now in the study set, giving a
+much better-powered look at this than the original 2-table check.
 
 ```{r}
 #| label: tbl-position-clustering
-#| tbl-cap: "Mean pairwise distance among the last 20% and first 20% of items (by presentation position) in the fitted item space, versus the mean pairwise distance across all items. A tighter cluster among last-position items than first-position items (or than the overall average) would support the stragglers-near-the-end pattern."
+#| tbl-cap: "Mean pairwise distance among the last 20% and first 20% of items (by presentation position) in the fitted item space, versus the mean pairwise distance across all items, for all 7 speededness-suspect tables plus the two null-gamma tables as a reference. A tighter cluster among last-position items than first-position items (or than the overall average) would support the stragglers-near-the-end pattern; 'last < first' marks cases matching that prediction."
 
 item_cluster_check <- function(tbl) {
   w   <- positions[[tbl]]$w
@@ -420,99 +530,126 @@ item_cluster_check <- function(tbl) {
   )
 }
 
-bind_rows(lapply(c("credentialform_lnirt", "nature_relatedness", "blum_2018_imak_bin"), item_cluster_check)) |>
-  knitr::kable(digits = 2, col.names = c("Table", "Mean dist. (last 20%)", "Mean dist. (first 20%)", "Mean dist. (all pairs)"))
+speeded_tables <- c("credentialform_lnirt", "nature_relatedness", "brain_hemisphere",
+                    "artistic_preferences", "depression_anxiety_stress",
+                    "fisher_temperment", "face_memory_test")
+
+bind_rows(lapply(c(speeded_tables, "blum_2018_imak_bin", "g308_sirt"), item_cluster_check)) |>
+  mutate(matches_prediction = ifelse(mean_dist_last < mean_dist_first, "yes (last < first)", "no")) |>
+  knitr::kable(digits = 2, col.names = c("Table", "Mean dist. (last 20%)", "Mean dist. (first 20%)",
+                                          "Mean dist. (all pairs)", "Matches prediction?"))
 ```
 
-This check comes back **inconclusive at the scouting stage, not a clean
-confirmation**. `credentialform_lnirt` shows *both* first- and
-last-position items clustering tighter than the overall average -- not
-specifically a last-item effect, and possibly confounded by the item
-downsampling that table required (200 -> 40 items, which keeps the true
-last 10 positions but samples the rest systematically rather than
-contiguously). `nature_relatedness` shows the *opposite* of the predicted
-direction: first-position items cluster tighter than last-position items.
-Neither result rules out the pattern existing in the full, undownsampled
-data with a properly converged chain -- this is exactly the kind of check
-that deserves the full 15,000-iteration run rather than the 3,000-iteration
-scouting pass before drawing a conclusion either way. Flagged here as
-open, not resolved.
+With the full speeded bucket in hand, this comes back **genuinely mixed,
+not a confirmation or a rejection**. Of the 7 speeded-suspect tables, 3
+show last-position items clustering tighter than first-position items as
+predicted (`artistic_preferences`, `fisher_temperment` weakly,
+`face_memory_test` strongly -- its last-item cluster is less than a
+quarter the spread of its first-item cluster); the other 4 show the
+opposite (`credentialform_lnirt`, `nature_relatedness`,
+`brain_hemisphere`, `depression_anxiety_stress`). There's no obvious
+feature separating the two groups (both directions include dichotomous
+and polytomous tables, small and large item counts). `face_memory_test` is
+the one clean example matching the paper's discussion-section pattern
+qualitatively; the rest suggest that either the effect is real but
+table-specific (present only for some speeded-test designs or item
+types), or that this pairwise item-distance proxy is too indirect a test
+without linking it to actual respondent-level omission behavior (available
+in the speededness-vignette's own cached data, but not joined in here).
+Reported as an open, mixed finding rather than forced into either
+direction.
 
 ## What to notice
 
-- **Clean separation is achievable and shows up where expected.**
-  `chakraborty2026_IWAH_IRW`'s known repeated-item structure produces both
-  a decisive inclusion probability (0.99) and visibly tighter clustering by
-  `item_family` in the interaction map than the negative control shows.
-- **A clean null is just as informative.** `blum_2018_imak_bin` (the
-  intended negative control) behaves exactly as a Rasch-consistent table
-  should: inclusion probability 0.007, a diffuse, patternless map.
-- **The most interesting result wasn't the one we scoped for.**
-  `g308_sirt` carries known testlet-structure metadata and was expected to
-  show clustering; instead it came back Rasch-like on both LSIRM and Q3.
-  That's convergent evidence across two independent methods, not a fitting
-  artifact -- but it's a reminder that `item_family` in IRW describes an
-  assignment made by the original data creators, not a guarantee that the
-  assignment shows up as measurable dependence in every downstream
-  analysis.
-- **The speededness "stragglers" signature needs the full run to
-  evaluate.** The quick position-clustering check above didn't confirm or
-  rule out the pattern; it's confounded by item downsampling in one table
-  and points the wrong direction in the other. Worth re-examining with the
-  full item set and converged chains before writing a real conclusion here.
-- **MCMC cost is the real constraint on scope.** Even with respondent and
-  item downsampling, this analysis is far more expensive per table than
-  the mirt-based models used elsewhere on the site, which is why this
-  vignette covers five hand-picked tables rather than a systematic batch.
+- **Response format (or the domain it's aliased with) is the dominant
+  driver in this batch, not the specific mechanism we scoped for.** Every
+  one of 13 polytomous tables -- known-structure, speeded-suspect, and 6
+  hypothesis-free blind draws alike -- shows a decisive inclusion
+  probability (>0.96). Only the 3 dichotomous tables show real variation.
+  This dwarfs the original "does known structure produce a positive
+  finding" question the study was scoped around.
+- **The estimator itself checks out on synthetic data**, but the study
+  design can't yet separate *format* (dichotomous vs. graded) from
+  *domain* (cognitive-ability task vs. personality/attitude self-report) --
+  they're nearly perfectly aliased here. That's the single most important
+  open question this pass raises, not a settled conclusion.
+- **Clean separation still shows up where there's independent ground
+  truth.** `chakraborty2026_IWAH_IRW`'s known repeated-item structure
+  produces visibly tighter clustering by `item_family` than the null
+  dichotomous tables' diffuse scatter, and agrees closely with the
+  existing Q3 diagnostic on the same table.
+- **A clean null is just as informative.** `blum_2018_imak_bin` and
+  `g308_sirt` (the latter despite carrying known testlet-structure
+  metadata) both come back Rasch-like -- and agree with Q3 on `g308_sirt`
+  specifically, which is convergent evidence across two independent
+  methods, not a fitting artifact.
+- **The speededness "stragglers" signature is a genuine mixed bag**, not a
+  confirmation or a rejection, across the full 7-table speeded bucket: 3
+  tables show the predicted last-item clustering, 4 don't. `face_memory_test`
+  is the one strong, clean match to the paper's discussion-section pattern.
+- **MCMC cost is still the real constraint on scope.** Even at 16 tables
+  with respondent/item downsampling, this is a hand-assembled study set,
+  not a systematic survey -- see Limitations.
 
 ## Limitations
 
-**This is a scouting pass, not a systematic survey.** Five tables were
-hand-picked to bracket the diagnostic (known structure, suspected
-speededness, presumed-null), not sampled to represent IRW as a whole.
-Nothing here should be read as an estimate of how often LSIRM-detectable
+**This is a hand-assembled study set, not a systematic survey -- even
+after expansion.** 16 tables were chosen across two rounds (5
+hypothesis-driven, 11 more completing a bucket or drawn blind), not
+sampled to represent IRW as a whole. The 6 blind exploratory tables reduce
+selection bias somewhat but were drawn from a size-filtered pool
+(`n_items` 5-60, `n_participants` 100-5,000), not all of IRW. Nothing here
+should be read as a calibrated estimate of how often LSIRM-detectable
 interaction occurs across IRW generally.
 
-**MCMC settings in this draft are intentionally fast, not final.** The
-numbers above use 3,000 iterations with 1,000 burn-in (see the pilot
-warning at the top of this page) -- enough to validate the pipeline and
-get a first read on signal, not enough to trust point estimates or
-credible intervals as final. A production run at 15,000 iterations is the
-next step before this page is complete.
+**Response format and instrument domain are confounded in this study set,
+and that's the central open question, not a footnote.** Every dichotomous
+table is a cognitive-ability task; nearly every polytomous table is a
+personality/attitude/clinical Likert scale. The null-calibration check
+above rules out the crudest explanation (a biased estimator that always
+says yes on graded data) but can't by itself tell us whether format or
+domain is doing the causal work. Resolving this needs a polytomous
+cognitive-ability battery and/or a dichotomous personality scale in the
+study set -- both are rare to nonexistent in current IRW holdings, per the
+format breakdown already documented in the [local dependence
+vignette](local_dependence.qmd).
 
-**Item downsampling is a compromise, and it may bias one result.**
-`credentialform_lnirt`'s 200 -> 40 item reduction keeps the true last 10
-items by position but samples the rest systematically; the inconclusive
-stragglers-near-the-end check above may be partly an artifact of that
-reduction rather than a fact about the full item set.
+**Item downsampling is a compromise.** Every table with more than 40 items
+(`credentialform_lnirt`, `depression_anxiety_stress`, `fisher_temperment`,
+`face_memory_test`, `artistic_preferences`) had items reduced, keeping the
+true last 10 by position and sampling the rest systematically. This could
+plausibly distort the stragglers-near-the-end check above for those
+specific tables, though the mixed result held across both downsampled and
+non-downsampled speeded tables, which argues against downsampling being
+the sole driver of the mixed picture.
 
 **The GRM extension is a package feature, not something the original paper
-evaluated.** `chakraborty2026_IWAH_IRW` and `nature_relatedness` use
-`lsirmgrm_ss()`, the graded-response variant `lsirm12pl` provides, rather
-than the binary-response model the original paper's examples focus on.
-The core distance-penalty logic is the same, but the graded extension's
-own performance hasn't been validated here beyond "it ran and produced a
-plausible-looking map."
+evaluated.** 13 of 16 tables use `lsirmgrm_ss()`, the graded-response
+variant `lsirm12pl` provides, rather than the binary-response model the
+original paper's examples focus on. The null-calibration check validates
+that this specific extension isn't trivially miscalibrated, but its
+broader performance characteristics haven't been independently studied
+here beyond that one simulated scenario.
 
 **Only the 1PL (Rasch-equivalent) latent-space variant was fit.** The
 package also exposes a 2PL LSIRM (`lsirm2pl_ss()`, allowing item
 discrimination to vary). A flat interaction map under the 1PL variant --
-as seen for the negative control here -- could in principle still mask
-discrimination-driven structure that a 2PL fit would catch; this is
+as seen for the negative-control tables here -- could in principle still
+mask discrimination-driven structure that a 2PL fit would catch; this is
 flagged as a natural extension rather than attempted in this pass.
 
 ## Reproducibility
 
 Results were computed on `r format(date_run, "%B %d, %Y")` using
-`r nrow(summary_df)` of `r length(scouting_tables)` scouting-set tables
-(scouting-run MCMC settings; see the warning at the top of this page). To
+`r nrow(summary_df)` of `r length(scouting_tables)` study-set tables at
+full production MCMC settings (15,000 iterations, 2,500 burn-in). To
 reproduce:
 
 ```r
 # 1. Re-run the compute script (from the project root)
-#    -- fast scouting settings:
+#    -- fast scouting settings (for quick iteration on new tables):
 source("vignettes/lsirm_interaction_maps_compute.R")
-#    -- or full production settings:
+#    -- full production settings (used for the numbers on this page):
 system("Rscript vignettes/lsirm_interaction_maps_compute.R --full")
 
 # 2. Re-render this page
