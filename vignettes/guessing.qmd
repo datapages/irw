@@ -503,7 +503,7 @@ if (cache_ok) {
 <select id="pw-m2" style="margin-left:0.4rem;"></select>
 </label>
 </div>
-<svg id="pw-svg" viewBox="0 0 700 420" style="width:100%%;max-width:700px;height:auto;display:block;"></svg>
+<svg id="pw-svg" viewBox="0 0 700 440" style="width:100%%;max-width:700px;height:auto;display:block;"></svg>
 </div>
 
 <script>
@@ -525,8 +525,21 @@ m2Sel.appendChild(o2);
 m1Sel.value = "Rasch";
 m2Sel.value = "Mixture";
 
-var W = 700, H = 420, mL = 170, mR = 20, mT = 10, mB = 30;
+var W = 700, H = 440, mL = 170, mR = 20, mT = 10, mB = 50;
 var plotW = W - mL - mR, plotH = H - mT - mB;
+
+function niceStep(maxAbs) {
+var raw = maxAbs / 3;
+var mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+var norm = raw / mag;
+var mult = norm < 1.5 ? 1 : (norm < 3.5 ? 2 : (norm < 7.5 ? 5 : 10));
+return mult * mag;
+}
+
+function fmtTick(v, step) {
+var decimals = Math.max(0, -Math.floor(Math.log(step) / Math.LN10) + 1);
+return v.toFixed(decimals);
+}
 
 function draw() {
 var m1 = m1Sel.value, m2 = m2Sel.value;
@@ -541,15 +554,31 @@ svg.innerHTML = "<text x=\\"20\\" y=\\"40\\" font-size=\\"13\\" fill=\\"#666\\">
 return;
 }
 
-var validVals = rows.filter(function(r) { return r.imv !== null; }).map(function(r) { return r.imv; });
-var maxAbs = Math.max(0.001, validVals.length ? Math.max.apply(null, validVals.map(Math.abs)) : 0.001);
+// Fixed axis range (not rescaled per selected pair), so bar lengths are
+// directly comparable across different m1/m2 choices. Values beyond the
+// range are clipped to the panel edge but their true number is still shown
+// as text rather than being cut off or silently rescaling the axis.
+var AXIS_MAX = 0.015;
 var rowH = plotH / rows.length;
 
-function px(v) { return mL + plotW / 2 + (v / maxAbs) * (plotW / 2); }
+function px(v) { return mL + plotW / 2 + (v / AXIS_MAX) * (plotW / 2); }
+function clampX(x) { return Math.max(mL, Math.min(mL + plotW, x)); }
 
 var html = "";
-var zeroX = px(0);
-html += "<line x1=\\"" + zeroX + "\\" y1=\\"" + mT + "\\" x2=\\"" + zeroX + "\\" y2=\\"" + (mT + plotH) + "\\" stroke=\\"#888\\"/>";
+var axisY = mT + plotH;
+html += "<line x1=\\"" + mL + "\\" y1=\\"" + axisY + "\\" x2=\\"" + (mL + plotW) + "\\" y2=\\"" + axisY + "\\" stroke=\\"#888\\"/>";
+
+var step = niceStep(AXIS_MAX);
+for (var tv = 0; tv <= AXIS_MAX + step / 2; tv += step) {
+[tv, -tv].forEach(function(v) {
+if (v !== 0 && Math.abs(v) < step / 2) return;
+var x = px(v);
+html += "<line x1=\\"" + x + "\\" y1=\\"" + mT + "\\" x2=\\"" + x + "\\" y2=\\"" + axisY +
+"\\" stroke=\\"" + (v === 0 ? "#888" : "#e5e5e5") + "\\" stroke-width=\\"" + (v === 0 ? "1.5" : "1") + "\\"/>";
+html += "<line x1=\\"" + x + "\\" y1=\\"" + axisY + "\\" x2=\\"" + x + "\\" y2=\\"" + (axisY + 5) + "\\" stroke=\\"#888\\"/>";
+html += "<text x=\\"" + x + "\\" y=\\"" + (axisY + 18) + "\\" font-size=\\"10\\" text-anchor=\\"middle\\" fill=\\"#333\\">" + fmtTick(v, step) + "</text>";
+});
+}
 
 rows.forEach(function(r, i) {
 var yTop = mT + i * rowH + rowH * 0.15;
@@ -561,14 +590,17 @@ html += "<text x=\\"" + (mL + 4) + "\\" y=\\"" + (yTop + barH / 2 + 4) +
 "\\" font-size=\\"11\\" fill=\\"#aaa\\">not available</text>";
 return;
 }
-var x1 = px(0), x2 = px(r.imv);
+var x1 = px(0), x2Raw = px(r.imv), x2 = clampX(x2Raw);
+var clipped = x2 !== x2Raw;
 var barX = Math.min(x1, x2), barW = Math.abs(x2 - x1);
 var color = r.imv >= 0 ? "#1baf7a" : "#d1495b";
 html += "<rect x=\\"" + barX + "\\" y=\\"" + yTop + "\\" width=\\"" + Math.max(barW, 0.5) +
-"\\" height=\\"" + barH + "\\" fill=\\"" + color + "\\"/>";
+"\\" height=\\"" + barH + "\\" fill=\\"" + color + "\\"" + (clipped ? " opacity=\\"0.6\\"" : "") + "/>";
 var lblX = r.imv >= 0 ? x2 + 4 : x2 - 4;
+var lblAnchor = r.imv >= 0 ? "start" : "end";
+if (clipped) { lblX = x2 - (r.imv >= 0 ? 4 : -4); lblAnchor = r.imv >= 0 ? "end" : "start"; }
 html += "<text x=\\"" + lblX + "\\" y=\\"" + (yTop + barH / 2 + 4) + "\\" font-size=\\"10\\" fill=\\"#333\\" text-anchor=\\"" +
-(r.imv >= 0 ? "start" : "end") + "\\">" + r.imv.toFixed(4) + "</text>";
+lblAnchor + "\\">" + r.imv.toFixed(4) + "</text>";
 });
 
 html += "<text x=\\"" + (mL + plotW / 2) + "\\" y=\\"" + (H - 6) +
