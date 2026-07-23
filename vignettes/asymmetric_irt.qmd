@@ -442,35 +442,23 @@ recovery_summary |>
   knitr::kable(align = "lrr")
 ```
 
-**Update:** an earlier version of this check reported weak, apparently
-run-to-run-unstable correlations for all three models and speculated about
-optimizer/BLAS nondeterminism as the cause. That diagnosis was wrong. The
-real bug was in the validation script itself: `extract_param_table()`
-returns items sorted by name as a **string** (`item_1, item_10, item_11,
-…, item_2, item_20, item_3, …`), and the recovery check bound that
-scrambled order positionally against the true shape parameters, which are
-in natural numeric item order. Most items were silently compared against
-the wrong item's truth. Fixing the alignment (join by item name instead of
-assuming row position) recovers a much cleaner — and, for RH, an
-essentially identical — picture to the "clean" run this page used to be
-unable to reproduce:
-
-- **RH**: $r = `r round(recovery_summary$cor_shape[recovery_summary$model=="RH"], 2)`$ — strong recovery.
-- **AO**: $r = `r round(recovery_summary$cor_shape[recovery_summary$model=="AO"], 2)`$ — moderate recovery.
-- **LPE**: $r = `r round(recovery_summary$cor_shape[recovery_summary$model=="LPE"], 2)`$ — the weakest of the three, though clearly better than noise.
-
-This check still draws only a **single** simulated dataset per model
-(`r nrow(recovery_df)/3` items each), so these correlations are themselves
-noisy estimates of each model's true recoverability at this sample size —
-LPE's $0.51$ in particular shouldn't be read as a precise number, just as
-"visibly weaker than RH." Checks (a) and (b) above involve no simulation or
-optimization and pass at machine precision on every machine we've tried;
-the out-of-sample calibration check in (d) below passes cleanly; and the
-real-data compute pipeline's `extract_param_table()` calls are not affected
-by this bug, because there each item's name travels with its own row
-(`a1`, `d`, `shape_est` together) rather than being re-matched against a
-separately ordered truth vector — the misalignment was specific to this
-diagnostic. Treat LPE's per-item $\kappa$ estimates below with the most
+Recovery is strong for RH
+($r = `r round(recovery_summary$cor_shape[recovery_summary$model=="RH"], 2)`$),
+moderate for AO
+($r = `r round(recovery_summary$cor_shape[recovery_summary$model=="AO"], 2)`$),
+and weakest for LPE
+($r = `r round(recovery_summary$cor_shape[recovery_summary$model=="LPE"], 2)`$)
+— though clearly better than noise. This check draws only a **single**
+simulated dataset per model (`r nrow(recovery_df)/3` items each), so these
+correlations are themselves noisy estimates of each model's true
+recoverability at this sample size — LPE's correlation in particular
+shouldn't be read as a precise number, just as "visibly weaker than RH."
+Checks (a) and (b) above involve no simulation or optimization and pass at
+machine precision on every machine we've tried; the out-of-sample
+calibration check in (d) below passes cleanly; and check (e) below sweeps
+sample size with multiple replicates per cell, giving a more precise
+picture of how much noise to expect at this scale than this single-dataset
+check can. Treat LPE's per-item $\kappa$ estimates below with the most
 caution as a result, RH's with the least, and AO's in between. The
 real-data batch below still uses a higher participant floor ($N \geq
 `r format(min_participants, big.mark=",")`$) than other IRW vignettes for
@@ -627,6 +615,59 @@ consistent with check (c)'s finding that shape parameters are harder to pin
 down than location/discrimination, and the reason for this vignette's
 higher-than-usual participant floor
 ($N \geq `r format(min_participants, big.mark=",")`$).
+
+```{r}
+#| label: entanglement-stats
+#| echo: false
+
+d_wide <- convergence_summary |>
+  select(model, n, rmse_d) |>
+  tidyr::pivot_wider(names_from = model, values_from = rmse_d)
+lpe_ao_ratio    <- round(range(d_wide$LPE / d_wide$AO), 1)
+lpe_rh_ratio_lo <- round((d_wide$LPE / d_wide$RH)[which.min(d_wide$n)], 1)
+lpe_rh_ratio_hi <- round((d_wide$LPE / d_wide$RH)[which.max(d_wide$n)], 1)
+rh_d_at_max_n   <- round(convergence_summary$rmse_d[
+  convergence_summary$model == "RH" & convergence_summary$n == max(convergence_summary$n)
+], 3)
+bias_shape_range <- round(range(convergence_summary$bias_shape), 2)
+```
+
+::: {.callout-note collapse="true"}
+#### A closer look: what's driving these curves, and a nuance check (c) alone doesn't show
+
+**The improvement is a variance story, not a bias-correction one.** Bias in
+the recovered shape parameter hovers near zero at every $N$ tested
+(`r bias_shape_range[1]` to `r bias_shape_range[2]` across every model x
+$N$ cell, no trend with $N$), so the RMSE decline in
+@fig-convergence-shape reflects shrinking sampling variance around an
+already-roughly-unbiased estimator, not a systematic offset that only
+shows up at small $N$. That's a cleaner form of consistency than a falling
+RMSE alone would guarantee.
+
+**LPE's shape parameter doesn't just recover poorly on its own — it's
+entangled with $d$.** @tbl-convergence-summary understates this: LPE's
+difficulty ($d$) RMSE runs
+`r lpe_ao_ratio[1]`–`r lpe_ao_ratio[2]`$\times$ AO's *at every sample size
+tested*, and the gap to RH widens from `r lpe_rh_ratio_lo`$\times$ at the
+smallest $N$ to `r lpe_rh_ratio_hi`$\times$ at the largest — not because
+LPE's $d$ estimate gets worse, but because RH's $d$ converges unusually
+fast (down to `r rh_d_at_max_n` by
+$N = `r format(max(convergence_n_grid), big.mark=",")`$). LPE's
+power-transform parameterization — raising the whole logistic curve to
+$\kappa$ — couples location and shape more tightly than AO's or RH's link
+functions do. Check (c)'s "LPE recovers shape weakest" finding looks like
+one symptom of a broader identifiability property of the LPE
+parameterization, not an issue isolated to $\kappa$ — read LPE's per-item
+$a$/$d$ estimates elsewhere in this vignette with that in mind, not just
+its $\kappa$.
+
+**One wrinkle not to over-read.** LPE's shape-parameter RMSE ticks up
+slightly from $N=250$ to $N=500$ in @fig-convergence-shape before resuming
+its decline. With only `r convergence_reps` replicates per cell, that's
+most plausibly sampling noise in which particular replicates got drawn,
+not a real non-monotonicity in the underlying estimator — confirming
+which would need more replicates per cell than this check budgeted for.
+:::
 
 ## Data and methods
 
