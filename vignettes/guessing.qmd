@@ -25,16 +25,24 @@ execute:
 library(dplyr)
 library(tidyr)
 library(tibble)
+library(purrr)
 library(ggplot2)
 
 theme_set(theme_minimal(base_size = 13))
+
+# Colors for the widget's 5 ICCs (Rasch/1PLg/3PL/1PL-AG/Mixture) and for the
+# Results section's 6 non-Rasch models (adds 2PL and Purified Rasch, which
+# don't appear as separate curves in the widget).
 model_colors <- c(
   Rasch    = "#2a78d6",
+  "2PL"    = "#6c757d",
   "1PLg"   = "#eb6834",
   "3PL"    = "#1baf7a",
   "1PL-AG" = "#e87ba4",
-  Mixture  = "#4a3aa7"
+  Mixture  = "#4a3aa7",
+  "Purified Rasch" = "#c9a227"
 )
+model_order <- c("2PL", "1PLg", "3PL", "1PL-AG", "Mixture", "Purified Rasch")
 
 results_path      <- "guessingdata/guessing_results.rds"
 provisional_path  <- "guessingdata/guessing_results_provisional.rds"
@@ -50,6 +58,27 @@ if (cache_ok) {
   subsample_n  <- .res$subsample_n
   n_complete_provisional <- .res$n_complete %||% NA_integer_
   n_total_planned        <- .res$n_total_planned %||% NA_integer_
+
+  # All IMVs reframed relative to Rasch ("1PL"), the common no-guessing
+  # baseline, so every model's predictive gain (or cost) is on one shared
+  # scale -- computed directly from each table's cached held-out
+  # predictions, no refitting involved.
+  model_keys <- c(pl2 = "2PL", plg = "1PLg", pl3 = "3PL", ag = "1PL-AG",
+                   mix = "Mixture", purified = "Purified Rasch")
+  if (!is.null(.res$raw)) {
+    source("guessing_helpers.R")
+    imv_vs_rasch_df <- map_dfr(.res$raw, function(r) {
+      y <- r$true_vals
+      p_rasch <- r$preds$rasch
+      map_dfr(names(model_keys), function(key) {
+        p <- r$preds[[key]]
+        imv_val <- if (is.null(p) || all(is.na(p))) NA_real_ else compute_imv(p_rasch, p, y)
+        tibble(table = r$table, model = model_keys[[key]], imv = imv_val)
+      })
+    }) |> mutate(model = factor(model, levels = model_order))
+  } else {
+    imv_vs_rasch_df <- tibble(table = character(), model = factor(character(), levels = model_order), imv = numeric())
+  }
 } else {
   summary_df <- tibble(
     table = character(), m = integer(), m_verified = logical(),
@@ -58,10 +87,9 @@ if (cache_ok) {
     converged_1plg = logical(), converged_3pl = logical(),
     converged_ag = logical(), converged_mix = logical(),
     pi_hat = numeric(), alpha_hat = numeric(), se_alpha = numeric(),
-    lr_stat = numeric(), lr_p = numeric(), frac_flagged = numeric(),
-    imv_1plg_mix = numeric(), imv_1plg_ag = numeric(),
-    imv_rasch_purified = numeric(), imv_3pl_mix = numeric(), imv_3pl_ag = numeric()
+    lr_stat = numeric(), lr_p = numeric(), frac_flagged = numeric()
   )
+  imv_vs_rasch_df <- tibble(table = character(), model = factor(character(), levels = model_order), imv = numeric())
   date_run <- Sys.Date(); holdout_frac <- 0.2; subsample_n <- 3000
   is_provisional <- FALSE
 }
@@ -123,22 +151,32 @@ relate to one another.
 <div class="guess-widget" style="border:1px solid #dee2e6;border-radius:6px;padding:1rem 1.25rem;margin:1rem 0;">
   <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px 24px;margin-bottom:0.75rem;">
     <label style="font-size:0.9rem;">Item difficulty (b)
+      <span style="font-size:0.72rem;font-weight:600;color:#495057;">-- all five curves</span>
       <input id="guess-b" type="range" min="-1" max="3" step="0.1" value="1.5" style="width:100%;">
       <span id="guess-b-val" style="font-family:monospace;font-size:0.85rem;"></span>
     </label>
     <label style="font-size:0.9rem;">Chance level (g, for an m-option item)
+      <span style="font-size:0.72rem;font-weight:600;color:#495057;">-- all five curves</span>
       <input id="guess-g" type="range" min="0.1" max="0.5" step="0.05" value="0.25" style="width:100%;">
       <span id="guess-g-val" style="font-family:monospace;font-size:0.85rem;"></span>
     </label>
     <label style="font-size:0.9rem;">Ability weight in guessing (1PL-AG &alpha;)
+      <span style="font-size:0.72rem;font-weight:600;color:#e87ba4;">-- 1PL-AG only (pink curve)</span>
       <input id="guess-alpha" type="range" min="0" max="1" step="0.05" value="0.2" style="width:100%;">
       <span id="guess-alpha-val" style="font-family:monospace;font-size:0.85rem;"></span>
     </label>
     <label style="font-size:0.9rem;">Engaged proportion (Mixture &pi;)
+      <span style="font-size:0.72rem;font-weight:600;color:#4a3aa7;">-- Mixture only (purple curve)</span>
       <input id="guess-pi" type="range" min="0.5" max="1" step="0.01" value="0.85" style="width:100%;">
       <span id="guess-pi-val" style="font-family:monospace;font-size:0.85rem;"></span>
     </label>
   </div>
+  <p style="font-size:0.78rem;color:#666;margin:0 0 0.5rem;">
+    3PL (green) always uses discrimination fixed at 1.5 (rather than a slider)
+    purely so its curve is visually distinguishable from 1PLg's at the same
+    <em>b</em> and <em>g</em> -- it is not meant to represent a specific
+    fitted discrimination value.
+  </p>
   <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:6px;font-size:0.82rem;">
     <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#2a78d6;"></span> Rasch</span>
     <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#eb6834;"></span> 1PLg</span>
@@ -345,23 +383,34 @@ that simplification was made deliberately for this first run.
 
 ## Results
 
+All predictive comparisons below are framed relative to a single common
+baseline -- the Rasch model, i.e. "1PL", the no-guessing reference every
+other specification is trying to improve on. Rather than the scattered
+pairwise comparisons a first pass might reach for (1PLg vs. Mixture, 3PL vs.
+1PL-AG, and so on), every model's IMV is computed the same way,
+`compute_imv(rasch_predictions, model_predictions, y)`, on the same
+held-out cells. That puts all six non-Rasch specifications for a table on
+one shared scale: positive means "beats plain Rasch out of sample," negative
+means "costs something relative to just ignoring guessing entirely."
+
 ::: {.callout-warning}
-**The `IMV(3PL,Mix)` and `IMV(3PL,AG)` columns below are known unreliable and should not be
-read as findings.** The free 3PL fits used `mirt`'s `beta` prior on the guessing parameter
-`g`, but `mirt` stores `g` internally on a transformed scale, not the raw
-[0,1] probability scale -- `beta` evaluates the Beta(5,17) density on the wrong scale
-entirely, and the fix (`expbeta`, which applies `plogis()` first, exactly as `mirt`'s own
-documentation specifies for 3PL/4PL lower asymptotes) was verified but not yet re-run
-across the batch. The symptom is systematic: every table's 3PL guessing parameter
-collapsed to $g \approx 0.5$ regardless of true chance level, producing predicted
-probabilities floored near 0.5 and artificially huge (and wrong) `IMV(3PL,*)` values
-(confirmed on `enem_2014_1mil_ch`: mean predicted P(correct) of 0.52 against a true base
-rate of 0.29). All other columns (`π̂`, `α̂`, `IMV(1PLg,Mix)`, `IMV(1PLg,AG)`,
-`IMV(Rasch,Purified)`) are unaffected -- the bug is isolated to the free-3PL comparisons,
-confirmed by checking `mirt`'s handling of `pars='values'` (used by the other models here)
-versus its `PRIOR` mechanism (used only for 3PL and 2PL; 2PL's `a1` prior does not have
-this issue, only 3PL's `g` prior does). Left in the table below for transparency rather
-than hidden, per instruction, but treat every `IMV(3PL,*)` entry as not yet a real result.
+**`IMV(Rasch,3PL)` is known unreliable and should not be read as a finding.**
+The free 3PL fits used `mirt`'s `beta` prior on the guessing parameter `g`,
+but `mirt` stores `g` internally on a transformed scale, not the raw [0,1]
+probability scale -- `beta` evaluates the Beta(5,17) density on the wrong
+scale entirely, and the fix (`expbeta`, which applies `plogis()` first,
+exactly as `mirt`'s own documentation specifies for 3PL/4PL lower
+asymptotes) was verified but not yet re-run across the batch. The symptom
+is systematic: every table's 3PL guessing parameter collapsed to
+$g \approx 0.5$ regardless of true chance level, producing predicted
+probabilities floored near 0.5 (confirmed on `enem_2014_1mil_ch`: mean
+predicted P(correct) of 0.52 against a true base rate of 0.29). All other
+columns are unaffected -- the bug is isolated to the free-3PL fit itself
+(confirmed by checking `mirt`'s handling of `pars='values'`, used by 1PLg
+and unaffected, versus its `PRIOR` mechanism, used only by 2PL's `a1` prior,
+also unaffected, and 3PL's `g` prior, which is broken). Left in the table
+and plot below for transparency rather than hidden, per instruction, but
+treat every `IMV(Rasch,3PL)` entry as not yet a real result.
 :::
 
 ```{r}
@@ -370,22 +419,16 @@ if (cache_ok && nrow(summary_df) > 0) {
   summary_df |>
     mutate(
       alpha_lbl = sprintf("%.3f (p=%.3f)", alpha_hat, lr_p),
-      pi_lbl    = sprintf("%.3f", pi_hat)
+      pi_lbl    = sprintf("%.3f", pi_hat),
+      frac_flagged = round(frac_flagged, 3)
     ) |>
-    mutate(across(c(frac_flagged, imv_1plg_mix, imv_1plg_ag,
-                     imv_rasch_purified, imv_3pl_mix, imv_3pl_ag),
-                  ~ ifelse(is.na(.x), NA, round(.x, 4)))) |>
     select(table, m, n_participants, n_items, n_heldout,
-           pi_lbl, alpha_lbl, frac_flagged,
-           imv_1plg_mix, imv_1plg_ag, imv_rasch_purified, imv_3pl_mix, imv_3pl_ag) |>
+           pi_lbl, alpha_lbl, frac_flagged) |>
     knitr::kable(
-      align = "lrrrrrlrrrrr",
+      align = "lrrrrrl",
       col.names = c("Table", "m", "N", "J", "N held-out",
-                    "π̂ (Mixture)", "α̂ (1PL-AG, p)", "Frac. flagged (Purified)",
-                    "IMV(1PLg,Mix)", "IMV(1PLg,AG)", "IMV(Rasch,Purified)",
-                    "IMV(3PL,Mix)", "IMV(3PL,AG)"),
-      caption = paste0("Per-table results (single ", holdout_frac * 100,
-                        "% held-out split per table)")
+                    "π̂ (Mixture)", "α̂ (1PL-AG, p)", "Frac. flagged (Purified)"),
+      caption = "Per-table model-internal diagnostics"
     )
 } else {
   cat("Results not yet computed -- run vignettes/guessing_compute.R.")
@@ -393,13 +436,54 @@ if (cache_ok && nrow(summary_df) > 0) {
 ```
 
 ```{r}
+#| label: imv-vs-rasch-table
+if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
+  imv_vs_rasch_df |>
+    mutate(imv = round(imv, 4)) |>
+    pivot_wider(names_from = model, values_from = imv) |>
+    select(table, all_of(model_order)) |>
+    knitr::kable(
+      align = "lrrrrrr",
+      caption = paste0("IMV(Rasch, model) for every model, on held-out cells ",
+                        "(single ", holdout_frac * 100, "% split per table)")
+    )
+}
+```
+
+```{r}
+#| label: imv-vs-rasch-plot
+#| fig-width: 9
+#| fig-height: 5.5
+if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
+  ggplot(imv_vs_rasch_df, aes(x = table, y = imv, fill = model)) +
+    geom_col(position = "stack") +
+    geom_hline(yintercept = 0, color = "grey30", linewidth = 0.3) +
+    scale_fill_manual(values = model_colors, breaks = model_order) +
+    coord_flip() +
+    labs(x = NULL, y = "IMV(Rasch, model)", fill = "Model",
+         title = "Predictive gain (or cost) relative to Rasch, stacked within table") +
+    theme(legend.position = "bottom")
+}
+```
+
+Stacking is within-table only -- each bar sums that table's six IMV(Rasch,
+model) values, with positive contributions extending right of zero and
+negative ones extending left, so the bar's net position (not any single
+segment) shows the overall balance of gains and costs for that table.
+`IMV(Rasch,3PL)` (green) is included per the caveat above; treat its
+segment as not-yet-real.
+
+```{r}
 #| label: highlight-picks
 if (cache_ok && nrow(summary_df) > 0) {
-  no_guess_tbl <- summary_df |> arrange(desc(pi_hat)) |> slice(1)
-  guess_tbl    <- summary_df |> arrange(pi_hat) |> slice(1)
-  disagree_tbl <- summary_df |>
-    filter(!is.na(imv_1plg_mix), !is.na(imv_1plg_ag)) |>
-    mutate(disagree = abs(sign(imv_1plg_mix) - sign(imv_1plg_ag))) |>
+  imv_wide <- imv_vs_rasch_df |> pivot_wider(names_from = model, values_from = imv)
+  picks_df <- summary_df |> left_join(imv_wide, by = "table")
+
+  no_guess_tbl <- picks_df |> arrange(desc(pi_hat)) |> slice(1)
+  guess_tbl    <- picks_df |> arrange(pi_hat) |> slice(1)
+  disagree_tbl <- picks_df |>
+    filter(!is.na(Mixture), !is.na(`1PL-AG`)) |>
+    mutate(disagree = abs(sign(Mixture) - sign(`1PL-AG`))) |>
     arrange(desc(disagree)) |> slice(1)
 }
 ```
@@ -412,22 +496,20 @@ if (cache_ok && nrow(summary_df) > 0) {
 
   no_guess_lbl <- if (no_guess_tbl$pi_hat > 0.95) "Safety-valve-suppressed / least guessing detected" else "Least guessing detected (of tables run so far)"
   cat(sprintf(
-    "**%s**: `%s` has \\u03c0\\u0302 = %.3f -- the Mixture model assigns the largest engaged share of the tables run so far, with IMV over the 1PLg of %s. %s\n\n",
-    no_guess_lbl, no_guess_tbl$table, no_guess_tbl$pi_hat,
-    ifelse(is.na(no_guess_tbl$imv_1plg_mix), "not available (1PLg did not converge)", sprintf("%.4f", no_guess_tbl$imv_1plg_mix)),
+    "**%s**: `%s` has \\u03c0\\u0302 = %.3f -- the Mixture model assigns the largest engaged share of the tables run so far, with IMV(Rasch,Mixture) of %.4f. %s\n\n",
+    no_guess_lbl, no_guess_tbl$table, no_guess_tbl$pi_hat, no_guess_tbl$Mixture,
     if (no_guess_tbl$pi_hat > 0.95) "A near-zero IMV here is not a failure of the Mixture model; it is the safety-valve property working as intended -- there is nothing for it to correct." else ""
   ))
 
   cat(sprintf(
-    "**Substantial guessing detected**: `%s` has \\u03c0\\u0302 = %.3f, meaning the Mixture model assigns roughly %.0f%% of response weight to the guessing class, with an IMV over the 1PLg of %s.\n\n",
-    guess_tbl$table, guess_tbl$pi_hat, 100 * (1 - guess_tbl$pi_hat),
-    ifelse(is.na(guess_tbl$imv_1plg_mix), "not available (1PLg did not converge)", sprintf("%.4f", guess_tbl$imv_1plg_mix))
+    "**Substantial guessing detected**: `%s` has \\u03c0\\u0302 = %.3f, meaning the Mixture model assigns roughly %.0f%% of response weight to the guessing class, with IMV(Rasch,Mixture) of %.4f.\n\n",
+    guess_tbl$table, guess_tbl$pi_hat, 100 * (1 - guess_tbl$pi_hat), guess_tbl$Mixture
   ))
 
   if (nrow(disagree_tbl) > 0 && disagree_tbl$disagree > 0) {
     cat(sprintf(
-      "**Where methods disagree**: `%s` shows the 1PLg-vs-Mixture and 1PLg-vs-1PL-AG comparisons pointing in different directions (IMV(1PLg,Mix) = %.4f vs. IMV(1PLg,AG) = %.4f) -- a reminder that these three lenses model genuinely different mechanisms and won't always agree on which correction (if any) is worth its complexity.\n\n",
-      disagree_tbl$table, disagree_tbl$imv_1plg_mix, disagree_tbl$imv_1plg_ag
+      "**Where methods disagree**: `%s` shows the Mixture and 1PL-AG comparisons against Rasch pointing in different directions (IMV(Rasch,Mixture) = %.4f vs. IMV(Rasch,1PL-AG) = %.4f) -- a reminder that these two lenses model genuinely different mechanisms and won't always agree on which correction (if any) is worth its complexity.\n\n",
+      disagree_tbl$table, disagree_tbl$Mixture, disagree_tbl$`1PL-AG`
     ))
   }
 }
