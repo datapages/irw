@@ -76,8 +76,35 @@ if (cache_ok) {
         tibble(table = r$table, model = model_keys[[key]], imv = imv_val)
       })
     }) |> mutate(model = factor(model, levels = model_order))
+
+    # Full pairwise IMV(m1, m2) for every ordered pair of the 7 specs (IMV is
+    # directional, so m1->m2 need not equal -m2->m1), per table -- computed
+    # once here from the same cached held-out predictions, then embedded as
+    # JSON for the user-selectable comparison widget below (no server-side
+    # computation needed at view time, and the page stays a static file).
+    all_model_keys <- c(rasch = "Rasch", pl2 = "2PL", plg = "1PLg", pl3 = "3PL",
+                         ag = "1PL-AG", mix = "Mixture", purified = "Purified Rasch")
+    pairwise_imv <- map(.res$raw, function(r) {
+      y <- r$true_vals
+      out <- list()
+      for (k1 in names(all_model_keys)) {
+        p1 <- r$preds[[k1]]
+        if (is.null(p1) || all(is.na(p1))) next
+        row <- list()
+        for (k2 in names(all_model_keys)) {
+          if (k1 == k2) next
+          p2 <- r$preds[[k2]]
+          row[[all_model_keys[[k2]]]] <- if (is.null(p2) || all(is.na(p2))) NA_real_ else compute_imv(p1, p2, y)
+        }
+        out[[all_model_keys[[k1]]]] <- row
+      }
+      out
+    })
+    names(pairwise_imv) <- map_chr(.res$raw, "table")
+    pairwise_imv_json <- jsonlite::toJSON(pairwise_imv, auto_unbox = TRUE, na = "null", digits = 5)
   } else {
     imv_vs_rasch_df <- tibble(table = character(), model = factor(character(), levels = model_order), imv = numeric())
+    pairwise_imv_json <- jsonlite::toJSON(list())
   }
 } else {
   summary_df <- tibble(
@@ -90,6 +117,7 @@ if (cache_ok) {
     lr_stat = numeric(), lr_p = numeric(), frac_flagged = numeric()
   )
   imv_vs_rasch_df <- tibble(table = character(), model = factor(character(), levels = model_order), imv = numeric())
+  pairwise_imv_json <- jsonlite::toJSON(list())
   date_run <- Sys.Date(); holdout_frac <- 0.2; subsample_n <- 3000
   is_provisional <- FALSE
 }
@@ -414,26 +442,6 @@ held-out cells. That puts all six non-Rasch specifications for a table on
 one shared scale: positive means "beats plain Rasch out of sample," negative
 means "costs something relative to just ignoring guessing entirely."
 
-::: {.callout-warning}
-**`IMV(Rasch,3PL)` is known unreliable and should not be read as a finding.**
-The free 3PL fits used `mirt`'s `beta` prior on the guessing parameter `g`,
-but `mirt` stores `g` internally on a transformed scale, not the raw [0,1]
-probability scale -- `beta` evaluates the Beta(5,17) density on the wrong
-scale entirely, and the fix (`expbeta`, which applies `plogis()` first,
-exactly as `mirt`'s own documentation specifies for 3PL/4PL lower
-asymptotes) was verified but not yet re-run across the batch. The symptom
-is systematic: every table's 3PL guessing parameter collapsed to
-$g \approx 0.5$ regardless of true chance level, producing predicted
-probabilities floored near 0.5 (confirmed on `enem_2014_1mil_ch`: mean
-predicted P(correct) of 0.52 against a true base rate of 0.29). All other
-columns are unaffected -- the bug is isolated to the free-3PL fit itself
-(confirmed by checking `mirt`'s handling of `pars='values'`, used by 1PLg
-and unaffected, versus its `PRIOR` mechanism, used only by 2PL's `a1` prior,
-also unaffected, and 3PL's `g` prior, which is broken). Left in the table
-and plot below for transparency rather than hidden, per instruction, but
-treat every `IMV(Rasch,3PL)` entry as not yet a real result.
-:::
-
 ```{r}
 #| label: results-table
 if (cache_ok && nrow(summary_df) > 0) {
@@ -471,27 +479,117 @@ if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
 }
 ```
 
+The table above fixes the baseline at Rasch. The widget below lets you pick
+*any* two of the seven specifications and see `IMV(m1, m2)` -- m1 as
+baseline, m2 as the model being evaluated -- across every table, without
+re-fitting anything (every pairwise value was precomputed from the same
+cached held-out predictions used everywhere else on this page). IMV is
+directional, so `IMV(Rasch, 3PL)` and `IMV(3PL, Rasch)` are not
+mirror images of each other -- pick both orders if you want to see that
+asymmetry directly.
+
 ```{r}
-#| label: imv-vs-rasch-plot
-#| fig-width: 9
-#| fig-height: 5.5
-if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
-  ggplot(imv_vs_rasch_df, aes(x = model, y = imv, fill = table)) +
-    geom_col(position = position_dodge2(preserve = "single")) +
-    geom_hline(yintercept = 0, color = "grey30", linewidth = 0.3) +
-    scale_fill_brewer(palette = "Paired") +
-    coord_flip() +
-    labs(x = NULL, y = "IMV(Rasch, model)", fill = "Table",
-         title = "Predictive gain (or cost) relative to Rasch, grouped by model") +
-    theme(legend.position = "bottom")
+#| label: pairwise-imv-widget
+#| results: asis
+if (cache_ok) {
+  model_names_js <- jsonlite::toJSON(names(model_colors), auto_unbox = FALSE)
+  widget_html <- sprintf('
+<div class="pairwise-widget" style="border:1px solid #dee2e6;border-radius:6px;padding:1rem 1.25rem;margin:1rem 0;">
+<div style="display:flex;flex-wrap:wrap;gap:1.25rem;align-items:center;margin-bottom:0.75rem;">
+<label style="font-weight:600;font-size:0.9rem;">Baseline (m1):
+<select id="pw-m1" style="margin-left:0.4rem;"></select>
+</label>
+<label style="font-weight:600;font-size:0.9rem;">Compared model (m2):
+<select id="pw-m2" style="margin-left:0.4rem;"></select>
+</label>
+</div>
+<svg id="pw-svg" viewBox="0 0 700 420" style="width:100%%;max-width:700px;height:auto;display:block;"></svg>
+</div>
+
+<script>
+(function() {
+var pairwiseData = %s;
+var modelNames = %s;
+var tableNames = Object.keys(pairwiseData);
+
+var m1Sel = document.getElementById("pw-m1");
+var m2Sel = document.getElementById("pw-m2");
+var svg = document.getElementById("pw-svg");
+
+modelNames.forEach(function(name) {
+var o1 = document.createElement("option"); o1.value = name; o1.textContent = name;
+m1Sel.appendChild(o1);
+var o2 = document.createElement("option"); o2.value = name; o2.textContent = name;
+m2Sel.appendChild(o2);
+});
+m1Sel.value = "Rasch";
+m2Sel.value = "Mixture";
+
+var W = 700, H = 420, mL = 170, mR = 20, mT = 10, mB = 30;
+var plotW = W - mL - mR, plotH = H - mT - mB;
+
+function draw() {
+var m1 = m1Sel.value, m2 = m2Sel.value;
+
+var rows = tableNames.map(function(t) {
+var v = (pairwiseData[t][m1] || {})[m2];
+return { table: t, imv: (v === undefined || v === null) ? null : v };
+});
+
+if (m1 === m2) {
+svg.innerHTML = "<text x=\\"20\\" y=\\"40\\" font-size=\\"13\\" fill=\\"#666\\">Pick two different models.</text>";
+return;
+}
+
+var validVals = rows.filter(function(r) { return r.imv !== null; }).map(function(r) { return r.imv; });
+var maxAbs = Math.max(0.001, validVals.length ? Math.max.apply(null, validVals.map(Math.abs)) : 0.001);
+var rowH = plotH / rows.length;
+
+function px(v) { return mL + plotW / 2 + (v / maxAbs) * (plotW / 2); }
+
+var html = "";
+var zeroX = px(0);
+html += "<line x1=\\"" + zeroX + "\\" y1=\\"" + mT + "\\" x2=\\"" + zeroX + "\\" y2=\\"" + (mT + plotH) + "\\" stroke=\\"#888\\"/>";
+
+rows.forEach(function(r, i) {
+var yTop = mT + i * rowH + rowH * 0.15;
+var barH = rowH * 0.7;
+html += "<text x=\\"" + (mL - 8) + "\\" y=\\"" + (yTop + barH / 2 + 4) +
+"\\" font-size=\\"11\\" text-anchor=\\"end\\" fill=\\"#333\\">" + r.table + "</text>";
+if (r.imv === null) {
+html += "<text x=\\"" + (mL + 4) + "\\" y=\\"" + (yTop + barH / 2 + 4) +
+"\\" font-size=\\"11\\" fill=\\"#aaa\\">not available</text>";
+return;
+}
+var x1 = px(0), x2 = px(r.imv);
+var barX = Math.min(x1, x2), barW = Math.abs(x2 - x1);
+var color = r.imv >= 0 ? "#1baf7a" : "#d1495b";
+html += "<rect x=\\"" + barX + "\\" y=\\"" + yTop + "\\" width=\\"" + Math.max(barW, 0.5) +
+"\\" height=\\"" + barH + "\\" fill=\\"" + color + "\\"/>";
+var lblX = r.imv >= 0 ? x2 + 4 : x2 - 4;
+html += "<text x=\\"" + lblX + "\\" y=\\"" + (yTop + barH / 2 + 4) + "\\" font-size=\\"10\\" fill=\\"#333\\" text-anchor=\\"" +
+(r.imv >= 0 ? "start" : "end") + "\\">" + r.imv.toFixed(4) + "</text>";
+});
+
+html += "<text x=\\"" + (mL + plotW / 2) + "\\" y=\\"" + (H - 6) +
+"\\" font-size=\\"11\\" text-anchor=\\"middle\\" fill=\\"#333\\">IMV(" + m1 + ", " + m2 + ")</text>";
+svg.innerHTML = html;
+}
+
+m1Sel.addEventListener("change", draw);
+m2Sel.addEventListener("change", draw);
+draw();
+})();
+</script>
+', pairwise_imv_json, model_names_js)
+  # results:asis inserts this text back into the Markdown stream, where
+  # pandoc re-parses it as Markdown -- any line indented 4+ spaces reads as
+  # an indented code block (swallowing the actual HTML as escaped text, so
+  # the widget silently never renders). Strip leading whitespace from every
+  # line so nothing in the generated HTML/JS can trigger that rule.
+  cat(gsub("(?m)^[ \t]+", "", widget_html, perl = TRUE))
 }
 ```
-
-Bars are grouped by model (not by table) -- each model's bar group shows
-one bar per table, so you can see how consistently (or not) a given
-correction performs across tables, rather than comparing models within a
-single table. The `3PL` group is included per the caveat above; treat
-those bars as not-yet-real.
 
 ```{r}
 #| label: highlight-picks
