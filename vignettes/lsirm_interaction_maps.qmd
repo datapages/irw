@@ -312,16 +312,24 @@ summary_df |>
                digits = 3)
 ```
 
-The pattern that jumps out is not subtle: **every one of the 13
-polytomous/graded tables** -- including all 6 blind, hypothesis-free
-exploratory tables -- shows a decisive inclusion probability above 0.96.
-The 3 dichotomous tables split as originally scoped: two near-zero
-(`g308_sirt`, `blum_2018_imak_bin`) and one decisive
-(`credentialform_lnirt`, now the single highest inclusion probability in
-the whole set at 0.9996). A split that tracks response format this cleanly,
-appearing the moment the study set was widened with unrelated blind
-tables, is exactly the kind of pattern that deserves a validity check
-before being taken as a real substantive finding -- see the next section.
+**In plain terms:** "inclusion probability" is the model's own confidence,
+on a 0-to-1 scale, that the extra "interaction" ingredient is actually
+needed to explain the data -- above 0.5 means "yes, include it"; near 1
+means "yes, almost certainly"; near 0 means "no, an ordinary Rasch model
+already explains this fine." Read that way, the table above says something
+striking: **every single one of the 13 multi-point-scale tables** --
+including all 6 that were picked completely at random, with no reason to
+expect anything special -- comes back with the model over 96% sure the
+interaction ingredient is needed. The 3 right/wrong tables split the way
+we originally expected going in: two come back near-certain it's *not*
+needed (`g308_sirt`, `blum_2018_imak_bin`), and one comes back the most
+certain of anything in the whole set that it *is* needed
+(`credentialform_lnirt`, at 99.96% confidence). A split that tracks
+question format (right/wrong vs. multi-point scale) this cleanly --
+especially once random, unrelated tables were thrown in and still followed
+the same pattern -- is a red flag worth checking before trusting it as a
+real finding about these tables, rather than a quirk of how the tool
+handles multi-point scales. That check is the next section.
 
 ### Interaction maps
 
@@ -373,12 +381,16 @@ spread across nearly every polytomous panel regardless of role
 
 ## Is this really about response format, or is the estimator biased?
 
-A split this clean -- every polytomous table positive, most dichotomous
-tables null -- is more consistent with an estimator quirk than with 13
-independent substantive discoveries, so before interpreting it, the
-question needs to be turned on the tool itself: does `lsirmgrm_ss()`
-report high inclusion probability on *any* graded-response data, even data
-built with zero true interaction?
+A split this clean -- every multi-point-scale table positive, most
+right/wrong tables null -- is more consistent with a quirk in the tool
+than with 13 independent real discoveries. Put plainly: before believing
+"multi-point scales have hidden structure and right/wrong tests mostly
+don't," we need to rule out the boring explanation that the fitting method
+itself just runs hot on any multi-point-scale data, whether or not
+anything real is going on. So the question gets turned on the tool: does
+`lsirmgrm_ss()` (the multi-point-scale version of the fitting method) claim
+high confidence on *any* multi-point-scale data, even data we build by
+hand to have zero true interaction?
 
 ```{r}
 #| label: null-calibration
@@ -411,24 +423,30 @@ tibble(
   knitr::kable(col.names = c("Case", "P(gamma > 0)", "Gamma"))
 ```
 
-The estimator passes this check: on data simulated with no true interaction
-whatsoever, `lsirmgrm_ss()` correctly recovers a near-zero inclusion
-probability (`r sprintf("%.3f", .cache$null_calibration$pi_estimate)`) and
-a near-zero gamma. That rules out the crudest possible explanation (the
-graded spike-and-slab implementation always says yes), and shifts the
-weight of evidence toward this being a real property of the tables
-themselves rather than a software bug -- but it does not fully resolve the
-question, and the study-set design confounds two things that would need to
-be teased apart to go further:
+The tool passes this check: fed data with no true interaction at all, it
+correctly comes back unconfident (`r sprintf("%.3f", .cache$null_calibration$pi_estimate)`
+out of 1, essentially "no") rather than falsely claiming there's something
+there. **In plain terms, that rules out the laziest explanation** -- the
+method doesn't just rubber-stamp "yes" on every multi-point-scale dataset
+regardless of content -- and shifts the weight of evidence toward the
+13-for-13 result being a real property of these particular tables, not a
+broken tool. But it doesn't fully settle the question, because of a
+mix-up baked into which tables happened to land in each bucket:
 
-**Response format and instrument domain are nearly perfectly aliased in
-this study set.** Every dichotomous table here is a cognitive-ability task
-(testlet reading comprehension, a credentialing exam, figural analogies);
-every polytomous table (with one partial exception, `face_memory_test`, a
-graded confidence/memory task rather than a personality scale) is a
-Likert-type personality, attitude, or clinical self-report scale
-(conscientiousness, disgust sensitivity, autism screening, depression/
-anxiety/stress, and so on). Likert personality batteries are well known to
+**Response format and what the tables actually measure are tangled
+together here, almost perfectly.** Every right/wrong table in this set is
+a cognitive-ability task (testlet reading comprehension, a credentialing
+exam, figural analogies); every multi-point-scale table (with one partial
+exception, `face_memory_test`, a graded confidence/memory task rather than
+a personality scale) is a Likert-type personality, attitude, or clinical
+self-report scale (conscientiousness, disgust sensitivity, autism
+screening, depression/anxiety/stress, and so on). So we can't yet tell
+whether the pattern above is really about *how questions are answered*
+(right/wrong vs. a 1-5 scale) or about *what's being measured* (ability
+vs. personality/attitude) -- the two happen to line up perfectly in this
+batch of tables, like two variables that always move together, making it
+impossible to say from this data alone which one is actually driving the
+result. Likert personality batteries are well known to
 carry genuine item redundancy -- reverse-worded twins, near-duplicate
 phrasing, shared method variance, halo and acquiescence response styles --
 in a way ability tests are usually designed to avoid. So "format predicts a
