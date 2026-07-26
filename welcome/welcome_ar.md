@@ -1,7 +1,7 @@
 ---
 lang: ar
 dir: rtl
-pagetitle: "مستودع استجابات البنود (Item Response Warehouse)"
+pagetitle: "مستودع استجابات البنود (Item Response Warehouse, IRW)"
 ---
 
 <!--
@@ -13,7 +13,7 @@ Translator note: please do NOT translate the following —
 5. The language-switcher link line below (English · Français · ...) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate or reorder it.
 -->
 
-# مستودع استجابات البنود (Item Response Warehouse)
+# مستودع استجابات البنود (Item Response Warehouse, IRW)
 
 **مجموعة مجانية ومفتوحة من بيانات استجابات البنود الموحّدة، مخصصة لأبحاث القياس النفسي والقياس بشكل عام.**
 

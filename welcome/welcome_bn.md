@@ -1,6 +1,6 @@
 ---
 lang: bn
-pagetitle: "Item Response Warehouse (আইটেম রেসপন্স ওয়্যারহাউস)"
+pagetitle: "Item Response Warehouse (IRW; আইটেম রেসপন্স ওয়্যারহাউস)"
 ---
 
 <!--
@@ -12,7 +12,7 @@ Translator note: please do NOT translate the following —
 5. The language-switcher link line below (English · Français · ...) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate or reorder it.
 -->
 
-# Item Response Warehouse (আইটেম রেসপন্স ওয়্যারহাউস)
+# Item Response Warehouse (IRW; আইটেম রেসপন্স ওয়্যারহাউস)
 
 **সাইকোমেট্রিক্স ও পরিমাপ গবেষণার জন্য সুসংগত (harmonized) আইটেম রেসপন্স ডেটার একটি বিনামূল্যের, উন্মুক্ত সংগ্রহ।**
 

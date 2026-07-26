@@ -1,6 +1,6 @@
 ---
 lang: ja
-pagetitle: "Item Response Warehouse（項目反応データウェアハウス）"
+pagetitle: "Item Response Warehouse（IRW；項目反応データウェアハウス）"
 ---
 
 <!--
@@ -12,7 +12,7 @@ Translator note: please do NOT translate the following —
 5. The language-switcher link line below (English · Français · ...) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate or reorder it.
 -->
 
-# Item Response Warehouse（項目反応データウェアハウス）
+# Item Response Warehouse（IRW；項目反応データウェアハウス）
 
 **心理測定学および測定研究のための、無料で公開された統一形式の項目反応データ集です。**
 

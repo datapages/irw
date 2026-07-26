@@ -1,6 +1,6 @@
 ---
 lang: zh-Hant
-pagetitle: "Item Response Warehouse（項目反應資料倉儲）"
+pagetitle: "Item Response Warehouse（IRW；項目反應資料倉儲）"
 ---
 
 <!--
@@ -12,7 +12,7 @@ Translator note: please do NOT translate the following —
 5. The language-switcher link line below (English · Français · ...) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate or reorder it.
 -->
 
-# Item Response Warehouse（項目反應資料倉儲）
+# Item Response Warehouse（IRW；項目反應資料倉儲）
 
 **一個免費、開放、經過統一格式化的項目反應資料集合，服務於心理計量學與測量研究。**
 

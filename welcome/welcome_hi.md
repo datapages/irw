@@ -1,6 +1,6 @@
 ---
 lang: hi
-pagetitle: "Item Response Warehouse (आइटम रिस्पॉन्स वेयरहाउस)"
+pagetitle: "Item Response Warehouse (IRW; आइटम रिस्पॉन्स वेयरहाउस)"
 ---
 
 <!--
@@ -12,7 +12,7 @@ Translator note: please do NOT translate the following —
 5. The language-switcher link line below (English · Français · ...) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate or reorder it.
 -->
 
-# Item Response Warehouse (आइटम रिस्पॉन्स वेयरहाउस)
+# Item Response Warehouse (IRW; आइटम रिस्पॉन्स वेयरहाउस)
 
 **मनोमिति (साइकोमेट्रिक्स) और मापन अनुसंधान के लिए, समरूप बनाए गए आइटम-प्रतिक्रिया डेटा का एक निःशुल्क, खुला संग्रह।**
 

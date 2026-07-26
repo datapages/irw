@@ -1,6 +1,6 @@
 ---
 lang: vi
-pagetitle: "Item Response Warehouse (Kho Dữ liệu Phản hồi Câu hỏi)"
+pagetitle: "Item Response Warehouse (IRW; Kho Dữ liệu Phản hồi Câu hỏi)"
 ---
 
 <!--
@@ -12,7 +12,7 @@ Translator note: please do NOT translate the following —
 5. The language-switcher link line below (English · Français · ...) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate or reorder it.
 -->
 
-# Item Response Warehouse (Kho Dữ liệu Phản hồi Câu hỏi)
+# Item Response Warehouse (IRW; Kho Dữ liệu Phản hồi Câu hỏi)
 
 **Một bộ sưu tập miễn phí, mở, gồm dữ liệu phản hồi câu hỏi (item response) đã được chuẩn hóa, phục vụ nghiên cứu đo lường tâm lý học (psychometrics) và đo lường nói chung.**
 

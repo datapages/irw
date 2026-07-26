@@ -1,6 +1,6 @@
 ---
 lang: zh
-pagetitle: "Item Response Warehouse（项目反应数据仓库）"
+pagetitle: "Item Response Warehouse（IRW；项目反应数据仓库）"
 ---
 
 <!--
@@ -12,7 +12,7 @@ Translator note: please do NOT translate the following —
 5. The language-switcher link line below (English · Français · ...) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate or reorder it.
 -->
 
-# Item Response Warehouse（项目反应数据仓库）
+# Item Response Warehouse（IRW；项目反应数据仓库）
 
 **一个免费、开放的、经过统一格式化的项目反应数据集合，服务于心理测量学与测量学研究。**
 

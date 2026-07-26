@@ -1,6 +1,6 @@
 ---
 lang: tr
-pagetitle: "Item Response Warehouse (Madde Tepki Deposu)"
+pagetitle: "Item Response Warehouse (IRW; Madde Tepki Deposu)"
 ---
 
 <!--
@@ -12,7 +12,7 @@ Translator note: please do NOT translate the following —
 5. The language-switcher link line below (English · Français · ...) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate or reorder it.
 -->
 
-# Item Response Warehouse (Madde Tepki Deposu)
+# Item Response Warehouse (IRW; Madde Tepki Deposu)
 
 **Psikometri ve ölçme araştırmaları için ücretsiz, açık ve uyumlaştırılmış madde tepki verilerinden oluşan bir koleksiyon.**
 

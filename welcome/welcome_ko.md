@@ -1,6 +1,6 @@
 ---
 lang: ko
-pagetitle: "Item Response Warehouse (문항 반응 데이터 저장소)"
+pagetitle: "Item Response Warehouse (IRW; 문항 반응 데이터 저장소)"
 ---
 
 <!--
@@ -12,7 +12,7 @@ Translator note: please do NOT translate the following —
 5. The language-switcher link line below (English · Français · ...) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate or reorder it.
 -->
 
-# Item Response Warehouse (문항 반응 데이터 저장소)
+# Item Response Warehouse (IRW; 문항 반응 데이터 저장소)
 
 **심리측정학 및 측정 연구를 위한, 무료로 공개된 통합 문항 반응 데이터 모음입니다.**
 

@@ -1,6 +1,6 @@
 ---
 lang: fr
-pagetitle: "L'Item Response Warehouse"
+pagetitle: "L'Item Response Warehouse (IRW; Entrepôt de réponse à l’item)"
 ---
 
 <!--
@@ -12,7 +12,7 @@ Translator note: please do NOT translate the following —
 5. The language-switcher link line below (English · Français · ...) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate or reorder it.
 -->
 
-# L'Item Response Warehouse
+# L'Item Response Warehouse (IRW; Entrepôt de réponse à l’item)
 
 **Une collection libre et ouverte de données de réponses aux items harmonisées, destinée à la recherche en psychométrie et en mesure.**
 

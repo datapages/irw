@@ -1,6 +1,6 @@
 ---
 lang: ru
-pagetitle: "Item Response Warehouse (Хранилище данных об ответах на задания)"
+pagetitle: "Item Response Warehouse (IRW; Хранилище данных об ответах на задания)"
 ---
 
 <!--
@@ -12,7 +12,7 @@ Translator note: please do NOT translate the following —
 5. The language-switcher link line below (English · Français · ...) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate or reorder it.
 -->
 
-# Item Response Warehouse (Хранилище данных об ответах на задания)
+# Item Response Warehouse (IRW; Хранилище данных об ответах на задания)
 
 **Бесплатная, открытая коллекция унифицированных данных об ответах на задания для исследований в области психометрики и измерений.**
 
