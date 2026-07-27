@@ -184,7 +184,7 @@ IRW 包含**數百個資料集**（稱為「表」），每個資料集都是一
 
 ## 資料標準
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="網格示意圖:展示每筆反應皆位於一個 id 與一個 item 的交會點上。" class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="示意圖:展示一個按 id 與 item 上色的網格,透過箭頭轉換為包含 id、item、resp 欄位的長格式表格,其中每個 resp 儲存格的顏色與網格中對應的來源儲存格顏色一致。" class="welcome-figure">
 
 
 每個 IRW 資料集都被轉換為**長格式**：每列對應一筆反應紀錄。每列至少包含三項資訊：

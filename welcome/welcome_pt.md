@@ -184,7 +184,7 @@ Os conjuntos de dados variam amplamente em tamanho (de algumas centenas de respo
 
 ## O padrão de dados
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagrama em grade mostrando que cada resposta está na interseção de um id e um item." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagrama mostrando uma grade colorida de células id-item transformada, por meio de uma seta, em uma tabela em formato longo com colunas id, item e resp, em que a cor de cada célula resp corresponde à sua célula de origem na grade." class="welcome-figure">
 
 
 Todo conjunto de dados do IRW é reformatado em **formato longo**: uma linha por resposta. No mínimo, cada linha contém três informações:

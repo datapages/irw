@@ -184,7 +184,7 @@ Die Datensätze variieren stark in ihrer Größe (von einigen Hundert Antworten 
 
 ## Der Datenstandard
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Rasterdiagramm, das zeigt, dass jede Antwort am Schnittpunkt einer id und eines item liegt." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagramm, das ein farbiges Raster aus id-item-Zellen zeigt, das über einen Pfeil in eine Tabelle im Long-Format mit den Spalten id, item und resp umgeformt wird, wobei die Farbe jeder resp-Zelle der Farbe ihrer Ursprungszelle im Raster entspricht." class="welcome-figure">
 
 
 Jeder IRW-Datensatz wird in ein **Long-Format** umgeformt: eine Zeile pro Antwort. Jede Zeile enthält mindestens drei Informationen:

@@ -184,7 +184,7 @@ IRW 包含**数百个数据集**（称为"表"），每个数据集都是一组�
 
 ## 数据标准
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="网格示意图:展示每个反应都位于一个 id 与一个 item 的交叉点上。" class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="示意图:展示一个按 id 与 item 着色的网格,通过箭头转换为包含 id、item、resp 列的长格式表格,其中每个 resp 单元格的颜色与网格中对应的源单元格颜色一致。" class="welcome-figure">
 
 
 每个 IRW 数据集都被转换为**长格式**：每行对应一条反应记录。每行至少包含三项信息：

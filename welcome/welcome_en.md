@@ -184,7 +184,7 @@ Datasets vary widely in size (from a few hundred responses to many millions) and
 
 ## The data standard
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Grid diagram showing that each response sits at the intersection of one id and one item." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagram showing a colored grid of id-by-item cells reshaped, via an arrow, into a long-format table of id, item, and resp columns, where each resp cell's color matches its source cell in the grid." class="welcome-figure">
 
 
 Every IRW dataset is reshaped into **long format**: one row per response. At minimum, each row has three pieces of information:

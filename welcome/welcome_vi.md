@@ -184,7 +184,7 @@ Các bộ dữ liệu có sự khác biệt lớn về quy mô (từ vài trăm 
 
 ## Chuẩn dữ liệu
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Sơ đồ dạng lưới cho thấy mỗi phản hồi nằm ở giao điểm của một id và một item." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="Sơ đồ cho thấy một lưới màu gồm các ô id-item được chuyển đổi, thông qua một mũi tên, thành một bảng ở định dạng dài gồm các cột id, item và resp, trong đó màu của mỗi ô resp khớp với màu của ô nguồn tương ứng trong lưới." class="welcome-figure">
 
 
 Mọi bộ dữ liệu IRW đều được định dạng lại thành **định dạng dài (long format)**: mỗi dòng ứng với một phản hồi. Mỗi dòng tối thiểu chứa ba thông tin:

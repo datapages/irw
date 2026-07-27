@@ -184,7 +184,7 @@ Les jeux de données varient considérablement en taille (de quelques centaines 
 
 ## Le standard de données
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Schéma en grille montrant que chaque réponse se situe à l&#x27;intersection d&#x27;un id et d&#x27;un item." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="Schéma montrant une grille colorée de cellules id-item transformée, via une flèche, en un tableau au format long comportant les colonnes id, item et resp, où la couleur de chaque cellule resp correspond à sa cellule d'origine dans la grille." class="welcome-figure">
 
 
 Chaque jeu de données de l'IRW est remis en forme au **format long** : une ligne par réponse. Au minimum, chaque ligne comporte trois éléments d'information :

@@ -185,7 +185,7 @@ IRW شامل **صدها مجموعه‌داده** ("جدول") است که هر 
 
 ## استاندارد داده
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="نموداری شبکه‌ای که نشان می‌دهد هر پاسخ در تقاطع یک id و یک item قرار دارد." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="نموداری که شبکه‌ای رنگی از خانه‌های id-item را نشان می‌دهد که با یک فلش به جدولی در قالب بلند با ستون‌های id، item و resp تبدیل شده است؛ رنگ هر خانه‌ی resp با رنگ خانه‌ی مبدأ آن در شبکه مطابقت دارد." class="welcome-figure">
 
 
 هر مجموعه‌داده‌ی IRW به **قالب بلند (long format)** تبدیل می‌شود: یک ردیف برای هر پاسخ. حداقل، هر ردیف شامل سه بخش اطلاعات است:

@@ -184,7 +184,7 @@ IRW ประกอบด้วย **ชุดข้อมูลหลายร�
 
 ## มาตรฐานข้อมูล
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="แผนภาพตารางแสดงให้เห็นว่าคำตอบแต่ละรายการอยู่ที่จุดตัดระหว่าง id หนึ่งกับ item หนึ่ง" class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="แผนภาพแสดงกริดสีที่มีเซลล์ id-item ซึ่งถูกแปลงผ่านลูกศรให้เป็นตารางรูปแบบยาวที่มีคอลัมน์ id, item และ resp โดยสีของแต่ละเซลล์ resp ตรงกับสีของเซลล์ต้นทางในกริด" class="welcome-figure">
 
 
 ชุดข้อมูล IRW ทุกชุดจะถูกปรับให้อยู่ใน **รูปแบบยาว (long format)**: หนึ่งแถวต่อหนึ่งคำตอบ อย่างน้อยที่สุด แต่ละแถวจะมีข้อมูลสามส่วน ได้แก่

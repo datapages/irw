@@ -184,7 +184,7 @@ I dataset variano molto per dimensione (da poche centinaia di risposte a molti m
 
 ## Lo standard dei dati
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagramma a griglia che mostra come ogni risposta si trovi all'intersezione di un id e di un item." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagramma che mostra una griglia colorata di celle id-item trasformata, tramite una freccia, in una tabella in formato lungo con colonne id, item e resp, dove il colore di ogni cella resp corrisponde a quello della cella di origine nella griglia." class="welcome-figure">
 
 
 Ogni dataset IRW viene riorganizzato in **formato lungo (long format)**: una riga per risposta. Come minimo, ogni riga contiene tre informazioni:

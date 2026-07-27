@@ -185,7 +185,7 @@ Translator note: please do NOT translate the following —
 
 ## معيار البيانات
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="رسم شبكي يوضح أن كل استجابة تقع عند تقاطع معرف واحد (id) وبند واحد (item)." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="رسم بياني يوضح شبكة ملوّنة من خلايا id-item، تتحول عبر سهم إلى جدول بالصيغة الطويلة (long format) يضم أعمدة id وitem وresp، حيث يطابق لون كل خلية resp لون خليتها الأصلية في الشبكة." class="welcome-figure">
 
 
 يُعاد تشكيل كل مجموعة بيانات في IRW وفق **الصيغة الطويلة (long format)**: صف واحد لكل استجابة. يحتوي كل صف، كحد أدنى، على ثلاث معلومات:

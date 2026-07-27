@@ -184,7 +184,7 @@ Los conjuntos de datos varían ampliamente en tamaño (desde unos pocos cientos 
 
 ## El estándar de datos
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagrama de cuadrícula que muestra que cada respuesta se encuentra en la intersección de un id y un item." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagrama que muestra una cuadrícula coloreada de celdas id-item transformada, mediante una flecha, en una tabla en formato largo con columnas id, item y resp, donde el color de cada celda resp coincide con el de su celda de origen en la cuadrícula." class="welcome-figure">
 
 
 Cada conjunto de datos del IRW se reformatea en **formato largo**: una fila por respuesta. Como mínimo, cada fila contiene tres elementos de información:

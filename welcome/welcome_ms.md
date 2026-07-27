@@ -184,7 +184,7 @@ Set data berbeza dengan ketara dari segi saiz (daripada beberapa ratus respons k
 
 ## Standard data
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Rajah grid menunjukkan bahawa setiap respons berada pada persilangan satu id dan satu item." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="Rajah menunjukkan grid berwarna bagi sel id-item, yang diubah melalui anak panah menjadi jadual format panjang dengan lajur id, item dan resp, dengan warna setiap sel resp sepadan dengan warna sel sumbernya dalam grid." class="welcome-figure">
 
 
 Setiap set data IRW dibentuk semula ke dalam **format panjang (long format)**: satu baris bagi setiap respons. Sekurang-kurangnya, setiap baris mengandungi tiga maklumat:

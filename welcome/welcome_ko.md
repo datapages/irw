@@ -184,7 +184,7 @@ IRW의 모든 데이터셋에 대해 다음 두 가지가 성립합니다:
 
 ## 데이터 표준
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="각 반응이 하나의 id와 하나의 item이 교차하는 지점에 위치함을 보여주는 격자 다이어그램." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="id와 item으로 구성된 색상별 격자가 화살표를 통해 id, item, resp 열을 가진 롱 포맷 표로 변환되는 모습을 보여주는 다이어그램. 각 resp 셀의 색상은 격자에서 해당 원본 셀의 색상과 일치한다." class="welcome-figure">
 
 
 모든 IRW 데이터셋은 **롱 포맷(long format)**으로 재구성됩니다: 반응 하나당 한 행입니다. 각 행은 최소한 다음 세 가지 정보를 담고 있습니다:

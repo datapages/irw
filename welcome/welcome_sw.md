@@ -184,7 +184,7 @@ Seti za data hutofautiana sana kwa ukubwa (kutoka majibu mia chache hadi mamilio
 
 ## Kiwango cha data
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Mchoro wa gridi unaoonyesha kuwa kila jibu liko kwenye makutano ya id moja na item moja." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="Mchoro unaoonyesha gridi yenye rangi ya seli za id-item, iliyobadilishwa kupitia mshale kuwa jedwali la muundo mrefu lenye safu za id, item na resp, ambapo rangi ya kila seli ya resp inalingana na rangi ya seli yake asili kwenye gridi." class="welcome-figure">
 
 
 Kila seti ya data ya IRW hubadilishwa kuwa **muundo mrefu (long format)**: mstari mmoja kwa kila jibu. Kwa kiwango cha chini kabisa, kila mstari una vipande vitatu vya taarifa:

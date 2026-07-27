@@ -185,7 +185,7 @@ IRW מכיל **מאות מערכי נתונים** ("טבלאות"), וכל אח�
 
 ## תקן הנתונים
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="תרשים רשת המראה שכל תגובה נמצאת בנקודת החיתוך של id אחד ו-item אחד." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="תרשים המציג רשת צבעונית של תאי id-item, המומרת באמצעות חץ לטבלה בפורמט ארוך עם עמודות id, item ו-resp, כאשר צבעו של כל תא resp תואם לצבע התא המקורי שלו ברשת." class="welcome-figure">
 
 
 כל מערך נתונים של IRW מעוצב מחדש לפורמט **ארוך (long format)**: שורה אחת לכל תגובה. לכל הפחות, כל שורה מכילה שלושה פרטי מידע:

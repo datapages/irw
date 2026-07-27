@@ -184,7 +184,7 @@ Datasets verschillen sterk in omvang (van enkele honderden responsen tot vele mi
 
 ## De datastandaard
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Rasterdiagram dat laat zien dat elke respons zich op het snijpunt van een id en een item bevindt." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagram met een gekleurd rooster van id-item-cellen dat via een pijl wordt omgevormd tot een tabel in lang formaat met kolommen id, item en resp, waarbij de kleur van elke resp-cel overeenkomt met die van de bijbehorende broncel in het rooster." class="welcome-figure">
 
 
 Elke IRW-dataset wordt omgevormd naar **lang formaat (long format)**: één rij per respons. Elke rij bevat minimaal drie stukjes informatie:

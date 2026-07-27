@@ -184,7 +184,7 @@ Zbiory danych różnią się znacznie pod względem wielkości (od kilkuset odpo
 
 ## Standard danych
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagram siatki pokazujący, że każda odpowiedź znajduje się na przecięciu jednego id i jednego item." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagram przedstawiający kolorową siatkę komórek id-item, przekształconą za pomocą strzałki w tabelę w formacie długim z kolumnami id, item i resp, gdzie kolor każdej komórki resp odpowiada kolorowi jej komórki źródłowej w siatce." class="welcome-figure">
 
 
 Każdy zbiór danych IRW jest przekształcany do **formatu długiego (long format)**: jeden wiersz na odpowiedź. Każdy wiersz zawiera co najmniej trzy informacje:

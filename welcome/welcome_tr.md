@@ -184,7 +184,7 @@ Veri kümeleri boyut açısından (birkaç yüz tepkiden milyonlarcasına kadar)
 
 ## Veri standardı
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Her yanıtın bir id ile bir item&#x27;in kesişim noktasında yer aldığını gösteren ızgara şeması." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="id-item hücrelerinden oluşan renkli bir ızgaranın, bir okla id, item ve resp sütunlarına sahip uzun format bir tabloya dönüştürüldüğünü gösteren şema; her resp hücresinin rengi, ızgaradaki kaynak hücresinin rengiyle eşleşir." class="welcome-figure">
 
 
 Her IRW veri kümesi **uzun format (long format)**'a dönüştürülür: her tepki için bir satır. Her satır en az üç bilgi parçası içerir:

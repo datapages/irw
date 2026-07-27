@@ -185,7 +185,7 @@ IRW میں شامل ہر ڈیٹاسیٹ کے بارے میں دو باتیں س�
 
 ## ڈیٹا کا معیار
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="ایک گرڈ خاکہ جو دکھاتا ہے کہ ہر ریسپانس ایک id اور ایک item کے تقاطع پر واقع ہے۔" class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="ایک خاکہ جو id-item خانوں پر مشتمل ایک رنگین گرڈ دکھاتا ہے، جسے ایک تیر کے ذریعے id، item اور resp کالموں پر مشتمل لانگ فارمیٹ ٹیبل میں تبدیل کیا گیا ہے، جہاں ہر resp خانے کا رنگ گرڈ میں اس کے اصل خانے کے رنگ سے مماثل ہے۔" class="welcome-figure">
 
 
 ہر IRW ڈیٹاسیٹ کو **لانگ فارمیٹ (long format)** میں ڈھالا جاتا ہے: ہر ریسپانس کے لیے ایک قطار۔ کم از کم، ہر قطار میں تین معلومات ہوتی ہیں:

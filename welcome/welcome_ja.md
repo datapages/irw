@@ -184,7 +184,7 @@ IRW に含まれるすべてのデータセットについて、次の2点が当
 
 ## データ標準
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="各反応が一つの id と一つの item の交点に位置することを示す格子状の図。" class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="id と item のセルからなる色分けされたグリッドが、矢印によって id・item・resp 列を持つロング形式の表に変換される様子を示す図。各 resp セルの色は、グリッド内の元となったセルの色と一致する。" class="welcome-figure">
 
 
 すべての IRW データセットは**ロング形式(long format)**に再構成されます:1反応につき1行です。各行には少なくとも次の3つの情報が含まれます:
