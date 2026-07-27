@@ -1,0 +1,257 @@
+---
+lang: hi
+pagetitle: "Item Response Warehouse (IRW; आइटम रिस्पॉन्स वेयरहाउस)"
+---
+
+<!--
+Translator note: please do NOT translate the following —
+1. Column names in backticks/tables (`id`, `item`, `resp`, `rt`, `age`, `rater`) — these are literal data field names.
+2. The contents of fenced code blocks (```r / ```python), including comments.
+3. Paper titles in the "Learn more" citations — translate only surrounding text, not the titles themselves.
+4. URLs and DOIs.
+5. The language-switcher dropdown block below (HTML/CSS/JS, no visible text to translate) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate, reorder, or hand-edit it per file; the "current language" state is computed at runtime by the script from the page URL.
+-->
+
+# Item Response Warehouse (IRW; आइटम रिस्पॉन्स वेयरहाउस)
+
+**मनोमिति (साइकोमेट्रिक्स) और मापन अनुसंधान के लिए, समरूप बनाए गए आइटम-प्रतिक्रिया डेटा का एक निःशुल्क, खुला संग्रह।**
+
+[शोध-पत्र पढ़ें](https://doi.org/10.3758/s13428-025-02796-y) **(ओपन एक्सेस)**
+
+<div class="lang-switch"><button type="button" class="lang-switch-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="lang-switch-panel" aria-label="Choose a language"><i class="bi bi-globe2" aria-hidden="true"></i><i class="bi bi-chevron-down" aria-hidden="true"></i></button><div class="lang-switch-panel" id="lang-switch-panel" hidden><label class="visually-hidden" for="lang-switch-search">Search languages</label><div class="lang-switch-search-wrap"><i class="bi bi-search" aria-hidden="true"></i><input type="text" id="lang-switch-search" class="lang-switch-search" autocomplete="off" placeholder="Search languages"></div><ul class="lang-switch-list" role="listbox"></ul></div></div>
+<noscript>
+
+[English](/) · [Français](/welcome/welcome_fr.html) · [Español](/welcome/welcome_es.html) · [中文](/welcome/welcome_zh.html) · [한국어](/welcome/welcome_ko.html) · [العربية](/welcome/welcome_ar.html) · [日本語](/welcome/welcome_ja.html) · [Português](/welcome/welcome_pt.html) · [Deutsch](/welcome/welcome_de.html) · [हिन्दी](/welcome/welcome_hi.html) · [Русский](/welcome/welcome_ru.html) · [繁體中文](/welcome/welcome_zh-hant.html) · [বাংলা](/welcome/welcome_bn.html) · [Türkçe](/welcome/welcome_tr.html) · [Tiếng Việt](/welcome/welcome_vi.html)
+
+</noscript>
+<script>
+(function () {
+  var LANGS = [
+    { native: "English",      en: "English",                lang: "en" },
+    { native: "Français",     en: "French",                 lang: "fr" },
+    { native: "Español",      en: "Spanish",                lang: "es" },
+    { native: "中文",          en: "Chinese Simplified",     lang: "zh-hans" },
+    { native: "한국어",        en: "Korean",                 lang: "ko" },
+    { native: "العربية",      en: "Arabic",                 lang: "ar" },
+    { native: "日本語",        en: "Japanese",               lang: "ja" },
+    { native: "Português",    en: "Portuguese",             lang: "pt" },
+    { native: "Deutsch",      en: "German",                 lang: "de" },
+    { native: "हिन्दी",        en: "Hindi",                  lang: "hi" },
+    { native: "Русский",      en: "Russian",                lang: "ru" },
+    { native: "繁體中文",       en: "Chinese Traditional",    lang: "zh-hant" },
+    { native: "বাংলা",        en: "Bengali",                lang: "bn" },
+    { native: "Türkçe",       en: "Turkish",                lang: "tr" },
+    { native: "Tiếng Việt",   en: "Vietnamese",             lang: "vi" }
+  ];
+
+  document.querySelectorAll(".lang-switch").forEach(function (root) {
+    var trigger = root.querySelector(".lang-switch-trigger");
+    var panel = root.querySelector(".lang-switch-panel");
+    var search = root.querySelector(".lang-switch-search");
+    var list = root.querySelector(".lang-switch-list");
+
+    // Hrefs are read from the <noscript> fallback rather than hardcoded,
+    // because Quarto resolves that markdown's links to correct relative
+    // paths per page at build time; a literal string in this script would
+    // stay absolute and break under file:// or non-root deployments.
+    var hrefByNative = {};
+    var noscriptEl = root.nextElementSibling;
+    if (noscriptEl && noscriptEl.tagName === "NOSCRIPT") {
+      var tmp = document.createElement("div");
+      tmp.innerHTML = noscriptEl.textContent;
+      Array.prototype.forEach.call(tmp.querySelectorAll("a"), function (a) {
+        hrefByNative[a.textContent.trim()] = a.href;
+      });
+    }
+
+    // Current language is read from <html lang="...">, which Quarto sets
+    // from each page's own frontmatter, rather than guessed from the URL.
+    var currentLang = (document.documentElement.lang || "").toLowerCase();
+
+    function render(filterText) {
+      list.innerHTML = "";
+      var q = (filterText || "").trim().toLowerCase();
+      var matches = LANGS.filter(function (entry) {
+        return !q || entry.native.toLowerCase().indexOf(q) !== -1 || entry.en.toLowerCase().indexOf(q) !== -1;
+      });
+
+      if (matches.length === 0) {
+        var empty = document.createElement("li");
+        empty.className = "lang-switch-empty";
+        empty.textContent = "No matches";
+        list.appendChild(empty);
+        return;
+      }
+
+      matches.forEach(function (entry) {
+        var li = document.createElement("li");
+        li.setAttribute("role", "option");
+        if (entry.lang === currentLang) {
+          li.className = "lang-switch-current";
+          li.setAttribute("aria-current", "true");
+          var check = document.createElement("i");
+          check.className = "bi bi-check2";
+          check.setAttribute("aria-hidden", "true");
+          li.appendChild(check);
+          li.appendChild(document.createTextNode(" " + entry.native));
+        } else {
+          var a = document.createElement("a");
+          a.href = hrefByNative[entry.native] || "#";
+          a.textContent = entry.native;
+          li.appendChild(a);
+        }
+        list.appendChild(li);
+      });
+    }
+
+    function openPanel() {
+      panel.hidden = false;
+      trigger.setAttribute("aria-expanded", "true");
+      search.value = "";
+      render("");
+      search.focus();
+    }
+
+    function closePanel() {
+      panel.hidden = true;
+      trigger.setAttribute("aria-expanded", "false");
+    }
+
+    trigger.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (panel.hidden) { openPanel(); } else { closePanel(); }
+    });
+
+    search.addEventListener("input", function () {
+      render(search.value);
+    });
+
+    panel.addEventListener("click", function (e) {
+      e.stopPropagation();
+    });
+
+    document.addEventListener("click", function () {
+      if (!panel.hidden) closePanel();
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !panel.hidden) {
+        closePanel();
+        trigger.focus();
+      }
+    });
+
+    render("");
+  });
+})();
+</script>
+
+---
+
+## IRW क्यों मौजूद है
+
+शिक्षा, मनोविज्ञान और संबंधित क्षेत्रों में मापन का अध्ययन करने वाले शोधकर्ताओं को अपनी विधियों का परीक्षण और तुलना करने के लिए वास्तविक डेटा की आवश्यकता होती है। यह डेटा पहले से ही बड़ी मात्रा में मौजूद है। लेकिन यह कई अध्ययनों में बिखरा हुआ है, अनेक अलग-अलग प्रारूपों में संग्रहीत है, और अस्पष्ट दस्तावेज़ीकरण या लाइसेंसिंग के कारण अक्सर इसका पुनः उपयोग करना कठिन होता है।
+
+यह एक सुपरिचित समस्या है। अन्य क्षेत्रों ने साझा, मानकीकृत डेटा संसाधन बनाकर इसे हल किया है। कंप्यूटर विज्ञान में, लेबल किए गए चित्रों के संग्रह ImageNet ने शोधकर्ताओं को एक साझा मानदंड प्रदान किया और कृत्रिम बुद्धिमत्ता (AI) में तेज़ प्रगति लाने में मदद की। आनुवंशिकी और तंत्रिका विज्ञान ने भी अपने-अपने डेटा के लिए इसी तरह के साझा संसाधन बनाए हैं।
+
+Item Response Warehouse (IRW) आइटम-प्रतिक्रिया डेटा के लिए वही काम करता है। यह सैकड़ों मौजूदा डेटासेट को एक साथ लाता है और उन्हें एक साझा प्रारूप में ढालता है — ताकि किसी एक डेटासेट पर परखी गई विधि को सैकड़ों अन्य डेटासेट पर भी आसानी से परखा जा सके।
+
+## IRW में क्या है
+
+IRW में **सैकड़ों डेटासेट** ("टेबल") हैं, जिनमें से प्रत्येक व्यक्तिगत प्रतिक्रियाओं का एक संग्रह है। जब भी कोई व्यक्ति (या कोई अन्य इकाई) किसी आइटम (या किसी अन्य मापन-प्रोब) पर प्रतिक्रिया देता है, तो एक प्रतिक्रिया उत्पन्न होती है। उदाहरणों में शामिल हैं:
+
+- शिक्षा और योग्यता परीक्षणों में छात्रों के उत्तर
+- व्यक्तित्व या दृष्टिकोण मापने वाले सर्वेक्षण आइटम
+- मानव मूल्यांकनकर्ताओं द्वारा दी गई रेटिंग
+- कोई भी अन्य स्थिति जिसमें मापन-प्रोब के एक समूह पर बार-बार प्रतिक्रियाएं दी जाती हों
+
+IRW के हर डेटासेट के बारे में दो बातें सत्य हैं:
+
+- **खुला।** प्रत्येक डेटासेट पुनः उपयोग के लिए लाइसेंस-प्राप्त है। इसका स्रोत दस्तावेज़ीकृत है, और इसे IRW प्रारूप में बदलने के लिए उपयोग किया गया कोड सार्वजनिक है।
+- **समरूप।** प्रत्येक डेटासेट को उसी सरल संरचना (नीचे वर्णित) में ढाला गया है, जिससे एक ही विश्लेषण कोड को कई डेटासेट पर बिना या न्यूनतम बदलाव के चलाया जा सकता है।
+
+डेटासेट आकार में (कुछ सौ प्रतिक्रियाओं से लेकर कई लाख तक) और प्रतिक्रिया के प्रकार में (हाँ/नहीं आइटम, बहु-श्रेणी रेटिंग, आंशिक-अंक स्कोर, और अन्य) व्यापक रूप से भिन्न होते हैं। प्रत्येक डेटासेट के साथ पूर्व-गणना की गई मेटाडेटा भी आती है — प्रतिभागियों की संख्या, आइटमों की संख्या, प्रतिक्रिया घनत्व, विषय क्षेत्र, और अन्य वर्णनात्मक टैग — ताकि शोधकर्ता बिना सभी डेटासेट पहले डाउनलोड और प्रोसेस किए, प्रासंगिक डेटासेट ढूँढ़ सकें।
+
+## डेटा मानक
+
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="एक ग्रिड आरेख जो दिखाता है कि प्रत्येक प्रतिक्रिया एक id और एक item के प्रतिच्छेदन पर स्थित होती है।" class="welcome-figure">
+
+
+प्रत्येक IRW डेटासेट को **लॉन्ग फॉर्मेट (long format)** में ढाला जाता है: प्रति प्रतिक्रिया एक पंक्ति। न्यूनतम रूप से, प्रत्येक पंक्ति में तीन जानकारियाँ होती हैं:
+
+| कॉलम | अर्थ |
+|---|---|
+| `id` | प्रतिक्रिया किसने (या किसने) दी — आमतौर पर एक व्यक्ति |
+| `item` | किस मापन-प्रोब ने प्रतिक्रिया उत्पन्न की — आमतौर पर एक प्रश्न या कार्य |
+| `resp` | प्रतिक्रिया स्वयं, क्रमसूचक (ordinal) स्कोर के रूप में संग्रहीत |
+
+**उदाहरण:**
+
+| `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
+|----|------|------|-----|-----|-------|
+| 1  | Q1   | 1    | 2.3 | 26  | a     |
+| 1  | Q2   | 0    | 1.8 | 26  | a     |
+| 2  | Q1   | 1    | 2.1 | 31  | b     |
+| 2  | Q2   | 1    | 2.5 | 31  | b     |
+
+जब किसी डेटासेट में अतिरिक्त जानकारी शामिल होती है — जैसे प्रतिक्रिया समय, मूल्यांकनकर्ता की पहचान, आयु जैसे सहचर (covariates) — तो यह जानकारी अतिरिक्त, सुसंगत रूप से नामित कॉलमों में संग्रहीत होती है। यह एक सरल संरचना मापन की एक बहुत विस्तृत श्रेणी को कवर करती है, जिसके कारण विश्लेषण कोड को केवल एक बार लिखकर पूरे वेयरहाउस पर लागू किया जा सकता है।
+
+इस मानक का पूर्ण तकनीकी विवरण [itemresponsewarehouse.org/standard.html](/standard.qmd) पर उपलब्ध है। आइटम टेक्स्ट, युग्म-प्रतिस्पर्धा (pairwise-competition) डेटा, और नाममात्र (क्रमरहित श्रेणी) प्रतिक्रियाओं के लिए भी अधिक विशिष्ट मानक मौजूद हैं।
+
+## इसका उपयोग कैसे करें
+
+आप कितना स्वचालन चाहते हैं, इस पर निर्भर करते हुए IRW डेटा प्राप्त करने के तीन तरीके हैं।
+
+**1. वेब ब्राउज़र में ब्राउज़ करें**
+[IRW डेटा ब्राउज़र](/data.qmd) पर सीधे डेटासेट और उनके मेटाडेटा का अन्वेषण करें — किसी खाते की आवश्यकता नहीं। किसी संपूर्ण डेटासेट को डाउनलोड करने के लिए एक निःशुल्क [Redivis](https://redivis.com) खाता आवश्यक है, क्योंकि यही वह प्लेटफ़ॉर्म है जो अंतर्निहित डेटा को होस्ट करता है।
+
+**2. `irw` पैकेज का उपयोग करें (अनुशंसित)**
+`irw` पैकेज, जो **R** और **Python** दोनों के लिए उपलब्ध है, डेटा खोजने, फ़िल्टर करने और डाउनलोड करने के लिए सरल फ़ंक्शन प्रदान करता है।
+
+```r
+# R
+devtools::install_github("itemresponsewarehouse/Rpkg")
+library(irw)
+
+irw_info()                     # overview of the IRW
+irw_list_tables()              # list all available tables
+irw_filter(var = "rt")         # find tables that include response times
+df <- irw_fetch("4thgrade_math_sirt")   # download one table
+```
+
+```python
+# Python
+# pip install "git+https://github.com/itemresponsewarehouse/Python-pkg.git"
+import irw
+
+irw.info()
+irw.list_tables()
+irw.filter(var="rt")
+df = irw.fetch("4thgrade_math_sirt")
+```
+
+पैकेज का पहली बार उपयोग करने पर, आपसे एक निःशुल्क Redivis खाते से लॉग इन करने के लिए कहा जाएगा। उसके बाद, कोड की एक ही पंक्ति किसी भी डेटासेट को सीधे R या Python में डाउनलोड कर देती है। इसके बाद, डेटा मानक सॉफ़्टवेयर से विश्लेषण के लिए तैयार होता है — उदाहरण के लिए, आइटम रिस्पॉन्स थ्योरी या फैक्टर विश्लेषण पैकेज।
+
+**3. Redivis की क्लाइंट लाइब्रेरी का सीधे उपयोग करें**
+निम्न-स्तरीय वर्कफ़्लो या R/Python से बाहर के वर्कफ़्लो के लिए, डेटा को Redivis की अपनी R और Python क्लाइंट लाइब्रेरी के माध्यम से भी एक्सेस किया जा सकता है। अधिक जानकारी के लिए [शुरुआत करें मार्गदर्शिका](/getstarted.qmd) देखें।
+
+### केवल डेटा डाउनलोड करने से आगे
+
+IRW परियोजना में यह भी शामिल है:
+
+- **[विग्नेट्स (vignettes)](/vignettes/index.qmd)** का एक बढ़ता हुआ संग्रह — क्लासिक और नई मापन विधियों को एक साथ कई IRW डेटासेट पर लागू करने वाले व्यावहारिक उदाहरण
+- वास्तविक डेटा के साथ मनोमिति पढ़ाने के लिए **प्रशिक्षण संसाधन और अभ्यास सेट**
+- अपने स्वयं के डेटासेट वेयरहाउस में जोड़ने के इच्छुक शोधकर्ताओं के लिए **एक योगदान प्रक्रिया**
+
+## अधिक जानें
+
+- Domingue et al. (2025). *An introduction to the Item Response Warehouse (IRW): A resource for enhancing data usage in psychometrics.* Behavior Research Methods. [doi:10.3758/s13428-025-02796-y](https://doi.org/10.3758/s13428-025-02796-y)
+- Nadela, Lee, Jain, Gupta, Zhang & Domingue (2026). *The Item Response Warehouse: What It Is, How to Use It, and Targets for Potential Improvements.* Chinese/English Journal of Educational Measurement and Evaluation. [doi:10.59863/CIJG4549](https://doi.org/10.59863/CIJG4549)
+- वेबसाइट: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
+- कोड: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
+
+यदि आप अपने कार्य में IRW डेटा का उपयोग करते हैं, तो कृपया मूल डेटा को उद्धृत करें (हमने ऐसा करने के लिए एक सुविधा प्रदान की है)। यह भी बहुत अच्छा होगा यदि आप ऊपर दिए गए परिचयात्मक शोध-पत्र को भी उद्धृत करें।
+
+---
+
+*कोई प्रश्न, प्रतिक्रिया, या किसी डेटासेट में योगदान देना चाहते हैं? [संपर्क पृष्ठ](/contact.qmd) पर जाएँ या [GitHub](https://github.com/itemresponsewarehouse) पर एक "issue" खोलें।*
