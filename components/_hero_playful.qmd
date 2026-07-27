@@ -1,12 +1,16 @@
 <!--
-Playful homepage hero collage (originally prototyped as a standalone HTML
-mockup, irw_homepage_hero_playful_v2.html). All markup/CSS/animation logic
-below is that prototype, unchanged in visual language -- the only thing this
-port does is source the stamp numbers and ×N badges from data/hero_stats.json
-instead of hand-typed strings, plus scope every CSS selector under
-`.irw-hero` (the prototype used bare selectors like `.card`, `.row`, and `.count`,
-which would collide with Bootstrap/Cosmo classes of the same name once this
-stops being a standalone page).
+Playful homepage hero collage. Originally prototyped as a standalone HTML
+mockup (irw_homepage_hero_playful_v2.html) with cards scattered at random
+tilts; restructured 2026-07-27 per reviewer feedback (David Lang, Michael
+Leon Chrzan) into a deliberate hierarchy -- TABLES and PEOPLE circles on top,
+ITEMS circle below with item-type cards ringed around it and connected by
+lines, domain bubbles clustered at TABLES, person-characteristic bubbles
+clustered at PEOPLE, no tilt, no corner confetti. Stamp numbers and ×N
+badges still come from data/hero_stats.json; domain and person-characteristic
+labels are illustrative (not pulled from a metadata field -- IRW has no
+domain taxonomy to source them from), same status as the item-type examples.
+All CSS selectors are scoped under `.irw-hero` since this is included inside
+the main site, not rendered standalone.
 -->
 
 ```{r}
@@ -79,11 +83,6 @@ html`<style>
 }
 .irw-hero .hero{position:relative; padding:34px 20px 24px; max-width:1080px; margin:0 auto;}
 
-.irw-hero .confetti{position:absolute; pointer-events:none;}
-.irw-hero .confetti.dot{border-radius:50%;}
-.irw-hero .confetti.sq{border-radius:4px;}
-.irw-hero .confetti.star{font-size:20px; line-height:1;}
-
 .irw-hero .head{position:relative; text-align:center; margin-bottom:2px; z-index:5;}
 .irw-hero .kicker{
   display:inline-block; font-family:Fredoka; font-weight:600; font-size:12px;
@@ -109,7 +108,11 @@ html`<style>
 }
 .irw-hero .cta:hover{transform:translate(-2px,-2px); box-shadow:5px 5px 0 var(--irw-hero-pink); color:#fff;}
 
-.irw-hero .collage{position:relative; height:400px; margin-top:14px;}
+/* collage: TABLES + PEOPLE clusters on top, ITEMS circle + ringed item-type
+   cards below, connected by lines drawn into .connector-svg at runtime. */
+.irw-hero .collage{position:relative; height:600px; margin-top:14px;}
+.irw-hero .connector-svg{position:absolute; inset:0; width:100%; height:100%; z-index:2; pointer-events:none;}
+
 .irw-hero .card{
   position:absolute; width:148px; background:#fff; border:3px solid var(--irw-hero-ink);
   border-radius:15px; padding:10px 12px 12px; box-shadow:5px 5px 0 var(--irw-hero-ink);
@@ -121,8 +124,8 @@ html`<style>
 }
 .irw-hero .card .lbl .tag-dot{width:7px; height:7px; border-radius:50%; display:inline-block; flex:0 0 auto;}
 @keyframes irwHeroBob{
-  0%,100%{ transform: translateY(0) rotate(var(--rot)); }
-  50%{ transform: translateY(-7px) rotate(var(--rot)); }
+  0%,100%{ transform: translateY(0); }
+  50%{ transform: translateY(-7px); }
 }
 
 .irw-hero .count{
@@ -136,10 +139,21 @@ html`<style>
   position:absolute; width:118px; height:118px; border-radius:50%; background:var(--irw-hero-pink);
   border:3px solid var(--irw-hero-ink); display:flex; flex-direction:column; align-items:center;
   justify-content:center; text-align:center; box-shadow:5px 5px 0 var(--irw-hero-ink);
-  animation:irwHeroBob ease-in-out infinite; color:#fff;
+  animation:irwHeroBob ease-in-out infinite; color:#fff; z-index:8;
 }
 .irw-hero .stamp .n{font-family:Fredoka; font-weight:700; font-size:22px; line-height:1;}
 .irw-hero .stamp .l{font-family:Fredoka; font-weight:600; font-size:9.5px; letter-spacing:.02em; margin-top:3px; text-transform:uppercase;}
+
+/* white "field" bubbles: breadth-of-domain examples clustered at TABLES,
+   person-characteristic examples clustered at PEOPLE. Static (no bob/tilt)
+   so the two anchor circles read as a stable frame around the item ring. */
+.irw-hero .field-bubble{
+  position:absolute; display:inline-flex; align-items:center; gap:6px;
+  background:#fff; border:2.5px solid var(--irw-hero-ink); border-radius:999px;
+  padding:6px 13px; font-family:Fredoka; font-weight:600; font-size:11px; color:var(--irw-hero-ink);
+  white-space:nowrap; box-shadow:3px 3px 0 var(--irw-hero-ink); z-index:6;
+}
+.irw-hero .field-bubble .tag-dot{width:7px; height:7px; border-radius:50%; display:inline-block; flex:0 0 auto;}
 
 .irw-hero .row{display:flex; align-items:center; gap:6px; margin-bottom:5px; font-size:10.5px; font-weight:700;}
 .irw-hero .opt-circle{width:13px; height:13px; border-radius:50%; border:2.5px solid var(--irw-hero-ink); flex:0 0 auto; transition:background .25s;}
@@ -156,11 +170,6 @@ html`<style>
 .irw-hero .toggle .knob2{position:absolute; top:1px; left:1px; width:14px; height:14px; border-radius:50%; background:#fff; border:2px solid var(--irw-hero-ink); transition:left .3s;}
 .irw-hero .toggle.tt .knob2{left:23px;}
 .irw-hero .toggle-lbl{font-family:Fredoka; font-size:10px; text-align:center; margin-top:4px; font-weight:600;}
-.irw-hero .emoji-row{display:flex; justify-content:space-between; font-size:16px; margin-top:1px;}
-.irw-hero .emoji-row span{opacity:.35; transition:opacity .25s, transform .25s;}
-.irw-hero .emoji-row span.on{opacity:1; transform:scale(1.3);}
-.irw-hero .scaleline{display:flex; justify-content:space-between; margin-top:6px;}
-.irw-hero .scaleline .opt-circle{width:11px; height:11px;}
 
 .irw-hero footer.meta{
   text-align:center; font-size:11.5px; color:#8a8496; max-width:600px; margin:14px auto 0; padding-top:12px;
@@ -206,16 +215,15 @@ fmtWords = (n) => {
 //| echo: false
 
 // Fixed card -> response-category mapping (decision: explicit, not inferred
-// at render time). "thumbs" has no entry in the v2 design -- intentionally
-// left un-badged, matching the prototype.
+// at render time). Reduced to 5 item-type examples (from 8) so the ring
+// around the ITEMS circle stays legible now that domain and person-
+// characteristic bubbles were added around TABLES/PEOPLE.
 heroCategoryMap = ({
   true_false:      2,
   multiple_choice: 4,
   likert:          5,
-  stars:           5,
   checkbox:        3,
-  confidence:      "7+",
-  mood:            6
+  confidence:      "7+"
 })
 
 heroCategoryLookup = new Map(
@@ -237,8 +245,10 @@ heroRoot = {
   const intervals = [];
   const track = (id) => { intervals.push(id); return id; };
 
-  const cards = [
-    {kind:'card', top:'2%',  left:'1%',  rot:-6, color:'var(--irw-hero-blue)', count: heroBadge('true_false'),
+  // Item-type cards ring around the ITEMS circle (center ~44%/58%), opening
+  // upward toward the TABLES/PEOPLE row above.
+  const itemCards = [
+    {top:'34%', left:'2%',  color:'var(--irw-hero-blue)', count: heroBadge('true_false'),
      label:'True or False?', build:c=>{
         const wrap = document.createElement('div');
         wrap.innerHTML = `<div class="toggle" id="tg"><div class="knob2"></div></div><div class="toggle-lbl" id="tgl">FALSE</div>`;
@@ -247,7 +257,7 @@ heroRoot = {
         let on=false;
         track(setInterval(()=>{ on=!on; tg.classList.toggle('tt',on); lbl.textContent = on?'TRUE':'FALSE'; }, 1400));
     }},
-    {kind:'card', top:'0%', left:'23%', rot:4, color:'var(--irw-hero-pink)', count: heroBadge('multiple_choice'),
+    {top:'68%', left:'4%',  color:'var(--irw-hero-pink)', count: heroBadge('multiple_choice'),
      label:'Pick one answer', build:c=>{
         const opts=['A) Paris','B) Rome','C) Cairo','D) Lima'];
         c.innerHTML = opts.map((o,i)=>`<div class="row"><span class="opt-circle" data-i="${i}"></span>${o}</div>`).join('');
@@ -255,20 +265,9 @@ heroRoot = {
         let i=0; circ[0].classList.add('on');
         track(setInterval(()=>{ circ[i].classList.remove('on'); i=(i+1)%circ.length; circ[i].classList.add('on'); }, 900));
     }},
-    {kind:'stamp', top:'4%', left:'46%', rot:-4, color:'var(--irw-hero-purple)', n: fmtInt(totals.n_tables) + "+", l:'tables'},
-    {kind:'card', top:'0%', left:'67%', rot:5, color:'var(--irw-hero-yellow)', count: heroBadge('stars'),
-     label:'Rate this item', build:c=>{
-        c.innerHTML = `<div class="stars" id="st"></div>`;
-        const el = c.querySelector('#st');
-        let n=0;
-        track(setInterval(()=>{
-          n = n%5 + 1;
-          el.innerHTML = '<span class="star-f">'+'★'.repeat(n)+'</span>'+'<span class="star-e">'+'★'.repeat(5-n)+'</span>';
-        }, 700));
-    }},
-    {kind:'card', top:'30%', left:'2%', rot:6, color:'var(--irw-hero-green)', count: heroBadge('likert'),
+    {top:'84%', left:'34%', color:'var(--irw-hero-green)', count: heroBadge('likert'),
      label:'Strongly agree?', build:c=>{
-        c.innerHTML = `<div class="scaleline">${[0,1,2,3,4].map(i=>`<span class="opt-circle" data-i="${i}"></span>`).join('')}</div>
+        c.innerHTML = `<div class="scaleline" style="display:flex; justify-content:space-between;">${[0,1,2,3,4].map(i=>`<span class="opt-circle" data-i="${i}"></span>`).join('')}</div>
                        <div style="display:flex; justify-content:space-between; font-size:8px; color:#8a8496; margin-top:3px;"><span>disagree</span><span>agree</span></div>`;
         const circ = [...c.querySelectorAll('.opt-circle')];
         let i=0, dir=1; circ[0].classList.add('on');
@@ -278,8 +277,7 @@ heroRoot = {
           circ[i].classList.add('on');
         }, 650));
     }},
-    {kind:'stamp', top:'26%', left:'26%', rot:5, color:'var(--irw-hero-orange)', n: fmtAbbrev(totals.n_participants), l:'people'},
-    {kind:'card', top:'26%', left:'48%', rot:-5, color:'var(--irw-hero-purple)', count: heroBadge('checkbox'),
+    {top:'84%', left:'64%', color:'var(--irw-hero-purple)', count: heroBadge('checkbox'),
      label:'Check all that apply', build:c=>{
         const items=['Fast','Careful','Confident'];
         c.innerHTML = items.map((t,i)=>`<div class="row"><span class="check" data-i="${i}"></span>${t}</div>`).join('');
@@ -291,7 +289,7 @@ heroRoot = {
           i=(i+1)%boxes.length;
         }, 1000));
     }},
-    {kind:'card', top:'30%', left:'71%', rot:4, color:'var(--irw-hero-blue)', count: heroBadge('confidence'),
+    {top:'34%', left:'80%', color:'var(--irw-hero-yellow)', count: heroBadge('confidence'),
      label:'How confident?', build:c=>{
         c.innerHTML = `<div class="track"><div class="knob" id="kn" style="left:0%"></div></div>
                        <div style="display:flex; justify-content:space-between; font-size:8px; color:#8a8496;"><span>0</span><span>100</span></div>`;
@@ -299,54 +297,133 @@ heroRoot = {
         let pos=0, dir=1;
         track(setInterval(()=>{ pos += dir*22; if(pos>=88||pos<=0) dir*=-1; kn.style.left=pos+'%'; }, 550));
     }},
-    {kind:'card', top:'60%', left:'12%', rot:-3, color:'var(--irw-hero-yellow)', count: heroBadge('mood'),
-     label:'How are you feeling?', build:c=>{
-        c.innerHTML = `<div class="emoji-row"><span>😠</span><span>🙁</span><span>😐</span><span>🙂</span><span>😄</span></div>`;
-        const em=[...c.querySelectorAll('span')];
-        let i=2, dir=1; em[i].classList.add('on');
-        track(setInterval(()=>{ em[i].classList.remove('on'); i+=dir; if(i===4||i===0) dir*=-1; em[i].classList.add('on'); }, 700));
-    }},
-    {kind:'stamp', top:'58%', left:'37%', rot:-6, color:'var(--irw-hero-green)', n: fmtAbbrev(totals.n_items) + "+", l:'items'},
-    {kind:'card', top:'62%', left:'60%', rot:5, color:'var(--irw-hero-pink)', count:null,
-     label:'Yes or no?', build:c=>{
-        c.innerHTML = `<div style="font-size:26px; text-align:center;" id="th">👍</div>`;
-        const el=c.querySelector('#th'); let up=true;
-        track(setInterval(()=>{ up=!up; el.textContent = up?'👍':'👎'; }, 1100));
-    }},
+  ];
+
+  // Illustrative only -- IRW has no domain taxonomy to pull this from, same
+  // status as the item-type examples above.
+  const domainBubbles = [
+    {top:'0%',  left:'0%',  color:'var(--irw-hero-blue)',   label:'Education'},
+    {top:'2%',  left:'36%', color:'var(--irw-hero-green)',  label:'Psychology'},
+    {top:'21%', left:'15%', color:'var(--irw-hero-orange)', label:'Health'},
+  ];
+  const personBubbles = [
+    {top:'0%',  left:'92%', color:'var(--irw-hero-pink)',   label:'Gender'},
+    {top:'2%',  left:'50%', color:'var(--irw-hero-purple)', label:'Age'},
+    {top:'21%', left:'74%', color:'var(--irw-hero-blue)',   label:'Ability'},
   ];
 
   const collage = document.createElement('div');
   collage.className = 'collage';
-  cards.forEach((cfg, idx) => {
-    const el = document.createElement('div');
-    el.style.top = cfg.top; el.style.left = cfg.left;
-    el.style.setProperty('--rot', cfg.rot + 'deg');
-    el.style.animationDuration = (4 + (idx % 3) * 0.7) + 's';
-    el.style.animationDelay = (idx * 0.25) + 's';
-    el.style.zIndex = 10 + idx;
 
-    if (cfg.kind === 'stamp') {
-      el.className = 'stamp';
-      el.style.background = cfg.color;
-      el.innerHTML = `<div class="n">${cfg.n}</div><div class="l">${cfg.l}</div>`;
-    } else {
-      el.className = 'card';
-      const lbl = document.createElement('div');
-      lbl.className = 'lbl';
-      lbl.innerHTML = `<span class="tag-dot" style="background:${cfg.color}"></span>${cfg.label}`;
-      el.appendChild(lbl);
-      if (cfg.count) {
-        const badge = document.createElement('div');
-        badge.className = 'count';
-        badge.textContent = cfg.count;
-        el.appendChild(badge);
-      }
-      const body = document.createElement('div');
-      el.appendChild(body);
-      cfg.build(body);
-    }
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('class', 'connector-svg');
+  collage.appendChild(svg);
+
+  let bobIdx = 0;
+  const nextBobStyle = (el) => {
+    el.style.animationDuration = (4 + (bobIdx % 3) * 0.7) + 's';
+    el.style.animationDelay = (bobIdx * 0.25) + 's';
+    bobIdx++;
+  };
+
+  // TABLES + PEOPLE stamps sit above the ITEMS stamp; item-type cards ring
+  // the ITEMS stamp and get connector lines drawn to it (below).
+  const tablesEl = document.createElement('div');
+  tablesEl.className = 'stamp';
+  tablesEl.style.top = '2%'; tablesEl.style.left = '14%';
+  tablesEl.style.background = 'var(--irw-hero-purple)';
+  tablesEl.innerHTML = `<div class="n">${fmtInt(totals.n_tables)}+</div><div class="l">tables</div>`;
+  nextBobStyle(tablesEl);
+  collage.appendChild(tablesEl);
+
+  const peopleEl = document.createElement('div');
+  peopleEl.className = 'stamp';
+  peopleEl.style.top = '2%'; peopleEl.style.left = '66%';
+  peopleEl.style.background = 'var(--irw-hero-orange)';
+  peopleEl.innerHTML = `<div class="n">${fmtAbbrev(totals.n_participants)}</div><div class="l">people</div>`;
+  nextBobStyle(peopleEl);
+  collage.appendChild(peopleEl);
+
+  domainBubbles.forEach(b => {
+    const el = document.createElement('div');
+    el.className = 'field-bubble';
+    el.style.top = b.top; el.style.left = b.left;
+    el.innerHTML = `<span class="tag-dot" style="background:${b.color}"></span>${b.label}`;
     collage.appendChild(el);
   });
+  personBubbles.forEach(b => {
+    const el = document.createElement('div');
+    el.className = 'field-bubble';
+    el.style.top = b.top; el.style.left = b.left;
+    el.innerHTML = `<span class="tag-dot" style="background:${b.color}"></span>${b.label}`;
+    collage.appendChild(el);
+  });
+
+  const itemsEl = document.createElement('div');
+  itemsEl.className = 'stamp';
+  itemsEl.style.top = '46%'; itemsEl.style.left = '42%';
+  itemsEl.style.background = 'var(--irw-hero-green)';
+  itemsEl.innerHTML = `<div class="n">${fmtAbbrev(totals.n_items)}+</div><div class="l">items</div>`;
+  nextBobStyle(itemsEl);
+  collage.appendChild(itemsEl);
+
+  const itemCardEls = itemCards.map(cfg => {
+    const el = document.createElement('div');
+    el.className = 'card';
+    el.style.top = cfg.top; el.style.left = cfg.left;
+    nextBobStyle(el);
+    const lbl = document.createElement('div');
+    lbl.className = 'lbl';
+    lbl.innerHTML = `<span class="tag-dot" style="background:${cfg.color}"></span>${cfg.label}`;
+    el.appendChild(lbl);
+    if (cfg.count) {
+      const badge = document.createElement('div');
+      badge.className = 'count';
+      badge.textContent = cfg.count;
+      el.appendChild(badge);
+    }
+    const body = document.createElement('div');
+    el.appendChild(body);
+    cfg.build(body);
+    collage.appendChild(el);
+    return el;
+  });
+
+  // Draw connector lines from each item-type card to the ITEMS circle using
+  // real measured positions (getBoundingClientRect), so the lines line up
+  // regardless of viewport width. Requires the collage to already be
+  // attached to the live document, so this runs after heroRoot is returned
+  // and OJS has inserted it -- hence the double rAF.
+  const layoutConnectors = () => {
+    const collageRect = collage.getBoundingClientRect();
+    if (collageRect.width === 0) return;
+    svg.setAttribute('viewBox', `0 0 ${collageRect.width} ${collageRect.height}`);
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    const itemsRect = itemsEl.getBoundingClientRect();
+    const itemsCenter = {
+      x: itemsRect.left + itemsRect.width / 2 - collageRect.left,
+      y: itemsRect.top + itemsRect.height / 2 - collageRect.top
+    };
+    itemCardEls.forEach(el => {
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2 - collageRect.left;
+      const cy = r.top + r.height / 2 - collageRect.top;
+      const line = document.createElementNS(svgNS, 'line');
+      line.setAttribute('x1', cx); line.setAttribute('y1', cy);
+      line.setAttribute('x2', itemsCenter.x); line.setAttribute('y2', itemsCenter.y);
+      line.setAttribute('stroke', '#1c1c22');
+      line.setAttribute('stroke-width', '2.5');
+      line.setAttribute('stroke-dasharray', '2 7');
+      line.setAttribute('stroke-linecap', 'round');
+      line.setAttribute('opacity', '0.35');
+      svg.appendChild(line);
+    });
+  };
+
+  requestAnimationFrame(() => requestAnimationFrame(layoutConnectors));
+  const resizeObserver = new ResizeObserver(() => layoutConnectors());
+  resizeObserver.observe(collage);
 
   const root = document.createElement('div');
   root.className = 'irw-hero';
@@ -373,21 +450,10 @@ heroRoot = {
 
   root.appendChild(heroEl);
 
-  const shapes = [
-    {t:'dot', top:'2%', left:'92%', size:10, color:'var(--irw-hero-green)'},
-    {t:'star',top:'88%', left:'88%', color:'var(--irw-hero-purple)'},
-    {t:'sq',  top:'90%', left:'2%', size:10, color:'var(--irw-hero-blue)'},
-  ];
-  shapes.forEach(s=>{
-    const d = document.createElement('div');
-    d.className = 'confetti ' + s.t;
-    d.style.top = s.top; d.style.left = s.left;
-    if (s.t === 'star') { d.textContent = '✦'; d.style.color = s.color; }
-    else { d.style.width = s.size + 'px'; d.style.height = s.size + 'px'; d.style.background = s.color; d.style.border = '2.5px solid var(--irw-hero-ink)'; }
-    heroEl.appendChild(d);
+  invalidation.then(() => {
+    intervals.forEach(id => clearInterval(id));
+    resizeObserver.disconnect();
   });
-
-  invalidation.then(() => intervals.forEach(id => clearInterval(id)));
 
   return root;
 }
