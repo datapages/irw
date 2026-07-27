@@ -9,16 +9,142 @@ Translator note: please do NOT translate the following —
 2. The contents of fenced code blocks (```r / ```python), including comments.
 3. Paper titles in the "Learn more" citations — translate only surrounding text, not the titles themselves.
 4. URLs and DOIs.
-5. The language-switcher link line below (English · Français · ...) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate or reorder it.
+5. The language-switcher dropdown block below (HTML/CSS/JS, no visible text to translate) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate, reorder, or hand-edit it per file; the "current language" state is computed at runtime by the script from the page URL.
 -->
 
 # Item Response Warehouse（IRW；項目反應資料倉儲）
 
 **一個免費、開放、經過統一格式化的項目反應資料集合，服務於心理計量學與測量研究。**
 
-[itemresponsewarehouse.org](https://itemresponsewarehouse.org) · [GitHub](https://github.com/itemresponsewarehouse) · [閱讀論文](https://doi.org/10.3758/s13428-025-02796-y)
+[閱讀論文](https://doi.org/10.3758/s13428-025-02796-y) **(開放取用)**
+
+<div class="lang-switch"><button type="button" class="lang-switch-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="lang-switch-panel" aria-label="Choose a language"><i class="bi bi-globe2" aria-hidden="true"></i><i class="bi bi-chevron-down" aria-hidden="true"></i></button><div class="lang-switch-panel" id="lang-switch-panel" hidden><label class="visually-hidden" for="lang-switch-search">Search languages</label><div class="lang-switch-search-wrap"><i class="bi bi-search" aria-hidden="true"></i><input type="text" id="lang-switch-search" class="lang-switch-search" autocomplete="off" placeholder="Search languages"></div><ul class="lang-switch-list" role="listbox"></ul></div></div>
+<noscript>
 
 [English](/) · [Français](/welcome/welcome_fr.html) · [Español](/welcome/welcome_es.html) · [中文](/welcome/welcome_zh.html) · [한국어](/welcome/welcome_ko.html) · [العربية](/welcome/welcome_ar.html) · [日本語](/welcome/welcome_ja.html) · [Português](/welcome/welcome_pt.html) · [Deutsch](/welcome/welcome_de.html) · [हिन्दी](/welcome/welcome_hi.html) · [Русский](/welcome/welcome_ru.html) · [繁體中文](/welcome/welcome_zh-hant.html) · [বাংলা](/welcome/welcome_bn.html) · [Türkçe](/welcome/welcome_tr.html) · [Tiếng Việt](/welcome/welcome_vi.html)
+
+</noscript>
+<script>
+(function () {
+  var LANGS = [
+    { native: "English",      en: "English",                lang: "en" },
+    { native: "Français",     en: "French",                 lang: "fr" },
+    { native: "Español",      en: "Spanish",                lang: "es" },
+    { native: "中文",          en: "Chinese Simplified",     lang: "zh-hans" },
+    { native: "한국어",        en: "Korean",                 lang: "ko" },
+    { native: "العربية",      en: "Arabic",                 lang: "ar" },
+    { native: "日本語",        en: "Japanese",               lang: "ja" },
+    { native: "Português",    en: "Portuguese",             lang: "pt" },
+    { native: "Deutsch",      en: "German",                 lang: "de" },
+    { native: "हिन्दी",        en: "Hindi",                  lang: "hi" },
+    { native: "Русский",      en: "Russian",                lang: "ru" },
+    { native: "繁體中文",       en: "Chinese Traditional",    lang: "zh-hant" },
+    { native: "বাংলা",        en: "Bengali",                lang: "bn" },
+    { native: "Türkçe",       en: "Turkish",                lang: "tr" },
+    { native: "Tiếng Việt",   en: "Vietnamese",             lang: "vi" }
+  ];
+
+  document.querySelectorAll(".lang-switch").forEach(function (root) {
+    var trigger = root.querySelector(".lang-switch-trigger");
+    var panel = root.querySelector(".lang-switch-panel");
+    var search = root.querySelector(".lang-switch-search");
+    var list = root.querySelector(".lang-switch-list");
+
+    // Hrefs are read from the <noscript> fallback rather than hardcoded,
+    // because Quarto resolves that markdown's links to correct relative
+    // paths per page at build time; a literal string in this script would
+    // stay absolute and break under file:// or non-root deployments.
+    var hrefByNative = {};
+    var noscriptEl = root.nextElementSibling;
+    if (noscriptEl && noscriptEl.tagName === "NOSCRIPT") {
+      var tmp = document.createElement("div");
+      tmp.innerHTML = noscriptEl.textContent;
+      Array.prototype.forEach.call(tmp.querySelectorAll("a"), function (a) {
+        hrefByNative[a.textContent.trim()] = a.href;
+      });
+    }
+
+    // Current language is read from <html lang="...">, which Quarto sets
+    // from each page's own frontmatter, rather than guessed from the URL.
+    var currentLang = (document.documentElement.lang || "").toLowerCase();
+
+    function render(filterText) {
+      list.innerHTML = "";
+      var q = (filterText || "").trim().toLowerCase();
+      var matches = LANGS.filter(function (entry) {
+        return !q || entry.native.toLowerCase().indexOf(q) !== -1 || entry.en.toLowerCase().indexOf(q) !== -1;
+      });
+
+      if (matches.length === 0) {
+        var empty = document.createElement("li");
+        empty.className = "lang-switch-empty";
+        empty.textContent = "No matches";
+        list.appendChild(empty);
+        return;
+      }
+
+      matches.forEach(function (entry) {
+        var li = document.createElement("li");
+        li.setAttribute("role", "option");
+        if (entry.lang === currentLang) {
+          li.className = "lang-switch-current";
+          li.setAttribute("aria-current", "true");
+          var check = document.createElement("i");
+          check.className = "bi bi-check2";
+          check.setAttribute("aria-hidden", "true");
+          li.appendChild(check);
+          li.appendChild(document.createTextNode(" " + entry.native));
+        } else {
+          var a = document.createElement("a");
+          a.href = hrefByNative[entry.native] || "#";
+          a.textContent = entry.native;
+          li.appendChild(a);
+        }
+        list.appendChild(li);
+      });
+    }
+
+    function openPanel() {
+      panel.hidden = false;
+      trigger.setAttribute("aria-expanded", "true");
+      search.value = "";
+      render("");
+      search.focus();
+    }
+
+    function closePanel() {
+      panel.hidden = true;
+      trigger.setAttribute("aria-expanded", "false");
+    }
+
+    trigger.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (panel.hidden) { openPanel(); } else { closePanel(); }
+    });
+
+    search.addEventListener("input", function () {
+      render(search.value);
+    });
+
+    panel.addEventListener("click", function (e) {
+      e.stopPropagation();
+    });
+
+    document.addEventListener("click", function () {
+      if (!panel.hidden) closePanel();
+    });
+
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !panel.hidden) {
+        closePanel();
+        trigger.focus();
+      }
+    });
+
+    render("");
+  });
+})();
+</script>
 
 ---
 
@@ -47,6 +173,9 @@ IRW 包含**數百個資料集**（稱為「表」），每個資料集都是一
 各資料集在規模上差異很大（從數百筆反應紀錄到數百萬筆不等），在反應類型上也各不相同（是/否類項目、多類別評分、部分給分等）。每個資料集還附帶預先計算好的中繼資料——參與者人數、項目數量、反應密度、學科領域及其他描述性標籤——使研究者無需先下載並處理全部資料，即可找到相關資料集。
 
 ## 資料標準
+
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="網格示意圖:展示每筆反應皆位於一個 id 與一個 item 的交會點上。" class="welcome-figure">
+
 
 每個 IRW 資料集都被轉換為**長格式**：每列對應一筆反應紀錄。每列至少包含三項資訊：
 
@@ -109,6 +238,7 @@ df = irw.fetch("4thgrade_math_sirt")
 ### 不僅僅是下載資料
 
 IRW 專案還包括：
+
 - 一套不斷增長的 **[範例集（vignettes）](/vignettes/index.qmd)**——展示如何將經典及新興的測量方法同時應用於多個 IRW 資料集的實例
 - **訓練資源與練習題**，用於以真實資料教授心理計量學
 - **資料貢獻流程**，供希望將自己的資料集加入該資料倉儲的研究者使用
