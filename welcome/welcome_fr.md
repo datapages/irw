@@ -1,6 +1,6 @@
 ---
 lang: fr
-pagetitle: "L'Item Response Warehouse (IRW; Entrepôt de réponse à l’item)"
+pagetitle: "L'Entreposage de Réponse à l'Item"
 ---
 
 <!--
@@ -12,9 +12,9 @@ Translator note: please do NOT translate the following —
 5. The language-switcher dropdown block below (HTML/CSS/JS, no visible text to translate) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate, reorder, or hand-edit it per file; the "current language" state is computed at runtime by the script from the page URL.
 -->
 
-# L'Item Response Warehouse (IRW; Entrepôt de réponse à l’item)
+# L'Entreposage de Réponse à l'Item (Item Response Warehouse, IRW)
 
-**Une collection libre et ouverte de données de réponses aux items harmonisées, destinée à la recherche en psychométrie et en mesure.**
+**Des ressources libres et ouvertes de données de réponses à l'item harmonisées, destinées à la recherche en psychométrie et en mesure.**
 
 [Lire l'article](https://doi.org/10.3758/s13428-025-02796-y) **(libre accès)**
 
@@ -158,31 +158,31 @@ Translator note: please do NOT translate the following —
 
 ---
 
-## Pourquoi l'IRW existe
+## Pourquoi l'IRW existe?
 
-Les chercheurs qui étudient la mesure — en éducation, en psychologie et dans les domaines connexes — ont besoin de données réelles pour tester et comparer leurs méthodes. Ces données existent déjà en grande quantité. Mais elles sont dispersées entre de nombreuses études, stockées dans des formats très divers, et souvent difficiles à réutiliser en raison d'une documentation ou d'une licence peu claire.
+Les chercheurs qui étudient la mesure, en éducation, en psychologie et dans les domaines connexes, ont besoin de données réelles pour tester et comparer leurs méthodes. Ces données existent déjà en grande quantité, mais elles sont dispersées entre de nombreuses études, stockées dans des formats très divers et souvent difficiles à réutiliser en raison d'une documentation ou d'une licence qui n'est pas claire.
 
-Il s'agit d'un problème bien connu. D'autres disciplines l'ont résolu en construisant des ressources de données partagées et normalisées. En informatique, la collection d'images étiquetées ImageNet a fourni aux chercheurs un référentiel commun et a contribué à accélérer les progrès de l'intelligence artificielle. La génétique et les neurosciences ont construit des ressources partagées similaires pour leurs propres données.
+Il s'agit d'un problème bien connu. D'autres disciplines l'ont résolu en construisant des ressources de données partagées et normalisées. En informatique, la collection d'images étiquetée ImageNet a fourni aux chercheurs un référentiel commun et a contribué à accélérer les progrès de l'intelligence artificielle. La génétique et les neurosciences ont construit des ressources partagées similaires pour leurs propres données.
 
-L'Item Response Warehouse (IRW) fait la même chose pour les données de réponses aux items. Il rassemble des centaines de jeux de données existants et les remet en forme selon un format commun unique — de sorte qu'une méthode testée sur un jeu de données puisse facilement être testée sur des centaines d'autres.
+L'Entreposage de Réponse à l'Item (nous allons utiliser l'acronyme IRW pour être cohérent avec les écrits anglophones sur le sujet) fait la même chose pour les données de réponses aux items. Il rassemble des centaines de jeux de données existants et les remet en forme selon un format commun unique de sorte qu'une méthode testée sur un jeu de données puisse facilement être testée sur des centaines d'autres.
 
-## Ce que contient l'IRW
+## Contenu de l'IRW
 
-L'IRW contient **des centaines de jeux de données** (« tables »), chacun étant une collection de réponses individuelles. Une réponse est générée chaque fois qu'une personne (ou une autre unité) répond à un item (ou une autre sonde). Voici quelques exemples :
+L'IRW contient **des centaines de jeux de données** (« tableaux »), chacun étant un ensemble de réponses individuelles. Une réponse est générée chaque fois qu'une personne (ou une unité) répond à un item (ou une variable). Voici quelques exemples :
 
 - Réponses d'élèves à des tests d'éducation et d'aptitude
 - Items de sondage mesurant la personnalité ou les attitudes
-- Évaluations attribuées par des évaluateurs humains
-- Tout autre contexte impliquant des réponses répétées à un ensemble de sondes de mesure
+- Résultats attribués par des évaluateurs humains
+- Tout autre contexte impliquant des réponses répétées à un ensemble de mesure
 
 Deux choses sont vraies pour chaque jeu de données de l'IRW :
 
-- **Ouvert.** Chaque jeu de données est sous licence permettant sa réutilisation. Son origine est documentée, et le code utilisé pour le convertir au format de l'IRW est public.
-- **Harmonisé.** Chaque jeu de données est remis en forme selon la même structure simple (décrite ci-dessous), de sorte que le même code d'analyse puisse s'exécuter sur de nombreux jeux de données avec peu ou pas de modification.
+- **Ouvert.** Chaque jeu de données est sous licence permettant sa réutilisation. Son origine est documentée et le code utilisé pour le convertir au format de l'IRW est public.
+- **Harmonisé.** Chaque jeu de données est remis en forme selon une même structure simplifiée (décrite ci-dessous), de sorte que le même code d'analyse puisse s'exécuter sur de nombreux jeux de données avec peu ou pas de modification.
 
-Les jeux de données varient considérablement en taille (de quelques centaines de réponses à plusieurs millions) et en type de réponse (items binaires, évaluations à catégories multiples, scores à crédit partiel, et plus encore). Chaque jeu de données est également accompagné de métadonnées précalculées — nombre de participants, nombre d'items, densité des réponses, domaine du sujet, et d'autres étiquettes descriptives — afin que les chercheurs puissent trouver les jeux de données pertinents sans devoir d'abord tous les télécharger et les traiter.
+Les jeux de données varient considérablement en taille (allant de quelques dizaines de réponses à plusieurs millions) et en type de réponse (items binaires, évaluations à catégories multiples, scores à crédit partiel, etc.). Chaque jeu de données est également accompagné de métadonnées pré-calculées (nombre de participants, nombre d'items, densité des réponses, domaine du sujet et d'autres étiquettes descriptives pertinentes) afin que les chercheurs puissent trouver les jeux de données pertinents sans devoir d'abord tous les télécharger et les traiter.
 
-## Le standard de données
+## Des données standardisées
 
 <img src="/welcome/assets/diagram-cross-classification.svg" alt="Schéma montrant une grille colorée de cellules id-item transformée, via une flèche, en un tableau au format long comportant les colonnes id, item et resp, où la couleur de chaque cellule resp correspond à sa cellule d'origine dans la grille." class="welcome-figure">
 
@@ -191,8 +191,8 @@ Chaque jeu de données de l'IRW est remis en forme au **format long** : une lign
 
 | Colonne | Signification |
 |---|---|
-| `id` | Qui (ou quoi) a produit la réponse — généralement une personne |
-| `item` | Quelle sonde de mesure a produit la réponse — généralement une question ou une tâche |
+| `id` | Qui (ou quoi) a produit la réponse (généralement une personne) |
+| `item` | Quelle mesure a produit la réponse (généralement une question ou une tâche) |
 | `resp` | La réponse elle-même, stockée sous forme de score ordinal |
 
 **Exemple :**
@@ -204,19 +204,19 @@ Chaque jeu de données de l'IRW est remis en forme au **format long** : une lign
 | 2  | Q1   | 1    | 2.1 | 31  | b     |
 | 2  | Q2   | 1    | 2.5 | 31  | b     |
 
-Lorsqu'un jeu de données comprend des informations supplémentaires — temps de réponse, identité de l'évaluateur, covariables telles que l'âge — ces informations sont stockées dans des colonnes additionnelles, nommées de façon cohérente. Cette structure simple unique couvre un très large éventail de situations de mesure, ce qui permet d'écrire le code d'analyse une seule fois et de l'appliquer à l'ensemble de l'entrepôt.
+Lorsqu'un jeu de données comprend des informations supplémentaires (par exemple, temps de réponse, identité de l'évaluateur, covariables telles que l'âge) ces informations sont stockées dans des colonnes additionnelles, nommées de façon cohérente. Cette structure simple et unique couvre un très large éventail de situations en mesure, ce qui permet d'écrire le code d'analyse une seule fois et de l'appliquer à l'ensemble de l'entrepôt de réponse.
 
-La spécification technique complète du standard est disponible sur [itemresponsewarehouse.org/standard.html](/standard.qmd). Des standards plus spécialisés existent également pour le texte des items, les données de compétition par paires, et les réponses nominales (catégories non ordonnées).
+La spécification technique complète de la standardisation est disponible sur [itemresponsewarehouse.org/standard.html](/standard.qmd). Des standards plus spécialisés existent également pour le contenu textuel des items, les données par paires et les réponses nominales (catégories qui ne sont pas ordonnées).
 
-## Comment l'utiliser
+## Comment l'utiliser?
 
-Il existe trois façons d'obtenir les données de l'IRW, selon le degré d'automatisation souhaité.
+Il existe trois façons d'obtenir les données de l'IRW selon le degré d'automatisation souhaité.
 
 **1. Parcourir dans le navigateur web**
-Explorez les jeux de données et leurs métadonnées directement sur le [navigateur de données de l'IRW](/data.qmd) — aucun compte requis. Le téléchargement d'un jeu de données complet nécessite un compte gratuit [Redivis](https://redivis.com), puisque c'est la plateforme qui héberge les données sous-jacentes.
+Explorez les jeux de données et leurs métadonnées directement sur le [navigateur de données de l'IRW](/data.qmd) — aucun compte n'est requis. Le téléchargement d'un jeu de données complet nécessite un compte gratuit [Redivis](https://redivis.com), puisque c'est la plateforme qui héberge les données sous-jacentes.
 
 **2. Utiliser le paquet `irw` (recommandé)**
-Le paquet `irw`, disponible pour **R** et **Python**, fournit des fonctions simples pour trouver, filtrer et télécharger des données.
+Le package `irw`, disponible pour **R** et **Python**, fournit des fonctions simples pour trouver, filtrer et télécharger des données.
 
 ```r
 # R
@@ -240,7 +240,7 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-La première fois que vous utilisez le paquet, il vous sera demandé de vous connecter avec un compte Redivis gratuit. Ensuite, une seule ligne de code télécharge n'importe quel jeu de données directement dans R ou Python. À partir de là, les données sont prêtes à être analysées avec des logiciels standards — par exemple, des paquets de théorie de réponse aux items ou d'analyse factorielle.
+La première fois que vous utilisez le package, il vous sera demandé de vous connecter avec un compte Redivis gratuit. Ensuite, une seule ligne de code télécharge n'importe quel jeu de données directement dans R ou Python. À partir de là, les données sont prêtes à être analysées, par exemple, avec la théorie de réponse aux items ou l'analyse factorielle.
 
 **3. Utiliser directement les bibliothèques clientes de Redivis**
 Pour des flux de travail de plus bas niveau ou hors R/Python, les données peuvent également être consultées via les propres bibliothèques clientes R et Python de Redivis. Consultez le [guide de démarrage](/getstarted.qmd) pour plus de détails.
@@ -249,7 +249,7 @@ Pour des flux de travail de plus bas niveau ou hors R/Python, les données peuve
 
 Le projet IRW comprend également :
 
-- Un ensemble croissant de **[vignettes](/vignettes/index.qmd)** — des exemples pratiques appliquant des méthodes de mesure classiques et nouvelles à de nombreux jeux de données de l'IRW à la fois
+- Un ensemble croissant de **[vignettes](/vignettes/index.qmd)** et des exemples pratiques appliquant des méthodes de mesure classiques, et nouvelles, à de nombreux jeux de données de l'IRW à la fois
 - **Des ressources de formation et des exercices** pour enseigner la psychométrie avec des données réelles
 - **Un processus de contribution** pour les chercheurs souhaitant ajouter leurs propres jeux de données à l'entrepôt
 
@@ -260,8 +260,8 @@ Le projet IRW comprend également :
 - Site web : [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
 - Code : [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
 
-Si vous utilisez des données de l'IRW dans vos travaux, merci de citer les données originales (nous fournissons une fonctionnalité permettant de le faire). Il serait également très apprécié que vous citiez l'article introductif ci-dessus.
+Si vous utilisez des données de l'IRW dans vos travaux, merci de citer les données originales (nous fournissons une fonctionnalité permettant de le faire). Il serait également apprécié que vous citiez l'article introductif mentionné plus haut.
 
 ---
 
-*Des questions, des commentaires, ou vous souhaitez contribuer un jeu de données ? Visitez la [page Contact](/contact.qmd) ou ouvrez un « issue » sur [GitHub](https://github.com/itemresponsewarehouse).*
+*Vous avez des questions, des commentaires ou vous souhaitez contribuer à un jeu de données ? Visitez la page [page Contact](/contact.qmd) ou ouvrez un « issue » sur [GitHub](https://github.com/itemresponsewarehouse).*
