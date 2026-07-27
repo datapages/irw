@@ -1,6 +1,6 @@
 ---
-lang: vi
-pagetitle: "Item Response Warehouse (IRW; Kho Dữ liệu Phản hồi Câu hỏi)"
+lang: sw
+pagetitle: "Item Response Warehouse (IRW; Ghala la Majibu ya Vipengele)"
 ---
 
 <!--
@@ -12,11 +12,11 @@ Translator note: please do NOT translate the following —
 5. The language-switcher dropdown block below (HTML/CSS/JS, no visible text to translate) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate, reorder, or hand-edit it per file; the "current language" state is computed at runtime by the script from the page URL.
 -->
 
-# Item Response Warehouse (IRW; Kho Dữ liệu Phản hồi Câu hỏi)
+# Item Response Warehouse (IRW; Ghala la Majibu ya Vipengele)
 
-**Một bộ sưu tập miễn phí, mở, gồm dữ liệu phản hồi câu hỏi (item response) đã được chuẩn hóa, phục vụ nghiên cứu đo lường tâm lý học (psychometrics) và đo lường nói chung.**
+**Mkusanyiko huru na wazi wa data ya majibu ya vipengele (item response) iliyosanifishwa, kwa ajili ya utafiti wa saikometriki na upimaji.**
 
-[Đọc bài báo](https://doi.org/10.3758/s13428-025-02796-y) **(truy cập mở)**
+[Soma karatasi](https://doi.org/10.3758/s13428-025-02796-y) **(ufikiaji huria)**
 
 <div class="lang-switch"><button type="button" class="lang-switch-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="lang-switch-panel" aria-label="Choose a language"><i class="bi bi-globe2" aria-hidden="true"></i><i class="bi bi-chevron-down" aria-hidden="true"></i></button><div class="lang-switch-panel" id="lang-switch-panel" hidden><label class="visually-hidden" for="lang-switch-search">Search languages</label><div class="lang-switch-search-wrap"><i class="bi bi-search" aria-hidden="true"></i><input type="text" id="lang-switch-search" class="lang-switch-search" autocomplete="off" placeholder="Search languages"></div><ul class="lang-switch-list" role="listbox"></ul></div></div>
 <noscript>
@@ -158,44 +158,44 @@ Translator note: please do NOT translate the following —
 
 ---
 
-## Vì sao IRW ra đời
+## Kwa nini IRW ipo
 
-Các nhà nghiên cứu về đo lường — trong giáo dục, tâm lý học và các lĩnh vực liên quan — cần dữ liệu thực tế để kiểm nghiệm và so sánh phương pháp của mình. Loại dữ liệu đó đã tồn tại với số lượng lớn. Nhưng nó lại nằm rải rác trong nhiều nghiên cứu, được lưu trữ theo nhiều định dạng khác nhau, và thường khó tái sử dụng vì tài liệu mô tả không rõ ràng hoặc vấn đề bản quyền/giấy phép không minh bạch.
+Watafiti wanaosoma upimaji — katika elimu, saikolojia, na fani zinazohusiana — wanahitaji data halisi ili kujaribu na kulinganisha mbinu zao. Data hiyo tayari ipo kwa wingi mkubwa. Lakini imetawanyika katika tafiti nyingi, imehifadhiwa katika miundo mingi tofauti, na mara nyingi ni ngumu kuitumia tena kwa sababu ya nyaraka au leseni zisizo wazi.
 
-Đây là một vấn đề đã được biết đến rộng rãi. Các lĩnh vực khác đã giải quyết vấn đề này bằng cách xây dựng các nguồn dữ liệu dùng chung, được chuẩn hóa. Trong khoa học máy tính, bộ sưu tập hình ảnh có gán nhãn ImageNet đã mang lại cho các nhà nghiên cứu một chuẩn so sánh (benchmark) chung và góp phần thúc đẩy sự tiến bộ nhanh chóng của trí tuệ nhân tạo. Di truyền học và khoa học thần kinh cũng đã xây dựng những nguồn tài nguyên dùng chung tương tự cho dữ liệu của riêng mình.
+Hii ni tatizo linalojulikana sana. Fani nyingine zimelitatua kwa kujenga rasilimali za data zilizoshirikiwa na kusanifishwa. Katika sayansi ya kompyuta, mkusanyiko wa picha zilizowekwa lebo wa ImageNet uliwapa watafiti kigezo cha kawaida (benchmark) na ukasaidia kuchochea maendeleo ya haraka katika AI. Jenetiki na sayansi ya neva zimejenga rasilimali za pamoja zinazofanana kwa data zao wenyewe.
 
-Item Response Warehouse (IRW) làm điều tương tự cho dữ liệu phản hồi câu hỏi. Nó tập hợp hàng trăm bộ dữ liệu đã có và định dạng lại chúng thành một định dạng chung duy nhất — nhờ đó một phương pháp đã được kiểm nghiệm trên một bộ dữ liệu có thể dễ dàng được kiểm nghiệm trên hàng trăm bộ dữ liệu khác.
+Item Response Warehouse (IRW) inafanya jambo lilelile kwa data ya majibu ya vipengele. Inakusanya mamia ya seti za data zilizopo na kuzibadilisha kuwa muundo mmoja wa pamoja — ili mbinu iliyojaribiwa kwenye seti moja ya data iweze kujaribiwa kwa urahisi kwenye mamia ya seti nyingine.
 
-## IRW chứa những gì
+## Kilichomo ndani ya IRW
 
-IRW chứa **hàng trăm bộ dữ liệu** (gọi là "bảng"), mỗi bộ là một tập hợp các phản hồi riêng lẻ. Một phản hồi được tạo ra bất cứ khi nào một người (hoặc đơn vị khác) trả lời một câu hỏi (hoặc một dạng đầu dò đo lường khác). Ví dụ bao gồm:
+IRW ina **mamia ya seti za data** ("majedwali"), kila moja ikiwa mkusanyiko wa majibu ya mtu mmoja mmoja. Jibu hutokea kila mara mtu (au kitengo kingine) anapojibu kipengele (item) au uchunguzi mwingine. Mifano ni pamoja na:
 
-- Câu trả lời của học sinh trong các bài kiểm tra giáo dục và năng lực
-- Các mục khảo sát đo tính cách hoặc thái độ
-- Điểm số do người chấm đưa ra
-- Bất kỳ tình huống nào khác liên quan đến các phản hồi lặp lại đối với một tập hợp đầu dò đo lường
+- Majibu ya wanafunzi katika mitihani ya elimu na uwezo
+- Vipengele vya dodoso vinavyopima utu au mitazamo
+- Alama zinazotolewa na wakadiriaji binadamu
+- Hali nyingine yoyote inayohusisha majibu yanayojirudia kwa seti ya vifaa vya upimaji
 
-Hai điều sau đây luôn đúng với mọi bộ dữ liệu trong IRW:
+Mambo mawili ni kweli kwa kila seti ya data katika IRW:
 
-- **Mở.** Mỗi bộ dữ liệu đều được cấp phép để tái sử dụng. Nguồn gốc của nó được ghi chép đầy đủ, và mã nguồn dùng để chuyển đổi nó sang định dạng IRW được công khai.
-- **Đã chuẩn hóa (Harmonized).** Mỗi bộ dữ liệu được định dạng lại theo cùng một cấu trúc đơn giản (mô tả bên dưới), để cùng một đoạn mã phân tích có thể chạy trên nhiều bộ dữ liệu mà chỉ cần chỉnh sửa rất ít hoặc không cần chỉnh sửa.
+- **Wazi.** Kila seti ya data ina leseni ya kutumika tena. Asili yake imeandikwa, na msimbo uliotumika kuibadilisha kuwa muundo wa IRW ni wa umma.
+- **Iliyosanifishwa (harmonized).** Kila seti ya data hubadilishwa kuwa muundo mmoja rahisi (ulioelezwa hapa chini), ili msimbo huohuo wa uchambuzi uweze kutumika kwenye seti nyingi za data kwa mabadiliko kidogo au bila mabadiliko yoyote.
 
-Các bộ dữ liệu có sự khác biệt lớn về quy mô (từ vài trăm phản hồi đến hàng triệu) và về loại phản hồi (mục có/không, đánh giá nhiều hạng mục, điểm số theo phần, và nhiều hơn nữa). Mỗi bộ dữ liệu cũng đi kèm với siêu dữ liệu (metadata) đã được tính toán sẵn — số lượng người tham gia, số lượng câu hỏi, mật độ phản hồi, lĩnh vực chủ đề và các thẻ mô tả khác — để các nhà nghiên cứu có thể tìm bộ dữ liệu phù hợp mà không cần tải xuống và xử lý tất cả trước.
+Seti za data hutofautiana sana kwa ukubwa (kutoka majibu mia chache hadi mamilioni mengi) na kwa aina ya majibu (vipengele vya ndiyo/hapana, ukadiriaji wa makundi mengi, alama za sehemu, na mengineyo). Kila seti ya data pia huja na metadata iliyokokotolewa tayari — idadi ya washiriki, idadi ya vipengele, msongamano wa majibu, uwanja wa somo, na lebo nyingine za maelezo — ili watafiti waweze kupata seti za data zinazofaa bila kulazimika kuzipakua na kuzichambua zote kwanza.
 
-## Chuẩn dữ liệu
+## Kiwango cha data
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Sơ đồ dạng lưới cho thấy mỗi phản hồi nằm ở giao điểm của một id và một item." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="Mchoro wa gridi unaoonyesha kuwa kila jibu liko kwenye makutano ya id moja na item moja." class="welcome-figure">
 
 
-Mọi bộ dữ liệu IRW đều được định dạng lại thành **định dạng dài (long format)**: mỗi dòng ứng với một phản hồi. Mỗi dòng tối thiểu chứa ba thông tin:
+Kila seti ya data ya IRW hubadilishwa kuwa **muundo mrefu (long format)**: mstari mmoja kwa kila jibu. Kwa kiwango cha chini kabisa, kila mstari una vipande vitatu vya taarifa:
 
-| Cột | Ý nghĩa |
+| Safu | Maana |
 |---|---|
-| `id` | Ai (hoặc cái gì) đã tạo ra phản hồi — thường là một người |
-| `item` | Đầu dò đo lường nào đã tạo ra phản hồi — thường là một câu hỏi hoặc nhiệm vụ |
-| `resp` | Bản thân phản hồi, được lưu trữ dưới dạng điểm số thứ bậc (ordinal) |
+| `id` | Nani (au nini) alizalisha jibu — kwa kawaida ni mtu |
+| `item` | Ni kifaa gani cha upimaji kilichozalisha jibu — kwa kawaida ni swali au kazi |
+| `resp` | Jibu lenyewe, likihifadhiwa kama alama ya mpangilio (ordinal) |
 
-**Ví dụ:**
+**Mfano:**
 
 | `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
 |----|------|------|-----|-----|-------|
@@ -204,19 +204,19 @@ Mọi bộ dữ liệu IRW đều được định dạng lại thành **định
 | 2  | Q1   | 1    | 2.1 | 31  | b     |
 | 2  | Q2   | 1    | 2.5 | 31  | b     |
 
-Khi một bộ dữ liệu bao gồm thông tin bổ sung — thời gian phản hồi, danh tính người chấm, các biến hiệp phương sai (covariate) như tuổi tác — thông tin đó được lưu trong các cột bổ sung, được đặt tên nhất quán. Cấu trúc đơn giản duy nhất này bao quát một phạm vi rất rộng các tình huống đo lường, và đó chính là điều giúp cho việc viết mã phân tích một lần rồi áp dụng cho toàn bộ kho dữ liệu trở nên khả thi.
+Wakati seti ya data inapokuwa na taarifa za ziada — muda wa kujibu, utambulisho wa mkadiriaji, vigezo shirikishi kama umri — taarifa hizo huhifadhiwa katika safu za ziada zenye majina thabiti. Muundo huu mmoja rahisi unashughulikia wigo mkubwa wa hali za upimaji, na hii ndiyo inayowezesha kuandika msimbo wa uchambuzi mara moja na kuutumia katika ghala lote.
 
-Đặc tả kỹ thuật đầy đủ của chuẩn này có tại [itemresponsewarehouse.org/standard.html](/standard.qmd). Ngoài ra còn có các chuẩn chuyên biệt hơn, liên quan, dành cho văn bản câu hỏi, dữ liệu thi đấu theo cặp (pairwise), và phản hồi danh nghĩa (nominal, không có thứ tự hạng mục).
+Maelezo kamili ya kiufundi ya kiwango yanapatikana kwenye [itemresponsewarehouse.org/standard.html](/standard.qmd). Kuna pia viwango vingine vinavyohusiana na maalum zaidi kwa maandishi ya vipengele, data ya kulinganisha kwa jozi (pairwise), na majibu ya nominali (makundi yasiyopangwa).
 
-## Cách sử dụng
+## Jinsi ya kuitumia
 
-Có ba cách để lấy dữ liệu IRW, tùy thuộc vào mức độ tự động hóa mà bạn mong muốn.
+Kuna njia tatu za kupata data ya IRW, kutegemea unavyotaka kuchakata kiotomatiki.
 
-**1. Duyệt trên trình duyệt web**
-Khám phá các bộ dữ liệu và siêu dữ liệu của chúng trực tiếp trên [trình duyệt dữ liệu IRW](/data.qmd) — không cần tài khoản. Việc tải xuống toàn bộ một bộ dữ liệu yêu cầu tài khoản [Redivis](https://redivis.com) miễn phí, vì đó là nền tảng lưu trữ dữ liệu gốc.
+**1. Vinjari kwenye kivinjari cha wavuti**
+Chunguza seti za data na metadata yake moja kwa moja kwenye [kivinjari cha data cha IRW](/data.qmd) — hakuna akaunti inayohitajika. Kupakua seti kamili ya data kunahitaji akaunti huru ya [Redivis](https://redivis.com), kwani hicho ndicho jukwaa linalohifadhi data ya msingi.
 
-**2. Sử dụng gói `irw` (khuyến nghị)**
-Gói `irw`, có sẵn cho cả **R** và **Python**, cung cấp các hàm đơn giản để tìm kiếm, lọc và tải xuống dữ liệu.
+**2. Tumia kifurushi cha `irw` (kinachopendekezwa)**
+Kifurushi cha `irw`, kinachopatikana kwa **R** na **Python**, kinatoa vitendaji rahisi vya kutafuta, kuchuja, na kupakua data.
 
 ```r
 # R
@@ -240,28 +240,28 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-Lần đầu tiên sử dụng gói này, bạn sẽ được yêu cầu đăng nhập bằng tài khoản Redivis miễn phí. Sau đó, chỉ cần một dòng mã là có thể tải bất kỳ bộ dữ liệu nào trực tiếp vào R hoặc Python. Từ đó, dữ liệu đã sẵn sàng để phân tích bằng phần mềm tiêu chuẩn — ví dụ như các gói lý thuyết phản hồi câu hỏi (item response theory) hoặc phân tích nhân tố.
+Mara ya kwanza kutumia kifurushi hiki, utaombwa kuingia (login) kwa akaunti huru ya Redivis. Baada ya hapo, mstari mmoja wa msimbo hupakua seti yoyote ya data moja kwa moja kwenye R au Python. Kuanzia hapo, data iko tayari kwa uchambuzi kwa kutumia programu za kawaida — kwa mfano vifurushi vya nadharia ya majibu ya vipengele (item response theory) au uchambuzi wa vipengele (factor analysis).
 
-**3. Sử dụng trực tiếp các thư viện client của Redivis**
-Đối với các quy trình làm việc cấp thấp hơn hoặc không dùng R/Python, dữ liệu cũng có thể được truy cập thông qua các thư viện client R và Python riêng của Redivis. Xem [Hướng dẫn Bắt đầu](/getstarted.qmd) để biết chi tiết.
+**3. Tumia moja kwa moja maktaba za mteja za Redivis**
+Kwa mtiririko wa kazi wa kiwango cha chini zaidi au usio wa R/Python, data pia inaweza kupatikana kupitia maktaba za mteja za Redivis za R na Python. Angalia [Mwongozo wa Kuanza](/getstarted.qmd) kwa maelezo zaidi.
 
-### Không chỉ dừng lại ở việc tải dữ liệu
+### Zaidi ya kupakua data
 
-Dự án IRW còn bao gồm:
+Mradi wa IRW pia unajumuisha:
 
-- Một bộ **[bài minh họa (vignettes)](/vignettes/index.qmd)** đang ngày càng mở rộng — các ví dụ thực tế áp dụng các phương pháp đo lường cổ điển và mới trên nhiều bộ dữ liệu IRW cùng lúc
-- **Tài nguyên đào tạo và bộ bài tập** để giảng dạy đo lường tâm lý học bằng dữ liệu thực tế
-- Một **quy trình đóng góp** dành cho các nhà nghiên cứu muốn thêm bộ dữ liệu của riêng mình vào kho dữ liệu
+- Mkusanyiko unaokua wa **[mifano ya kina (vignettes)](/vignettes/index.qmd)** — mifano iliyofanyiwa kazi inayotumia mbinu za kawaida na mpya za upimaji kwenye seti nyingi za data za IRW kwa wakati mmoja
+- **Rasilimali za mafunzo na seti za mazoezi** kwa ajili ya kufundisha saikometriki kwa kutumia data halisi
+- **Mchakato wa kuchangia** kwa watafiti wanaotaka kuongeza seti zao za data kwenye ghala
 
-## Tìm hiểu thêm
+## Jifunze zaidi
 
 - Domingue et al. (2025). *An introduction to the Item Response Warehouse (IRW): A resource for enhancing data usage in psychometrics.* Behavior Research Methods. [doi:10.3758/s13428-025-02796-y](https://doi.org/10.3758/s13428-025-02796-y)
 - Nadela, Lee, Jain, Gupta, Zhang & Domingue (2026). *The Item Response Warehouse: What It Is, How to Use It, and Targets for Potential Improvements.* Chinese/English Journal of Educational Measurement and Evaluation. [doi:10.59863/CIJG4549](https://doi.org/10.59863/CIJG4549)
-- Trang web: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
-- Mã nguồn: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
+- Tovuti: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
+- Msimbo: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
 
-Nếu bạn sử dụng dữ liệu IRW trong công việc của mình, vui lòng trích dẫn dữ liệu gốc (chúng tôi đã cung cấp chức năng để làm việc này). Chúng tôi cũng rất trân trọng nếu bạn trích dẫn bài báo giới thiệu nêu trên.
+Ikiwa unatumia data ya IRW katika kazi yako, tafadhali taja (cite) data ya asili (tumetoa vitendaji vinavyowezesha hili). Tungefurahi pia kama ungetaja karatasi ya utangulizi iliyotajwa hapo juu.
 
 ---
 
-*Có câu hỏi, phản hồi, hay muốn đóng góp một bộ dữ liệu? Hãy ghé thăm [trang Liên hệ](/contact.qmd) hoặc mở một issue trên [GitHub](https://github.com/itemresponsewarehouse).*
+*Una maswali, maoni, au unataka kuchangia seti ya data? Tembelea [ukurasa wa Mawasiliano](/contact.qmd) au fungua suala (issue) kwenye [GitHub](https://github.com/itemresponsewarehouse).*

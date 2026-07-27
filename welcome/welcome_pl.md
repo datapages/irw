@@ -1,6 +1,6 @@
 ---
-lang: vi
-pagetitle: "Item Response Warehouse (IRW; Kho Dữ liệu Phản hồi Câu hỏi)"
+lang: pl
+pagetitle: "Item Response Warehouse (IRW; Magazyn Odpowiedzi na Zadania)"
 ---
 
 <!--
@@ -12,11 +12,11 @@ Translator note: please do NOT translate the following —
 5. The language-switcher dropdown block below (HTML/CSS/JS, no visible text to translate) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate, reorder, or hand-edit it per file; the "current language" state is computed at runtime by the script from the page URL.
 -->
 
-# Item Response Warehouse (IRW; Kho Dữ liệu Phản hồi Câu hỏi)
+# Item Response Warehouse (IRW; Magazyn Odpowiedzi na Zadania)
 
-**Một bộ sưu tập miễn phí, mở, gồm dữ liệu phản hồi câu hỏi (item response) đã được chuẩn hóa, phục vụ nghiên cứu đo lường tâm lý học (psychometrics) và đo lường nói chung.**
+**Bezpłatny, otwarty zbiór ujednoliconych danych o odpowiedziach na zadania (item response) do badań psychometrycznych i pomiarowych.**
 
-[Đọc bài báo](https://doi.org/10.3758/s13428-025-02796-y) **(truy cập mở)**
+[Przeczytaj artykuł](https://doi.org/10.3758/s13428-025-02796-y) **(otwarty dostęp)**
 
 <div class="lang-switch"><button type="button" class="lang-switch-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="lang-switch-panel" aria-label="Choose a language"><i class="bi bi-globe2" aria-hidden="true"></i><i class="bi bi-chevron-down" aria-hidden="true"></i></button><div class="lang-switch-panel" id="lang-switch-panel" hidden><label class="visually-hidden" for="lang-switch-search">Search languages</label><div class="lang-switch-search-wrap"><i class="bi bi-search" aria-hidden="true"></i><input type="text" id="lang-switch-search" class="lang-switch-search" autocomplete="off" placeholder="Search languages"></div><ul class="lang-switch-list" role="listbox"></ul></div></div>
 <noscript>
@@ -158,44 +158,44 @@ Translator note: please do NOT translate the following —
 
 ---
 
-## Vì sao IRW ra đời
+## Dlaczego powstał IRW
 
-Các nhà nghiên cứu về đo lường — trong giáo dục, tâm lý học và các lĩnh vực liên quan — cần dữ liệu thực tế để kiểm nghiệm và so sánh phương pháp của mình. Loại dữ liệu đó đã tồn tại với số lượng lớn. Nhưng nó lại nằm rải rác trong nhiều nghiên cứu, được lưu trữ theo nhiều định dạng khác nhau, và thường khó tái sử dụng vì tài liệu mô tả không rõ ràng hoặc vấn đề bản quyền/giấy phép không minh bạch.
+Badacze zajmujący się pomiarem — w edukacji, psychologii i pokrewnych dziedzinach — potrzebują rzeczywistych danych, aby testować i porównywać swoje metody. Takie dane już istnieją w dużych ilościach. Są jednak rozproszone w wielu badaniach, przechowywane w wielu różnych formatach i często trudne do ponownego wykorzystania z powodu niejasnej dokumentacji lub licencji.
 
-Đây là một vấn đề đã được biết đến rộng rãi. Các lĩnh vực khác đã giải quyết vấn đề này bằng cách xây dựng các nguồn dữ liệu dùng chung, được chuẩn hóa. Trong khoa học máy tính, bộ sưu tập hình ảnh có gán nhãn ImageNet đã mang lại cho các nhà nghiên cứu một chuẩn so sánh (benchmark) chung và góp phần thúc đẩy sự tiến bộ nhanh chóng của trí tuệ nhân tạo. Di truyền học và khoa học thần kinh cũng đã xây dựng những nguồn tài nguyên dùng chung tương tự cho dữ liệu của riêng mình.
+To dobrze znany problem. Inne dziedziny rozwiązały go, budując wspólne, ustandaryzowane zasoby danych. W informatyce zbiór oznaczonych obrazów ImageNet dał badaczom wspólny punkt odniesienia (benchmark) i pomógł napędzić szybki postęp w AI. Genetyka i neuronauka zbudowały podobne wspólne zasoby dla swoich danych.
 
-Item Response Warehouse (IRW) làm điều tương tự cho dữ liệu phản hồi câu hỏi. Nó tập hợp hàng trăm bộ dữ liệu đã có và định dạng lại chúng thành một định dạng chung duy nhất — nhờ đó một phương pháp đã được kiểm nghiệm trên một bộ dữ liệu có thể dễ dàng được kiểm nghiệm trên hàng trăm bộ dữ liệu khác.
+Item Response Warehouse (IRW) robi to samo dla danych o odpowiedziach na zadania. Gromadzi setki istniejących zbiorów danych i przekształca je w jeden wspólny format — dzięki czemu metoda przetestowana na jednym zbiorze danych może łatwo zostać przetestowana na setkach innych.
 
-## IRW chứa những gì
+## Co zawiera IRW
 
-IRW chứa **hàng trăm bộ dữ liệu** (gọi là "bảng"), mỗi bộ là một tập hợp các phản hồi riêng lẻ. Một phản hồi được tạo ra bất cứ khi nào một người (hoặc đơn vị khác) trả lời một câu hỏi (hoặc một dạng đầu dò đo lường khác). Ví dụ bao gồm:
+IRW zawiera **setki zbiorów danych** ("tabel"), z których każdy jest zbiorem indywidualnych odpowiedzi. Odpowiedź powstaje za każdym razem, gdy jakaś osoba (lub inna jednostka) odpowiada na zadanie (item) lub inny bodziec pomiarowy. Przykłady obejmują:
 
-- Câu trả lời của học sinh trong các bài kiểm tra giáo dục và năng lực
-- Các mục khảo sát đo tính cách hoặc thái độ
-- Điểm số do người chấm đưa ra
-- Bất kỳ tình huống nào khác liên quan đến các phản hồi lặp lại đối với một tập hợp đầu dò đo lường
+- Odpowiedzi uczniów w testach edukacyjnych i testach zdolności
+- Pozycje kwestionariuszy mierzące osobowość lub postawy
+- Oceny przyznawane przez ludzkich sędziów (raterów)
+- Każdą inną sytuację obejmującą powtarzane odpowiedzi na zestaw narzędzi pomiarowych
 
-Hai điều sau đây luôn đúng với mọi bộ dữ liệu trong IRW:
+W przypadku każdego zbioru danych w IRW prawdziwe są dwie rzeczy:
 
-- **Mở.** Mỗi bộ dữ liệu đều được cấp phép để tái sử dụng. Nguồn gốc của nó được ghi chép đầy đủ, và mã nguồn dùng để chuyển đổi nó sang định dạng IRW được công khai.
-- **Đã chuẩn hóa (Harmonized).** Mỗi bộ dữ liệu được định dạng lại theo cùng một cấu trúc đơn giản (mô tả bên dưới), để cùng một đoạn mã phân tích có thể chạy trên nhiều bộ dữ liệu mà chỉ cần chỉnh sửa rất ít hoặc không cần chỉnh sửa.
+- **Otwarty.** Każdy zbiór danych jest udostępniony na licencji zezwalającej na ponowne wykorzystanie. Jego pochodzenie jest udokumentowane, a kod użyty do przekształcenia go do formatu IRW jest publicznie dostępny.
+- **Ujednolicony (harmonized).** Każdy zbiór danych jest przekształcany do tej samej prostej struktury (opisanej poniżej), dzięki czemu ten sam kod analityczny może działać na wielu zbiorach danych przy niewielkiej modyfikacji lub bez żadnej.
 
-Các bộ dữ liệu có sự khác biệt lớn về quy mô (từ vài trăm phản hồi đến hàng triệu) và về loại phản hồi (mục có/không, đánh giá nhiều hạng mục, điểm số theo phần, và nhiều hơn nữa). Mỗi bộ dữ liệu cũng đi kèm với siêu dữ liệu (metadata) đã được tính toán sẵn — số lượng người tham gia, số lượng câu hỏi, mật độ phản hồi, lĩnh vực chủ đề và các thẻ mô tả khác — để các nhà nghiên cứu có thể tìm bộ dữ liệu phù hợp mà không cần tải xuống và xử lý tất cả trước.
+Zbiory danych różnią się znacznie pod względem wielkości (od kilkuset odpowiedzi do wielu milionów) oraz rodzaju odpowiedzi (zadania tak/nie, oceny wielokategorialne, wyniki częściowe i inne). Do każdego zbioru danych dołączone są również wstępnie obliczone metadane — liczba uczestników, liczba zadań, gęstość odpowiedzi, dziedzina tematyczna oraz inne opisowe etykiety — dzięki czemu badacze mogą znaleźć odpowiednie zbiory danych bez konieczności ich wcześniejszego pobierania i przetwarzania.
 
-## Chuẩn dữ liệu
+## Standard danych
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Sơ đồ dạng lưới cho thấy mỗi phản hồi nằm ở giao điểm của một id và một item." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagram siatki pokazujący, że każda odpowiedź znajduje się na przecięciu jednego id i jednego item." class="welcome-figure">
 
 
-Mọi bộ dữ liệu IRW đều được định dạng lại thành **định dạng dài (long format)**: mỗi dòng ứng với một phản hồi. Mỗi dòng tối thiểu chứa ba thông tin:
+Każdy zbiór danych IRW jest przekształcany do **formatu długiego (long format)**: jeden wiersz na odpowiedź. Każdy wiersz zawiera co najmniej trzy informacje:
 
-| Cột | Ý nghĩa |
+| Kolumna | Znaczenie |
 |---|---|
-| `id` | Ai (hoặc cái gì) đã tạo ra phản hồi — thường là một người |
-| `item` | Đầu dò đo lường nào đã tạo ra phản hồi — thường là một câu hỏi hoặc nhiệm vụ |
-| `resp` | Bản thân phản hồi, được lưu trữ dưới dạng điểm số thứ bậc (ordinal) |
+| `id` | Kto (lub co) wygenerowało odpowiedź — zazwyczaj osoba |
+| `item` | Które narzędzie pomiarowe wygenerowało odpowiedź — zazwyczaj pytanie lub zadanie |
+| `resp` | Sama odpowiedź, przechowywana jako wynik porządkowy (ordinalny) |
 
-**Ví dụ:**
+**Przykład:**
 
 | `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
 |----|------|------|-----|-----|-------|
@@ -204,19 +204,19 @@ Mọi bộ dữ liệu IRW đều được định dạng lại thành **định
 | 2  | Q1   | 1    | 2.1 | 31  | b     |
 | 2  | Q2   | 1    | 2.5 | 31  | b     |
 
-Khi một bộ dữ liệu bao gồm thông tin bổ sung — thời gian phản hồi, danh tính người chấm, các biến hiệp phương sai (covariate) như tuổi tác — thông tin đó được lưu trong các cột bổ sung, được đặt tên nhất quán. Cấu trúc đơn giản duy nhất này bao quát một phạm vi rất rộng các tình huống đo lường, và đó chính là điều giúp cho việc viết mã phân tích một lần rồi áp dụng cho toàn bộ kho dữ liệu trở nên khả thi.
+Gdy zbiór danych zawiera dodatkowe informacje — czas odpowiedzi, tożsamość ratera, kowarianty takie jak wiek — informacje te są przechowywane w dodatkowych, spójnie nazwanych kolumnach. Ta jedna prosta struktura obejmuje ogromny zakres sytuacji pomiarowych, co sprawia, że możliwe jest napisanie kodu analitycznego raz i zastosowanie go w całym magazynie.
 
-Đặc tả kỹ thuật đầy đủ của chuẩn này có tại [itemresponsewarehouse.org/standard.html](/standard.qmd). Ngoài ra còn có các chuẩn chuyên biệt hơn, liên quan, dành cho văn bản câu hỏi, dữ liệu thi đấu theo cặp (pairwise), và phản hồi danh nghĩa (nominal, không có thứ tự hạng mục).
+Pełna specyfikacja techniczna standardu jest dostępna pod adresem [itemresponsewarehouse.org/standard.html](/standard.qmd). Istnieją także powiązane, bardziej wyspecjalizowane standardy dla tekstu zadań, danych porównań parami (pairwise) oraz odpowiedzi nominalnych (kategorii nieuporządkowanych).
 
-## Cách sử dụng
+## Jak z niego korzystać
 
-Có ba cách để lấy dữ liệu IRW, tùy thuộc vào mức độ tự động hóa mà bạn mong muốn.
+Istnieją trzy sposoby pozyskania danych IRW, w zależności od tego, ile chcesz zautomatyzować.
 
-**1. Duyệt trên trình duyệt web**
-Khám phá các bộ dữ liệu và siêu dữ liệu của chúng trực tiếp trên [trình duyệt dữ liệu IRW](/data.qmd) — không cần tài khoản. Việc tải xuống toàn bộ một bộ dữ liệu yêu cầu tài khoản [Redivis](https://redivis.com) miễn phí, vì đó là nền tảng lưu trữ dữ liệu gốc.
+**1. Przeglądaj w przeglądarce internetowej**
+Przeglądaj zbiory danych i ich metadane bezpośrednio w [przeglądarce danych IRW](/data.qmd) — bez konieczności zakładania konta. Pobranie pełnego zbioru danych wymaga bezpłatnego konta [Redivis](https://redivis.com), ponieważ to ta platforma przechowuje bazowe dane.
 
-**2. Sử dụng gói `irw` (khuyến nghị)**
-Gói `irw`, có sẵn cho cả **R** và **Python**, cung cấp các hàm đơn giản để tìm kiếm, lọc và tải xuống dữ liệu.
+**2. Użyj pakietu `irw` (zalecane)**
+Pakiet `irw`, dostępny zarówno dla **R**, jak i **Pythona**, oferuje proste funkcje do wyszukiwania, filtrowania i pobierania danych.
 
 ```r
 # R
@@ -240,28 +240,28 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-Lần đầu tiên sử dụng gói này, bạn sẽ được yêu cầu đăng nhập bằng tài khoản Redivis miễn phí. Sau đó, chỉ cần một dòng mã là có thể tải bất kỳ bộ dữ liệu nào trực tiếp vào R hoặc Python. Từ đó, dữ liệu đã sẵn sàng để phân tích bằng phần mềm tiêu chuẩn — ví dụ như các gói lý thuyết phản hồi câu hỏi (item response theory) hoặc phân tích nhân tố.
+Przy pierwszym użyciu pakietu zostaniesz poproszony o zalogowanie się za pomocą bezpłatnego konta Redivis. Od tego momentu jedna linijka kodu pobiera dowolny zbiór danych bezpośrednio do R lub Pythona. Od tego etapu dane są gotowe do analizy za pomocą standardowego oprogramowania — na przykład pakietów do teorii odpowiedzi na zadania (IRT) lub analizy czynnikowej.
 
-**3. Sử dụng trực tiếp các thư viện client của Redivis**
-Đối với các quy trình làm việc cấp thấp hơn hoặc không dùng R/Python, dữ liệu cũng có thể được truy cập thông qua các thư viện client R và Python riêng của Redivis. Xem [Hướng dẫn Bắt đầu](/getstarted.qmd) để biết chi tiết.
+**3. Użyj bezpośrednio bibliotek klienckich Redivis**
+W przypadku bardziej niskopoziomowych przepływów pracy lub przepływów spoza R/Python dane można również uzyskać za pomocą własnych bibliotek klienckich R i Python firmy Redivis. Szczegóły znajdziesz w [Przewodniku dla początkujących](/getstarted.qmd).
 
-### Không chỉ dừng lại ở việc tải dữ liệu
+### Poza pobieraniem danych
 
-Dự án IRW còn bao gồm:
+Projekt IRW obejmuje również:
 
-- Một bộ **[bài minh họa (vignettes)](/vignettes/index.qmd)** đang ngày càng mở rộng — các ví dụ thực tế áp dụng các phương pháp đo lường cổ điển và mới trên nhiều bộ dữ liệu IRW cùng lúc
-- **Tài nguyên đào tạo và bộ bài tập** để giảng dạy đo lường tâm lý học bằng dữ liệu thực tế
-- Một **quy trình đóng góp** dành cho các nhà nghiên cứu muốn thêm bộ dữ liệu của riêng mình vào kho dữ liệu
+- Rosnący zbiór **[przykładów (vignettes)](/vignettes/index.qmd)** — opracowanych przykładów stosujących klasyczne i nowe metody pomiarowe jednocześnie na wielu zbiorach danych IRW
+- **Materiały szkoleniowe i zestawy zadań** do nauczania psychometrii na rzeczywistych danych
+- **Proces zgłaszania danych** dla badaczy, którzy chcą dodać własne zbiory danych do magazynu
 
-## Tìm hiểu thêm
+## Więcej informacji
 
 - Domingue et al. (2025). *An introduction to the Item Response Warehouse (IRW): A resource for enhancing data usage in psychometrics.* Behavior Research Methods. [doi:10.3758/s13428-025-02796-y](https://doi.org/10.3758/s13428-025-02796-y)
 - Nadela, Lee, Jain, Gupta, Zhang & Domingue (2026). *The Item Response Warehouse: What It Is, How to Use It, and Targets for Potential Improvements.* Chinese/English Journal of Educational Measurement and Evaluation. [doi:10.59863/CIJG4549](https://doi.org/10.59863/CIJG4549)
-- Trang web: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
-- Mã nguồn: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
+- Strona internetowa: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
+- Kod: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
 
-Nếu bạn sử dụng dữ liệu IRW trong công việc của mình, vui lòng trích dẫn dữ liệu gốc (chúng tôi đã cung cấp chức năng để làm việc này). Chúng tôi cũng rất trân trọng nếu bạn trích dẫn bài báo giới thiệu nêu trên.
+Jeśli korzystasz z danych IRW w swojej pracy, prosimy o cytowanie oryginalnych danych (udostępniliśmy odpowiednią funkcjonalność w tym celu). Bylibyśmy również bardzo wdzięczni za zacytowanie powyższego artykułu wprowadzającego.
 
 ---
 
-*Có câu hỏi, phản hồi, hay muốn đóng góp một bộ dữ liệu? Hãy ghé thăm [trang Liên hệ](/contact.qmd) hoặc mở một issue trên [GitHub](https://github.com/itemresponsewarehouse).*
+*Masz pytania, uwagi lub chcesz dodać zbiór danych? Odwiedź [stronę kontaktową](/contact.qmd) lub otwórz zgłoszenie (issue) na [GitHubie](https://github.com/itemresponsewarehouse).*

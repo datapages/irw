@@ -1,6 +1,7 @@
 ---
-lang: vi
-pagetitle: "Item Response Warehouse (IRW; Kho Dữ liệu Phản hồi Câu hỏi)"
+lang: he
+dir: rtl
+pagetitle: "מחסן תגובות לפריטים (Item Response Warehouse, IRW)"
 ---
 
 <!--
@@ -12,11 +13,11 @@ Translator note: please do NOT translate the following —
 5. The language-switcher dropdown block below (HTML/CSS/JS, no visible text to translate) — it is identical, verbatim, across every welcome_<lang>.md file. Do not translate, reorder, or hand-edit it per file; the "current language" state is computed at runtime by the script from the page URL.
 -->
 
-# Item Response Warehouse (IRW; Kho Dữ liệu Phản hồi Câu hỏi)
+# מחסן תגובות לפריטים (Item Response Warehouse, IRW)
 
-**Một bộ sưu tập miễn phí, mở, gồm dữ liệu phản hồi câu hỏi (item response) đã được chuẩn hóa, phục vụ nghiên cứu đo lường tâm lý học (psychometrics) và đo lường nói chung.**
+**אוסף חופשי ופתוח של נתוני תגובה לפריט (item response) מתואמים, למחקר בפסיכומטריקה ובמדידה.**
 
-[Đọc bài báo](https://doi.org/10.3758/s13428-025-02796-y) **(truy cập mở)**
+[קראו את המאמר](https://doi.org/10.3758/s13428-025-02796-y) **(גישה פתוחה)**
 
 <div class="lang-switch"><button type="button" class="lang-switch-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="lang-switch-panel" aria-label="Choose a language"><i class="bi bi-globe2" aria-hidden="true"></i><i class="bi bi-chevron-down" aria-hidden="true"></i></button><div class="lang-switch-panel" id="lang-switch-panel" hidden><label class="visually-hidden" for="lang-switch-search">Search languages</label><div class="lang-switch-search-wrap"><i class="bi bi-search" aria-hidden="true"></i><input type="text" id="lang-switch-search" class="lang-switch-search" autocomplete="off" placeholder="Search languages"></div><ul class="lang-switch-list" role="listbox"></ul></div></div>
 <noscript>
@@ -158,44 +159,44 @@ Translator note: please do NOT translate the following —
 
 ---
 
-## Vì sao IRW ra đời
+## למה IRW קיים
 
-Các nhà nghiên cứu về đo lường — trong giáo dục, tâm lý học và các lĩnh vực liên quan — cần dữ liệu thực tế để kiểm nghiệm và so sánh phương pháp của mình. Loại dữ liệu đó đã tồn tại với số lượng lớn. Nhưng nó lại nằm rải rác trong nhiều nghiên cứu, được lưu trữ theo nhiều định dạng khác nhau, và thường khó tái sử dụng vì tài liệu mô tả không rõ ràng hoặc vấn đề bản quyền/giấy phép không minh bạch.
+חוקרים העוסקים במדידה — בחינוך, בפסיכולוגיה ובתחומים קרובים — זקוקים לנתונים אמיתיים כדי לבחון ולהשוות בין השיטות שלהם. נתונים כאלה כבר קיימים בכמויות גדולות. אך הם מפוזרים על פני מחקרים רבים, מאוחסנים בפורמטים שונים רבים, ולעיתים קרובות קשה להשתמש בהם שוב בשל תיעוד או רישוי לא ברורים.
 
-Đây là một vấn đề đã được biết đến rộng rãi. Các lĩnh vực khác đã giải quyết vấn đề này bằng cách xây dựng các nguồn dữ liệu dùng chung, được chuẩn hóa. Trong khoa học máy tính, bộ sưu tập hình ảnh có gán nhãn ImageNet đã mang lại cho các nhà nghiên cứu một chuẩn so sánh (benchmark) chung và góp phần thúc đẩy sự tiến bộ nhanh chóng của trí tuệ nhân tạo. Di truyền học và khoa học thần kinh cũng đã xây dựng những nguồn tài nguyên dùng chung tương tự cho dữ liệu của riêng mình.
+זו בעיה ידועה היטב. תחומים אחרים פתרו אותה על ידי בניית משאבי נתונים משותפים ומתוקננים. במדעי המחשב, אוסף התמונות המתויגות ImageNet סיפק לחוקרים אמת מידה (benchmark) משותפת וסייע להניע קִדמה מהירה בתחום הבינה המלאכותית. גם הגנטיקה ומדעי המוח בנו משאבים משותפים דומים עבור הנתונים שלהם.
 
-Item Response Warehouse (IRW) làm điều tương tự cho dữ liệu phản hồi câu hỏi. Nó tập hợp hàng trăm bộ dữ liệu đã có và định dạng lại chúng thành một định dạng chung duy nhất — nhờ đó một phương pháp đã được kiểm nghiệm trên một bộ dữ liệu có thể dễ dàng được kiểm nghiệm trên hàng trăm bộ dữ liệu khác.
+מחסן תגובות לפריטים (IRW) עושה את אותו הדבר עבור נתוני תגובה לפריט. הוא מאגד מאות מערכי נתונים קיימים ומעצב אותם מחדש לפורמט משותף אחד — כך ששיטה שנבחנה על מערך נתונים אחד יכולה להיבחן בקלות על מאות מערכי נתונים אחרים.
 
-## IRW chứa những gì
+## מה נמצא ב-IRW
 
-IRW chứa **hàng trăm bộ dữ liệu** (gọi là "bảng"), mỗi bộ là một tập hợp các phản hồi riêng lẻ. Một phản hồi được tạo ra bất cứ khi nào một người (hoặc đơn vị khác) trả lời một câu hỏi (hoặc một dạng đầu dò đo lường khác). Ví dụ bao gồm:
+IRW מכיל **מאות מערכי נתונים** ("טבלאות"), וכל אחד מהם הוא אוסף של תגובות בודדות. תגובה נוצרת בכל פעם שאדם כלשהו (או יחידה אחרת) מגיב לפריט (item) (או לבדיקה אחרת). דוגמאות כוללות:
 
-- Câu trả lời của học sinh trong các bài kiểm tra giáo dục và năng lực
-- Các mục khảo sát đo tính cách hoặc thái độ
-- Điểm số do người chấm đưa ra
-- Bất kỳ tình huống nào khác liên quan đến các phản hồi lặp lại đối với một tập hợp đầu dò đo lường
+- תשובות תלמידים במבחני חינוך ויכולת
+- פריטי שאלון המודדים אישיות או עמדות
+- ציונים שניתנו על ידי מעריכים אנושיים
+- כל מצב אחר הכולל תגובות חוזרות ונשנות למערך של כלי מדידה
 
-Hai điều sau đây luôn đúng với mọi bộ dữ liệu trong IRW:
+שני דברים נכונים לגבי כל מערך נתונים ב-IRW:
 
-- **Mở.** Mỗi bộ dữ liệu đều được cấp phép để tái sử dụng. Nguồn gốc của nó được ghi chép đầy đủ, và mã nguồn dùng để chuyển đổi nó sang định dạng IRW được công khai.
-- **Đã chuẩn hóa (Harmonized).** Mỗi bộ dữ liệu được định dạng lại theo cùng một cấu trúc đơn giản (mô tả bên dưới), để cùng một đoạn mã phân tích có thể chạy trên nhiều bộ dữ liệu mà chỉ cần chỉnh sửa rất ít hoặc không cần chỉnh sửa.
+- **פתוח.** לכל מערך נתונים יש רישיון לשימוש חוזר. מקורו מתועד, והקוד ששימש להמרתו לפורמט IRW הוא ציבורי.
+- **מתואם (Harmonized).** כל מערך נתונים מעוצב מחדש לאותו מבנה פשוט (המתואר בהמשך), כך שאותו קוד ניתוח יכול לפעול על מערכי נתונים רבים בשינוי מועט או ללא שינוי כלל.
 
-Các bộ dữ liệu có sự khác biệt lớn về quy mô (từ vài trăm phản hồi đến hàng triệu) và về loại phản hồi (mục có/không, đánh giá nhiều hạng mục, điểm số theo phần, và nhiều hơn nữa). Mỗi bộ dữ liệu cũng đi kèm với siêu dữ liệu (metadata) đã được tính toán sẵn — số lượng người tham gia, số lượng câu hỏi, mật độ phản hồi, lĩnh vực chủ đề và các thẻ mô tả khác — để các nhà nghiên cứu có thể tìm bộ dữ liệu phù hợp mà không cần tải xuống và xử lý tất cả trước.
+מערכי הנתונים שונים מאוד בגודלם (ממאות בודדות של תגובות ועד מיליונים רבים) ובסוג התגובה (פריטים של כן/לא, דירוגים רב-קטגוריאליים, ציונים חלקיים, ועוד). כל מערך נתונים מגיע גם עם מטא-נתונים מחושבים מראש — מספר המשתתפים, מספר הפריטים, צפיפות התגובות, תחום הנושא, ותוויות תיאוריות נוספות — כך שחוקרים יכולים למצוא מערכי נתונים רלוונטיים מבלי להוריד ולעבד את כולם קודם.
 
-## Chuẩn dữ liệu
+## תקן הנתונים
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Sơ đồ dạng lưới cho thấy mỗi phản hồi nằm ở giao điểm của một id và một item." class="welcome-figure">
+<img src="/welcome/assets/diagram-cross-classification.svg" alt="תרשים רשת המראה שכל תגובה נמצאת בנקודת החיתוך של id אחד ו-item אחד." class="welcome-figure">
 
 
-Mọi bộ dữ liệu IRW đều được định dạng lại thành **định dạng dài (long format)**: mỗi dòng ứng với một phản hồi. Mỗi dòng tối thiểu chứa ba thông tin:
+כל מערך נתונים של IRW מעוצב מחדש לפורמט **ארוך (long format)**: שורה אחת לכל תגובה. לכל הפחות, כל שורה מכילה שלושה פרטי מידע:
 
-| Cột | Ý nghĩa |
+| עמודה | משמעות |
 |---|---|
-| `id` | Ai (hoặc cái gì) đã tạo ra phản hồi — thường là một người |
-| `item` | Đầu dò đo lường nào đã tạo ra phản hồi — thường là một câu hỏi hoặc nhiệm vụ |
-| `resp` | Bản thân phản hồi, được lưu trữ dưới dạng điểm số thứ bậc (ordinal) |
+| `id` | מי (או מה) הפיק את התגובה — בדרך כלל אדם |
+| `item` | איזה כלי מדידה הפיק את התגובה — בדרך כלל שאלה או משימה |
+| `resp` | התגובה עצמה, המאוחסנת כציון סדר (ordinal) |
 
-**Ví dụ:**
+**דוגמה:**
 
 | `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
 |----|------|------|-----|-----|-------|
@@ -204,19 +205,19 @@ Mọi bộ dữ liệu IRW đều được định dạng lại thành **định
 | 2  | Q1   | 1    | 2.1 | 31  | b     |
 | 2  | Q2   | 1    | 2.5 | 31  | b     |
 
-Khi một bộ dữ liệu bao gồm thông tin bổ sung — thời gian phản hồi, danh tính người chấm, các biến hiệp phương sai (covariate) như tuổi tác — thông tin đó được lưu trong các cột bổ sung, được đặt tên nhất quán. Cấu trúc đơn giản duy nhất này bao quát một phạm vi rất rộng các tình huống đo lường, và đó chính là điều giúp cho việc viết mã phân tích một lần rồi áp dụng cho toàn bộ kho dữ liệu trở nên khả thi.
+כאשר מערך נתונים כולל מידע נוסף — זמן תגובה, זהות המעריך, משתני עזר כמו גיל — מידע זה מאוחסן בעמודות נוספות בעלות שמות עקביים. מבנה פשוט אחד זה מכסה מגוון עצום של מצבי מדידה, וזה מה שמאפשר לכתוב קוד ניתוח פעם אחת וליישם אותו על פני כל המחסן.
 
-Đặc tả kỹ thuật đầy đủ của chuẩn này có tại [itemresponsewarehouse.org/standard.html](/standard.qmd). Ngoài ra còn có các chuẩn chuyên biệt hơn, liên quan, dành cho văn bản câu hỏi, dữ liệu thi đấu theo cặp (pairwise), và phản hồi danh nghĩa (nominal, không có thứ tự hạng mục).
+המפרט הטכני המלא של התקן זמין בכתובת [itemresponsewarehouse.org/standard.html](/standard.qmd). קיימים גם תקנים קשורים ומתמחים יותר לטקסט פריטים, לנתוני השוואה זוגית (pairwise) ולתגובות נומינליות (קטגוריות ללא סדר).
 
-## Cách sử dụng
+## איך להשתמש בו
 
-Có ba cách để lấy dữ liệu IRW, tùy thuộc vào mức độ tự động hóa mà bạn mong muốn.
+יש שלוש דרכים לקבל נתוני IRW, בהתאם לרמת האוטומציה הרצויה לך.
 
-**1. Duyệt trên trình duyệt web**
-Khám phá các bộ dữ liệu và siêu dữ liệu của chúng trực tiếp trên [trình duyệt dữ liệu IRW](/data.qmd) — không cần tài khoản. Việc tải xuống toàn bộ một bộ dữ liệu yêu cầu tài khoản [Redivis](https://redivis.com) miễn phí, vì đó là nền tảng lưu trữ dữ liệu gốc.
+**1. עיון בדפדפן האינטרנט**
+חִקרו מערכי נתונים ואת המטא-נתונים שלהם ישירות ב[דפדפן הנתונים של IRW](/data.qmd) — אין צורך בחשבון. הורדת מערך נתונים מלא דורשת חשבון [Redivis](https://redivis.com) חינמי, מכיוון שזו הפלטפורמה המארחת את הנתונים הבסיסיים.
 
-**2. Sử dụng gói `irw` (khuyến nghị)**
-Gói `irw`, có sẵn cho cả **R** và **Python**, cung cấp các hàm đơn giản để tìm kiếm, lọc và tải xuống dữ liệu.
+**2. השתמשו בחבילת `irw` (מומלץ)**
+חבילת `irw`, הזמינה הן עבור **R** והן עבור **Python**, מספקת פונקציות פשוטות למציאה, סינון והורדה של נתונים.
 
 ```r
 # R
@@ -240,28 +241,28 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-Lần đầu tiên sử dụng gói này, bạn sẽ được yêu cầu đăng nhập bằng tài khoản Redivis miễn phí. Sau đó, chỉ cần một dòng mã là có thể tải bất kỳ bộ dữ liệu nào trực tiếp vào R hoặc Python. Từ đó, dữ liệu đã sẵn sàng để phân tích bằng phần mềm tiêu chuẩn — ví dụ như các gói lý thuyết phản hồi câu hỏi (item response theory) hoặc phân tích nhân tố.
+בפעם הראשונה שתשתמשו בחבילה, תתבקשו להתחבר באמצעות חשבון Redivis חינמי. לאחר מכן, שורת קוד אחת מורידה כל מערך נתונים ישירות ל-R או ל-Python. מנקודה זו, הנתונים מוכנים לניתוח באמצעות תוכנה סטנדרטית — לדוגמה חבילות תיאוריית תגובה לפריט (item response theory) או ניתוח גורמים.
 
-**3. Sử dụng trực tiếp các thư viện client của Redivis**
-Đối với các quy trình làm việc cấp thấp hơn hoặc không dùng R/Python, dữ liệu cũng có thể được truy cập thông qua các thư viện client R và Python riêng của Redivis. Xem [Hướng dẫn Bắt đầu](/getstarted.qmd) để biết chi tiết.
+**3. השתמשו ישירות בספריות הלקוח של Redivis**
+עבור זרימות עבודה ברמה נמוכה יותר או שאינן מבוססות R/Python, ניתן לגשת לנתונים גם דרך ספריות הלקוח של Redivis עצמה עבור R ו-Python. לפרטים, ראו את [מדריך תחילת העבודה](/getstarted.qmd).
 
-### Không chỉ dừng lại ở việc tải dữ liệu
+### מעבר להורדת נתונים
 
-Dự án IRW còn bao gồm:
+פרויקט IRW כולל גם:
 
-- Một bộ **[bài minh họa (vignettes)](/vignettes/index.qmd)** đang ngày càng mở rộng — các ví dụ thực tế áp dụng các phương pháp đo lường cổ điển và mới trên nhiều bộ dữ liệu IRW cùng lúc
-- **Tài nguyên đào tạo và bộ bài tập** để giảng dạy đo lường tâm lý học bằng dữ liệu thực tế
-- Một **quy trình đóng góp** dành cho các nhà nghiên cứu muốn thêm bộ dữ liệu của riêng mình vào kho dữ liệu
+- אוסף הולך וגדל של **[דוגמאות מפורטות (vignettes)](/vignettes/index.qmd)** — דוגמאות מעובדות המיישמות שיטות מדידה קלאסיות וחדשות על פני מערכי נתונים רבים של IRW בו-זמנית
+- **משאבי הדרכה ומערכי תרגילים** ללימוד פסיכומטריקה עם נתונים אמיתיים
+- **תהליך תרומה** עבור חוקרים המעוניינים להוסיף מערכי נתונים משלהם למחסן
 
-## Tìm hiểu thêm
+## מידע נוסף
 
 - Domingue et al. (2025). *An introduction to the Item Response Warehouse (IRW): A resource for enhancing data usage in psychometrics.* Behavior Research Methods. [doi:10.3758/s13428-025-02796-y](https://doi.org/10.3758/s13428-025-02796-y)
 - Nadela, Lee, Jain, Gupta, Zhang & Domingue (2026). *The Item Response Warehouse: What It Is, How to Use It, and Targets for Potential Improvements.* Chinese/English Journal of Educational Measurement and Evaluation. [doi:10.59863/CIJG4549](https://doi.org/10.59863/CIJG4549)
-- Trang web: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
-- Mã nguồn: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
+- אתר אינטרנט: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
+- קוד: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
 
-Nếu bạn sử dụng dữ liệu IRW trong công việc của mình, vui lòng trích dẫn dữ liệu gốc (chúng tôi đã cung cấp chức năng để làm việc này). Chúng tôi cũng rất trân trọng nếu bạn trích dẫn bài báo giới thiệu nêu trên.
+אם אתם משתמשים בנתוני IRW בעבודתכם, אנא צטטו את הנתונים המקוריים (סיפקנו לשם כך את הפונקציונליות הנדרשת). נשמח מאוד גם אם תצטטו את מאמר המבוא שלעיל.
 
 ---
 
-*Có câu hỏi, phản hồi, hay muốn đóng góp một bộ dữ liệu? Hãy ghé thăm [trang Liên hệ](/contact.qmd) hoặc mở một issue trên [GitHub](https://github.com/itemresponsewarehouse).*
+*יש לכם שאלות, משוב, או שברצונכם לתרום מערך נתונים? בקרו ב[דף יצירת הקשר](/contact.qmd) או פתחו issue ב-[GitHub](https://github.com/itemresponsewarehouse).*
