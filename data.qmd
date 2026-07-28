@@ -45,6 +45,7 @@ vi = Object.fromEntries(Object.entries(_vi).map(([k, v]) => [k, {...v, range: lo
 // info for tag variables
 ti = ({
   "longitudinal":                          { label: "Longitudinal"                          } ,
+  "has_item_text":                         { label: "Has item text?"                        } ,
   "age_range":                             { label: "Age range"                             } ,
   "child_age__for_child_focused_studies_": { label: "Child age (for child-focused studies)" } ,
   "construct_type":                        { label: "Construct type"                        } ,
@@ -176,6 +177,7 @@ range_inputs = ([
 // specify overlap-based inputs (as variable, values)
 overlap_inputs = ([
   { v: "longitudinal",                          vals: longitudinal_vals     },
+  { v: "has_item_text",                         vals: has_item_text_vals    },
   { v: "age_range",                             vals: age_range_vals        },
   { v: "child_age__for_child_focused_studies_", vals: child_age_vals        },
   { v: "construct_type",                        vals: construct_type_vals   },
@@ -395,7 +397,7 @@ row ? html`<div class="pullout">
 
 ## {{< bi code class=header-icon >}}Code snippet
 
-The R code snippet below uses the <a href="https://itemresponsewarehouse.github.io/Rpkg" target="_blank">irw package</a> to fetch all of the tables that match the filters specified here. _Note: a difference between the functionality of the filters here and the behavior of_ `irw_filter()` _is that specifying values for a given argument of_ `irw_filter()` _will result in_ `NA` _values being dropped, while they can be included here._
+The R code snippet below uses the <a href="https://itemresponsewarehouse.github.io/Rpkg" target="_blank">irw package</a> to fetch all of the tables that match the filters specified here. _Note: a difference between the functionality of the filters here and the behavior of_ `irw_filter()` _is that specifying values for a given argument of_ `irw_filter()` _will result in_ `NA` _values being dropped, while they can be included here. The "Has item text?" filter is also not reflected in the snippet, since_ `irw_filter()` _does not support filtering by item-text availability; use_ `irw_list_itemtext_tables()` _separately for that._
 
 ```{ojs}
 // simple templating function: replace strings of the form "{{variable}}" in the
@@ -417,7 +419,7 @@ range_args = range_inputs.map(({ v, vals }) => range_arg(v, vals))
 // construct arguments for overlap inputs if they're not their default values
 is_default_overlap = (v, vals) => tags[v].every(t => vals.includes(t))
 overlap_arg = (v, vals) => is_default_overlap(v, vals) ? null : `${v} = ${c(vals.filter(e => e !== "NA"))}`
-overlap_args = overlap_inputs.filter(d => d.v !== l).map(({ v, vals }) => overlap_arg(v, vals))
+overlap_args = overlap_inputs.filter(d => d.v !== l && d.v !== "has_item_text").map(({ v, vals }) => overlap_arg(v, vals))
 
 // special handling to construct var argument by combining variables and prefixes
 var_arg_vals = var_inputs.map(({v, vals}) => v === "prefix" ? vals.map(s => `${s}_`) : vals).flat()
@@ -472,6 +474,14 @@ ds.length === 0 ? html`<em>No datasets match filters.</em>` : html`
 
 ```{ojs filter-longitudinal}
 viewof longitudinal_vals = tag_checkbox("longitudinal")
+```
+:::
+
+::: {.callout-note collapse="true"}
+## {{< bi file-text class=header-icon >}}Has item text?
+
+```{ojs filter-has-item-text}
+viewof has_item_text_vals = tag_checkbox("has_item_text")
 ```
 :::
 

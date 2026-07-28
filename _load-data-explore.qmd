@@ -37,6 +37,9 @@ var_vals <- metadata |>
   summarise(vals = list(value)) |>
   deframe()
 
+itemtext_meta <- irw_meta$table("itemtext_metadata")$to_tibble()
+itemtext_tables <- itemtext_meta |> pull(table) |> str_to_lower() |> unique()
+
 biblio <- irw_meta$table("biblio:qahg")$to_tibble()
 bib_data <- biblio |>
   mutate(table = str_to_lower(table)) |>
@@ -60,7 +63,10 @@ tags <- tag_table |>
   mutate(sample = sample |> str_replace_all(",(?= etc)", comma) |> str_remove_all('\\"')) |>
   mutate(across(-table, \(s) s |> str_split(",") |> map(str_trim) |> map(\(x) str_replace_all(x, comma, ",")))) |>
   left_join(metadata |> select(table, longitudinal)) |>
-  relocate(longitudinal, .before = age_range)
+  relocate(longitudinal, .before = age_range) |>
+  mutate(has_item_text = if_else(table %in% itemtext_tables, "Yes", "No"),
+         has_item_text = as.list(has_item_text)) |>
+  relocate(has_item_text, .before = age_range)
 
 color_vars <- tags |>
   pivot_longer(cols = -table, names_to = "tag", values_to = "value") |>
@@ -76,12 +82,14 @@ sort_n <- \(v) v |> fct_infreq() |> fct_relevel("NA", after = Inf) |> levels()
 
 age_range_vals <- c("Child (<18y)", "Adult (18+)", "Elderly (minimum age >50)", "Mixed", "Non-human", "NA")
 child_age_vals <- c("Early (<6y)", "Child (6-12y)", "Adolescent (12-18y)", "NA")
+has_item_text_vals <- c("Yes", "No")
 
 sort_funs <- list(
   "age_range" = \(v) age_range_vals,
   "child_age__for_child_focused_studies_" = \(v) child_age_vals,
   "construct_name" = sort_alpha,
   "construct_type" = sort_alpha,
+  "has_item_text" = \(v) has_item_text_vals,
   "item_format" = sort_n,
   "license" = sort_n,
   "longitudinal" = sort_n,
