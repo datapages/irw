@@ -162,9 +162,9 @@ Translator note: please do NOT translate the following —
 
 Les chercheurs qui étudient la mesure, en éducation, en psychologie et dans les domaines connexes, ont besoin de données réelles pour tester et comparer leurs méthodes. Ces données existent déjà en grande quantité, mais elles sont dispersées entre de nombreuses études, stockées dans des formats très divers et souvent difficiles à réutiliser en raison d'une documentation ou d'une licence qui n'est pas claire.
 
-Il s'agit d'un problème bien connu. D'autres disciplines l'ont résolu en construisant des ressources de données partagées et normalisées. En informatique, la collection d'images étiquetée ImageNet a fourni aux chercheurs un référentiel commun et a contribué à accélérer les progrès de l'intelligence artificielle. La génétique et les neurosciences ont construit des ressources partagées similaires pour leurs propres données.
+Il s'agit d'un problème bien connu. La communauté scientifique a formulé une norme commune pour le résoudre : les données doivent être **FAIR** — Trouvables (Findable), Accessibles, Interopérables et Réutilisables (Wilkinson et al., 2016). D'autres disciplines ont mis ces principes en pratique en construisant des ressources de données partagées et normalisées. En informatique, la collection d'images étiquetée ImageNet a fourni aux chercheurs un référentiel commun et a contribué à accélérer les progrès de l'intelligence artificielle. La génétique et les neurosciences ont construit des ressources partagées similaires pour leurs propres données.
 
-L'Entreposage de Réponse à l'Item (nous allons utiliser l'acronyme IRW pour être cohérent avec les écrits anglophones sur le sujet) fait la même chose pour les données de réponses aux items. Il rassemble des centaines de jeux de données existants et les remet en forme selon un format commun unique de sorte qu'une méthode testée sur un jeu de données puisse facilement être testée sur des centaines d'autres.
+L'Entreposage de Réponse à l'Item (nous allons utiliser l'acronyme IRW pour être cohérent avec les écrits anglophones sur le sujet) applique les mêmes principes FAIR aux données de réponses aux items. Il rassemble des centaines de jeux de données existants et les remet en forme selon un format commun unique de sorte qu'une méthode testée sur un jeu de données puisse facilement être testée sur des centaines d'autres.
 
 ## Contenu de l'IRW
 
@@ -175,10 +175,12 @@ L'IRW contient **des centaines de jeux de données** (« tableaux »), chacun é
 - Résultats attribués par des évaluateurs humains
 - Tout autre contexte impliquant des réponses répétées à un ensemble de mesure
 
-Deux choses sont vraies pour chaque jeu de données de l'IRW :
+Chaque jeu de données de l'IRW est conçu pour être :
 
-- **Ouvert.** Chaque jeu de données est sous licence permettant sa réutilisation. Son origine est documentée et le code utilisé pour le convertir au format de l'IRW est public.
-- **Harmonisé.** Chaque jeu de données est remis en forme selon une même structure simplifiée (décrite ci-dessous), de sorte que le même code d'analyse puisse s'exécuter sur de nombreux jeux de données avec peu ou pas de modification.
+- **Trouvable (Findable).** Chaque jeu de données est accompagné de métadonnées précalculées — nombre de participants, nombre d'items, densité des réponses, domaine du sujet et autres étiquettes descriptives — afin que les jeux de données puissent être localisés et filtrés sans devoir d'abord être téléchargés.
+- **Accessible.** Chaque jeu de données peut être récupéré via le navigateur web ou le package `irw`, avec un compte gratuit.
+- **Interopérable.** Chaque jeu de données est remis en forme selon une même structure simplifiée (décrite ci-dessous), de sorte que le même code d'analyse puisse s'exécuter sur de nombreux jeux de données avec peu ou pas de modification.
+- **Réutilisable.** Chaque jeu de données est sous licence ouverte, son origine est documentée et le code utilisé pour le convertir au format de l'IRW est public.
 
 Les jeux de données varient considérablement en taille (allant de quelques dizaines de réponses à plusieurs millions) et en type de réponse (items binaires, évaluations à catégories multiples, scores à crédit partiel, etc.). Chaque jeu de données est également accompagné de métadonnées pré-calculées (nombre de participants, nombre d'items, densité des réponses, domaine du sujet et d'autres étiquettes descriptives pertinentes) afin que les chercheurs puissent trouver les jeux de données pertinents sans devoir d'abord tous les télécharger et les traiter.
 
@@ -257,6 +259,7 @@ Le projet IRW comprend également :
 
 - Domingue et al. (2025). *An introduction to the Item Response Warehouse (IRW): A resource for enhancing data usage in psychometrics.* Behavior Research Methods. [doi:10.3758/s13428-025-02796-y](https://doi.org/10.3758/s13428-025-02796-y)
 - Nadela, Lee, Jain, Gupta, Zhang & Domingue (2026). *The Item Response Warehouse: What It Is, How to Use It, and Targets for Potential Improvements.* Chinese/English Journal of Educational Measurement and Evaluation. [doi:10.59863/CIJG4549](https://doi.org/10.59863/CIJG4549)
+- Wilkinson et al. (2016). *The FAIR Guiding Principles for scientific data management and stewardship.* Scientific Data. [doi:10.1038/sdata.2016.18](https://doi.org/10.1038/sdata.2016.18)
 - Site web : [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
 - Code : [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
 

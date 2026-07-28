@@ -162,9 +162,9 @@ Translator note: please do NOT translate the following —
 
 Researchers who study measurement — in education, psychology, and related fields — need real data to test and compare their methods. That data already exists in large quantities. But it is scattered across many studies, stored in many different formats, and often hard to reuse because of unclear documentation or licensing.
 
-This is a well-known problem. Other fields solved it by building shared, standardized data resources. In computer science, the ImageNet collection of labeled images gave researchers a common benchmark and helped drive rapid progress in AI. Genetics and neuroscience built similar shared resources for their own data.
+This is a well-known problem. The research community has articulated a shared standard for solving it: data should be **FAIR** — Findable, Accessible, Interoperable, and Reusable (Wilkinson et al., 2016). Other fields put these principles into practice by building shared, standardized data resources. In computer science, the ImageNet collection of labeled images gave researchers a common benchmark and helped drive rapid progress in AI. Genetics and neuroscience built similar shared resources for their own data.
 
-The Item Response Warehouse (IRW) does the same thing for item response data. It brings together hundreds of existing datasets and reshapes them into one common format — so that a method tested on one dataset can easily be tested on hundreds of others.
+The Item Response Warehouse (IRW) applies the same FAIR principles to item response data. It brings together hundreds of existing datasets and reshapes them into one common format — so that a method tested on one dataset can easily be tested on hundreds of others.
 
 ## What is in the IRW
 
@@ -175,10 +175,12 @@ The IRW contains **hundreds of datasets** ("tables"), each one a collection of i
 - Ratings assigned by human raters
 - Any other setting involving repeated responses to a set of measurement probes
 
-Two things are true of every dataset in the IRW:
+Every dataset in the IRW is designed to be:
 
-- **Open.** Each dataset is licensed for reuse. Its origin is documented, and the code used to convert it into the IRW format is public.
-- **Harmonized.** Each dataset is reshaped into the same simple structure (described below), so that the same analysis code can run across many datasets with little or no modification.
+- **Findable.** Each dataset comes with pre-computed metadata — participant and item counts, response density, subject area, and other descriptive tags — so datasets can be located and filtered without downloading them first.
+- **Accessible.** Every dataset can be retrieved through the web browser or the `irw` package, using a free account.
+- **Interoperable.** Each dataset is reshaped into the same simple long-format structure (described below), so the same analysis code can run across many datasets with little or no modification.
+- **Reusable.** Each dataset is openly licensed, its origin is documented, and the code used to convert it into the IRW format is public.
 
 Datasets vary widely in size (from a few hundred responses to many millions) and in response type (yes/no items, multi-category ratings, partial-credit scores, and more). Each dataset also comes with pre-computed metadata — number of participants, number of items, response density, subject area, and other descriptive tags — so that researchers can find relevant datasets without first downloading and processing all of them.
 
@@ -257,6 +259,7 @@ The IRW project also includes:
 
 - Domingue et al. (2025). *An introduction to the Item Response Warehouse (IRW): A resource for enhancing data usage in psychometrics.* Behavior Research Methods. [doi:10.3758/s13428-025-02796-y](https://doi.org/10.3758/s13428-025-02796-y)
 - Nadela, Lee, Jain, Gupta, Zhang & Domingue (2026). *The Item Response Warehouse: What It Is, How to Use It, and Targets for Potential Improvements.* Chinese/English Journal of Educational Measurement and Evaluation. [doi:10.59863/CIJG4549](https://doi.org/10.59863/CIJG4549)
+- Wilkinson et al. (2016). *The FAIR Guiding Principles for scientific data management and stewardship.* Scientific Data. [doi:10.1038/sdata.2016.18](https://doi.org/10.1038/sdata.2016.18)
 - Website: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
 - Code: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
 

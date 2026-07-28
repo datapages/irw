@@ -162,9 +162,9 @@ Translator note: please do NOT translate the following —
 
 Badacze zajmujący się pomiarem — w edukacji, psychologii i pokrewnych dziedzinach — potrzebują rzeczywistych danych, aby testować i porównywać swoje metody. Takie dane już istnieją w dużych ilościach. Są jednak rozproszone w wielu badaniach, przechowywane w wielu różnych formatach i często trudne do ponownego wykorzystania z powodu niejasnej dokumentacji lub licencji.
 
-To dobrze znany problem. Inne dziedziny rozwiązały go, budując wspólne, ustandaryzowane zasoby danych. W informatyce zbiór oznaczonych obrazów ImageNet dał badaczom wspólny punkt odniesienia (benchmark) i pomógł napędzić szybki postęp w AI. Genetyka i neuronauka zbudowały podobne wspólne zasoby dla swoich danych.
+To dobrze znany problem. Społeczność badawcza sformułowała wspólny standard, aby go rozwiązać: dane powinny być **FAIR** — możliwe do odnalezienia (Findable), dostępne (Accessible), interoperacyjne (Interoperable) i możliwe do ponownego wykorzystania (Reusable) (Wilkinson et al., 2016). Inne dziedziny wcieliły te zasady w życie, budując wspólne, ustandaryzowane zasoby danych. W informatyce zbiór oznaczonych obrazów ImageNet dał badaczom wspólny punkt odniesienia (benchmark) i pomógł napędzić szybki postęp w AI. Genetyka i neuronauka zbudowały podobne wspólne zasoby dla swoich danych.
 
-Item Response Warehouse (IRW) robi to samo dla danych o odpowiedziach na zadania. Gromadzi setki istniejących zbiorów danych i przekształca je w jeden wspólny format — dzięki czemu metoda przetestowana na jednym zbiorze danych może łatwo zostać przetestowana na setkach innych.
+Item Response Warehouse (IRW) stosuje te same zasady FAIR do danych o odpowiedziach na zadania. Gromadzi setki istniejących zbiorów danych i przekształca je w jeden wspólny format — dzięki czemu metoda przetestowana na jednym zbiorze danych może łatwo zostać przetestowana na setkach innych.
 
 ## Co zawiera IRW
 
@@ -175,10 +175,12 @@ IRW zawiera **setki zbiorów danych** ("tabel"), z których każdy jest zbiorem 
 - Oceny przyznawane przez ludzkich sędziów (raterów)
 - Każdą inną sytuację obejmującą powtarzane odpowiedzi na zestaw narzędzi pomiarowych
 
-W przypadku każdego zbioru danych w IRW prawdziwe są dwie rzeczy:
+Każdy zbiór danych w IRW jest zaprojektowany tak, aby był:
 
-- **Otwarty.** Każdy zbiór danych jest udostępniony na licencji zezwalającej na ponowne wykorzystanie. Jego pochodzenie jest udokumentowane, a kod użyty do przekształcenia go do formatu IRW jest publicznie dostępny.
-- **Ujednolicony (harmonized).** Każdy zbiór danych jest przekształcany do tej samej prostej struktury (opisanej poniżej), dzięki czemu ten sam kod analityczny może działać na wielu zbiorach danych przy niewielkiej modyfikacji lub bez żadnej.
+- **Możliwy do odnalezienia (Findable).** Każdy zbiór danych zawiera wstępnie obliczone metadane — liczbę uczestników, liczbę zadań, gęstość odpowiedzi, dziedzinę tematyczną oraz inne opisowe etykiety — dzięki czemu zbiory danych można znaleźć i filtrować bez konieczności ich wcześniejszego pobrania.
+- **Dostępny (Accessible).** Każdy zbiór danych można pobrać przez przeglądarkę internetową lub pakiet `irw`, korzystając z bezpłatnego konta.
+- **Interoperacyjny (Interoperable).** Każdy zbiór danych jest przekształcany do tej samej prostej struktury (opisanej poniżej), dzięki czemu ten sam kod analityczny może działać na wielu zbiorach danych przy niewielkiej modyfikacji lub bez żadnej.
+- **Możliwy do ponownego wykorzystania (Reusable).** Każdy zbiór danych jest udostępniony na otwartej licencji, jego pochodzenie jest udokumentowane, a kod użyty do przekształcenia go do formatu IRW jest publicznie dostępny.
 
 Zbiory danych różnią się znacznie pod względem wielkości (od kilkuset odpowiedzi do wielu milionów) oraz rodzaju odpowiedzi (zadania tak/nie, oceny wielokategorialne, wyniki częściowe i inne). Do każdego zbioru danych dołączone są również wstępnie obliczone metadane — liczba uczestników, liczba zadań, gęstość odpowiedzi, dziedzina tematyczna oraz inne opisowe etykiety — dzięki czemu badacze mogą znaleźć odpowiednie zbiory danych bez konieczności ich wcześniejszego pobierania i przetwarzania.
 
@@ -257,6 +259,7 @@ Projekt IRW obejmuje również:
 
 - Domingue et al. (2025). *An introduction to the Item Response Warehouse (IRW): A resource for enhancing data usage in psychometrics.* Behavior Research Methods. [doi:10.3758/s13428-025-02796-y](https://doi.org/10.3758/s13428-025-02796-y)
 - Nadela, Lee, Jain, Gupta, Zhang & Domingue (2026). *The Item Response Warehouse: What It Is, How to Use It, and Targets for Potential Improvements.* Chinese/English Journal of Educational Measurement and Evaluation. [doi:10.59863/CIJG4549](https://doi.org/10.59863/CIJG4549)
+- Wilkinson et al. (2016). *The FAIR Guiding Principles for scientific data management and stewardship.* Scientific Data. [doi:10.1038/sdata.2016.18](https://doi.org/10.1038/sdata.2016.18)
 - Strona internetowa: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
 - Kod: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
 

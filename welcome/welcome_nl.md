@@ -162,9 +162,9 @@ Translator note: please do NOT translate the following —
 
 Onderzoekers die meting bestuderen — in de onderwijskunde, psychologie en verwante vakgebieden — hebben echte data nodig om hun methoden te testen en te vergelijken. Die data bestaat al in grote hoeveelheden. Maar ze is verspreid over veel studies, opgeslagen in veel verschillende formaten, en vaak lastig te hergebruiken door onduidelijke documentatie of licenties.
 
-Dit is een bekend probleem. Andere vakgebieden hebben het opgelost door gedeelde, gestandaardiseerde databronnen te bouwen. In de informatica gaf de ImageNet-verzameling van gelabelde afbeeldingen onderzoekers een gemeenschappelijke benchmark en hielp dit de snelle vooruitgang in AI aan te jagen. Genetica en neurowetenschappen hebben vergelijkbare gedeelde bronnen gebouwd voor hun eigen data.
+Dit is een bekend probleem. De onderzoeksgemeenschap heeft een gedeelde norm geformuleerd om het op te lossen: data moet **FAIR** zijn — vindbaar (Findable), toegankelijk (Accessible), interoperabel (Interoperable) en herbruikbaar (Reusable) (Wilkinson et al., 2016). Andere vakgebieden hebben deze principes in de praktijk gebracht door gedeelde, gestandaardiseerde databronnen te bouwen. In de informatica gaf de ImageNet-verzameling van gelabelde afbeeldingen onderzoekers een gemeenschappelijke benchmark en hielp dit de snelle vooruitgang in AI aan te jagen. Genetica en neurowetenschappen hebben vergelijkbare gedeelde bronnen gebouwd voor hun eigen data.
 
-Het Item Response Warehouse (IRW) doet hetzelfde voor itemresponsdata. Het brengt honderden bestaande datasets samen en vormt ze om naar één gemeenschappelijk formaat — zodat een methode die op één dataset is getest, gemakkelijk op honderden andere kan worden getest.
+Het Item Response Warehouse (IRW) past dezelfde FAIR-principes toe op itemresponsdata. Het brengt honderden bestaande datasets samen en vormt ze om naar één gemeenschappelijk formaat — zodat een methode die op één dataset is getest, gemakkelijk op honderden andere kan worden getest.
 
 ## Wat zit er in het IRW
 
@@ -175,10 +175,12 @@ Het IRW bevat **honderden datasets** ("tabellen"), elk een verzameling van indiv
 - Beoordelingen gegeven door menselijke beoordelaars
 - Elke andere situatie met herhaalde responsen op een reeks meetinstrumenten
 
-Twee dingen gelden voor elke dataset in het IRW:
+Elke dataset in het IRW is ontworpen om te voldoen aan vier eigenschappen:
 
-- **Open.** Elke dataset is gelicentieerd voor hergebruik. De herkomst ervan is gedocumenteerd, en de code die is gebruikt om de dataset naar het IRW-formaat om te zetten, is openbaar.
-- **Geharmoniseerd.** Elke dataset wordt omgevormd naar dezelfde eenvoudige structuur (hieronder beschreven), zodat dezelfde analysecode met weinig of geen aanpassing op veel datasets kan worden toegepast.
+- **Vindbaar (Findable).** Elke dataset wordt geleverd met vooraf berekende metadata — aantal deelnemers, aantal items, responsdichtheid, vakgebied en andere beschrijvende labels — zodat datasets kunnen worden gevonden en gefilterd zonder ze eerst te downloaden.
+- **Toegankelijk (Accessible).** Elke dataset kan worden opgehaald via de webbrowser of het `irw`-package, met een gratis account.
+- **Interoperabel (Interoperable).** Elke dataset wordt omgevormd naar dezelfde eenvoudige structuur (hieronder beschreven), zodat dezelfde analysecode met weinig of geen aanpassing op veel datasets kan worden toegepast.
+- **Herbruikbaar (Reusable).** Elke dataset is openlijk gelicentieerd, de herkomst ervan is gedocumenteerd, en de code die is gebruikt om de dataset naar het IRW-formaat om te zetten, is openbaar.
 
 Datasets verschillen sterk in omvang (van enkele honderden responsen tot vele miljoenen) en in responstype (ja/nee-items, meerkeuzebeoordelingen, deelscores, en meer). Elke dataset wordt ook geleverd met vooraf berekende metadata — aantal deelnemers, aantal items, responsdichtheid, vakgebied en andere beschrijvende labels — zodat onderzoekers relevante datasets kunnen vinden zonder ze eerst allemaal te downloaden en te verwerken.
 
@@ -257,6 +259,7 @@ Het IRW-project omvat ook:
 
 - Domingue et al. (2025). *An introduction to the Item Response Warehouse (IRW): A resource for enhancing data usage in psychometrics.* Behavior Research Methods. [doi:10.3758/s13428-025-02796-y](https://doi.org/10.3758/s13428-025-02796-y)
 - Nadela, Lee, Jain, Gupta, Zhang & Domingue (2026). *The Item Response Warehouse: What It Is, How to Use It, and Targets for Potential Improvements.* Chinese/English Journal of Educational Measurement and Evaluation. [doi:10.59863/CIJG4549](https://doi.org/10.59863/CIJG4549)
+- Wilkinson et al. (2016). *The FAIR Guiding Principles for scientific data management and stewardship.* Scientific Data. [doi:10.1038/sdata.2016.18](https://doi.org/10.1038/sdata.2016.18)
 - Website: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
 - Code: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
 

@@ -162,9 +162,9 @@ Translator note: please do NOT translate the following —
 
 研究测量问题的学者——无论在教育学、心理学还是相关领域——都需要真实数据来检验和比较他们的方法。这样的数据其实早已大量存在，但它们分散在众多研究中，存储格式各异，并且常常因为文档不清晰或授权不明确而难以重复使用。
 
-这是一个众所周知的问题。其他学科通过建立共享的、标准化的数据资源解决了这个问题。在计算机科学领域，带标注的图像集合 ImageNet 为研究者提供了一个共同的基准,推动了人工智能的快速发展。遗传学和神经科学也为各自的数据建立了类似的共享资源。
+这是一个众所周知的问题。学术界已经提出了解决这一问题的共同准则：数据应当具备 **FAIR** 特性——可发现（Findable）、可访问（Accessible）、可互操作（Interoperable）和可重用（Reusable）（Wilkinson et al., 2016）。其他学科正是通过践行这些原则,建立共享的、标准化的数据资源来解决这个问题的。在计算机科学领域，带标注的图像集合 ImageNet 为研究者提供了一个共同的基准,推动了人工智能的快速发展。遗传学和神经科学也为各自的数据建立了类似的共享资源。
 
-Item Response Warehouse（IRW）为项目反应数据做了同样的事情。它汇集了数百个已有数据集，将它们统一转换为同一种通用格式——这样一来，在某个数据集上验证过的方法，就能轻松地在数百个其他数据集上进行检验。
+Item Response Warehouse（IRW）将同样的 FAIR 原则应用于项目反应数据。它汇集了数百个已有数据集，将它们统一转换为同一种通用格式——这样一来，在某个数据集上验证过的方法，就能轻松地在数百个其他数据集上进行检验。
 
 ## IRW 包含哪些内容
 
@@ -175,10 +175,12 @@ IRW 包含**数百个数据集**（称为"表"），每个数据集都是一组�
 - 人类评分者给出的评分
 - 任何其他涉及对一组测量探针重复作出反应的情境
 
-关于 IRW 中的每一个数据集，以下两点始终成立：
+IRW 中的每一个数据集都力求做到：
 
-- **开放。** 每个数据集都获得了可供重复使用的授权。其来源均有文档记录，将其转换为 IRW 格式所使用的代码也是公开的。
-- **统一格式化。** 每个数据集都被转换为相同的简单结构（详见下文），使得同一套分析代码可以在众多数据集上运行，几乎不需要修改。
+- **可发现（Findable）。** 每个数据集都附带预先计算好的元数据——参与者人数、项目数量、反应密度、学科领域及其他描述性标签——使数据集无需先下载即可被定位和筛选。
+- **可访问（Accessible）。** 每个数据集都可以通过网页浏览器或 `irw` 包获取，只需一个免费账户。
+- **可互操作（Interoperable）。** 每个数据集都被转换为相同的简单结构（详见下文），使得同一套分析代码可以在众多数据集上运行，几乎不需要修改。
+- **可重用（Reusable）。** 每个数据集都获得开放授权，其来源均有文档记录，将其转换为 IRW 格式所使用的代码也是公开的。
 
 各数据集在规模上差异很大（从数百条反应记录到数百万条不等），在反应类型上也各不相同（是/否类项目、多类别评分、部分得分等）。每个数据集还附带预先计算好的元数据——参与者人数、项目数量、反应密度、学科领域及其他描述性标签——使研究者无需先下载并处理全部数据,即可找到相关数据集。
 
@@ -257,6 +259,7 @@ IRW 项目还包括:
 
 - Domingue et al. (2025). *An introduction to the Item Response Warehouse (IRW): A resource for enhancing data usage in psychometrics.* Behavior Research Methods. [doi:10.3758/s13428-025-02796-y](https://doi.org/10.3758/s13428-025-02796-y)
 - Nadela, Lee, Jain, Gupta, Zhang & Domingue (2026). *The Item Response Warehouse: What It Is, How to Use It, and Targets for Potential Improvements.* Chinese/English Journal of Educational Measurement and Evaluation. [doi:10.59863/CIJG4549](https://doi.org/10.59863/CIJG4549)
+- Wilkinson et al. (2016). *The FAIR Guiding Principles for scientific data management and stewardship.* Scientific Data. [doi:10.1038/sdata.2016.18](https://doi.org/10.1038/sdata.2016.18)
 - 网站：[itemresponsewarehouse.org](https://itemresponsewarehouse.org)
 - 代码：[github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
 

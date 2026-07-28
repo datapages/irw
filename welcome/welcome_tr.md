@@ -162,9 +162,9 @@ Translator note: please do NOT translate the following —
 
 Ölçme konusunu çalışan araştırmacıların — eğitim, psikoloji ve ilgili alanlarda — yöntemlerini sınamak ve karşılaştırmak için gerçek verilere ihtiyacı vardır. Bu tür veriler zaten büyük miktarlarda mevcuttur. Ancak birçok çalışmaya dağılmış, birçok farklı biçimde saklanmış ve genellikle belirsiz belgeleme veya lisanslama nedeniyle yeniden kullanımı zor durumdadır.
 
-Bu iyi bilinen bir sorundur. Diğer alanlar, paylaşılan ve standartlaştırılmış veri kaynakları oluşturarak bu sorunu çözmüştür. Bilgisayar biliminde, etiketlenmiş görüntülerden oluşan ImageNet koleksiyonu araştırmacılara ortak bir kıyaslama noktası (benchmark) sağlamış ve yapay zekada hızlı ilerlemeyi desteklemiştir. Genetik ve nörobilim de kendi verileri için benzer paylaşılan kaynaklar oluşturmuştur.
+Bu iyi bilinen bir sorundur. Araştırma topluluğu bu sorunu çözmek için ortak bir standart ortaya koymuştur: veriler **FAIR** olmalıdır — bulunabilir (Findable), erişilebilir (Accessible), birlikte çalışabilir (Interoperable) ve yeniden kullanılabilir (Reusable) (Wilkinson et al., 2016). Diğer alanlar, bu ilkeleri paylaşılan ve standartlaştırılmış veri kaynakları oluşturarak uygulamaya koymuştur. Bilgisayar biliminde, etiketlenmiş görüntülerden oluşan ImageNet koleksiyonu araştırmacılara ortak bir kıyaslama noktası (benchmark) sağlamış ve yapay zekada hızlı ilerlemeyi desteklemiştir. Genetik ve nörobilim de kendi verileri için benzer paylaşılan kaynaklar oluşturmuştur.
 
-Item Response Warehouse (IRW), madde tepki verileri için aynı şeyi yapar. Yüzlerce mevcut veri kümesini bir araya getirir ve bunları tek bir ortak biçime dönüştürür — böylece bir veri kümesi üzerinde test edilen bir yöntem, yüzlerce başka veri kümesi üzerinde de kolayca test edilebilir.
+Item Response Warehouse (IRW), aynı FAIR ilkelerini madde tepki verilerine uygular. Yüzlerce mevcut veri kümesini bir araya getirir ve bunları tek bir ortak biçime dönüştürür — böylece bir veri kümesi üzerinde test edilen bir yöntem, yüzlerce başka veri kümesi üzerinde de kolayca test edilebilir.
 
 ## IRW'de neler var
 
@@ -175,10 +175,12 @@ IRW, her biri bireysel tepkilerden oluşan bir koleksiyon olan **yüzlerce veri 
 - İnsan değerlendiriciler tarafından verilen puanlar
 - Bir dizi ölçme aracına tekrarlanan tepkilerin verildiği diğer her türlü durum
 
-IRW'deki her veri kümesi için iki şey doğrudur:
+IRW'deki her veri kümesi şu şekilde tasarlanmıştır:
 
-- **Açık.** Her veri kümesi yeniden kullanım için lisanslıdır. Kökeni belgelenmiştir ve onu IRW biçimine dönüştürmek için kullanılan kod herkese açıktır.
-- **Uyumlaştırılmış (Harmonized).** Her veri kümesi aynı basit yapıya (aşağıda açıklanmıştır) dönüştürülür, böylece aynı analiz kodu birçok veri kümesinde çok az değişiklikle veya hiç değişiklik yapılmadan çalıştırılabilir.
+- **Bulunabilir (Findable).** Her veri kümesi, önceden hesaplanmış meta verilerle birlikte gelir — katılımcı sayısı, madde sayısı, tepki yoğunluğu, konu alanı ve diğer açıklayıcı etiketler — böylece veri kümeleri önce indirilmeden bulunabilir ve filtrelenebilir.
+- **Erişilebilir (Accessible).** Her veri kümesine, ücretsiz bir hesapla, web tarayıcısı veya `irw` paketi üzerinden erişilebilir.
+- **Birlikte çalışabilir (Interoperable).** Her veri kümesi aynı basit yapıya (aşağıda açıklanmıştır) dönüştürülür, böylece aynı analiz kodu birçok veri kümesinde çok az değişiklikle veya hiç değişiklik yapılmadan çalıştırılabilir.
+- **Yeniden kullanılabilir (Reusable).** Her veri kümesi açık lisanslıdır, kökeni belgelenmiştir ve onu IRW biçimine dönüştürmek için kullanılan kod herkese açıktır.
 
 Veri kümeleri boyut açısından (birkaç yüz tepkiden milyonlarcasına kadar) ve tepki türü açısından (evet/hayır maddeleri, çok kategorili puanlamalar, kısmi puanlar ve daha fazlası) büyük farklılıklar gösterir. Her veri kümesi ayrıca önceden hesaplanmış meta verilerle birlikte gelir — katılımcı sayısı, madde sayısı, tepki yoğunluğu, konu alanı ve diğer açıklayıcı etiketler — böylece araştırmacılar önce hepsini indirip işlemeden ilgili veri kümelerini bulabilir.
 
@@ -257,6 +259,7 @@ IRW projesi ayrıca şunları da içerir:
 
 - Domingue et al. (2025). *An introduction to the Item Response Warehouse (IRW): A resource for enhancing data usage in psychometrics.* Behavior Research Methods. [doi:10.3758/s13428-025-02796-y](https://doi.org/10.3758/s13428-025-02796-y)
 - Nadela, Lee, Jain, Gupta, Zhang & Domingue (2026). *The Item Response Warehouse: What It Is, How to Use It, and Targets for Potential Improvements.* Chinese/English Journal of Educational Measurement and Evaluation. [doi:10.59863/CIJG4549](https://doi.org/10.59863/CIJG4549)
+- Wilkinson et al. (2016). *The FAIR Guiding Principles for scientific data management and stewardship.* Scientific Data. [doi:10.1038/sdata.2016.18](https://doi.org/10.1038/sdata.2016.18)
 - Web sitesi: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
 - Kod: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
 

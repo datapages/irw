@@ -162,9 +162,9 @@ Translator note: please do NOT translate the following —
 
 Watafiti wanaosoma upimaji — katika elimu, saikolojia, na fani zinazohusiana — wanahitaji data halisi ili kujaribu na kulinganisha mbinu zao. Data hiyo tayari ipo kwa wingi mkubwa. Lakini imetawanyika katika tafiti nyingi, imehifadhiwa katika miundo mingi tofauti, na mara nyingi ni ngumu kuitumia tena kwa sababu ya nyaraka au leseni zisizo wazi.
 
-Hii ni tatizo linalojulikana sana. Fani nyingine zimelitatua kwa kujenga rasilimali za data zilizoshirikiwa na kusanifishwa. Katika sayansi ya kompyuta, mkusanyiko wa picha zilizowekwa lebo wa ImageNet uliwapa watafiti kigezo cha kawaida (benchmark) na ukasaidia kuchochea maendeleo ya haraka katika AI. Jenetiki na sayansi ya neva zimejenga rasilimali za pamoja zinazofanana kwa data zao wenyewe.
+Hii ni tatizo linalojulikana sana. Jumuiya ya utafiti imeweka kiwango cha pamoja cha kulitatua: data inapaswa kuwa **FAIR** — inayopatikana kwa urahisi (Findable), inayofikiwa (Accessible), inayoweza kutumika pamoja na mifumo mingine (Interoperable), na inayoweza kutumika tena (Reusable) (Wilkinson et al., 2016). Fani nyingine zimeweka kanuni hizi katika vitendo kwa kujenga rasilimali za data zilizoshirikiwa na kusanifishwa. Katika sayansi ya kompyuta, mkusanyiko wa picha zilizowekwa lebo wa ImageNet uliwapa watafiti kigezo cha kawaida (benchmark) na ukasaidia kuchochea maendeleo ya haraka katika AI. Jenetiki na sayansi ya neva zimejenga rasilimali za pamoja zinazofanana kwa data zao wenyewe.
 
-Item Response Warehouse (IRW) inafanya jambo lilelile kwa data ya majibu ya vipengele. Inakusanya mamia ya seti za data zilizopo na kuzibadilisha kuwa muundo mmoja wa pamoja — ili mbinu iliyojaribiwa kwenye seti moja ya data iweze kujaribiwa kwa urahisi kwenye mamia ya seti nyingine.
+Item Response Warehouse (IRW) inatumia kanuni hizohizo za FAIR kwa data ya majibu ya vipengele. Inakusanya mamia ya seti za data zilizopo na kuzibadilisha kuwa muundo mmoja wa pamoja — ili mbinu iliyojaribiwa kwenye seti moja ya data iweze kujaribiwa kwa urahisi kwenye mamia ya seti nyingine.
 
 ## Kilichomo ndani ya IRW
 
@@ -175,10 +175,12 @@ IRW ina **mamia ya seti za data** ("majedwali"), kila moja ikiwa mkusanyiko wa m
 - Alama zinazotolewa na wakadiriaji binadamu
 - Hali nyingine yoyote inayohusisha majibu yanayojirudia kwa seti ya vifaa vya upimaji
 
-Mambo mawili ni kweli kwa kila seti ya data katika IRW:
+Kila seti ya data katika IRW imeundwa iwe:
 
-- **Wazi.** Kila seti ya data ina leseni ya kutumika tena. Asili yake imeandikwa, na msimbo uliotumika kuibadilisha kuwa muundo wa IRW ni wa umma.
-- **Iliyosanifishwa (harmonized).** Kila seti ya data hubadilishwa kuwa muundo mmoja rahisi (ulioelezwa hapa chini), ili msimbo huohuo wa uchambuzi uweze kutumika kwenye seti nyingi za data kwa mabadiliko kidogo au bila mabadiliko yoyote.
+- **Inayopatikana kwa urahisi (Findable).** Kila seti ya data inakuja na metadata iliyokokotolewa tayari — idadi ya washiriki, idadi ya vipengele, msongamano wa majibu, uwanja wa somo, na lebo nyingine za maelezo — ili seti za data ziweze kupatikana na kuchujwa bila kuzipakua kwanza.
+- **Inayofikiwa (Accessible).** Kila seti ya data inaweza kupatikana kupitia kivinjari cha wavuti au kifurushi cha `irw`, kwa akaunti ya bure.
+- **Inayoweza kutumika pamoja na mifumo mingine (Interoperable).** Kila seti ya data hubadilishwa kuwa muundo mmoja rahisi (ulioelezwa hapa chini), ili msimbo huohuo wa uchambuzi uweze kutumika kwenye seti nyingi za data kwa mabadiliko kidogo au bila mabadiliko yoyote.
+- **Inayoweza kutumika tena (Reusable).** Kila seti ya data ina leseni huria, asili yake imeandikwa, na msimbo uliotumika kuibadilisha kuwa muundo wa IRW ni wa umma.
 
 Seti za data hutofautiana sana kwa ukubwa (kutoka majibu mia chache hadi mamilioni mengi) na kwa aina ya majibu (vipengele vya ndiyo/hapana, ukadiriaji wa makundi mengi, alama za sehemu, na mengineyo). Kila seti ya data pia huja na metadata iliyokokotolewa tayari — idadi ya washiriki, idadi ya vipengele, msongamano wa majibu, uwanja wa somo, na lebo nyingine za maelezo — ili watafiti waweze kupata seti za data zinazofaa bila kulazimika kuzipakua na kuzichambua zote kwanza.
 
@@ -257,6 +259,7 @@ Mradi wa IRW pia unajumuisha:
 
 - Domingue et al. (2025). *An introduction to the Item Response Warehouse (IRW): A resource for enhancing data usage in psychometrics.* Behavior Research Methods. [doi:10.3758/s13428-025-02796-y](https://doi.org/10.3758/s13428-025-02796-y)
 - Nadela, Lee, Jain, Gupta, Zhang & Domingue (2026). *The Item Response Warehouse: What It Is, How to Use It, and Targets for Potential Improvements.* Chinese/English Journal of Educational Measurement and Evaluation. [doi:10.59863/CIJG4549](https://doi.org/10.59863/CIJG4549)
+- Wilkinson et al. (2016). *The FAIR Guiding Principles for scientific data management and stewardship.* Scientific Data. [doi:10.1038/sdata.2016.18](https://doi.org/10.1038/sdata.2016.18)
 - Tovuti: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
 - Msimbo: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
 

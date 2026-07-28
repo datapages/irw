@@ -162,9 +162,9 @@ Translator note: please do NOT translate the following —
 
 Forschende, die sich mit Messung beschäftigen — in der Bildungsforschung, Psychologie und verwandten Bereichen — benötigen echte Daten, um ihre Methoden zu testen und zu vergleichen. Solche Daten existieren bereits in großer Menge. Sie sind jedoch über viele Studien verstreut, in vielen unterschiedlichen Formaten gespeichert und aufgrund unklarer Dokumentation oder Lizenzierung oft schwer wiederzuverwenden.
 
-Dies ist ein bekanntes Problem. Andere Fachbereiche haben es gelöst, indem sie gemeinsame, standardisierte Datenressourcen aufgebaut haben. In der Informatik bot die Sammlung beschrifteter Bilder ImageNet Forschenden einen gemeinsamen Bezugspunkt und trug zu raschen Fortschritten in der KI bei. Auch die Genetik und die Neurowissenschaften haben ähnliche gemeinsame Ressourcen für ihre eigenen Daten aufgebaut.
+Dies ist ein bekanntes Problem. Die Forschungsgemeinschaft hat einen gemeinsamen Standard zu dessen Lösung formuliert: Daten sollen **FAIR** sein — auffindbar (Findable), zugänglich (Accessible), interoperabel (Interoperable) und wiederverwendbar (Reusable) (Wilkinson et al., 2016). Andere Fachbereiche haben diese Prinzipien in die Praxis umgesetzt, indem sie gemeinsame, standardisierte Datenressourcen aufgebaut haben. In der Informatik bot die Sammlung beschrifteter Bilder ImageNet Forschenden einen gemeinsamen Bezugspunkt und trug zu raschen Fortschritten in der KI bei. Auch die Genetik und die Neurowissenschaften haben ähnliche gemeinsame Ressourcen für ihre eigenen Daten aufgebaut.
 
-Das Item Response Warehouse (IRW) tut dasselbe für Item-Response-Daten. Es bringt Hunderte bestehender Datensätze zusammen, formt sie in ein gemeinsames Format um und macht sie frei zugänglich an einem einzigen Ort — sodass eine Methode, die an einem Datensatz getestet wurde, leicht an Hunderten anderer getestet werden kann.
+Das Item Response Warehouse (IRW) wendet dieselben FAIR-Prinzipien auf Item-Response-Daten an. Es bringt Hunderte bestehender Datensätze zusammen, formt sie in ein gemeinsames Format um und macht sie frei zugänglich an einem einzigen Ort — sodass eine Methode, die an einem Datensatz getestet wurde, leicht an Hunderten anderer getestet werden kann.
 
 ## Was das IRW enthält
 
@@ -175,10 +175,12 @@ Das IRW enthält **Hunderte von Datensätzen** ("Tabellen"), von denen jeder ein
 - Bewertungen, die von menschlichen Beurteilenden vergeben werden
 - Jeder andere Kontext mit wiederholten Antworten auf eine Reihe von Messsonden
 
-Für jeden Datensatz im IRW gelten zwei Dinge:
+Jeder Datensatz im IRW ist darauf ausgelegt:
 
-- **Offen.** Jeder Datensatz ist für die Weiterverwendung lizenziert. Seine Herkunft ist dokumentiert, und der Code, der zur Umwandlung in das IRW-Format verwendet wurde, ist öffentlich zugänglich.
-- **Harmonisiert.** Jeder Datensatz wird in dieselbe einfache Struktur umgeformt (unten beschrieben), sodass derselbe Analysecode mit wenig oder gar keiner Anpassung auf viele Datensätze angewendet werden kann.
+- **Auffindbar (Findable).** Jeder Datensatz kommt mit vorab berechneten Metadaten — Anzahl der Teilnehmenden, Anzahl der Items, Antwortdichte, Themengebiet und weitere beschreibende Tags —, sodass Datensätze gefunden und gefiltert werden können, ohne sie zuvor herunterzuladen.
+- **Zugänglich (Accessible).** Jeder Datensatz kann über den Webbrowser oder das `irw`-Paket abgerufen werden, mit einem kostenlosen Konto.
+- **Interoperabel (Interoperable).** Jeder Datensatz wird in dieselbe einfache Struktur umgeformt (unten beschrieben), sodass derselbe Analysecode mit wenig oder gar keiner Anpassung auf viele Datensätze angewendet werden kann.
+- **Wiederverwendbar (Reusable).** Jeder Datensatz ist offen lizenziert, seine Herkunft ist dokumentiert, und der Code, der zur Umwandlung in das IRW-Format verwendet wurde, ist öffentlich zugänglich.
 
 Die Datensätze variieren stark in ihrer Größe (von einigen Hundert Antworten bis zu mehreren Millionen) und im Antworttyp (Ja/Nein-Items, mehrkategoriale Bewertungen, Teilpunktzahlen und mehr). Jeder Datensatz kommt zudem mit vorab berechneten Metadaten — Anzahl der Teilnehmenden, Anzahl der Items, Antwortdichte, Themengebiet und weitere beschreibende Tags —, sodass Forschende relevante Datensätze finden können, ohne zunächst alle herunterladen und verarbeiten zu müssen.
 
@@ -257,6 +259,7 @@ Das IRW-Projekt umfasst außerdem:
 
 - Domingue et al. (2025). *An introduction to the Item Response Warehouse (IRW): A resource for enhancing data usage in psychometrics.* Behavior Research Methods. [doi:10.3758/s13428-025-02796-y](https://doi.org/10.3758/s13428-025-02796-y)
 - Nadela, Lee, Jain, Gupta, Zhang & Domingue (2026). *The Item Response Warehouse: What It Is, How to Use It, and Targets for Potential Improvements.* Chinese/English Journal of Educational Measurement and Evaluation. [doi:10.59863/CIJG4549](https://doi.org/10.59863/CIJG4549)
+- Wilkinson et al. (2016). *The FAIR Guiding Principles for scientific data management and stewardship.* Scientific Data. [doi:10.1038/sdata.2016.18](https://doi.org/10.1038/sdata.2016.18)
 - Website: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
 - Code: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
 

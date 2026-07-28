@@ -162,9 +162,9 @@ Translator note: please do NOT translate the following —
 
 Penyelidik yang mengkaji pengukuran — dalam bidang pendidikan, psikologi, dan bidang berkaitan — memerlukan data sebenar untuk menguji dan membandingkan kaedah mereka. Data sedemikian sudah wujud dalam jumlah yang besar. Namun ia bertaburan merentasi banyak kajian, disimpan dalam pelbagai format yang berbeza, dan sering sukar digunakan semula kerana dokumentasi atau lesen yang tidak jelas.
 
-Ini adalah masalah yang sudah lama diketahui. Bidang-bidang lain telah menyelesaikannya dengan membina sumber data yang dikongsi dan diseragamkan. Dalam sains komputer, koleksi imej berlabel ImageNet memberikan penyelidik satu penanda aras (benchmark) yang sama dan membantu mempercepatkan kemajuan dalam AI. Genetik dan sains saraf turut membina sumber terkongsi yang serupa untuk data masing-masing.
+Ini adalah masalah yang sudah lama diketahui. Komuniti penyelidikan telah menggariskan piawaian bersama untuk menyelesaikannya: data perlu **FAIR** — mudah dijumpai (Findable), boleh diakses (Accessible), boleh berinteroperasi (Interoperable), dan boleh digunakan semula (Reusable) (Wilkinson et al., 2016). Bidang-bidang lain telah melaksanakan prinsip-prinsip ini dengan membina sumber data yang dikongsi dan diseragamkan. Dalam sains komputer, koleksi imej berlabel ImageNet memberikan penyelidik satu penanda aras (benchmark) yang sama dan membantu mempercepatkan kemajuan dalam AI. Genetik dan sains saraf turut membina sumber terkongsi yang serupa untuk data masing-masing.
 
-Item Response Warehouse (IRW) melakukan perkara yang sama untuk data respons item. Ia menghimpunkan ratusan set data sedia ada dan membentuk semula ke dalam satu format yang sama — supaya sesuatu kaedah yang diuji ke atas satu set data boleh diuji dengan mudah ke atas ratusan set data yang lain.
+Item Response Warehouse (IRW) menerapkan prinsip FAIR yang sama untuk data respons item. Ia menghimpunkan ratusan set data sedia ada dan membentuk semula ke dalam satu format yang sama — supaya sesuatu kaedah yang diuji ke atas satu set data boleh diuji dengan mudah ke atas ratusan set data yang lain.
 
 ## Apa yang terdapat dalam IRW
 
@@ -175,10 +175,12 @@ IRW mengandungi **ratusan set data** ("jadual"), setiap satunya adalah koleksi r
 - Pemarkahan yang diberikan oleh penilai manusia
 - Mana-mana situasi lain yang melibatkan respons berulang kepada satu set alat pengukuran
 
-Dua perkara adalah benar bagi setiap set data dalam IRW:
+Setiap set data dalam IRW direka untuk:
 
-- **Terbuka.** Setiap set data dilesenkan untuk penggunaan semula. Asal-usulnya didokumentasikan, dan kod yang digunakan untuk menukarkannya ke format IRW adalah terbuka kepada umum.
-- **Diseragamkan (harmonized).** Setiap set data dibentuk semula ke dalam struktur mudah yang sama (diterangkan di bawah), supaya kod analisis yang sama boleh dijalankan ke atas banyak set data dengan sedikit atau tiada pengubahsuaian.
+- **Mudah dijumpai (Findable).** Setiap set data disertakan dengan metadata yang telah dikira terlebih dahulu — bilangan peserta, bilangan item, kepadatan respons, bidang subjek, dan label deskriptif lain — supaya set data dapat dicari dan ditapis tanpa perlu memuat turunnya terlebih dahulu.
+- **Boleh diakses (Accessible).** Setiap set data boleh diperoleh melalui pelayar web atau pakej `irw`, dengan akaun percuma.
+- **Boleh berinteroperasi (Interoperable).** Setiap set data dibentuk semula ke dalam struktur mudah yang sama (diterangkan di bawah), supaya kod analisis yang sama boleh dijalankan ke atas banyak set data dengan sedikit atau tiada pengubahsuaian.
+- **Boleh digunakan semula (Reusable).** Setiap set data mempunyai lesen terbuka, asal-usulnya didokumentasikan, dan kod yang digunakan untuk menukarkannya ke format IRW adalah terbuka kepada umum.
 
 Set data berbeza dengan ketara dari segi saiz (daripada beberapa ratus respons kepada berjuta-juta) dan jenis respons (item ya/tidak, penilaian pelbagai kategori, skor separa, dan banyak lagi). Setiap set data juga disertakan dengan metadata yang telah dikira terlebih dahulu — bilangan peserta, bilangan item, kepadatan respons, bidang subjek, dan label deskriptif lain — supaya penyelidik dapat mencari set data yang berkaitan tanpa perlu memuat turun dan memproses kesemuanya terlebih dahulu.
 
@@ -257,6 +259,7 @@ Projek IRW juga merangkumi:
 
 - Domingue et al. (2025). *An introduction to the Item Response Warehouse (IRW): A resource for enhancing data usage in psychometrics.* Behavior Research Methods. [doi:10.3758/s13428-025-02796-y](https://doi.org/10.3758/s13428-025-02796-y)
 - Nadela, Lee, Jain, Gupta, Zhang & Domingue (2026). *The Item Response Warehouse: What It Is, How to Use It, and Targets for Potential Improvements.* Chinese/English Journal of Educational Measurement and Evaluation. [doi:10.59863/CIJG4549](https://doi.org/10.59863/CIJG4549)
+- Wilkinson et al. (2016). *The FAIR Guiding Principles for scientific data management and stewardship.* Scientific Data. [doi:10.1038/sdata.2016.18](https://doi.org/10.1038/sdata.2016.18)
 - Laman web: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
 - Kod: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
 

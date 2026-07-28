@@ -162,9 +162,9 @@ Translator note: please do NOT translate the following —
 
 교육학, 심리학 및 관련 분야에서 측정을 연구하는 연구자들은 자신의 방법을 검증하고 비교하기 위해 실제 데이터가 필요합니다. 그러한 데이터는 이미 방대한 양으로 존재합니다. 하지만 여러 연구에 걸쳐 흩어져 있고, 서로 다른 형식으로 저장되어 있으며, 문서화나 라이선스가 불분명하여 재사용하기 어려운 경우가 많습니다.
 
-이는 잘 알려진 문제입니다. 다른 분야들은 공유되고 표준화된 데이터 자원을 구축하여 이 문제를 해결했습니다. 컴퓨터 과학 분야에서는 라벨이 지정된 이미지 모음인 ImageNet이 연구자들에게 공통의 기준을 제공하여 인공지능 분야의 빠른 발전을 이끌었습니다. 유전학과 신경과학 역시 각자의 데이터를 위한 유사한 공유 자원을 구축했습니다.
+이는 잘 알려진 문제입니다. 연구 공동체는 이를 해결하기 위한 공통 기준을 마련했습니다. 데이터는 **FAIR**해야 한다는 것, 즉 찾을 수 있고(Findable), 접근할 수 있고(Accessible), 상호운용 가능하며(Interoperable), 재사용할 수 있어야(Reusable) 한다는 원칙입니다(Wilkinson et al., 2016). 다른 분야들은 이러한 원칙을 실제로 적용하여 공유되고 표준화된 데이터 자원을 구축함으로써 이 문제를 해결했습니다. 컴퓨터 과학 분야에서는 라벨이 지정된 이미지 모음인 ImageNet이 연구자들에게 공통의 기준을 제공하여 인공지능 분야의 빠른 발전을 이끌었습니다. 유전학과 신경과학 역시 각자의 데이터를 위한 유사한 공유 자원을 구축했습니다.
 
-Item Response Warehouse(IRW)는 문항 반응 데이터에 대해 동일한 역할을 합니다. 수백 개의 기존 데이터셋을 한데 모아 하나의 공통 형식으로 재구성함으로써, 한 데이터셋에서 검증된 방법을 수백 개의 다른 데이터셋에서도 손쉽게 검증할 수 있게 합니다.
+Item Response Warehouse(IRW)는 문항 반응 데이터에 동일한 FAIR 원칙을 적용합니다. 수백 개의 기존 데이터셋을 한데 모아 하나의 공통 형식으로 재구성함으로써, 한 데이터셋에서 검증된 방법을 수백 개의 다른 데이터셋에서도 손쉽게 검증할 수 있게 합니다.
 
 ## IRW에 포함된 내용
 
@@ -175,10 +175,12 @@ IRW는 **수백 개의 데이터셋**("테이블")을 포함하며, 각 데이�
 - 인간 평가자가 부여한 평정
 - 측정 도구 집합에 대해 반복적으로 반응이 이루어지는 그 밖의 모든 상황
 
-IRW의 모든 데이터셋에 대해 다음 두 가지가 성립합니다:
+IRW의 모든 데이터셋은 다음과 같이 설계되어 있습니다:
 
-- **개방성.** 각 데이터셋은 재사용이 가능하도록 라이선스가 부여되어 있습니다. 출처가 문서화되어 있으며, 이를 IRW 형식으로 변환하는 데 사용된 코드도 공개되어 있습니다.
-- **통합성.** 각 데이터셋은 동일한 단순 구조(아래에서 설명)로 재구성되어 있어, 동일한 분석 코드를 거의 또는 전혀 수정하지 않고 여러 데이터셋에 걸쳐 실행할 수 있습니다.
+- **찾을 수 있음(Findable).** 각 데이터셋에는 참가자 수, 문항 수, 반응 밀도, 주제 분야 및 기타 서술적 태그와 같은 사전 계산된 메타데이터가 포함되어 있어, 먼저 다운로드하지 않고도 데이터셋을 찾고 필터링할 수 있습니다.
+- **접근 가능함(Accessible).** 각 데이터셋은 무료 계정만 있으면 웹 브라우저 또는 `irw` 패키지를 통해 받을 수 있습니다.
+- **상호운용 가능함(Interoperable).** 각 데이터셋은 동일한 단순 구조(아래에서 설명)로 재구성되어 있어, 동일한 분석 코드를 거의 또는 전혀 수정하지 않고 여러 데이터셋에 걸쳐 실행할 수 있습니다.
+- **재사용 가능함(Reusable).** 각 데이터셋은 개방형 라이선스가 부여되어 있고, 출처가 문서화되어 있으며, 이를 IRW 형식으로 변환하는 데 사용된 코드도 공개되어 있습니다.
 
 데이터셋은 규모(수백 건의 반응부터 수백만 건까지)와 반응 유형(예/아니오 문항, 다범주 평정, 부분 점수 등)에서 매우 다양합니다. 각 데이터셋에는 참가자 수, 문항 수, 반응 밀도, 주제 분야 및 기타 서술적 태그와 같은 사전 계산된 메타데이터가 함께 제공되어, 연구자들이 모든 데이터셋을 먼저 다운로드하고 처리하지 않고도 관련 데이터셋을 찾을 수 있습니다.
 
@@ -257,6 +259,7 @@ IRW 프로젝트에는 다음도 포함됩니다:
 
 - Domingue et al. (2025). *An introduction to the Item Response Warehouse (IRW): A resource for enhancing data usage in psychometrics.* Behavior Research Methods. [doi:10.3758/s13428-025-02796-y](https://doi.org/10.3758/s13428-025-02796-y)
 - Nadela, Lee, Jain, Gupta, Zhang & Domingue (2026). *The Item Response Warehouse: What It Is, How to Use It, and Targets for Potential Improvements.* Chinese/English Journal of Educational Measurement and Evaluation. [doi:10.59863/CIJG4549](https://doi.org/10.59863/CIJG4549)
+- Wilkinson et al. (2016). *The FAIR Guiding Principles for scientific data management and stewardship.* Scientific Data. [doi:10.1038/sdata.2016.18](https://doi.org/10.1038/sdata.2016.18)
 - 웹사이트: [itemresponsewarehouse.org](https://itemresponsewarehouse.org)
 - 코드: [github.com/itemresponsewarehouse](https://github.com/itemresponsewarehouse)
 
