@@ -1,0 +1,538 @@
+<!--
+Playful homepage hero collage. Originally prototyped as a standalone HTML
+mockup (irw_homepage_hero_playful_v2.html) with cards scattered at random
+tilts; restructured 2026-07-27 per reviewer feedback (David Lang, Michael
+Leon Chrzan) into a hierarchy with TABLES/PEOPLE circles above an ITEMS
+circle ringed by item-type cards.
+
+Restructured again 2026-07-29 to v3 (irw-hero-v3.html, workshopped in a
+separate Claude Artifacts conversation): each cluster (Tables, People,
+Items, Responses) is now drawn as its own labeled "zone box" with a tag
+cloud of illustrative attributes underneath its stamp, and a new dedicated
+Responses zone was added alongside Tables/People/Items. The item-type ring
+around ITEMS was trimmed from 5 cards to 3 (Choose an answer / Strongly
+agree? / How confident?) -- true/false and checkbox cards were dropped in
+this pass. Tag-cloud labels (tableDomains, peopleTraits, responseAttributes)
+are illustrative only, same status as the item-type examples: IRW has no
+domain/trait taxonomy to source them from.
+
+Stamp numbers and badge counts come from data/hero_stats.json via
+CONFIG, built below from ojs_define()'d hero_stats -- nothing in the CSS or
+DOM-building code needs to change when the underlying figures update.
+
+Two responsive breakpoints are load-bearing and intentionally separate:
+760px switches the 4 zone boxes from a stacked column to the absolute-
+positioned box layout, and 960px (a second, later breakpoint) switches the
+ITEMS zone's inner content from stacked to the absolute-positioned ring
+layout and turns on the connector lines. The ring needs more horizontal
+room than the box-split alone provides, which is why this isn't collapsed
+into a single breakpoint.
+
+All CSS selectors are scoped under `.irw-hero` and all element IDs are
+prefixed `irw-hero-` since this is included inside the main site, not
+rendered standalone.
+-->
+
+```{r}
+#| label: load-hero-stats
+#| include: false
+
+library(jsonlite)
+
+# Emergency fallback only: used if data/hero_stats.json is missing or fails
+# to parse at build time (e.g. accidental deletion, bad merge). This keeps
+# `quarto render` from failing rather than being a source of truth -- it is
+# NOT refreshed automatically by metadata/00_hero_totals.R or
+# metadata/00_hero_category_breakdown.R (those write the checked-in JSON
+# file), so it will drift stale over time. Update by hand only if the
+# checked-in JSON itself is broken and a rebuild is needed before a fix
+# lands.
+hero_stats_fallback <- list(
+  generated_at = "2025-01-01T00:00:00Z",
+  totals = list(n_tables = 1300, n_responses = 27000000000, n_participants = 65000000, n_items = 730000),
+  category_breakdown = list(
+    list(n_categories = 2,    n_items = 148589, n_responses = 2112679586),
+    list(n_categories = 3,    n_items = 11974,  n_responses = 28686057),
+    list(n_categories = 4,    n_items = 31583,  n_responses = 54052143),
+    list(n_categories = 5,    n_items = 86988,  n_responses = 172105890),
+    list(n_categories = 6,    n_items = 18967,  n_responses = 6905164),
+    list(n_categories = "7+", n_items = 103551, n_responses = 127337448)
+  )
+)
+
+hero_stats_path <- "data/hero_stats.json"
+
+hero_stats <- tryCatch({
+  parsed <- fromJSON(hero_stats_path, simplifyVector = FALSE)
+  required_totals <- c("n_tables", "n_responses", "n_participants", "n_items")
+  valid <- is.list(parsed$totals) && all(required_totals %in% names(parsed$totals)) &&
+    is.list(parsed$category_breakdown)
+  if (!valid) stop("hero_stats.json missing required fields")
+  parsed
+}, error = function(e) {
+  warning("components/_hero_playful.qmd: ", hero_stats_path,
+          " missing or malformed (", conditionMessage(e),
+          ") -- rendering hero with fallback values.")
+  hero_stats_fallback
+})
+
+ojs_define(hero_stats = hero_stats)
+```
+
+```{ojs}
+//| label: hero-styles
+//| echo: false
+
+html`<style>
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Nunito:wght@600;700;800&display=swap');
+
+.irw-hero, .irw-hero *{box-sizing:border-box;}
+.irw-hero{
+  --cream:#fff3e2;
+  --ink:#1c1c22;
+  --pink:#ff4d8d;
+  --yellow:#ffca3a;
+  --blue:#3a86ff;
+  --green:#38d19a;
+  --orange:#ff8a3d;
+  --purple:#8352ff;
+  --shadow-sm: 3px 3px 0 var(--ink);
+  --shadow-md: 5px 5px 0 var(--ink);
+  --shadow-lg: 7px 7px 0 var(--ink);
+  --border: 3px solid var(--ink);
+  background:var(--cream); font-family:'Nunito', sans-serif; color:var(--ink);
+  border-radius:16px; overflow-x:hidden;
+}
+.irw-hero .page{ max-width:1100px; margin:0 auto; padding:56px 24px 40px; }
+
+/* ---------- Header ---------- */
+.irw-hero .header{ text-align:center; margin-bottom:32px; }
+.irw-hero .pill-badge{
+  display:inline-block; background:var(--purple); color:#fff; font-weight:800;
+  font-size:clamp(30px, 5vw, 52px); letter-spacing:0.5px; padding:10px 28px; border-radius:999px;
+  border:var(--border); box-shadow:var(--shadow-sm); transform:rotate(-3deg); margin-bottom:22px;
+}
+.irw-hero h1.headline{
+  font-family:'Fredoka', sans-serif; font-weight:700; font-size:clamp(30px, 5vw, 52px);
+  line-height:1.15; margin:0 0 6px;
+}
+.irw-hero h1.headline sup{ font-size:0.4em; top:-1.1em; color:#8a8478; font-weight:800; }
+.irw-hero .highlight{ position:relative; color:var(--pink); display:inline-block; }
+.irw-hero .highlight svg{ position:absolute; left:-2%; bottom:-14px; width:104%; height:16px; overflow:visible; }
+.irw-hero .footnote{
+  font-size:12.5px; font-weight:700; color:#948d80; max-width:460px; margin:0 auto 18px;
+  font-style:italic; line-height:1.4;
+}
+.irw-hero .tagline{
+  font-weight:600; font-size:clamp(15px, 1.7vw, 18px); color:#4a4550; max-width:640px;
+  margin:0 auto 26px; line-height:1.5;
+}
+.irw-hero .tagline strong{ color:var(--ink); font-weight:800; }
+.irw-hero .cta{
+  display:inline-flex; align-items:center; gap:8px; background:var(--ink); color:#fff;
+  font-weight:800; font-size:16px; padding:14px 28px; border-radius:999px; border:var(--border);
+  box-shadow:5px 5px 0 var(--pink); text-decoration:none; cursor:pointer;
+  transition:box-shadow .15s ease, transform .15s ease;
+}
+.irw-hero .cta:hover{ box-shadow:9px 9px 0 var(--pink); transform:translate(-2px,-2px); color:#fff; }
+
+/* ---------- Shared sticker elements ---------- */
+.irw-hero .bob{ animation:irwHeroBob 3.4s ease-in-out infinite; }
+@keyframes irwHeroBob{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-9px); } }
+
+.irw-hero .stamp{
+  border-radius:50%; border:var(--border); box-shadow:var(--shadow-md);
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  text-align:center; color:#fff; flex-shrink:0; width:130px; height:130px;
+}
+.irw-hero .stamp .stamp-number{ font-family:'Fredoka', sans-serif; font-weight:700; line-height:1; font-size:22px; }
+.irw-hero .stamp .stamp-label{ font-weight:800; letter-spacing:1px; margin-top:4px; font-size:11px; }
+.irw-hero #irw-hero-stamp-items{ background:var(--green); width:150px; height:150px; }
+.irw-hero #irw-hero-stamp-items .stamp-number{ font-size:26px; }
+.irw-hero #irw-hero-stamp-items .stamp-label{ font-size:12px; }
+
+.irw-hero .bubble{
+  display:inline-flex; align-items:center; gap:7px; background:#fff; border:2.5px solid var(--ink);
+  box-shadow:var(--shadow-sm); border-radius:999px; padding:5px 12px; font-weight:700;
+  font-size:11.5px; white-space:nowrap;
+}
+.irw-hero .dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.irw-hero .tag-cloud{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
+
+.irw-hero .card{
+  background:#fff; border:var(--border); box-shadow:var(--shadow-md);
+  border-radius:14px; padding:10px 12px 12px; width:100%; max-width:170px; position:relative;
+}
+.irw-hero .card .card-label{ display:flex; align-items:center; gap:6px; font-weight:800; font-size:12px; margin-bottom:9px; }
+.irw-hero .card .badge{
+  position:absolute; top:-13px; right:-11px; background:var(--yellow); border:2.5px solid var(--ink);
+  box-shadow:var(--shadow-sm); border-radius:999px; padding:3px 9px; font-weight:800;
+  font-size:11px; transform:rotate(4deg);
+}
+
+/* ---------- Mini demos ---------- */
+.irw-hero .mini-single{ display:flex; gap:8px; }
+.irw-hero .radio{
+  width:24px; height:24px; border-radius:50%; border:2px solid var(--ink); background:#fff;
+  display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:#b9b3aa;
+}
+.irw-hero .radio.active{ background:var(--purple); color:#fff; }
+
+.irw-hero .mini-likert{ display:flex; align-items:center; gap:5px; }
+.irw-hero .likert-dot{ width:15px; height:15px; border-radius:50%; border:2px solid var(--ink); background:#efe9de; transition:background .25s ease; }
+.irw-hero .likert-dot.active{ background:var(--pink); }
+.irw-hero .likert-edge{ font-size:9px; font-weight:800; color:#b9b3aa; }
+
+.irw-hero .mini-slider{ position:relative; width:100%; }
+.irw-hero .slider-track{ position:relative; width:100%; height:8px; background:#efe9de; border:2px solid var(--ink); border-radius:999px; }
+.irw-hero .slider-knob{
+  position:absolute; top:50%; left:2px; width:16px; height:16px; background:var(--orange);
+  border:2px solid var(--ink); border-radius:50%; transform:translateY(-50%);
+  animation:irwHeroSlideKnob 2.6s ease-in-out infinite;
+}
+@keyframes irwHeroSlideKnob{ 0%,100%{ left:2px; } 50%{ left:calc(100% - 18px); } }
+.irw-hero .slider-nums{ display:flex; justify-content:space-between; font-size:9px; font-weight:800; color:#b9b3aa; margin-top:4px; }
+
+/* ---------- Collage: boxes drawn around each cluster ---------- */
+.irw-hero .collage{
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:22px;
+  margin-top:8px;
+}
+.irw-hero .zone-box{
+  position:relative;
+  width:100%;
+  max-width:400px;
+  background:#fffaf1;
+  border:var(--border);
+  border-radius:22px;
+  box-shadow:var(--shadow-lg);
+  padding:26px 22px 20px;
+}
+.irw-hero .box-tab{
+  position:absolute; top:-16px; left:24px; color:#fff; font-weight:800; font-size:12px;
+  letter-spacing:1px; text-transform:uppercase; padding:6px 14px; border-radius:9px;
+  border:2.5px solid var(--ink); box-shadow:3px 3px 0 var(--ink); transform:rotate(-2deg);
+}
+.irw-hero #irw-hero-zone-tables .box-tab{ background:var(--purple); }
+.irw-hero #irw-hero-zone-people .box-tab{ background:var(--orange); }
+.irw-hero #irw-hero-zone-items  .box-tab{ background:var(--green); }
+.irw-hero #irw-hero-zone-responses .box-tab{ background:var(--blue); }
+.irw-hero #irw-hero-zone-tables .stamp{ background:var(--purple); }
+.irw-hero #irw-hero-zone-people .stamp{ background:var(--orange); }
+.irw-hero #irw-hero-zone-responses .stamp{ background:var(--blue); }
+
+.irw-hero .zone-inner{ display:flex; flex-direction:column; align-items:center; gap:14px; }
+.irw-hero #irw-hero-zone-items{ max-width:520px; }
+.irw-hero #irw-hero-items-inner{ display:flex; flex-direction:column; align-items:center; gap:16px; }
+.irw-hero .connectors{ display:none; }
+
+.irw-hero .caption{
+  text-align:center; color:#8a8478; font-size:12.5px; font-weight:600; max-width:520px;
+  margin:30px auto 0; line-height:1.5;
+}
+
+/* ---------- >=760px: box-split layout ----------
+   Load-bearing breakpoint #1 of 2 -- switches the 4 zone boxes from a
+   stacked column to the absolute-positioned side-by-side arrangement.
+   Kept separate from the 960px breakpoint below (see file header comment):
+   the item-type ring needs more horizontal room than this alone provides. */
+@media (min-width:760px){
+  .irw-hero .collage{ display:block; min-height:900px; }
+  .irw-hero .zone-box{ position:absolute; max-width:none; }
+  .irw-hero #irw-hero-zone-tables{ left:0; top:0; width:calc(50% - 12px); }
+  .irw-hero #irw-hero-zone-people{ right:0; top:0; width:calc(50% - 12px); }
+  .irw-hero #irw-hero-zone-items{ left:0; top:340px; width:calc(73% - 10px); max-width:none; transform:none; }
+  .irw-hero #irw-hero-zone-responses{ right:0; top:340px; width:calc(27% - 10px); max-width:none; }
+}
+
+/* ---------- >=960px: item-type ring layout ----------
+   Load-bearing breakpoint #2 of 2 -- switches the ITEMS zone's inner
+   content from stacked to the absolute-positioned ring (stamp centered,
+   3 cards positioned around it) and turns on the connector-line SVG.
+   Gated separately from 760px above because the ring needs more room than
+   the box-split provides on its own; collapsing these into one breakpoint
+   will overlap the 3 cards at intermediate widths. */
+@media (min-width:960px){
+  .irw-hero .collage{ min-height:760px; }
+  .irw-hero #irw-hero-items-inner{ position:relative; display:block; height:340px; }
+  .irw-hero #irw-hero-items-inner .stamp,
+  .irw-hero #irw-hero-items-inner .card{ position:absolute; max-width:none; }
+  .irw-hero #irw-hero-stamp-items{ left:50%; top:180px; transform:translateX(-50%); }
+  .irw-hero #irw-hero-card-choice{ left:6%; top:90px; width:190px; }
+  .irw-hero #irw-hero-card-likert{ left:calc(50% - 100px); top:0px; width:200px; }
+  .irw-hero #irw-hero-card-slider{ right:10%; top:70px; width:190px; }
+
+  .irw-hero .connectors{ display:block; position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+}
+</style>`
+```
+
+```{ojs}
+//| label: hero-formatters
+//| echo: false
+
+// Abbreviated K/M/B formatter for stamp numbers and ×N badges: 3 significant
+// figures, trailing ".0" dropped (e.g. 172105890 -> "172M", 6905164 -> "6.9M").
+fmtAbbrev = (n) => {
+  if (n == null || isNaN(n)) return "";
+  const units = [[1e9, "B"], [1e6, "M"], [1e3, "K"]];
+  for (const [threshold, suffix] of units) {
+    if (Math.abs(n) >= threshold) {
+      const scaled = n / threshold;
+      const digits = Math.abs(scaled) >= 100 ? 0 : 1;
+      return scaled.toFixed(digits).replace(/\.0$/, "") + suffix;
+    }
+  }
+  return Math.round(n).toLocaleString("en-US");
+}
+
+// Thousands-grouped integer, used for the "tables" stamp (shown in full,
+// not abbreviated, per the v2 prototype).
+fmtInt = (n) => (n == null || isNaN(n)) ? "" : Math.round(n).toLocaleString("en-US");
+
+// Spelled-out magnitude for the tagline prose ("3.2 billion answers").
+fmtWords = (n) => {
+  if (n == null || isNaN(n)) return "";
+  if (Math.abs(n) >= 1e9) return (Math.round(n / 1e8) / 10) + " billion";
+  if (Math.abs(n) >= 1e6) return (Math.round(n / 1e5) / 10) + " million";
+  if (Math.abs(n) >= 1e3) return (Math.round(n / 1e2) / 10) + " thousand";
+  return fmtInt(n);
+}
+```
+
+```{ojs}
+//| label: hero-config
+//| echo: false
+
+// Fixed badge -> response-category mapping (decision: explicit, not
+// inferred at render time). Only 3 of the 6 category buckets are surfaced
+// here since the v3 ring only has 3 item-type cards (multiple_choice,
+// likert, and confidence/slider -- true_false and checkbox were dropped
+// in the v3 restructure).
+heroCategoryMap = ({
+  choice: 4,
+  likert: 5,
+  slider: "7+"
+})
+
+heroCategoryLookup = new Map(
+  (hero_stats.category_breakdown || []).map(d => [String(d.n_categories), d])
+)
+
+// Hide a card's badge rather than render "×0" / "×NA" if its bucket is
+// missing or zero in the current data refresh.
+heroBadge = (key) => {
+  const cat = heroCategoryMap[key];
+  if (cat === undefined) return null;
+  const row = heroCategoryLookup.get(String(cat));
+  if (!row || !row.n_responses) return null;
+  return "×" + fmtAbbrev(row.n_responses);
+}
+
+// Single place real numbers/tags feed into the collage -- everything below
+// this cell builds DOM from CONFIG and shouldn't need to change when the
+// underlying figures update. tableDomains/peopleTraits/responseAttributes
+// are illustrative only (see file header comment) and stay hand-written.
+CONFIG = ({
+  tables: fmtInt(hero_stats.totals.n_tables),
+  people: fmtAbbrev(hero_stats.totals.n_participants),
+  items: fmtAbbrev(hero_stats.totals.n_items),
+  responses: fmtWords(hero_stats.totals.n_responses),
+  responsesAbbrev: fmtAbbrev(hero_stats.totals.n_responses),
+  badges: {
+    choice: heroBadge('choice'),
+    likert: heroBadge('likert'),
+    slider: heroBadge('slider')
+  },
+  tableDomains: ['Education','Psychology','Health','Cognition','Personality','Political Science','Consumer Behavior','Linguistics'],
+  peopleTraits: ['Gender','Age','Ability','Race / Ethnicity','Language','Socioeconomic Status','Education Level','Treatment Status'],
+  responseAttributes: ['Ordinal Responses','Response Time','Date','Item Text']
+})
+
+PALETTE = ['var(--blue)','var(--purple)','var(--green)','var(--pink)','var(--orange)','var(--yellow)']
+```
+
+```{ojs}
+//| label: hero-collage
+//| echo: false
+
+heroRoot = {
+  const intervals = [];
+  const track = (id) => { intervals.push(id); return id; };
+
+  const root = document.createElement('div');
+  root.className = 'irw-hero';
+  root.innerHTML = `
+    <div class="page">
+      <div class="header">
+        <div class="pill-badge">ITEM RESPONSE WAREHOUSE</div>
+        <h1 class="headline">
+          Every question ever answered<sup>*</sup>, in
+          <span class="highlight">one place
+            <svg viewBox="0 0 200 20" preserveAspectRatio="none">
+              <path d="M2,14 C30,4 50,18 75,10 C100,2 120,16 145,8 C165,2 180,14 198,8"
+                    fill="none" stroke="var(--yellow)" stroke-width="5" stroke-linecap="round"/>
+            </svg>
+          </span>
+        </h1>
+        <p class="footnote">*Well, nearly every question!</p>
+        <p class="tagline"><strong>${CONFIG.responses}</strong> responses. True/false, five-star, multiple choice, Likert — all reshaped into one format.</p>
+        <a class="cta" href="data.qmd">Explore the warehouse →</a>
+      </div>
+
+      <div class="collage" id="irw-hero-collage">
+
+        <div class="zone-box" id="irw-hero-zone-tables">
+          <div class="box-tab">Tables</div>
+          <div class="zone-inner">
+            <div class="stamp bob" style="animation-delay:0s;">
+              <div class="stamp-number">${CONFIG.tables}+</div>
+              <div class="stamp-label">TABLES</div>
+            </div>
+            <div class="tag-cloud" id="irw-hero-table-domains"></div>
+          </div>
+        </div>
+
+        <div class="zone-box" id="irw-hero-zone-people">
+          <div class="box-tab">People</div>
+          <div class="zone-inner">
+            <div class="stamp bob" style="animation-delay:.5s;">
+              <div class="stamp-number">${CONFIG.people}</div>
+              <div class="stamp-label">PEOPLE</div>
+            </div>
+            <div class="tag-cloud" id="irw-hero-people-traits"></div>
+          </div>
+        </div>
+
+        <div class="zone-box" id="irw-hero-zone-items">
+          <div class="box-tab">Items</div>
+          <svg class="connectors" id="irw-hero-connectors"></svg>
+          <div class="zone-inner" id="irw-hero-items-inner">
+            <div class="stamp bob" id="irw-hero-stamp-items" style="animation-delay:.3s;">
+              <div class="stamp-number">${CONFIG.items}+</div>
+              <div class="stamp-label">ITEMS</div>
+            </div>
+            <div class="card bob" id="irw-hero-card-choice" style="animation-delay:.15s;"></div>
+            <div class="card bob" id="irw-hero-card-likert" style="animation-delay:0s;"></div>
+            <div class="card bob" id="irw-hero-card-slider" style="animation-delay:.45s;"></div>
+          </div>
+        </div>
+
+        <div class="zone-box" id="irw-hero-zone-responses">
+          <div class="box-tab">Responses</div>
+          <div class="zone-inner">
+            <div class="stamp bob" style="animation-delay:.2s;">
+              <div class="stamp-number">${CONFIG.responsesAbbrev}</div>
+              <div class="stamp-label">RESPONSES</div>
+            </div>
+            <div class="tag-cloud" id="irw-hero-response-attributes"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <p class="caption">All numbers shown are approximate and metadata is available in limited cases.</p>
+    </div>
+  `;
+
+  const $ = (sel) => root.querySelector(sel);
+
+  function buildTagCloud(id, labels) {
+    const el = $(id);
+    el.innerHTML = labels.map((label, i) =>
+      `<span class="bubble"><span class="dot" style="background:${PALETTE[i % PALETTE.length]};"></span>${label}</span>`
+    ).join('');
+  }
+  buildTagCloud('#irw-hero-table-domains', CONFIG.tableDomains);
+  buildTagCloud('#irw-hero-people-traits', CONFIG.peopleTraits);
+  buildTagCloud('#irw-hero-response-attributes', CONFIG.responseAttributes);
+
+  // Item-type card content.
+  const cardDefs = [
+    { id:'#irw-hero-card-choice', badgeKey:'choice', dot:'var(--purple)', label:'Choose an answer',
+      body:`<div class="mini-single" data-single-group><div class="radio active">A</div><div class="radio">B</div><div class="radio">C</div><div class="radio">D</div></div>` },
+    { id:'#irw-hero-card-likert', badgeKey:'likert', dot:'var(--pink)',   label:'Strongly agree?',
+      body:`<div class="mini-likert" data-likert-group><span class="likert-edge">DIS</span><div class="likert-dot"></div><div class="likert-dot"></div><div class="likert-dot"></div><div class="likert-dot"></div><div class="likert-dot"></div><span class="likert-edge">AGR</span></div>` },
+    { id:'#irw-hero-card-slider', badgeKey:'slider', dot:'var(--orange)', label:'How confident?',
+      body:`<div class="mini-slider"><div class="slider-track"><div class="slider-knob"></div></div><div class="slider-nums"><span>0</span><span>100</span></div></div>` }
+  ];
+  cardDefs.forEach(def => {
+    const el = $(def.id);
+    const badge = CONFIG.badges[def.badgeKey];
+    el.innerHTML = `${badge ? `<div class="badge">${badge}</div>` : ''}
+      <div class="card-label"><span class="dot" style="background:${def.dot};"></span>${def.label}</div>
+      ${def.body}`;
+  });
+
+  // Mini-demo animations (slider knob is pure CSS animation, see @keyframes
+  // irwHeroSlideKnob above).
+  root.querySelectorAll('[data-single-group]').forEach(group => {
+    const radios = group.querySelectorAll('.radio');
+    let idx = 0;
+    const render = () => radios.forEach((r, i) => r.classList.toggle('active', i === idx));
+    render();
+    track(setInterval(() => { idx = (idx + 1) % radios.length; render(); }, 900));
+  });
+
+  root.querySelectorAll('[data-likert-group]').forEach(group => {
+    const dots = group.querySelectorAll('.likert-dot');
+    let idx = 0, dir = 1;
+    const render = () => dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+    render();
+    track(setInterval(() => {
+      idx += dir;
+      if (idx === dots.length - 1 || idx === 0) dir *= -1;
+      render();
+    }, 480));
+  });
+
+  // Dashed connector lines: each ring card -> center of ITEMS stamp.
+  // Scoped to the ITEMS box only; only meaningful once the >=960px ring
+  // layout is active; recomputed on resize (debounced) and via
+  // ResizeObserver so it stays correct across the 760px/960px breakpoints.
+  const svg = $('#irw-hero-connectors');
+  const inner = $('#irw-hero-items-inner');
+  const stampItems = $('#irw-hero-stamp-items');
+  const cardIds = ['#irw-hero-card-choice', '#irw-hero-card-likert', '#irw-hero-card-slider'];
+
+  const drawConnectors = () => {
+    if (window.innerWidth < 960) { svg.innerHTML = ''; return; }
+    const innerRect = inner.getBoundingClientRect();
+    if (innerRect.width === 0) return;
+    const items = stampItems.getBoundingClientRect();
+    const itemsCenter = {
+      x: items.left + items.width / 2 - innerRect.left,
+      y: items.top + items.height / 2 - innerRect.top
+    };
+    let html = '';
+    cardIds.forEach(id => {
+      const r = $(id).getBoundingClientRect();
+      const cx = r.left + r.width / 2 - innerRect.left;
+      const cy = r.bottom - innerRect.top;
+      html += `<line x1="${cx}" y1="${cy}" x2="${itemsCenter.x}" y2="${itemsCenter.y}"
+                stroke="#1c1c22" stroke-width="2" stroke-dasharray="6 6" stroke-opacity="0.35" />`;
+    });
+    svg.innerHTML = html;
+  };
+
+  requestAnimationFrame(() => requestAnimationFrame(drawConnectors));
+  let resizeTimer;
+  const onResize = () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(drawConnectors, 120); };
+  window.addEventListener('resize', onResize);
+  const resizeObserver = new ResizeObserver(() => drawConnectors());
+  resizeObserver.observe(inner);
+
+  invalidation.then(() => {
+    intervals.forEach(id => clearInterval(id));
+    clearTimeout(resizeTimer);
+    window.removeEventListener('resize', onResize);
+    resizeObserver.disconnect();
+  });
+
+  return root;
+}
+```
