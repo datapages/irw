@@ -1,0 +1,365 @@
+---
+title: "Bounded Continuous Responses: Comparing Beta IRT, Samejima's CRM, and Mueller's CRSM"
+description: |
+  Slider and visual-analogue-scale items produce a response that is
+  continuous but lives in a fixed, interpretable range, like [0,1] or
+  [0,100] -- not the open-ended continuous case standard CFA/linear-factor
+  models assume. We compare four published ways of modeling that: a naive
+  linear baseline that ignores the bounds, Noel and Dauvier's Beta IRT
+  model, Samejima's Continuous Response Model, and Mueller's Continuous
+  Rating Scale Model, on one simulated dataset and one real IRW table.
+date: today
+bibliography: continuous_bounded_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+::: {.callout-important}
+**This is a draft pilot, not the final vignette.** It exists to get feedback
+on the modeling approach before investing in the full study. What's here:
+real fits of all 4 core model specs, on one simulated dataset and one real
+IRW table, with a working held-out comparison. What's *not* here yet: the
+full simulation/recovery grid (multiple DGPs x sample sizes x item counts),
+a boundary-inflation (zero/one-piling) condition, and Ferrando's (2001)
+optional stretch model. See [Limitations](#limitations) for the complete
+list and the reasoning behind several scope decisions made along the way.
+:::
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(ggplot2)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue   <- "#2166ac"
+irw_red    <- "#d73027"
+irw_green  <- "#4daf4a"
+irw_purple <- "#984ea3"
+irw_grey   <- "#808080"
+
+model_colors <- c(
+  "naive_linear"              = irw_grey,
+  "beta_irt_item_dispersion"  = irw_blue,
+  "beta_irt_fixed_dispersion" = irw_purple,
+  "samejima_crm"              = irw_red,
+  "muller_corsm"              = irw_green
+)
+model_labels <- c(
+  "naive_linear"              = "Naive linear",
+  "beta_irt_item_dispersion"  = "Beta IRT (item disp.)",
+  "beta_irt_fixed_dispersion" = "Beta IRT (fixed disp.)",
+  "samejima_crm"              = "Samejima CRM",
+  "muller_corsm"               = "Mueller CRSM"
+)
+
+cache_path <- "continuous_bounded_data/continuous_bounded_results.rds"
+cache_ok <- file.exists(cache_path)
+if (cache_ok) res <- readRDS(cache_path)
+```
+
+## Motivation
+
+Visual analogue scales, slider ratings, and continuous confidence or
+percentage judgments are common in IRW: a respondent marks a point on a
+fixed, labeled segment (0 to 100, say), and the raw response is a
+continuous number that is *bounded* at both ends. This is a different
+measurement problem from the unbounded continuous case (response times,
+open-ended magnitude estimates), which reduces to standard linear-factor
+or CFA modeling and is covered elsewhere on this site -- the bounds
+themselves are the interesting part here, because they create floor/ceiling
+effects and non-constant response variance near the edges that a plain
+linear model doesn't see.
+
+Three published models handle this directly. Noel and Dauvier's Beta IRT
+model [@noel2007beta] treats the response as Beta-distributed given
+ability, with the two natural Beta parameters reparameterized into an
+item difficulty and a dispersion. Samejima's Continuous Response Model
+[@samejima1973homogeneous] models a monotonic transform of the response as
+normal given ability -- the historically original approach, predating Beta
+IRT by over 30 years. Mueller's Continuous Rating Scale Model
+[@mueller1987rasch] takes a Rasch-family, specific-objectivity approach,
+estimated by pairwise conditional likelihood; Verhelst's (2019) exponential
+family framework [@verhelst2019exponential] is the modern theoretical
+generalization of Mueller's model, though the model actually fitted here is
+Mueller's original. We compare these three against a naive linear (Gaussian,
+identity-link) baseline that ignores the bounds entirely -- the "what if you
+just treat it like ordinary continuous data" control, playing the same role
+the Rasch baseline plays in the site's guessing-models vignette.
+
+## Data and methods
+
+### The four core specs
+
+1. **Naive linear baseline** -- single-factor CFA via `lavaan`, identity
+   link, Gaussian residual, fit directly on the raw (rescaled-to-[0,1])
+   response. Ignores boundedness entirely.
+2. **Beta IRT** [@noel2007beta] -- fit as a discretized custom `mirt`
+   itemtype wrapping `sirt::brm.irf()`, following `sirt`'s own documented
+   mirt-estimation recipe (`?sirt::brm.sim`). Two variants: **item-varying
+   dispersion** (each item gets its own dispersion parameter, the model's
+   default parameterization) and **fixed dispersion** (one dispersion
+   parameter shared across all items, via an `mirt` parameter constraint).
+3. **Samejima's Continuous Response Model** [@samejima1973homogeneous] --
+   `EstCRM::EstCRMitem()` / `EstCRMperson()`.
+4. **Mueller's Continuous Rating Scale Model** [@mueller1987rasch] -- a
+   patched copy of `pcIRT::CRSM()` / a from-scratch reimplementation of its
+   person-scoring equation (see [Limitations](#limitations) for why
+   patching was necessary).
+
+Ferrando's (2001) nonlinear congeneric model [@ferrando2001nonlinear] is an
+optional stretch spec with no package implementation (it would need a
+custom truncated-normal likelihood via `optim`); per the original scope for
+this vignette it's only attempted after specs 1-4 are complete and
+validated, and **has not been attempted in this draft** -- see
+[Limitations](#limitations).
+
+### Why "interval probability," not raw log-likelihood
+
+Before any model comparison, we checked whether all 4 models report
+likelihood on the same scale. They don't: reading `EstCRM::EstCRMitem()`'s
+source directly shows it transforms the raw response to
+$Z = \ln\!\big(X/(K-X)\big)$ and fits/reports its EM log-likelihood entirely
+on that $Z$-scale, with no Jacobian term anywhere in the function. A raw
+log-likelihood from EstCRM is therefore not comparable to, say, the Beta
+IRT model's density on the raw response, without a correction.
+
+Rather than hand-deriving a per-model Jacobian correction, every model's
+held-out score in this vignette is a **binned interval log-probability**:
+$\log P(\text{bin}_{lo} < X < \text{bin}_{hi})$, using the same bin edges
+(on the raw, rescaled-to-$[0,1]$ scale) for all 4 models. Interval
+probability is invariant to a monotonic reparameterization of the
+intervening likelihood -- the Jacobian exactly cancels under integration --
+so this sidesteps the Jacobian bookkeeping entirely. This is a deliberate
+substitution for "compare raw densities with a Jacobian correction," flagged
+here because the original scope for this vignette didn't spell out this
+exact resolution.
+
+### Comparison metric: held-out log-likelihood, not IMV
+
+We use held-out log-likelihood rather than IMV (InterModel Vigorish), the
+metric used in most other vignettes on this site. `imv4sem` and
+`imv.mirt` are not on CRAN, and no citable generalization of IMV to
+continuous or Beta-type outcomes was found. **This is flagged as an ad hoc
+decision to revisit, not a settled one** -- unlike IMV's binary/count case,
+there's no obviously "natural" coin-flip baseline for a continuous
+response, so held-out log-likelihood is a reasonable default rather than a
+demonstrably right answer.
+
+### Held-out design: person-level, not cell-level
+
+The project's usual convention for held-out evaluation on IRW data is a
+response-level (missing-cell) holdout: mask a random subset of person x item
+cells, fit on the rest, score the masked cells. That isn't viable here for
+2 of the 4 specs -- reading `EstCRM::EstCRMitem()` and `pcIRT::CRSM()`'s
+fitting code directly shows **neither has any missing-data handling at
+all** (both do matrix/pairwise algebra that silently breaks with `NA`
+cells, confirmed by testing).
+
+We substituted a **person-level train/test split** instead: fit item
+parameters on a training subset of persons (a complete matrix, no missing
+cells), then estimate ability for held-out test persons (from their own
+full response vector, which none of the 4 fitting calls ever saw) and score
+each model's implied probability for those same responses. This is a
+standard "do item parameters generalize to new examinees" cross-validation
+design, but it's different, and weaker, evidence than true cell-level
+held-out-response prediction. Flagged here as a deviation driven by package
+constraints, not a silent substitution.
+
+### Real-data selection
+
+We used the scouting pass over IRW documented in
+`continuous_scout_candidates.csv` / `continuous_scout_data/continuous_scout_handoff.md`
+(55 tables with $\geq$12 response categories, classified bounded /
+unbounded / unclear from observed min/max patterns and IRW's `item_format`
+tag). Of the 24 tables classified `bounded`, the scout's own top pick --
+`lsbq_maleki_2025_non_persian_proficiency` -- is what we used: 3 items, 312
+respondents, a 0-10 scale with **~40% genuinely non-integer response
+values**. That fractional-value evidence mattered more than sample size or
+item count in the final choice: every 0-100 "Slider/continuous"-tagged
+table we checked (`emoji_scheffler_2024`, the `ai_fear_dong_2026_*` family,
+etc.) came back **100% integer-valued** on inspection, which is weaker
+evidence of genuine continuity than a fine-grained integer scale.
+
+Two other scout candidates were checked and rejected before landing on this
+one, both for reasons specific to what these 4 models assume:
+
+- `eammi_grahe_2018_marriage_identity_allocation` -- row sums across items
+  are a constant 100. This is an ipsative/compositional point-allocation
+  task, which violates the conditional-independence assumption every one of
+  these 4 models makes (a higher score on one item mechanically forces
+  lower scores on the others).
+- `much_tte_2025_currentmotivation` / `test_taking_much_2025_cm` -- person
+  x item cells are not unique (repeated measurement occasions per item, not
+  a single-occasion multi-item battery).
+
+### Simulation
+
+A single condition, not yet the full grid (see
+[Limitations](#limitations)): $N=300$ persons, $J=10$ items, generated
+directly from the Beta IRT model's own equations (`sim_beta_irt()` in
+`continuous_bounded_helpers.R` -- a bug-fixed reimplementation of
+`sirt::brm.sim()`'s logic; see [Limitations](#limitations) for why the
+reimplementation was necessary), fixed dispersion $\tau=0.6$ across items,
+item difficulties spaced evenly on $[-1.5, 1.5]$.
+
+## Results
+
+### Simulated data: does the correctly-specified model win, and does it recover parameters?
+
+```{r}
+#| label: fig-sim-scores
+if (cache_ok) {
+  res$sim$scores |>
+    mutate(model = factor(model, levels = names(model_colors))) |>
+    ggplot(aes(x = model, y = mean_ll, fill = model)) +
+    geom_col(width = 0.6) +
+    geom_text(aes(label = sprintf("%.2f", mean_ll)), vjust = 1.4, color = "white", size = 3.5) +
+    scale_fill_manual(values = model_colors, labels = model_labels, guide = "none") +
+    scale_x_discrete(labels = model_labels) +
+    labs(x = NULL, y = "Mean held-out log-probability (per response)",
+         title = "Simulated Beta-IRT data: held-out fit by model") +
+    theme(axis.text.x = element_text(angle = 20, hjust = 1))
+} else {
+  cat("Cache not found -- run continuous_bounded_compute.R first.")
+}
+```
+
+On data simulated directly from the Beta IRT model, the two Beta IRT
+variants have the best (least negative) held-out fit, essentially tied with
+Samejima CRM and Mueller CRSM, and all three clearly beat the naive linear
+baseline. This is the expected pattern for a correctly-specified-model
+recovery check: the models built for bounded continuous responses recover
+the truth better than the one that ignores the bounds.
+
+Item-difficulty recovery for the item-varying-dispersion Beta IRT fit
+(correlation between estimated and true $\delta$) was
+`r if (cache_ok) sprintf("%.3f", res$sim$recovery_cor_delta) else "NA"`.
+
+### Real data: `r if (cache_ok) res$real$table else ""`
+
+```{r}
+#| label: fig-real-scores
+if (cache_ok) {
+  res$real$scores |>
+    mutate(model = factor(model, levels = names(model_colors))) |>
+    ggplot(aes(x = model, y = mean_ll, fill = model)) +
+    geom_col(width = 0.6) +
+    geom_text(aes(label = sprintf("%.2f", mean_ll)), vjust = 1.4, color = "white", size = 3.5) +
+    scale_fill_manual(values = model_colors, labels = model_labels, guide = "none") +
+    scale_x_discrete(labels = model_labels) +
+    labs(x = NULL, y = "Mean held-out log-probability (per response)",
+         title = sprintf("%s: held-out fit by model", res$real$table)) +
+    theme(axis.text.x = element_text(angle = 20, hjust = 1))
+} else {
+  cat("Cache not found -- run continuous_bounded_compute.R first.")
+}
+```
+
+On the real data
+(N=`r if (cache_ok) res$real$N else "?"`,
+J=`r if (cache_ok) res$real$J else "?"`), the naive linear baseline is
+substantially worse than all 3 bounded-response models -- unsurprising,
+given this is exactly a 0-10 scale with real floor/ceiling behavior.
+Samejima CRM comes out slightly ahead of the other 3 in this single pilot
+run; with only 3 items and one train/test split, this ordering shouldn't be
+over-read (see [Limitations](#limitations)).
+
+## Limitations {#limitations}
+
+**This is a single-shot pilot, not the full study.** Concretely not yet
+done:
+
+- **The full recovery/misspecification grid.** The original scope called
+  for cross-fitting all 4 specs against 3-4 DGPs (Beta IRT, Samejima CRM,
+  Mueller CoRSM), varying N (300/1000), J (8/20), and Beta IRT dispersion
+  structure (fixed/item-varying), plus a boundary-inflation (zero/one
+  piling) condition to see how each spec degrades qualitatively. None of
+  that is here yet -- this draft has one simulated dataset under one DGP.
+- **Ferrando's (2001) nonlinear congeneric model** [@ferrando2001nonlinear]
+  -- the optional stretch spec, comparable to the treatment in Ferrando
+  (2002) [@ferrando2002theoretical] -- has not been attempted at all,
+  correctly per its own sequencing rule (only after specs 1-4 are complete
+  and validated).
+- **Partial missingness in real data.** The real-data pilot used complete
+  cases only; IRW tables with partially missing item responses aren't
+  handled yet.
+- **Only one train/test split**, not a repeated/cross-validated design.
+
+**Package-availability and correctness issues found while building this**
+(worth knowing before extending this pilot):
+
+- `pcIRT::CRSM()` (Mueller's model) was **dropped from the package
+  entirely** in the last CRAN release (0.2.4, 2019); it only exists in
+  pcIRT $\leq$ 0.2.3. `pcIRT` itself was later archived by CRAN entirely
+  (2025-11-11). This vignette's compute script installs 0.2.3 from the
+  CRAN archive, not the current CRAN release -- a real risk for
+  reproducing this vignette in the future if the archive changes.
+- That same version's `CRSM()` has a convergence-check bug
+  (`is.na(para) || ...` where `para` becomes a 2-vector after the first
+  iteration) that is a hard error under R $\geq$ 4.3 and had to be patched
+  locally before it would run at all.
+- `sirt::brm.sim()` hardcodes a 9-item assumption in its column-naming
+  code and errors for any other item count; `sim_beta_irt()` in the
+  helpers file reimplements its generative logic directly rather than
+  patching `sirt`.
+- `pcIRT::person_par.CRSM()` only scores the same persons used in the
+  original fit (no missing-data handling, no new-data argument) and could
+  not be reused for the person-level holdout design above; a generalized
+  version of its estimating equation was written from scratch instead.
+
+**Explicitly out of scope** (not implemented, not planned for this
+vignette): DIF for continuous responses [@finch2023impact]; dual-range
+slider / interval-response models and the Interval Consensus Model
+[@kloft2024measuring; @kloft2023dirichlet; @kloft2025interval] -- a
+different response format (an interval, not a point) and, for the
+Consensus Model, a different modeling paradigm (cultural consensus
+theory) entirely; Zopluoglu's mixture CRM [@zopluoglu2020finite] and
+Noel's beta unfolding model [@noel2014beta] -- each adds a full second axis
+of complexity (latent mixture classes; unfolding vs. dominance response
+process), and unfolding in particular is a more natural extension of the
+site's existing unfolding-vs-dominance vignette than a duplicate here;
+Ferrando and Navarro-Gonzalez's (2021) multidimensional Dual Thurstonian
+model [@ferrando2021multidimensional].
+
+**The comparison metric (held-out log-likelihood) is an ad hoc choice**,
+not a validated best-practice for this setting -- flagged explicitly above,
+worth revisiting before this becomes the final vignette.
+
+## Reproducibility
+
+```{r}
+#| echo: false
+run_note <- if (cache_ok) res$scope_note else "not yet run"
+```
+
+`r run_note`.
+
+```r
+# 1. Run the compute script (from the project root)
+source("vignettes/continuous_bounded_compute.R")
+
+# 2. Re-render this page
+quarto::quarto_render("vignettes/continuous_bounded.qmd")
+```
+
+::: {.callout-tip}
+To cite the real-data table used here, run:
+
+```r
+irw_save_bibtex("lsbq_maleki_2025_non_persian_proficiency",
+                 output_file = "continuous_bounded_data/irw_references.bib")
+```
+:::
+
+---
+
+## References
