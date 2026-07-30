@@ -479,6 +479,52 @@ if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
 }
 ```
 
+```{r}
+#| label: plg-na-note
+#| results: asis
+if (cache_ok && nrow(summary_df) > 0 && any(!summary_df$converged_1plg)) {
+  na_tables <- summary_df$table[!summary_df$converged_1plg]
+  em_cycles_used <- 2000  # matches EM_CYCLES in guessing_compute.R
+  cat(sprintf(
+    "**1PLg is blank on %d table%s (%s):** its constrained-3PL fit (`a1` fixed at 1, `g` fixed at 1/m) did not converge within the %d-cycle EM budget used for every model on this page. Rather than report a point estimate from an unconverged fit, that cell is left blank instead of a misleading number.\n\n",
+    length(na_tables), if (length(na_tables) > 1) "s" else "",
+    paste0("`", na_tables, "`", collapse = ", "), em_cycles_used
+  ))
+}
+```
+
+::: {.callout-note}
+### Reading the table above
+
+- **"3PL wins" is mostly discrimination, not guessing.** Check this
+  directly in the pairwise widget below: `IMV(2PL, 3PL)` is only 0.0008 to
+  0.0044 on every table here except `enem_2014_1mil_ch` (where it goes
+  negative, along with every other guessing correction on that table -- see
+  next point). Almost all of 3PL's edge over Rasch is the free discrimination
+  parameter it already shares with 2PL, not its guessing floor. And because
+  the Mixture model is Rasch-engaged (its engaged class has slope fixed at
+  1), comparing it against 3PL, 1PL-AG, or even 2PL folds two separate
+  questions -- does letting discrimination vary help, and does modeling
+  guessing help -- into a single number.
+- **This is a single 80/20 split, not the repeated-split design the Safety
+  Valve paper uses in its own empirical section** (see Limitations). Two
+  cells here look like exactly the kind of split noise that caution is about:
+  `enem_2013_1mil_cn` has π̂ = 0.76 (real guessing detected by the Mixture model) but a small
+  *negative* Mixture IMV, and on `enem_2014_1mil_ch` every guessing
+  correction -- 3PL, 1PL-AG, Mixture, and Purified Rasch -- goes negative at
+  once. Neither result is implausible on its own, but neither should be read
+  as settled until checked against the 20-split version of this analysis.
+- **Purified Rasch's column is negative on every table here, and that is not
+  evidence it "doesn't work."** Method A was never designed to improve
+  out-of-sample response prediction; its promise is better *item parameters*
+  after removing guessing-contaminated persons from calibration (see Data and
+  methods above). Scoring it on held-out response prediction -- the yardstick
+  built for models that exist to predict responses -- isn't the test its own
+  logic would ask for. A fairer comparison would check parameter recovery
+  (e.g., in simulation, against known generating item parameters) rather than
+  IMV.
+:::
+
 The table above fixes the baseline at Rasch. The widget below lets you pick
 *any* two of the seven specifications and see `IMV(m1, m2)` -- m1 as
 baseline, m2 as the model being evaluated -- across every table, without
@@ -646,13 +692,13 @@ if (cache_ok && nrow(summary_df) > 0) {
 
   no_guess_lbl <- if (no_guess_tbl$pi_hat > 0.95) "Safety-valve-suppressed / least guessing detected" else "Least guessing detected (of tables run so far)"
   cat(sprintf(
-    "**%s**: `%s` has \\u03c0\\u0302 = %.3f -- the Mixture model assigns the largest engaged share of the tables run so far, with IMV(Rasch,Mixture) of %.4f. %s\n\n",
+    "**%s**: `%s` has π̂ = %.3f -- the Mixture model assigns the largest engaged share of the tables run so far, with IMV(Rasch,Mixture) of %.4f. %s\n\n",
     no_guess_lbl, no_guess_tbl$table, no_guess_tbl$pi_hat, no_guess_tbl$Mixture,
     if (no_guess_tbl$pi_hat > 0.95) "A near-zero IMV here is not a failure of the Mixture model; it is the safety-valve property working as intended -- there is nothing for it to correct." else ""
   ))
 
   cat(sprintf(
-    "**Substantial guessing detected**: `%s` has \\u03c0\\u0302 = %.3f, meaning the Mixture model assigns roughly %.0f%% of response weight to the guessing class, with IMV(Rasch,Mixture) of %.4f.\n\n",
+    "**Substantial guessing detected**: `%s` has π̂ = %.3f, meaning the Mixture model assigns roughly %.0f%% of response weight to the guessing class, with IMV(Rasch,Mixture) of %.4f.\n\n",
     guess_tbl$table, guess_tbl$pi_hat, 100 * (1 - guess_tbl$pi_hat), guess_tbl$Mixture
   ))
 
