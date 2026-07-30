@@ -82,6 +82,7 @@ suppressMessages({
   library(EstCRM)
   library(pcIRT)
   library(sirt)
+  library(dplyr)
 })
 
 # ------------------------------------------------------------------------------
@@ -290,20 +291,35 @@ theta_new_muller_corsm <- function(fit, Y01_new) {
   S0n <- function(t, th, b) exp(t * (th - b) + t * (1 - t) * lambda)
   S1n <- function(t, th, b) t * exp(t * (th - b) + t * (1 - t) * lambda)
   S2n <- function(t, th, b) t^2 * exp(t * (th - b) + t * (1 - t) * lambda)
+  safe_integrate <- function(f, th, b) {
+    tryCatch(stats::integrate(f, 0, 1, th = th, b = b, stop.on.error = FALSE)$value,
+             error = function(e) NA_real_)
+  }
+  # Newton-Raphson can overshoot into a region where t*(th-b) overflows
+  # exp() (giving integrate() a non-finite integrand, a hard error even
+  # with stop.on.error=FALSE) -- clamp theta each step and bail out to NA
+  # on non-finite/degenerate updates instead of crashing the whole batch.
   estimate_one <- function(y_row) {
     obs <- which(!is.na(y_row))
     if (length(obs) == 0) return(NA_real_)
-    th <- 0; th1 <- Inf; iter <- 0
-    while (is.na(th1) || (abs(th1 - th) > 1e-4 && iter < 100)) {
-      if (iter > 0) th <- th1
-      s0 <- vapply(obs, function(j) stats::integrate(S0n, 0, 1, th = th, b = itempar[j], stop.on.error = FALSE)$value, numeric(1))
-      s1 <- vapply(obs, function(j) stats::integrate(S1n, 0, 1, th = th, b = itempar[j], stop.on.error = FALSE)$value, numeric(1))
-      s2 <- vapply(obs, function(j) stats::integrate(S2n, 0, 1, th = th, b = itempar[j], stop.on.error = FALSE)$value, numeric(1))
+    th <- 0; iter <- 0; converged <- FALSE
+    repeat {
+      if (iter >= 100) break
+      s0 <- vapply(obs, function(j) safe_integrate(S0n, th, itempar[j]), numeric(1))
+      s1 <- vapply(obs, function(j) safe_integrate(S1n, th, itempar[j]), numeric(1))
+      s2 <- vapply(obs, function(j) safe_integrate(S2n, th, itempar[j]), numeric(1))
+      if (anyNA(c(s0, s1, s2)) || any(s0 <= 0)) return(NA_real_)
       su1 <- sum(s1 / s0); su2 <- -sum(s2 / s0 - (s1 / s0)^2)
+      if (!is.finite(su1) || !is.finite(su2) || su2 == 0) return(NA_real_)
       th1 <- th - (sum(y_row[obs]) - su1) / su2
+      if (!is.finite(th1)) return(NA_real_)
+      th1 <- max(min(th1, 30), -30)  # keep t*(th-b) finite for exp() at t in [0,1]
+      if (abs(th1 - th) <= 1e-4) { th <- th1; converged <- TRUE; break }
+      th <- th1
       iter <- iter + 1
     }
-    th1
+    if (!converged && iter >= 100) return(NA_real_)
+    th
   }
   apply(Y01_new, 1, estimate_one)
 }
@@ -315,4 +331,196 @@ bin_logprob_muller_corsm <- function(fit, item_idx, theta, lo, hi) {
   den <- tryCatch(stats::integrate(S0n, lower = 0, upper = 1, stop.on.error = FALSE)$value, error = function(e) NA_real_)
   if (is.na(num) || is.na(den) || den <= 0) return(NA_real_)
   log(pmax(num / den, 1e-12))
+}
+
+# ==============================================================================
+# DGPs for the full simulation/recovery grid (continuous_bounded_compute.R,
+# Part D). sim_beta_irt() above already covers the Beta IRT DGP; the two
+# below cover Samejima CRM and Mueller CoRSM directly from their own model
+# equations -- no package implements either as a *simulator* (EstCRM::simCRM
+# uses Shojima's (2005) specific parameterization, not a general theta/item
+# generator; pcIRT has no simCRSM-equivalent surviving in the version used
+# here), so both are written from the model definitions directly.
+# ==============================================================================
+
+# Samejima (1973) / EstCRM parameterization: Z_ij = alpha_j*(theta_i - b_j) +
+# e_ij, e_ij ~ N(0, sigma_j^2); observed X_ij = 1/(1+exp(-Z_ij)) is the exact
+# inverse of EstCRM's own Z = ln(X/(1-X)) transform (see EstCRMitem's source,
+# quoted in the file header), so data generated this way is exactly what
+# EstCRM::EstCRMitem() is built to recover.
+sim_samejima_crm <- function(theta, b, alpha, sigma = 1) {
+  N <- length(theta); J <- length(b)
+  if (length(sigma) == 1) sigma <- rep(sigma, J)
+  X <- matrix(0, N, J)
+  for (j in seq_len(J)) {
+    Z <- rnorm(N, alpha[j] * (theta - b[j]), sigma[j])
+    X[, j] <- 1 / (1 + exp(-Z))
+  }
+  colnames(X) <- paste0("item", seq_len(J))
+  X
+}
+
+# Mueller (1987) CRSM: density f(x | theta, b, lambda) is proportional to
+# exp(x*(theta-b) + x*(1-x)*lambda) on x in [0,1] -- the same form used in
+# person_par.CRSM()'s S0n() and bin_logprob_muller_corsm() above. No closed-
+# form sampler exists for this family, so this uses grid-based inverse-CDF
+# sampling (vectorized across persons per item): build the unnormalized
+# density on a fine grid, normalize to a CDF, then invert a uniform draw per
+# person via linear interpolation.
+sim_muller_corsm <- function(theta, b, lambda, grid_n = 1000) {
+  N <- length(theta); J <- length(b)
+  if (length(lambda) == 1) lambda <- rep(lambda, J)
+  x_grid <- seq(1e-4, 1 - 1e-4, length.out = grid_n)
+  X <- matrix(0, N, J)
+  for (j in seq_len(J)) {
+    logdens <- outer(theta - b[j], x_grid, "*") +
+      matrix(x_grid * (1 - x_grid) * lambda[j], N, grid_n, byrow = TRUE)
+    logdens <- logdens - apply(logdens, 1, max)  # numerical stability
+    dens <- exp(logdens)
+    cdf <- t(apply(dens, 1, cumsum))
+    cdf <- cdf / cdf[, grid_n]
+    u <- runif(N)
+    X[, j] <- vapply(seq_len(N), function(i) stats::approx(cdf[i, ], x_grid, xout = u[i], rule = 2)$y, numeric(1))
+  }
+  colnames(X) <- paste0("item", seq_len(J))
+  X
+}
+
+# Zero-one boundary-inflation wrapper (diagnostic condition only, per the
+# vignette scope -- not a 5th model to fit, just a DGP perturbation to see
+# how the 4 core specs' held-out fit degrades under floor/ceiling piling
+# beyond what each model's own smooth density already captures). With
+# probability p0/p1 per cell, replaces the continuous draw with an exact
+# boundary value instead. Loosely in the spirit of Molenaar et al.'s (2022)
+# zero-one-inflated framing, but simulated only, never fit as its own model.
+apply_boundary_inflation <- function(Y01, p0 = 0.1, p1 = 0.1) {
+  N <- nrow(Y01); J <- ncol(Y01)
+  u <- matrix(runif(N * J), N, J)
+  Y01[u < p0] <- 0
+  Y01[u >= p0 & u < p0 + p1] <- 1
+  Y01
+}
+
+# ==============================================================================
+# Shared person-split fit/score routine, used by both continuous_bounded_
+# compute.R's pilot/batch sections and its simulation/recovery grid (Part D).
+# Lives here, not in the compute script, because the grid runs it inside
+# furrr::future_pmap() workers, which only source this helpers file -- a
+# function defined at compute.R's top level would not exist in those workers.
+#
+# Y01: [0,1]-rescaled response matrix, NO missing cells (complete cases
+# only, this pilot). Columns must already be safe bare identifiers (e.g.
+# "item1", not "17.1.R" or "CM01_02") -- lavaan's model-string parser
+# doesn't support arbitrary/backtick-quoted names.
+# ==============================================================================
+
+K_BINS <- 6           # shared bin count for held-out interval scoring, all models --
+                      # lowered from 12 after finding that finer bins left some
+                      # bins with zero training-split observations for some
+                      # (smaller-N or narrow-range) items, which crashes mirt's
+                      # fscores(response.pattern=...) when a held-out test person
+                      # lands in a bin the training fold never populated
+TEST_FRAC <- 0.25     # person-level test-set fraction
+
+fit_score_all <- function(Y01, label, K = K_BINS, test_frac = TEST_FRAC, seed) {
+  set.seed(seed)
+  N <- nrow(Y01); J <- ncol(Y01)
+  bins <- make_bins(K)
+  test_idx <- sample(seq_len(N), floor(N * test_frac))
+  train_idx <- setdiff(seq_len(N), test_idx)
+
+  Ytr <- Y01[train_idx, , drop = FALSE]
+  Yte <- Y01[test_idx, , drop = FALSE]
+  n_tr <- nrow(Ytr)
+
+  # held-out cells to score: every (test person, item) combination
+  held <- expand.grid(person = seq_len(nrow(Yte)), item = seq_len(J))
+  held$value <- Yte[cbind(held$person, held$item)]
+  held$bin <- bin_of(held$value, bins)
+  held$lo <- bins$edges[held$bin]
+  held$hi <- bins$edges[held$bin + 1]
+
+  out <- list()
+  fits <- list()
+
+  # --- 1. naive linear --------------------------------------------------------
+  res_lin <- tryCatch({
+    fit_lin <- fit_naive_linear(Ytr)
+    th <- theta_new_linear(fit_lin, Yte)
+    ll <- mapply(function(i, p, lo, hi) bin_logprob_linear(fit_lin, colnames(Yte)[i], th[p], lo, hi),
+                 held$item, held$person, held$lo, held$hi)
+    list(fit = fit_lin,
+         row = data.frame(model = "naive_linear", label = label,
+                           n_held = sum(!is.na(ll)), mean_ll = mean(ll, na.rm = TRUE)))
+  }, error = function(e) e)
+  if (!inherits(res_lin, "error")) {
+    out$naive_linear <- res_lin$row
+    fits$naive_linear <- res_lin$fit
+  } else {
+    message("  [", label, "] naive linear failed: ", conditionMessage(res_lin))
+    fits$naive_linear <- res_lin
+  }
+
+  # --- 2/2b. Beta IRT, item-varying and fixed dispersion ----------------------
+  # Fit AND score wrapped in one tryCatch per variant: mirt's category
+  # re-mapping (categories unobserved in the training split get compacted to
+  # consecutive integers) can make fscores(response.pattern=...) reject a
+  # held-out person whose response lands in a bin that had zero training
+  # observations for that item -- a scoring-stage failure, not a fitting
+  # failure. Isolated per model so it doesn't abort naive_linear/Samejima/
+  # Mueller for the same table (an earlier version let this propagate and
+  # silently lost all 4 models' results for 3 of the batch tables).
+  Ycat_tr <- discretize01(Ytr, K)
+  Ycat_te <- discretize01(Yte, K)
+  for (disp in c("item", "fixed")) {
+    key <- paste0("beta_irt_", disp, "_dispersion")
+    res <- tryCatch({
+      fit_b <- fit_beta_irt(Ycat_tr, dispersion = disp)
+      th <- theta_new_beta_irt(fit_b, Ycat_te)
+      ll <- mapply(function(i, p, b) bin_logprob_beta_irt(fit_b, i, K, th[p], b),
+                   held$item, held$person, held$bin)
+      list(fit = fit_b,
+           row = data.frame(model = key, label = label,
+                             n_held = sum(!is.na(ll)), mean_ll = mean(ll, na.rm = TRUE)))
+    }, error = function(e) e)
+    if (!inherits(res, "error")) {
+      out[[key]] <- res$row
+      fits[[key]] <- res$fit
+    } else {
+      message("  [", label, "] beta IRT (", disp, " dispersion) failed: ", conditionMessage(res))
+      fits[[key]] <- res
+    }
+  }
+
+  # --- 3. Samejima CRM ---------------------------------------------------------
+  Ytr_sq <- Ytr; Ytr_sq[] <- squeeze01(as.matrix(Ytr), n_tr)
+  Yte_sq <- Yte; Yte_sq[] <- squeeze01(as.matrix(Yte), n_tr)
+  fit_crm <- tryCatch(fit_samejima_crm(Ytr_sq, max_em = 200), error = function(e) e)
+  if (!inherits(fit_crm, "error")) {
+    th_tr <- tryCatch(theta_new_samejima_crm(fit_crm, Ytr_sq), error = function(e) e)
+    th_te <- tryCatch(theta_new_samejima_crm(fit_crm, Yte_sq), error = function(e) e)
+    if (!inherits(th_tr, "error") && !inherits(th_te, "error")) {
+      rs <- .crm_resid_sd(fit_crm, Ytr_sq, th_tr)
+      ll <- mapply(function(i, p, lo, hi) bin_logprob_samejima_crm(fit_crm, i, rs, th_te[p], lo, hi),
+                   held$item, held$person, held$lo, held$hi)
+      out$samejima_crm <- data.frame(model = "samejima_crm", label = label,
+                                      n_held = sum(!is.na(ll)), mean_ll = mean(ll, na.rm = TRUE))
+    } else message("  [", label, "] Samejima CRM theta estimation failed")
+  } else message("  [", label, "] Samejima CRM fit failed: ", conditionMessage(fit_crm))
+  fits$samejima_crm <- fit_crm
+
+  # --- 4. Mueller CRSM ----------------------------------------------------------
+  fit_mu <- tryCatch(fit_muller_corsm(Ytr_sq), error = function(e) e)
+  if (!inherits(fit_mu, "error")) {
+    th_te <- tryCatch(theta_new_muller_corsm(fit_mu, Yte_sq), error = function(e) e)
+    if (!inherits(th_te, "error")) {
+      ll <- mapply(function(i, p, lo, hi) bin_logprob_muller_corsm(fit_mu, i, th_te[p], lo, hi),
+                   held$item, held$person, held$lo, held$hi)
+      out$muller_corsm <- data.frame(model = "muller_corsm", label = label,
+                                      n_held = sum(!is.na(ll)), mean_ll = mean(ll, na.rm = TRUE))
+    } else message("  [", label, "] Mueller CRSM theta estimation failed")
+  } else message("  [", label, "] Mueller CRSM fit failed: ", conditionMessage(fit_mu))
+  fits$muller_corsm <- fit_mu
+
+  list(table = bind_rows(out), fits = fits, train_idx = train_idx, test_idx = test_idx)
 }

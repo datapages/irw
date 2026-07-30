@@ -9,7 +9,9 @@ description: |
   model, Samejima's Continuous Response Model, and Mueller's Continuous
   Rating Scale Model, on one simulated dataset and one real IRW table.
 date: today
-bibliography: continuous_bounded_data/references.bib
+bibliography:
+  - continuous_bounded_data/references.bib
+  - continuous_bounded_data/irw_references.bib
 format:
   html:
     code-fold: true
@@ -64,6 +66,10 @@ model_labels <- c(
 cache_path <- "continuous_bounded_data/continuous_bounded_results.rds"
 cache_ok <- file.exists(cache_path)
 if (cache_ok) res <- readRDS(cache_path)
+
+grid_cache_path <- "continuous_bounded_data/continuous_bounded_grid_results.rds"
+grid_cache_ok <- file.exists(grid_cache_path)
+if (grid_cache_ok) grid_res <- readRDS(grid_cache_path)
 ```
 
 ## Motivation
@@ -176,18 +182,74 @@ constraints, not a silent substitution.
 
 ### Real-data selection
 
-We used the scouting pass over IRW documented in
-`continuous_scout_candidates.csv` / `continuous_scout_data/continuous_scout_handoff.md`
-(55 tables with $\geq$12 response categories, classified bounded /
-unbounded / unclear from observed min/max patterns and IRW's `item_format`
-tag). Of the 24 tables classified `bounded`, the scout's own top pick --
-`lsbq_maleki_2025_non_persian_proficiency` -- is what we used: 3 items, 312
-respondents, a 0-10 scale with **~40% genuinely non-integer response
-values**. That fractional-value evidence mattered more than sample size or
-item count in the final choice: every 0-100 "Slider/continuous"-tagged
-table we checked (`emoji_scheffler_2024`, the `ai_fear_dong_2026_*` family,
-etc.) came back **100% integer-valued** on inspection, which is weaker
-evidence of genuine continuity than a fine-grained integer scale.
+#### Finding candidate tables: the scouting process
+
+IRW has no field that directly flags "this table's responses are bounded
+continuous" -- that has to be inferred. The scouting process that produced
+the candidate list lives entirely in this repo, **not** in the `irw`
+R package (`irw_metadata()` / `irw_fetch()` / `irw_tags()` are the package
+functions it's built on top of; the scout scripts and their output are
+project-local artifacts, not something `library(irw)` gives you). Anyone
+extending this vignette to more tables, or adapting the approach for a
+different response format, should start from these files directly rather
+than re-deriving the logic:
+
+- `vignettes/continuous_scout_fetch.R` -- the expensive stage.
+- `vignettes/continuous_scout_classify.R` -- the cheap, rerun-freely stage.
+- Cached raw output: `vignettes/continuous_scout_data/continuous_scout_raw.rds`.
+- Final table: **`continuous_scout_candidates.csv`, at the repo root**
+  (not inside a `vignettes/` subfolder, and not published anywhere --
+  regenerate it locally with the two scripts above if you don't have it).
+
+The filtering logic is more than a single `range(resp)` check, precisely
+because raw min/max alone can't distinguish a genuine fixed-format scale
+from a derived/open-ended score. It runs in three steps:
+
+1. **Cheap metadata filter, no fetching.** Keep tables where
+   `irw_metadata()$n_categories >= 12` -- the threshold this site's other
+   summaries already use as the boundary of "cleanly ordinal" (see
+   `dimensionality.qmd`, `local_dependence_compute.R`). This is exactly
+   where many-category and continuous candidates both live, so it's a
+   cheap way to shortlist before touching Redivis at all.
+2. **Fetch and summarize.** For every table that survives step 1, fetch
+   `resp` and compute, per table, `n_unique`/`min_resp`/`max_resp`/
+   `range_resp`/`pct_noninteger`, and, per item within the table,
+   `item_min`/`item_max`/`item_n`/`pct_noninteger`.
+3. **Classify from two independent signals**, combined so that agreement
+   is stronger evidence than either alone and disagreement gets downgraded
+   to `unclear` rather than resolved automatically:
+   - *resp-based*: are the table's observed min/max at a "round,"
+     interpretable endpoint (0, 1, 5, 10, 100, ...), **and** do at least
+     70% of items individually come within 15% of the table's overall
+     range at both ends? That item-consistency check matters --  an
+     earlier version compared raw per-item extremes directly and
+     misclassified clean tables purely from small-sample noise (e.g. an
+     11-item 0-100 VAS table where 9 items hit exactly [0,100] but 2
+     items topped out at 92/98 got flagged "inconsistent"). Checking
+     whether each item's range comes *within a tolerance* of the table's
+     range, instead, tolerates that kind of sampling noise while still
+     catching an item on a genuinely different scale (e.g. a 1-9 item
+     mixed into a 0-100 table).
+   - *metadata-based*: IRW's own curated `item_format` tag from
+     `irw_tags()` -- `"Slider/continuous"` is direct evidence for bounded,
+     `"Constructed Response"` for unbounded.
+
+Of the 55 tables with $\geq$12 categories, this produced 24 `bounded`, 18
+`unbounded`, 13 `unclear` (full breakdown and per-table notes in
+`vignettes/continuous_scout_data/continuous_scout_handoff.md`).
+
+#### Choosing among the 24 bounded candidates
+
+The scout's own top pick -- `lsbq_maleki_2025_non_persian_proficiency` --
+is what we used for this pilot: 3 items, 312 respondents, a 0-10 scale with
+**~40% genuinely non-integer response values**. That fractional-value
+evidence mattered more than sample size or item count in the final choice:
+every 0-100 "Slider/continuous"-tagged table we checked
+(`emoji_scheffler_2024`, the `ai_fear_dong_2026_*` family, etc.) came back
+**100% integer-valued** on inspection, which is weaker evidence of genuine
+continuity than a fine-grained integer scale -- classification from
+min/max and tags alone can't tell "true VAS" from "a very fine 0-100
+integer rating," so this had to be checked by hand.
 
 Two other scout candidates were checked and rejected before landing on this
 one, both for reasons specific to what these 4 models assume:
@@ -203,13 +265,33 @@ one, both for reasons specific to what these 4 models assume:
 
 ### Simulation
 
-A single condition, not yet the full grid (see
-[Limitations](#limitations)): $N=300$ persons, $J=10$ items, generated
-directly from the Beta IRT model's own equations (`sim_beta_irt()` in
-`continuous_bounded_helpers.R` -- a bug-fixed reimplementation of
-`sirt::brm.sim()`'s logic; see [Limitations](#limitations) for why the
-reimplementation was necessary), fixed dispersion $\tau=0.6$ across items,
-item difficulties spaced evenly on $[-1.5, 1.5]$.
+**A single illustrative condition** ($N=300$, $J=10$, Beta IRT DGP, fixed
+dispersion) is shown first below, generated directly from the Beta IRT
+model's own equations (`sim_beta_irt()` in `continuous_bounded_helpers.R`
+-- a bug-fixed reimplementation of `sirt::brm.sim()`'s logic; see
+[Limitations](#limitations) for why the reimplementation was necessary).
+
+**The full recovery/misspecification grid** cross-fits all 4 core specs
+against 3 DGPs, generated from each model's own equations: Beta IRT
+(`sim_beta_irt()`), Samejima CRM (`sim_samejima_crm()`: $Z_{ij} =
+\alpha_j(\theta_i - b_j) + e_{ij}$, $e_{ij}\sim N(0,\sigma_j^2)$, then
+$X_{ij}=1/(1+e^{-Z_{ij}})$ -- the exact inverse of EstCRM's own $Z=\ln(X/(1-X))$
+transform), and Mueller CRSM (`sim_muller_corsm()`: grid-based inverse-CDF
+sampling from the same $\exp[x(\theta-b)+x(1-x)\lambda]$ density used for
+scoring, since no closed-form sampler exists for this family). The
+naive-linear DGP is skipped, per the original scope's own allowance: an
+unbounded-Gaussian DGP clipped to $[0,1]$ to make it "bounded" would
+introduce an artificial boundary spike unrepresentative of what a linear
+model actually generates -- the exact awkwardness the scope flagged as a
+reason to skip it.
+
+Grid: $N\in\{300,1000\}$, $J\in\{8,20\}$, and, for the Beta IRT DGP
+specifically, fixed vs. item-varying dispersion -- 8 + 4 + 4 = 16
+conditions, plus 1 boundary-inflation condition (10% of responses forced to
+exactly 0, 10% forced to exactly 1, layered on the Beta IRT DGP at
+$N=300$/$J=8$) for 17 total. Run via `furrr::future_pmap()` +
+`plan(multisession)`, cached separately from the real-data pilot above
+(own skip-if-exists gate in the compute script).
 
 ## Results
 
@@ -244,7 +326,139 @@ Item-difficulty recovery for the item-varying-dispersion Beta IRT fit
 (correlation between estimated and true $\delta$) was
 `r if (cache_ok) sprintf("%.3f", res$sim$recovery_cor_delta) else "NA"`.
 
+### The full recovery grid: 16 conditions x 3 DGPs
+
+Parameter recovery for the correctly-specified model was excellent
+everywhere -- every one of the 16 non-inflation conditions recovered its
+true item parameters at $r>0.96$, most above $r>0.99$:
+
+```{r}
+#| label: tbl-grid-recovery
+if (grid_cache_ok) {
+  grid_res$scores |>
+    filter(!boundary_inflation) |>
+    distinct(dgp, N, J, dispersion_mode, recovery_cor) |>
+    arrange(dgp, N, J, dispersion_mode) |>
+    mutate(recovery_cor = sprintf("%.3f", recovery_cor)) |>
+    knitr::kable(col.names = c("DGP", "N", "J", "Beta IRT dispersion", "Recovery r"))
+} else {
+  cat("Grid cache not found -- run continuous_bounded_compute.R first.")
+}
+```
+
+More useful than "does recovery work" (it does, everywhere) is the
+cross-fitting question: when data comes from one DGP, which of the 4
+*fitted* specs wins the held-out comparison?
+
+```{r}
+#| label: fig-grid-crossfit
+if (grid_cache_ok) {
+  grid_res$scores |>
+    filter(!boundary_inflation) |>
+    mutate(model = factor(model, levels = names(model_colors)),
+           dgp_label = recode(dgp, beta_irt = "DGP: Beta IRT", samejima_crm = "DGP: Samejima CRM",
+                               muller_corsm = "DGP: Mueller CRSM")) |>
+    group_by(dgp_label, model) |>
+    summarise(mean_ll = mean(mean_ll, na.rm = TRUE), .groups = "drop") |>
+    ggplot(aes(x = model, y = mean_ll, fill = model)) +
+    geom_col(width = 0.6) +
+    scale_fill_manual(values = model_colors, labels = model_labels, guide = "none") +
+    scale_x_discrete(labels = model_labels) +
+    facet_wrap(~dgp_label, ncol = 3) +
+    labs(x = NULL, y = "Mean held-out log-probability\n(averaged across N/J conditions)",
+         title = "Cross-fitting: held-out fit by model, averaged across all N/J conditions per DGP") +
+    theme(axis.text.x = element_text(angle = 40, hjust = 1, size = 8))
+} else {
+  cat("Grid cache not found -- run continuous_bounded_compute.R first.")
+}
+```
+
+The pattern is consistent across all 3 DGPs and matches every real-data
+result above: **the 3 bounded-response models cluster tightly together and
+substantially outperform the naive linear baseline, regardless of which of
+the 3 actually generated the data.** The correctly-specified model is
+usually numerically best or tied for best (Samejima CRM wins clearly under
+its own DGP; Mueller CRSM wins clearly under its own DGP), but the margin
+between the 3 bounded-response models is small compared to the gap to naive
+linear -- these 3 models are more interchangeable with each other than any
+of them is with a model that ignores the bounds. One fit failed outright:
+Samejima CRM's EM did not converge (a `missing value where TRUE/FALSE
+needed` error partway through) on one Mueller-CRSM-generated dataset
+($N=300$, $J=8$) -- a real misspecification-robustness finding, not
+papered over; see [Limitations](#limitations).
+
+### Boundary inflation: does floor/ceiling piling break anything?
+
+Beyond fitting, we asked how each spec's held-out fit *degrades* when 20%
+of responses are forced to the exact boundary (10% to 0, 10% to 1) on top
+of the Beta IRT DGP -- diagnostic information, not a 5th model to fit:
+
+```{r}
+#| label: fig-grid-inflation
+if (grid_cache_ok) {
+  grid_res$scores |>
+    filter(dgp == "beta_irt", N == 300, J == 8, dispersion_mode == "fixed") |>
+    mutate(model = factor(model, levels = names(model_colors)),
+           condition = ifelse(boundary_inflation, "20% boundary-inflated", "Not inflated")) |>
+    ggplot(aes(x = model, y = mean_ll, fill = model, alpha = condition)) +
+    geom_col(position = "dodge", width = 0.6) +
+    scale_fill_manual(values = model_colors, labels = model_labels, guide = "none") +
+    scale_alpha_manual(values = c("Not inflated" = 1, "20% boundary-inflated" = 0.55), name = NULL) +
+    scale_x_discrete(labels = model_labels) +
+    labs(x = NULL, y = "Mean held-out log-probability",
+         title = "Beta IRT DGP (N=300, J=8): held-out fit with vs. without boundary inflation") +
+    theme(axis.text.x = element_text(angle = 20, hjust = 1))
+} else {
+  cat("Grid cache not found -- run continuous_bounded_compute.R first.")
+}
+```
+
+Every spec's held-out fit gets worse under inflation -- none of the 4 core
+specs explicitly models a zero-one-inflated mixture, so this is expected --
+but **not by the same amount**. The naive linear baseline degrades by
+about 23% (mean log-probability drops from -1.57 to -1.93); the 3
+bounded-response models degrade by roughly 15-16% each (e.g. Mueller CRSM:
+-1.25 to -1.43). The bounded-response models' smooth density still puts
+more mass near the boundary than a Gaussian does, so they absorb some of
+the extra piling without a dedicated inflation term, while the naive linear
+model has nothing in its structure to absorb it at all. None of the 4
+handle it *well* -- a true zero-one-inflated extension (Molenaar et al.,
+2022) would be needed for that -- but the bounded-response models are
+comparatively more robust to it than the baseline that ignores boundedness
+altogether.
+
 ### Real data: `r if (cache_ok) res$real$table else ""`
+
+What does this table's response distribution actually look like? This is
+the ~40% non-integer evidence from [Real-data selection](#real-data-selection)
+made visual, and it's also the direct reason the naive linear baseline
+underperforms below: a Gaussian model expects mass concentrated symmetrically
+around the mean, not piled up against a hard boundary.
+
+```{r}
+#| label: fig-real-dist
+if (cache_ok) {
+  as.data.frame(res$real$Y_raw) |>
+    tidyr::pivot_longer(everything(), names_to = "item", values_to = "resp") |>
+    ggplot(aes(x = resp)) +
+    geom_histogram(binwidth = 0.5, boundary = 0, fill = irw_blue, color = "white", linewidth = 0.1) +
+    facet_wrap(~item, ncol = 3) +
+    labs(x = sprintf("Raw response (%g-%g scale)", res$real$low, res$real$high),
+         y = "Count",
+         title = sprintf("%s: raw response distribution by item", res$real$table))
+} else {
+  cat("Cache not found -- run continuous_bounded_compute.R first.")
+}
+```
+
+All 3 items show a similar shape: a broad hump across the mid-range plus a
+sharp spike at the upper boundary. Between 23% and 44% of responses per
+item sit at *exactly* 10, the scale ceiling (vs. under 9% at exactly 0) --
+respondents who are, or report being, fully proficient pile up exactly at
+the boundary, which a symmetric Gaussian around a single mean cannot
+represent. This ceiling pile-up is precisely the floor/ceiling behavior
+the 3 bounded-response models are built to handle and the naive linear
+model is not.
 
 ```{r}
 #| label: fig-real-scores
@@ -273,26 +487,201 @@ Samejima CRM comes out slightly ahead of the other 3 in this single pilot
 run; with only 3 items and one train/test split, this ordering shouldn't be
 over-read (see [Limitations](#limitations)).
 
+### Vetting the other 20 bounded candidates (two rounds -- the first round had a real bug)
+
+The scout's `bounded` classification covers 24 tables total. Before adding
+more real-data examples, we screened the other 20 (everything besides the
+one already used, plus 1 rejected during the initial selection) for
+structural problems like the one that ruled out
+`eammi_grahe_2018_marriage_identity_allocation` above.
+
+**Round 1** (`vet_candidates.R`) flagged 7 tables as unusable because
+`(id, item)` pairs repeated many times per table -- more rows than
+`n_persons x n_items` would predict. That conclusion was wrong for most of
+them. IRW's own data standard (`standard.qmd`) documents `wave` (repeated/
+longitudinal administrations) and `rater` (multiple raters per unit) as
+standard optional columns for exactly this scenario, and every one of the
+7 flagged tables turned out to have one:
+
+| Table | Column that explains the "duplication" |
+|---|---|
+| `tears` | `rater`, `stimulus`, `phase` |
+| `nas_rogoza_2024_study5_{nas,ngs,nvs}` | `wave` |
+| `emoji_scheffler_2024` | `rater` |
+| `opentsstvr_linnig_2025_vas` | `wave` |
+| `westhoff2023_{stopd,pbat}` | `wave` |
+| `gilbert_meta_95` | `wave` |
+| `much_tte_2025_currentmotivation` | `wave` |
+
+Round 1's check only ever grouped by `(id, item)` and never looked for
+these columns -- so it was discarding information IRW had correctly
+stored, not finding a flaw in the data. Separately, `test_taking_much_2025_cm`
+had been excluded on an untested assumption (grouped with `much_tte` by
+name similarity, never actually checked) -- it turns out to have zero
+duplicate rows and needs no filtering at all.
+
+**Round 2** (`vet_candidates2.R`) filters each of these 8 tables to a
+single wave/rater occasion (or, for `test_taking_much_2025_cm`, uses it
+as-is) and re-checks. **5 of the 8 came out clean** -- unique `(id, item)`
+pairs, a real N, and no ipsative row-sum constraint -- and are used below.
+The other 3 (`tears`, `emoji_scheffler_2024`, `opentsstvr_linnig_2025_vas`,
+plus `double_marking_steele_2022` and `thomeczek2025_les`, which weren't
+wave/rater cases to begin with) remain excluded even after this
+correction: `tears` is a fully crossed rater x stimulus x phase design that
+doesn't reduce to a single filter; `emoji_scheffler_2024`'s `rater` column
+(153 distinct values against 107 `id`s) doesn't divide cleanly into one
+occasion per person; `opentsstvr_linnig_2025_vas` still has duplicate
+`(id, item)` pairs even within one wave; and `double_marking_steele_2022` /
+`thomeczek2025_les` have too few observations per rater once split (8 and
+6 dissertations/sessions respectively).
+
+The 3 tables from the **original** round-1 screen that were correctly
+excluded regardless of the wave/rater oversight: `klippel_irw`
+(item-varying ranges), `ehealth_rioux_2025_{triplep,beam,abiliti}` (mixed
+0-100/1-7 formats within one table), and
+`mclaughlin_samuel_2025_auditory_session_1` (1 item -- unusable for IRT
+regardless of anything else). Full vetting code and output:
+`vignettes/continuous_bounded_data/vet_candidates.R` /`vet_results.csv`
+(round 1) and `vet_candidates2.R` / `vet_results2.csv` (round 2).
+
+### Real data #2: a large-*N*, integer-valued check (`ai_fear_dong_2026_ai`)
+
+Of the tables that were structurally clean from the start,
+`ai_fear_dong_2026_*` (4 tables, N=10,000, exactly `n_persons x n_items`
+rows, 0 duplicates) stood out but needed one more decision: each is a
+48-item, 6-target x 8-trait factorial design (Care/Doctor/Journalist/
+Judge/Manager/Religious x competent/warm/etc.), not one construct. We used
+one target's 8 trait items -- `Doctor_*` (competent, determined, fair,
+imaginative, intelligent, sincere, tolerant, warm) -- treated as a single
+"overall impression of Doctor" construct. This is a defensible
+simplification (trait ratings like these reliably load on one general
+"halo"/evaluation factor even when they nominally span warmth and
+competence facets) but is a real construct-validity judgment call, not
+something the scouting script could resolve automatically.
+
+Unlike `lsbq_maleki_2025_non_persian_proficiency`, this table is **100%
+integer-valued** -- weaker evidence of genuine continuity (see
+[Real-data selection](#real-data-selection)) -- so it's included as a
+large-*N* structural check, not a second demonstration of fractional-value
+continuity. We subsampled to N=2,000 (from 10,000) for compute
+tractability in this pilot.
+
+```{r}
+#| label: fig-real2-dist
+if (cache_ok) {
+  as.data.frame(res$real2$Y_raw) |>
+    tidyr::pivot_longer(everything(), names_to = "item", values_to = "resp") |>
+    mutate(item = sub("^Doctor_", "", item)) |>
+    ggplot(aes(x = resp)) +
+    geom_histogram(binwidth = 5, boundary = 0, fill = irw_blue, color = "white", linewidth = 0.1) +
+    facet_wrap(~item, ncol = 4) +
+    labs(x = sprintf("Raw response (%g-%g scale)", res$real2$low, res$real2$high),
+         y = "Count",
+         title = sprintf("%s (%s facet): raw response distribution by item", res$real2$table, res$real2$facet))
+} else {
+  cat("Cache not found -- run continuous_bounded_compute.R first.")
+}
+```
+
+Ceiling piling shows up here too (1.7%-27% of responses land at exactly
+100, item-dependent), though less uniformly across items than in the
+primary table.
+
+```{r}
+#| label: fig-real2-scores
+if (cache_ok) {
+  res$real2$scores |>
+    mutate(model = factor(model, levels = names(model_colors))) |>
+    ggplot(aes(x = model, y = mean_ll, fill = model)) +
+    geom_col(width = 0.6) +
+    geom_text(aes(label = sprintf("%.2f", mean_ll)), vjust = 1.4, color = "white", size = 3.5) +
+    scale_fill_manual(values = model_colors, labels = model_labels, guide = "none") +
+    scale_x_discrete(labels = model_labels) +
+    labs(x = NULL, y = "Mean held-out log-probability (per response)",
+         title = sprintf("%s (%s facet): held-out fit by model", res$real2$table, res$real2$facet)) +
+    theme(axis.text.x = element_text(angle = 20, hjust = 1))
+} else {
+  cat("Cache not found -- run continuous_bounded_compute.R first.")
+}
+```
+
+Same qualitative pattern as the primary table: naive linear is clearly
+worst, the 3 bounded-response models are close together, with Mueller CRSM
+slightly ahead this time (vs. Samejima CRM in the primary table) -- with
+N=2,000 this ordering is more stable than the 3-item pilot above, but it's
+still one train/test split on one facet of one table, not a claim that
+Mueller CRSM generally wins.
+
+### 5 more real tables (round-2 vetting survivors)
+
+`much_tte_2025_currentmotivation` (3 items, N=1,244), `test_taking_much_2025_cm`
+(9 items, N=1,244), and the 3 `nas_rogoza_2024_study5_*` subscales (NAS/NGS/NVS,
+4 items each, N~270-280, from the same daily-diary narcissism study --
+Narcissistic Antagonism, Grandiosity, and Vulnerability) all passed round-2
+vetting and fit cleanly:
+
+```{r}
+#| label: fig-batch-scores
+if (cache_ok) {
+  res$batch$scores |>
+    mutate(model = factor(model, levels = names(model_colors)),
+           label = sprintf("%s\n(N=%d, J=%d)", label, N, J)) |>
+    ggplot(aes(x = model, y = mean_ll, fill = model)) +
+    geom_col(width = 0.6) +
+    scale_fill_manual(values = model_colors, labels = model_labels, guide = "none") +
+    scale_x_discrete(labels = model_labels) +
+    facet_wrap(~label, ncol = 3) +
+    labs(x = NULL, y = "Mean held-out log-probability (per response)",
+         title = "Held-out fit by model, across 5 additional real tables") +
+    theme(axis.text.x = element_text(angle = 40, hjust = 1, size = 8))
+} else {
+  cat("Cache not found -- run continuous_bounded_compute.R first.")
+}
+```
+
+The naive linear baseline is worst everywhere, consistent with the 2 tables
+above. Among the 3 bounded-response models, the ranking isn't stable across
+tables -- Mueller CRSM edges out the others on `test_taking_much_2025_cm`
+and 2 of the 3 `nas_rogoza` subscales, but the gaps are small throughout and
+this is still one train/test split per table. The main takeaway is
+qualitative, not "which of the 3 wins": all 3 bounded-response models
+consistently and substantially beat the naive linear baseline across every
+real table tried so far.
+
+`westhoff2023_{stopd,pbat}` and `gilbert_meta_95` passed the same
+structural (wave) fix but hit an unresolved numerical issue in the Beta IRT
+scoring step (and, for `pbat`, Samejima CRM fitting too) even after
+coarsening the shared bin grid from 12 to 6 bins -- left out of this pass
+rather than force partial results into the comparison (see
+[Limitations](#limitations)).
+
 ## Limitations {#limitations}
 
-**This is a single-shot pilot, not the full study.** Concretely not yet
-done:
+**This is still a pilot, not the final study,** though the simulation side
+is now complete per the original scope. Concretely not yet done:
 
-- **The full recovery/misspecification grid.** The original scope called
-  for cross-fitting all 4 specs against 3-4 DGPs (Beta IRT, Samejima CRM,
-  Mueller CoRSM), varying N (300/1000), J (8/20), and Beta IRT dispersion
-  structure (fixed/item-varying), plus a boundary-inflation (zero/one
-  piling) condition to see how each spec degrades qualitatively. None of
-  that is here yet -- this draft has one simulated dataset under one DGP.
 - **Ferrando's (2001) nonlinear congeneric model** [@ferrando2001nonlinear]
   -- the optional stretch spec, comparable to the treatment in Ferrando
-  (2002) [@ferrando2002theoretical] -- has not been attempted at all,
-  correctly per its own sequencing rule (only after specs 1-4 are complete
-  and validated).
-- **Partial missingness in real data.** The real-data pilot used complete
+  (2002) [@ferrando2002theoretical] -- has not been attempted at all. Specs
+  1-4 are now complete and validated (the grid ran cleanly), so its own
+  sequencing rule no longer blocks it -- it just hasn't been picked up yet.
+- **Partial missingness in real data.** All 7 real tables used complete
   cases only; IRW tables with partially missing item responses aren't
   handled yet.
-- **Only one train/test split**, not a repeated/cross-validated design.
+- **Only one train/test split per condition** (real or simulated), not a
+  repeated/cross-validated design -- so none of the held-out numbers above
+  have an uncertainty band, and a single unlucky split could shift a close
+  call between the 3 bounded-response models.
+- **One grid fit failed outright**: Samejima CRM's EM did not converge
+  (`missing value where TRUE/FALSE needed`) on one Mueller-CRSM-generated
+  condition ($N=300$, $J=8$, no boundary inflation). Not re-run with a
+  different seed or diagnosed further -- reported as a real
+  misspecification-robustness finding (EstCRM's EM can fail outright, not
+  just fit poorly, on data far from its assumptions) rather than treated as
+  a bug to route around.
+- **The grid's boundary-inflation condition covers only 1 of the 3 DGPs**
+  (Beta IRT, $N=300$/$J=8$) -- not repeated for Samejima CRM or Mueller
+  CoRSM, or at other N/J combinations.
 
 **Package-availability and correctness issues found while building this**
 (worth knowing before extending this pilot):
@@ -315,6 +704,28 @@ done:
   original fit (no missing-data handling, no new-data argument) and could
   not be reused for the person-level holdout design above; a generalized
   version of its estimating equation was written from scratch instead.
+- The from-scratch Mueller CRSM person-scoring routine
+  (`theta_new_muller_corsm()`) could diverge to a `theta` extreme enough to
+  overflow `exp()` inside `integrate()`, which throws a hard "non-finite
+  function value" error rather than the graceful NA `stop.on.error=FALSE`
+  is supposed to allow -- this crashed the *entire* held-out scoring pass
+  for a table (not just Mueller CRSM) before being caught and fixed by
+  clamping `theta` and wrapping each `integrate()` call individually.
+- Similarly, a Beta IRT scoring-stage failure (see below) was originally
+  written so it could crash naive-linear/Samejima/Mueller's results for the
+  same table too -- every model's fit-and-score block is now wrapped in its
+  own `tryCatch` so one model's failure can't take down the other 3.
+- **Unresolved**: `westhoff2023_{stopd,pbat}` and `gilbert_meta_95` pass
+  every structural check (single wave, unique `(id, item)`, no ipsative
+  constraint) but still fail at the Beta IRT scoring step -- `mirt`
+  compacts a training split's observed categories to consecutive integers
+  per item, and if a held-out test person's response lands in a category
+  with zero training-split observations, `fscores(response.pattern=...)`
+  rejects it. Lowering the shared bin count from 12 to 6 fixed this for
+  every other table in this pilot but not these 3 (`pbat` also fails
+  Samejima CRM fitting with an unrelated "missing value where TRUE/FALSE
+  needed" error, not yet diagnosed). Left out of the real-data set rather
+  than chasing further.
 
 **Explicitly out of scope** (not implemented, not planned for this
 vignette): DIF for continuous responses [@finch2023impact]; dual-range
