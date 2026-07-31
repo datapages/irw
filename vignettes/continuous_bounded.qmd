@@ -23,15 +23,13 @@ execute:
   warning: false
 ---
 
-::: {.callout-important}
-**This is a draft pilot, not the final vignette.** It exists to get feedback
-on the modeling approach before investing in the full study. What's here:
-real fits of all 4 core model specs, on one simulated dataset and one real
-IRW table, with a working held-out comparison. What's *not* here yet: the
-full simulation/recovery grid (multiple DGPs x sample sizes x item counts),
-a boundary-inflation (zero/one-piling) condition, and Ferrando's (2001)
-optional stretch model. See [Limitations](#limitations) for the complete
-list and the reasoning behind several scope decisions made along the way.
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the
+analysis design, and the writing below — was produced largely by Claude
+(Anthropic), working from a task specification and with human review.
+Treat the methodological choices and interpretations accordingly, and
+check the compute script (`continuous_bounded_compute.R`) directly if
+you're relying on the numbers here.
 :::
 
 ```{r}
@@ -75,7 +73,7 @@ if (grid_cache_ok) grid_res <- readRDS(grid_cache_path)
 ## Motivation
 
 Visual analogue scales, slider ratings, and continuous confidence or
-percentage judgments are common in IRW: a respondent marks a point on a
+percentage judgments are common: a respondent marks a point on a
 fixed, labeled segment (0 to 100, say), and the raw response is a
 continuous number that is *bounded* at both ends. This is a different
 measurement problem from the unbounded continuous case (response times,
@@ -123,42 +121,150 @@ the Rasch baseline plays in the site's guessing-models vignette.
 
 Ferrando's (2001) nonlinear congeneric model [@ferrando2001nonlinear] is an
 optional stretch spec with no package implementation (it would need a
-custom truncated-normal likelihood via `optim`); per the original scope for
-this vignette it's only attempted after specs 1-4 are complete and
-validated, and **has not been attempted in this draft** -- see
-[Limitations](#limitations).
+custom truncated-normal likelihood via `optim`) and has not been attempted
+here -- see [Limitations](#limitations).
 
-### Why "interval probability," not raw log-likelihood
+### Comparing the item response functions across models
 
-Before any model comparison, we checked whether all 4 models report
-likelihood on the same scale. They don't: reading `EstCRM::EstCRMitem()`'s
-source directly shows it transforms the raw response to
-$Z = \ln\!\big(X/(K-X)\big)$ and fits/reports its EM log-likelihood entirely
-on that $Z$-scale, with no Jacobian term anywhere in the function. A raw
-log-likelihood from EstCRM is therefore not comparable to, say, the Beta
-IRT model's density on the raw response, without a correction.
+Before fitting anything to data, it helps to see what each model's own
+equation implies about the relationship between a respondent's ability
+$\theta$ and their expected response. All three bounded-response models
+share a common building block -- a linear "ability minus difficulty" term,
+$a(\theta-b)$ -- but wire it into the response very differently. Drag the
+sliders below to see how difficulty ($b$) and discrimination ($a$) reshape
+each model's mean response curve.
 
-Rather than hand-deriving a per-model Jacobian correction, every model's
-held-out score in this vignette is a **binned interval log-probability**:
+```{ojs}
+//| echo: false
+viewof irf_b = Inputs.range([-2, 2], {value: 0, step: 0.1, label: "Item difficulty (b)"})
+```
+
+```{ojs}
+//| echo: false
+viewof irf_a = Inputs.range([0.3, 2.5], {value: 1, step: 0.1, label: "Discrimination (a) -- no effect on Mueller CRSM"})
+```
+
+```{ojs}
+//| echo: false
+
+function normalPDF(z, mu, sigma) {
+  return Math.exp(-0.5 * ((z - mu) / sigma) ** 2) / (sigma * Math.sqrt(2 * Math.PI));
+}
+
+function simpson(f, lo, hi, n) {
+  const h = (hi - lo) / n;
+  let s = f(lo) + f(hi);
+  for (let i = 1; i < n; i++) {
+    s += (i % 2 === 0 ? 2 : 4) * f(lo + i * h);
+  }
+  return (s * h) / 3;
+}
+
+irf_sigma = 1
+irf_lambda = 2
+
+function betaIrtMean(theta, a, b) {
+  return 1 / (1 + Math.exp(-a * (theta - b)));
+}
+
+function samejimaMean(theta, a, b, sigma) {
+  const loc = a * (theta - b);
+  return simpson((z) => (1 / (1 + Math.exp(-z))) * normalPDF(z, loc, sigma), loc - 6 * sigma, loc + 6 * sigma, 60);
+}
+
+function muellerMean(theta, b, lambda) {
+  const g = (x) => Math.exp(x * (theta - b) + x * (1 - x) * lambda);
+  const Z = simpson(g, 0, 1, 100);
+  return simpson((x) => x * g(x), 0, 1, 100) / Z;
+}
+
+irf_thetas = d3.range(-3, 3.01, 0.1)
+
+irf_curve_data = irf_thetas.flatMap((theta) => [
+  { theta, model: "naive_linear", y: 0.5 + irf_a * (theta - irf_b) },
+  { theta, model: "beta_irt", y: betaIrtMean(theta, irf_a, irf_b) },
+  { theta, model: "samejima_crm", y: samejimaMean(theta, irf_a, irf_b, irf_sigma) },
+  { theta, model: "muller_corsm", y: muellerMean(theta, irf_b, irf_lambda) }
+])
+```
+
+```{ojs}
+//| echo: false
+
+irf_colors = ({
+  naive_linear: "#808080",
+  beta_irt: "#2166ac",
+  samejima_crm: "#d73027",
+  muller_corsm: "#4daf4a"
+})
+
+irf_labels = ({
+  naive_linear: "Naive linear",
+  beta_irt: "Beta IRT",
+  samejima_crm: "Samejima CRM",
+  muller_corsm: "Mueller CRSM"
+})
+
+Plot.plot({
+  width: 700,
+  height: 420,
+  x: {label: "Ability (θ)", domain: [-3, 3]},
+  y: {label: "Expected response (rescaled to [0,1])", domain: [-0.15, 1.15]},
+  color: {
+    domain: Object.keys(irf_colors),
+    range: Object.values(irf_colors),
+    legend: true,
+    tickFormat: (d) => irf_labels[d]
+  },
+  marks: [
+    Plot.ruleY([0, 1], {stroke: "#999", strokeDasharray: "2,2"}),
+    Plot.line(irf_curve_data.filter((d) => d.model === "naive_linear"), {
+      x: "theta", y: "y", stroke: "model", strokeDasharray: "4,3"
+    }),
+    Plot.line(irf_curve_data.filter((d) => d.model !== "naive_linear"), {
+      x: "theta", y: "y", stroke: "model"
+    })
+  ]
+})
+```
+
+The naive linear line (dashed) is the only curve not actually confined to
+$[0,1]$: away from $\theta=b$ it predicts responses outside the possible
+range entirely, which is the exact failure mode the other three models are
+built to avoid by leveling off smoothly at the boundary instead. Mueller's
+CRSM has no discrimination parameter at all -- being a Rasch-family,
+specific-objectivity model [@mueller1987rasch], moving the $a$ slider only
+changes the other three curves. Dispersion parameters are held fixed here
+at representative values ($\sigma=1$ for Samejima CRM, $\lambda=2$ for
+Mueller CRSM) rather than exposed as sliders: Beta IRT's mean curve doesn't
+depend on its dispersion parameter at all (only its spread does), while
+Samejima's and Mueller's dispersion parameters do shift the mean curve
+itself once backtransformed through a nonlinear link, not just its spread.
+
+### Estimation and model comparison
+
+Every model's held-out fit is reported as the **log-probability of the
+response falling in a small interval**, not a raw point density. This
+choice exists because the 4 models don't report likelihood on the same
+scale to begin with: reading `EstCRM::EstCRMitem()`'s source shows it
+transforms the raw response to $Z = \ln\!\big(X/(K-X)\big)$ and computes
+its entire EM log-likelihood on that transformed scale, not the original
+response scale the Beta IRT and naive linear fits use. Comparing those two
+log-likelihoods directly would be comparing different units -- like
+comparing an error reported in inches to one reported in centimeters
+without converting first. The usual fix is a model-specific Jacobian
+correction; instead, every model's held-out score here is
 $\log P(\text{bin}_{lo} < X < \text{bin}_{hi})$, using the same bin edges
-(on the raw, rescaled-to-$[0,1]$ scale) for all 4 models. Interval
-probability is invariant to a monotonic reparameterization of the
-intervening likelihood -- the Jacobian exactly cancels under integration --
-so this sidesteps the Jacobian bookkeeping entirely. This is a deliberate
-substitution for "compare raw densities with a Jacobian correction," flagged
-here because the original scope for this vignette didn't spell out this
-exact resolution.
+(on the raw, rescaled-to-$[0,1]$ scale) for all 4 models. A probability that
+a response lands in a fixed interval means the same thing regardless of
+which internal scale a model uses to compute it, so this sidesteps the
+rescaling problem entirely rather than requiring a per-model correction.
 
-### Comparison metric: held-out log-likelihood, not IMV
-
-We use held-out log-likelihood rather than IMV (InterModel Vigorish), the
-metric used in most other vignettes on this site. `imv4sem` and
-`imv.mirt` are not on CRAN, and no citable generalization of IMV to
-continuous or Beta-type outcomes was found. **This is flagged as an ad hoc
-decision to revisit, not a settled one** -- unlike IMV's binary/count case,
-there's no obviously "natural" coin-flip baseline for a continuous
-response, so held-out log-likelihood is a reasonable default rather than a
-demonstrably right answer.
+Held-out log-probability, built this way, is the metric used to compare all
+4 specs throughout this vignette. It's a standard, interpretable scale for
+predictive fit, though not a validated best-practice specific to this
+bounded-continuous setting -- flagged as an ad hoc choice worth revisiting
+(see [Limitations](#limitations)).
 
 ### Held-out design: person-level, not cell-level
 
@@ -179,6 +285,34 @@ standard "do item parameters generalize to new examinees" cross-validation
 design, but it's different, and weaker, evidence than true cell-level
 held-out-response prediction. Flagged here as a deviation driven by package
 constraints, not a silent substitution.
+
+### Simulation
+
+**A single illustrative condition** ($N=300$, $J=10$, Beta IRT DGP, fixed
+dispersion) is shown first below, generated directly from the Beta IRT
+model's own equations (`sim_beta_irt()` in `continuous_bounded_helpers.R`
+-- a bug-fixed reimplementation of `sirt::brm.sim()`'s logic; see
+[Limitations](#limitations) for why the reimplementation was necessary).
+
+**The full recovery/misspecification grid** cross-fits all 4 core specs
+against 3 DGPs, generated from each model's own equations: Beta IRT
+(`sim_beta_irt()`), Samejima CRM (`sim_samejima_crm()`: $Z_{ij} =
+\alpha_j(\theta_i - b_j) + e_{ij}$, $e_{ij}\sim N(0,\sigma_j^2)$, then
+$X_{ij}=1/(1+e^{-Z_{ij}})$ -- the exact inverse of EstCRM's own $Z=\ln(X/(1-X))$
+transform), and Mueller CRSM (`sim_muller_corsm()`: grid-based inverse-CDF
+sampling from the same $\exp[x(\theta-b)+x(1-x)\lambda]$ density used for
+scoring, since no closed-form sampler exists for this family). The
+naive-linear DGP is skipped: an unbounded-Gaussian DGP clipped to $[0,1]$ to
+make it "bounded" would introduce an artificial boundary spike
+unrepresentative of what a linear model actually generates.
+
+Grid: $N\in\{300,1000\}$, $J\in\{8,20\}$, and, for the Beta IRT DGP
+specifically, fixed vs. item-varying dispersion -- 8 + 4 + 4 = 16
+conditions, plus 1 boundary-inflation condition (10% of responses forced to
+exactly 0, 10% forced to exactly 1, layered on the Beta IRT DGP at
+$N=300$/$J=8$) for 17 total. Run via `furrr::future_pmap()` +
+`plan(multisession)`, cached separately from the real-data results below
+(own skip-if-exists gate in the compute script).
 
 ### Real-data selection
 
@@ -238,60 +372,62 @@ Of the 55 tables with $\geq$12 categories, this produced 24 `bounded`, 18
 `unbounded`, 13 `unclear` (full breakdown and per-table notes in
 `vignettes/continuous_scout_data/continuous_scout_handoff.md`).
 
-#### Choosing among the 24 bounded candidates
+#### From 24 candidates to the 7 tables analyzed
 
-The scout's own top pick -- `lsbq_maleki_2025_non_persian_proficiency` --
-is what we used for this pilot: 3 items, 312 respondents, a 0-10 scale with
-**~40% genuinely non-integer response values**. That fractional-value
-evidence mattered more than sample size or item count in the final choice:
-every 0-100 "Slider/continuous"-tagged table we checked
-(`emoji_scheffler_2024`, the `ai_fear_dong_2026_*` family, etc.) came back
-**100% integer-valued** on inspection, which is weaker evidence of genuine
-continuity than a fine-grained integer scale -- classification from
-min/max and tags alone can't tell "true VAS" from "a very fine 0-100
-integer rating," so this had to be checked by hand.
+Not every scouted candidate is usable as-is. Two structural checks rule
+tables out regardless of anything else: an **ipsative/compositional**
+constraint (row sums across items are a constant, e.g. a fixed
+point-allocation task), which violates the conditional-independence
+assumption every one of these 4 models makes; and **non-unique
+`(id, item)` pairs**, which usually means the table holds multiple
+measurement occasions per item, not a single-occasion battery, and needs
+reducing to one occasion before analysis -- IRW's own data standard
+(`standard.qmd`) documents `wave` (repeated administrations) and `rater`
+(multiple raters per unit) as the columns that explain this in practice,
+and several tables that looked unusable at first check were reclaimed after
+filtering to a single wave/rater.
 
-Two other scout candidates were checked and rejected before landing on this
-one, both for reasons specific to what these 4 models assume:
+Applying those checks, plus a by-hand look at fractional-value evidence (a
+table classified `bounded` from its min/max endpoints can still turn out to
+be 100% integer-valued on inspection -- weaker evidence of genuine
+continuity than a fine-grained scale, since classification from metadata
+alone can't tell "true VAS" from "a very fine 0-100 integer rating"),
+narrowed the 24 `bounded` candidates to the 7 tables used for every
+real-data result below:
 
-- `eammi_grahe_2018_marriage_identity_allocation` -- row sums across items
-  are a constant 100. This is an ipsative/compositional point-allocation
-  task, which violates the conditional-independence assumption every one of
-  these 4 models makes (a higher score on one item mechanically forces
-  lower scores on the others).
-- `much_tte_2025_currentmotivation` / `test_taking_much_2025_cm` -- person
-  x item cells are not unique (repeated measurement occasions per item, not
-  a single-occasion multi-item battery).
+| Table | N | J | Note |
+|---|---|---|---|
+| `lsbq_maleki_2025_non_persian_proficiency` | 308 | 3 | 0-10 scale, ~40% non-integer responses -- primary evidence of genuine continuity |
+| `ai_fear_dong_2026_ai` (Doctor facet, subsampled) | 2,000 | 8 | 0-100, integer-valued; large-*N* structural check |
+| `much_tte_2025_currentmotivation` | 1,244 | 3 | wave-filtered to one occasion |
+| `test_taking_much_2025_cm` | 1,244 | 9 | -- |
+| `nas_rogoza_2024_study5_nas` | 277 | 4 | wave-filtered; Narcissistic Antagonism subscale |
+| `nas_rogoza_2024_study5_ngs` | 274 | 4 | wave-filtered; Narcissistic Grandiosity subscale |
+| `nas_rogoza_2024_study5_nvs` | 278 | 4 | wave-filtered; Narcissistic Vulnerability subscale |
 
-### Simulation
+Tables left out along the way fell into a few categories: ipsative/
+point-allocation formats, item ranges that vary within a table, formats
+mixed within a single table, too few items to fit an IRT model, and
+repeated-measures structure too irregular to reduce to a single
+wave/rater. Two tables that pass every structural check
+(`westhoff2023_{stopd,pbat}`, `gilbert_meta_95`) hit an unresolved Beta IRT
+scoring issue instead, described in [Limitations](#limitations). Full
+per-table vetting code and output, including the exact reason for every
+excluded table, live in `vignettes/continuous_bounded_data/vet_candidates.R`
+/ `vet_results.csv` and `vet_candidates2.R` / `vet_results2.csv`.
 
-**A single illustrative condition** ($N=300$, $J=10$, Beta IRT DGP, fixed
-dispersion) is shown first below, generated directly from the Beta IRT
-model's own equations (`sim_beta_irt()` in `continuous_bounded_helpers.R`
--- a bug-fixed reimplementation of `sirt::brm.sim()`'s logic; see
-[Limitations](#limitations) for why the reimplementation was necessary).
-
-**The full recovery/misspecification grid** cross-fits all 4 core specs
-against 3 DGPs, generated from each model's own equations: Beta IRT
-(`sim_beta_irt()`), Samejima CRM (`sim_samejima_crm()`: $Z_{ij} =
-\alpha_j(\theta_i - b_j) + e_{ij}$, $e_{ij}\sim N(0,\sigma_j^2)$, then
-$X_{ij}=1/(1+e^{-Z_{ij}})$ -- the exact inverse of EstCRM's own $Z=\ln(X/(1-X))$
-transform), and Mueller CRSM (`sim_muller_corsm()`: grid-based inverse-CDF
-sampling from the same $\exp[x(\theta-b)+x(1-x)\lambda]$ density used for
-scoring, since no closed-form sampler exists for this family). The
-naive-linear DGP is skipped, per the original scope's own allowance: an
-unbounded-Gaussian DGP clipped to $[0,1]$ to make it "bounded" would
-introduce an artificial boundary spike unrepresentative of what a linear
-model actually generates -- the exact awkwardness the scope flagged as a
-reason to skip it.
-
-Grid: $N\in\{300,1000\}$, $J\in\{8,20\}$, and, for the Beta IRT DGP
-specifically, fixed vs. item-varying dispersion -- 8 + 4 + 4 = 16
-conditions, plus 1 boundary-inflation condition (10% of responses forced to
-exactly 0, 10% forced to exactly 1, layered on the Beta IRT DGP at
-$N=300$/$J=8$) for 17 total. Run via `furrr::future_pmap()` +
-`plan(multisession)`, cached separately from the real-data pilot above
-(own skip-if-exists gate in the compute script).
+Two of the 7 needed an additional judgment call beyond the structural
+checks above. `ai_fear_dong_2026_ai` is a 48-item, 6-target x 8-trait
+factorial design (Care/Doctor/Journalist/Judge/Manager/Religious x
+competent/warm/etc.), not one construct, so we used one target's 8 trait
+items (`Doctor_*`) as a single "overall impression of Doctor" construct --
+trait ratings like these reliably load on one general "halo" factor even
+when they nominally span separate facets, but it's a real
+construct-validity call, not something the scouting script could resolve
+automatically -- and it was subsampled from N=10,000 to N=2,000 for compute
+tractability. `lsbq_maleki_2025_non_persian_proficiency` needed no such
+call; it's the scout's own top pick and the only one of the 7 with
+substantial fractional-value evidence.
 
 ## Results
 
@@ -427,13 +563,14 @@ handle it *well* -- a true zero-one-inflated extension (Molenaar et al.,
 comparatively more robust to it than the baseline that ignores boundedness
 altogether.
 
-### Real data: `r if (cache_ok) res$real$table else ""`
+### Real data: does floor/ceiling piling look the way the models expect?
 
-What does this table's response distribution actually look like? This is
-the ~40% non-integer evidence from [Real-data selection](#real-data-selection)
-made visual, and it's also the direct reason the naive linear baseline
-underperforms below: a Gaussian model expects mass concentrated symmetrically
-around the mean, not piled up against a hard boundary.
+Before comparing model fits, it helps to see what these tables' response
+distributions actually look like. This is the primary table's ~40%
+non-integer evidence from [Real-data selection](#real-data-selection) made
+visual, and it's also the direct reason the naive linear baseline
+underperforms below: a Gaussian model expects mass concentrated
+symmetrically around the mean, not piled up against a hard boundary.
 
 ```{r}
 #| label: fig-real-dist
@@ -456,209 +593,63 @@ sharp spike at the upper boundary. Between 23% and 44% of responses per
 item sit at *exactly* 10, the scale ceiling (vs. under 9% at exactly 0) --
 respondents who are, or report being, fully proficient pile up exactly at
 the boundary, which a symmetric Gaussian around a single mean cannot
-represent. This ceiling pile-up is precisely the floor/ceiling behavior
+represent. The same ceiling pile-up shows up, to varying degrees, in the
+other 6 tables analyzed below -- it's the general floor/ceiling behavior
 the 3 bounded-response models are built to handle and the naive linear
 model is not.
 
+### Held-out fit across all 7 real tables
+
 ```{r}
-#| label: fig-real-scores
+#| label: prep-real-scores
 if (cache_ok) {
-  res$real$scores |>
-    mutate(model = factor(model, levels = names(model_colors))) |>
-    ggplot(aes(x = model, y = mean_ll, fill = model)) +
-    geom_col(width = 0.6) +
-    geom_text(aes(label = sprintf("%.2f", mean_ll)), vjust = 1.4, color = "white", size = 3.5) +
-    scale_fill_manual(values = model_colors, labels = model_labels, guide = "none") +
-    scale_x_discrete(labels = model_labels) +
-    labs(x = NULL, y = "Mean held-out log-probability (per response)",
-         title = sprintf("%s: held-out fit by model", res$real$table)) +
-    theme(axis.text.x = element_text(angle = 20, hjust = 1))
-} else {
-  cat("Cache not found -- run continuous_bounded_compute.R first.")
+  all_real_scores <- dplyr::bind_rows(
+    res$real$scores |> dplyr::mutate(N = res$real$N, J = res$real$J),
+    res$real2$scores |> dplyr::mutate(
+      N = res$real2$N, J = res$real2$J,
+      label = paste0(label, " (", res$real2$facet, ")")
+    ),
+    res$batch$scores
+  )
 }
 ```
 
-On the real data
-(N=`r if (cache_ok) res$real$N else "?"`,
-J=`r if (cache_ok) res$real$J else "?"`), the naive linear baseline is
-substantially worse than all 3 bounded-response models -- unsurprising,
-given this is exactly a 0-10 scale with real floor/ceiling behavior.
-Samejima CRM comes out slightly ahead of the other 3 in this single pilot
-run; with only 3 items and one train/test split, this ordering shouldn't be
-over-read (see [Limitations](#limitations)).
-
-### Vetting the other 20 bounded candidates (two rounds -- the first round had a real bug)
-
-The scout's `bounded` classification covers 24 tables total. Before adding
-more real-data examples, we screened the other 20 (everything besides the
-one already used, plus 1 rejected during the initial selection) for
-structural problems like the one that ruled out
-`eammi_grahe_2018_marriage_identity_allocation` above.
-
-**Round 1** (`vet_candidates.R`) flagged 7 tables as unusable because
-`(id, item)` pairs repeated many times per table -- more rows than
-`n_persons x n_items` would predict. That conclusion was wrong for most of
-them. IRW's own data standard (`standard.qmd`) documents `wave` (repeated/
-longitudinal administrations) and `rater` (multiple raters per unit) as
-standard optional columns for exactly this scenario, and every one of the
-7 flagged tables turned out to have one:
-
-| Table | Column that explains the "duplication" |
-|---|---|
-| `tears` | `rater`, `stimulus`, `phase` |
-| `nas_rogoza_2024_study5_{nas,ngs,nvs}` | `wave` |
-| `emoji_scheffler_2024` | `rater` |
-| `opentsstvr_linnig_2025_vas` | `wave` |
-| `westhoff2023_{stopd,pbat}` | `wave` |
-| `gilbert_meta_95` | `wave` |
-| `much_tte_2025_currentmotivation` | `wave` |
-
-Round 1's check only ever grouped by `(id, item)` and never looked for
-these columns -- so it was discarding information IRW had correctly
-stored, not finding a flaw in the data. Separately, `test_taking_much_2025_cm`
-had been excluded on an untested assumption (grouped with `much_tte` by
-name similarity, never actually checked) -- it turns out to have zero
-duplicate rows and needs no filtering at all.
-
-**Round 2** (`vet_candidates2.R`) filters each of these 8 tables to a
-single wave/rater occasion (or, for `test_taking_much_2025_cm`, uses it
-as-is) and re-checks. **5 of the 8 came out clean** -- unique `(id, item)`
-pairs, a real N, and no ipsative row-sum constraint -- and are used below.
-The other 3 (`tears`, `emoji_scheffler_2024`, `opentsstvr_linnig_2025_vas`,
-plus `double_marking_steele_2022` and `thomeczek2025_les`, which weren't
-wave/rater cases to begin with) remain excluded even after this
-correction: `tears` is a fully crossed rater x stimulus x phase design that
-doesn't reduce to a single filter; `emoji_scheffler_2024`'s `rater` column
-(153 distinct values against 107 `id`s) doesn't divide cleanly into one
-occasion per person; `opentsstvr_linnig_2025_vas` still has duplicate
-`(id, item)` pairs even within one wave; and `double_marking_steele_2022` /
-`thomeczek2025_les` have too few observations per rater once split (8 and
-6 dissertations/sessions respectively).
-
-The 3 tables from the **original** round-1 screen that were correctly
-excluded regardless of the wave/rater oversight: `klippel_irw`
-(item-varying ranges), `ehealth_rioux_2025_{triplep,beam,abiliti}` (mixed
-0-100/1-7 formats within one table), and
-`mclaughlin_samuel_2025_auditory_session_1` (1 item -- unusable for IRT
-regardless of anything else). Full vetting code and output:
-`vignettes/continuous_bounded_data/vet_candidates.R` /`vet_results.csv`
-(round 1) and `vet_candidates2.R` / `vet_results2.csv` (round 2).
-
-### Real data #2: a large-*N*, integer-valued check (`ai_fear_dong_2026_ai`)
-
-Of the tables that were structurally clean from the start,
-`ai_fear_dong_2026_*` (4 tables, N=10,000, exactly `n_persons x n_items`
-rows, 0 duplicates) stood out but needed one more decision: each is a
-48-item, 6-target x 8-trait factorial design (Care/Doctor/Journalist/
-Judge/Manager/Religious x competent/warm/etc.), not one construct. We used
-one target's 8 trait items -- `Doctor_*` (competent, determined, fair,
-imaginative, intelligent, sincere, tolerant, warm) -- treated as a single
-"overall impression of Doctor" construct. This is a defensible
-simplification (trait ratings like these reliably load on one general
-"halo"/evaluation factor even when they nominally span warmth and
-competence facets) but is a real construct-validity judgment call, not
-something the scouting script could resolve automatically.
-
-Unlike `lsbq_maleki_2025_non_persian_proficiency`, this table is **100%
-integer-valued** -- weaker evidence of genuine continuity (see
-[Real-data selection](#real-data-selection)) -- so it's included as a
-large-*N* structural check, not a second demonstration of fractional-value
-continuity. We subsampled to N=2,000 (from 10,000) for compute
-tractability in this pilot.
-
 ```{r}
-#| label: fig-real2-dist
+#| label: fig-real-all-scores
 if (cache_ok) {
-  as.data.frame(res$real2$Y_raw) |>
-    tidyr::pivot_longer(everything(), names_to = "item", values_to = "resp") |>
-    mutate(item = sub("^Doctor_", "", item)) |>
-    ggplot(aes(x = resp)) +
-    geom_histogram(binwidth = 5, boundary = 0, fill = irw_blue, color = "white", linewidth = 0.1) +
-    facet_wrap(~item, ncol = 4) +
-    labs(x = sprintf("Raw response (%g-%g scale)", res$real2$low, res$real2$high),
-         y = "Count",
-         title = sprintf("%s (%s facet): raw response distribution by item", res$real2$table, res$real2$facet))
-} else {
-  cat("Cache not found -- run continuous_bounded_compute.R first.")
-}
-```
-
-Ceiling piling shows up here too (1.7%-27% of responses land at exactly
-100, item-dependent), though less uniformly across items than in the
-primary table.
-
-```{r}
-#| label: fig-real2-scores
-if (cache_ok) {
-  res$real2$scores |>
-    mutate(model = factor(model, levels = names(model_colors))) |>
-    ggplot(aes(x = model, y = mean_ll, fill = model)) +
-    geom_col(width = 0.6) +
-    geom_text(aes(label = sprintf("%.2f", mean_ll)), vjust = 1.4, color = "white", size = 3.5) +
-    scale_fill_manual(values = model_colors, labels = model_labels, guide = "none") +
-    scale_x_discrete(labels = model_labels) +
-    labs(x = NULL, y = "Mean held-out log-probability (per response)",
-         title = sprintf("%s (%s facet): held-out fit by model", res$real2$table, res$real2$facet)) +
-    theme(axis.text.x = element_text(angle = 20, hjust = 1))
-} else {
-  cat("Cache not found -- run continuous_bounded_compute.R first.")
-}
-```
-
-Same qualitative pattern as the primary table: naive linear is clearly
-worst, the 3 bounded-response models are close together, with Mueller CRSM
-slightly ahead this time (vs. Samejima CRM in the primary table) -- with
-N=2,000 this ordering is more stable than the 3-item pilot above, but it's
-still one train/test split on one facet of one table, not a claim that
-Mueller CRSM generally wins.
-
-### 5 more real tables (round-2 vetting survivors)
-
-`much_tte_2025_currentmotivation` (3 items, N=1,244), `test_taking_much_2025_cm`
-(9 items, N=1,244), and the 3 `nas_rogoza_2024_study5_*` subscales (NAS/NGS/NVS,
-4 items each, N~270-280, from the same daily-diary narcissism study --
-Narcissistic Antagonism, Grandiosity, and Vulnerability) all passed round-2
-vetting and fit cleanly:
-
-```{r}
-#| label: fig-batch-scores
-if (cache_ok) {
-  res$batch$scores |>
+  all_real_scores |>
     mutate(model = factor(model, levels = names(model_colors)),
            label = sprintf("%s\n(N=%d, J=%d)", label, N, J)) |>
     ggplot(aes(x = model, y = mean_ll, fill = model)) +
     geom_col(width = 0.6) +
     scale_fill_manual(values = model_colors, labels = model_labels, guide = "none") +
     scale_x_discrete(labels = model_labels) +
-    facet_wrap(~label, ncol = 3) +
+    facet_wrap(~label, ncol = 4) +
     labs(x = NULL, y = "Mean held-out log-probability (per response)",
-         title = "Held-out fit by model, across 5 additional real tables") +
+         title = "Held-out fit by model, across all 7 real IRW tables analyzed") +
     theme(axis.text.x = element_text(angle = 40, hjust = 1, size = 8))
 } else {
   cat("Cache not found -- run continuous_bounded_compute.R first.")
 }
 ```
 
-The naive linear baseline is worst everywhere, consistent with the 2 tables
-above. Among the 3 bounded-response models, the ranking isn't stable across
-tables -- Mueller CRSM edges out the others on `test_taking_much_2025_cm`
-and 2 of the 3 `nas_rogoza` subscales, but the gaps are small throughout and
-this is still one train/test split per table. The main takeaway is
-qualitative, not "which of the 3 wins": all 3 bounded-response models
-consistently and substantially beat the naive linear baseline across every
-real table tried so far.
-
-`westhoff2023_{stopd,pbat}` and `gilbert_meta_95` passed the same
-structural (wave) fix but hit an unresolved numerical issue in the Beta IRT
-scoring step (and, for `pbat`, Samejima CRM fitting too) even after
-coarsening the shared bin grid from 12 to 6 bins -- left out of this pass
-rather than force partial results into the comparison (see
-[Limitations](#limitations)).
+The pattern is consistent across all 7 tables and matches the simulation
+results above: the naive linear baseline is clearly worst everywhere, and
+the 3 bounded-response models are tightly clustered together. No single
+bounded-response spec wins consistently -- Samejima CRM comes out slightly
+ahead on the primary `lsbq_maleki_2025_non_persian_proficiency` table,
+while Mueller CRSM edges ahead on `ai_fear_dong_2026_ai` (Doctor facet) and
+on `test_taking_much_2025_cm` and 2 of the 3 `nas_rogoza` subscales -- but
+the gaps between the 3 bounded-response models are small throughout, and
+each table has only one train/test split (see
+[Limitations](#limitations)). The main takeaway is qualitative, not "which
+of the 3 wins": all 3 bounded-response models consistently and
+substantially beat the naive linear baseline across every real table
+analyzed.
 
 ## Limitations {#limitations}
 
-**This is still a pilot, not the final study,** though the simulation side
-is now complete per the original scope. Concretely not yet done:
+Known gaps this vignette does not yet address:
 
 - **Ferrando's (2001) nonlinear congeneric model** [@ferrando2001nonlinear]
   -- the optional stretch spec, comparable to the treatment in Ferrando
@@ -684,7 +675,7 @@ is now complete per the original scope. Concretely not yet done:
   CoRSM, or at other N/J combinations.
 
 **Package-availability and correctness issues found while building this**
-(worth knowing before extending this pilot):
+(worth knowing before extending this vignette):
 
 - `pcIRT::CRSM()` (Mueller's model) was **dropped from the package
   entirely** in the last CRAN release (0.2.4, 2019); it only exists in
@@ -722,7 +713,7 @@ is now complete per the original scope. Concretely not yet done:
   per item, and if a held-out test person's response lands in a category
   with zero training-split observations, `fscores(response.pattern=...)`
   rejects it. Lowering the shared bin count from 12 to 6 fixed this for
-  every other table in this pilot but not these 3 (`pbat` also fails
+  every other table here but not these 3 (`pbat` also fails
   Samejima CRM fitting with an unrelated "missing value where TRUE/FALSE
   needed" error, not yet diagnosed). Left out of the real-data set rather
   than chasing further.
@@ -743,16 +734,9 @@ model [@ferrando2021multidimensional].
 
 **The comparison metric (held-out log-likelihood) is an ad hoc choice**,
 not a validated best-practice for this setting -- flagged explicitly above,
-worth revisiting before this becomes the final vignette.
+worth revisiting.
 
 ## Reproducibility
-
-```{r}
-#| echo: false
-run_note <- if (cache_ok) res$scope_note else "not yet run"
-```
-
-`r run_note`.
 
 ```r
 # 1. Run the compute script (from the project root)
