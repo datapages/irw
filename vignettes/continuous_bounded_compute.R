@@ -18,10 +18,14 @@
 # -- on (a) 17 simulated datasets spanning a DGP x N x J x dispersion grid
 # plus one boundary-inflation condition (Part D, uses furrr::future_pmap +
 # plan(multisession) as specified) and (b) 7 real IRW tables (Parts B/B2/C),
-# each scored via a person-level held-out log-likelihood (see
-# continuous_bounded_helpers.R's "Held-out design note" for why cell-level
-# masking -- the project's usual convention -- isn't viable here: EstCRM and
-# pcIRT's fitting code has no missing-data support at all). See the helpers
+# each scored via genuine cell-level missing-response prediction: item
+# parameters are fit on a complete training-person matrix (EstCRM and
+# pcIRT's fitting code has no missing-data support at all, so that part is
+# unavoidable), but a random subset of each TEST person's items is hidden
+# before estimating that person's theta, and only the hidden items are
+# scored -- see continuous_bounded_helpers.R's "Held-out design note" for
+# why this is viable despite the fitting-stage constraint (all 4 specs'
+# person-scoring functions turn out to be NA-tolerant). See the helpers
 # file header for the package-bug fixes, the cross-model likelihood-scale
 # resolution, and the IMV-vs-log-likelihood decision -- all flagged there as
 # they were found/made, not assumed silently.
@@ -219,8 +223,10 @@ if (!file.exists(out_rds)) {
     out <- tryCatch(fit_score_all(Y01, label = tb, seed = 10 + i), error = function(e) {
       message("    failed: ", conditionMessage(e)); NULL
     })
-    if (!is.null(out)) batch_results[[tb]] <- list(N = nrow(Yraw), J = ncol(Yraw), scores = out$table)
+    if (!is.null(out)) batch_results[[tb]] <- list(N = nrow(Yraw), J = ncol(Yraw), scores = out$table,
+                                                    predictions = out$predictions)
   }
+  batch_predictions <- bind_rows(lapply(names(batch_results), function(tb) batch_results[[tb]]$predictions))
   batch_scores <- bind_rows(lapply(names(batch_results), function(tb) {
     batch_results[[tb]]$scores |> mutate(N = batch_results[[tb]]$N, J = batch_results[[tb]]$J)
   }))
@@ -238,18 +244,19 @@ if (!file.exists(out_rds)) {
     scope_note = "PILOT/DRAFT run -- see header of continuous_bounded_compute.R",
     sim = list(theta_true = theta_true, delta_true = delta_true, tau_true = tau_true,
                Y = Y_sim, train_idx = sim_out$train_idx, test_idx = sim_out$test_idx,
-               scores = sim_out$table, recovery_cor_delta = recovery_cor),
+               scores = sim_out$table, predictions = sim_out$predictions,
+               recovery_cor_delta = recovery_cor),
     real = list(table = real_table, low = real_low, high = real_high,
                 orig_items = orig_items,
                 N = nrow(Y_real_raw), J = ncol(Y_real_raw),
                 Y_raw = Y_real_raw, train_idx = real_out$train_idx, test_idx = real_out$test_idx,
-                scores = real_out$table),
+                scores = real_out$table, predictions = real_out$predictions),
     real2 = list(table = real2_table, facet = real2_facet, low = real2_low, high = real2_high,
                  orig_items = orig_items2,
                  N = nrow(Y_real2_raw), J = ncol(Y_real2_raw),
                  Y_raw = Y_real2_raw, train_idx = real2_out$train_idx, test_idx = real2_out$test_idx,
-                 scores = real2_out$table),
-    batch = list(tables = BATCH_TABLES, scores = batch_scores),
+                 scores = real2_out$table, predictions = real2_out$predictions),
+    batch = list(tables = BATCH_TABLES, scores = batch_scores, predictions = batch_predictions),
     vetting = list(n_candidates_checked = 20,
                    n_usable_round1 = 1,
                    n_usable_round2 = 5,

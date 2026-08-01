@@ -125,24 +125,40 @@ fit_naive_linear <- function(Y01) {
 
 # ------------------------------------------------------------------------------
 # Held-out design note: EstCRMitem() and pcIRT::CRSM() (the fitting functions
-# for specs 3-4) have NO missing-data support at all in their fitting code --
+# for specs 3-4) have NO missing-data support at all in their FITTING code --
 # confirmed by reading both (CRSM's combn-pairwise loop does rowSums() with no
-# na.rm, EstCRMitem's core EM matrix algebra likewise). So a cell-level
-# "missing-response paradigm" holdout (this project's usual convention, see
-# feedback_cv_holdout memory / guessing_compute.R) is not viable across all 4
-# specs with the tools actually available. Substituted instead: a PERSON-level
-# train/test split -- fit item parameters on a complete training-person
-# matrix (zero missingness), then estimate theta for held-out test persons
-# (from their own full response vector, which none of the 4 fitting calls
-# ever saw) and score the model's implied probability for those same
-# responses. This is a legitimate, standard "do item parameters generalize to
-# new examinees" cross-validation design, but it is weaker/different evidence
-# than true cell-level held-out-response prediction -- flagged here as a
-# deviation driven by package constraints, not a silent substitution.
+# na.rm, EstCRMitem's core EM matrix algebra likewise). So item-parameter
+# fitting still requires a complete training-person matrix (zero missingness)
+# for all 4 specs -- that part of the design is unchanged.
+#
+# Person-level SCORING, however, is NA-tolerant for all 4 specs once item
+# parameters are fixed: mirt::fscores(response.pattern=...) handles missing
+# cells natively (that's core mirt functionality, not something added here);
+# lavaan::lavPredict() computes factor scores from an incomplete newdata row
+# the same way; EstCRM::EstCRMperson() skips NA columns per person when
+# forming its theta estimate (confirmed by reading its source); and
+# theta_new_muller_corsm() below was written from scratch to do the same
+# (`obs <- which(!is.na(y_row))`). All 4 were smoke-tested directly against
+# this exact scenario (partial-NA newdata vs. full newdata, correlation
+# >0.98 in every case) before being wired into the cell-level design below.
+#
+# This means a true CELL-level ("missing-response paradigm") holdout -- this
+# project's usual convention, see feedback_cv_holdout memory / guessing_
+# compute.R -- IS viable here, despite specs 3-4's fitting-stage constraint:
+# fit item parameters on a complete training-person matrix as before, but for
+# each TEST person, synthetically hide a random subset of their items
+# (MASK_FRAC below), estimate theta from only the remaining observed items
+# via the NA-tolerant theta_new_*() functions, then score log P(bin_lo < X <
+# bin_hi | theta, item params) only for the items that were actually hidden.
+# This is genuine missing-response prediction -- the model never saw the
+# scored value, directly or indirectly, at any stage -- not the "self-
+# consistency" check an earlier version of this design used (estimate theta
+# from a test person's full vector, then score those same items).
 #
 # Each fit_*() below trains on a complete matrix. Each theta_new_*() estimates
 # person locations for NEW persons given the fixed, already-fitted item
-# parameters. Each bin_logprob_*() computes log P(bin_lo < X < bin_hi | theta,
+# parameters, and now receives a partially-masked response matrix for test
+# persons. Each bin_logprob_*() computes log P(bin_lo < X < bin_hi | theta,
 # item params) -- the common currency across all 4 models (see file header
 # for why interval probability, not point density, is what's compared).
 # ------------------------------------------------------------------------------
@@ -159,6 +175,15 @@ bin_logprob_linear <- function(fit, item_name, theta, lo, hi) {
   mu <- intercept + loading * theta
   sd_j <- sqrt(max(resvar, 1e-8))
   log(pmax(pnorm(hi, mu, sd_j) - pnorm(lo, mu, sd_j), 1e-12))
+}
+
+# Predicted response value (point estimate, E[X_ij | theta]) -- the naive
+# linear model's mean IS its predicted response, no backtransform needed.
+predict_mean_linear <- function(fit, item_name, theta) {
+  pe <- lavaan::parameterEstimates(fit)
+  loading   <- pe$est[pe$op == "=~" & pe$rhs == item_name]
+  intercept <- pe$est[pe$op == "~1" & pe$lhs == item_name]
+  intercept + loading * theta
 }
 
 # ==============================================================================
@@ -231,6 +256,15 @@ bin_logprob_beta_irt <- function(fit, item_idx, K, theta, bin) {
   log(pmax(probs[1, bin], 1e-12))
 }
 
+# Predicted response: the closed-form Beta(shape1,shape2) mean derived in
+# the vignette's "Model equations" section, E[X_ij|theta] = logistic(theta
+# - delta_j) -- independent of tau, so tau isn't even read here.
+predict_mean_beta_irt <- function(fit, item_idx, theta) {
+  cf <- mirt::coef(fit, simplify = TRUE)$items
+  delta <- cf[item_idx, "delta"]
+  plogis(theta - delta)
+}
+
 # ==============================================================================
 # 3. Samejima's Continuous Response Model (1973), via EstCRM
 # ==============================================================================
@@ -270,6 +304,18 @@ bin_logprob_samejima_crm <- function(fit, item_idx, resid_sd, theta, lo, hi) {
   z_of <- function(x) log(pmin(pmax(x, 1e-6), 1 - 1e-6) / (1 - pmin(pmax(x, 1e-6), 1 - 1e-6)))
   mu <- ipar[item_idx, "alpha"] * (theta - ipar[item_idx, "b"])
   log(pmax(pnorm(z_of(hi), mu, resid_sd[item_idx]) - pnorm(z_of(lo), mu, resid_sd[item_idx]), 1e-12))
+}
+
+# Predicted response: E[X_ij|theta] = E[logistic(Z)] where Z ~ N(mu, sigma^2)
+# -- logistic is nonlinear, so this needs the same numeric integration the
+# widget's samejimaMean() does in JS, not just plogis(mu) (Jensen's
+# inequality means that would be a biased point estimate).
+predict_mean_samejima_crm <- function(fit, item_idx, resid_sd, theta) {
+  ipar <- fit$param
+  mu <- ipar[item_idx, "alpha"] * (theta - ipar[item_idx, "b"])
+  sigma <- resid_sd[item_idx]
+  f <- function(z) plogis(z) * dnorm(z, mu, sigma)
+  tryCatch(stats::integrate(f, mu - 6 * sigma, mu + 6 * sigma)$value, error = function(e) NA_real_)
 }
 
 # ==============================================================================
@@ -331,6 +377,18 @@ bin_logprob_muller_corsm <- function(fit, item_idx, theta, lo, hi) {
   den <- tryCatch(stats::integrate(S0n, lower = 0, upper = 1, stop.on.error = FALSE)$value, error = function(e) NA_real_)
   if (is.na(num) || is.na(den) || den <= 0) return(NA_real_)
   log(pmax(num / den, 1e-12))
+}
+
+# Predicted response: E[X|theta] = integral of x*density / integral of
+# density over [0,1] -- same g(x) as bin_logprob_muller_corsm and the
+# widget's muellerMean(), no closed form for this family.
+predict_mean_muller_corsm <- function(fit, item_idx, theta) {
+  lambda <- fit$disppar; b <- fit$itempar[item_idx]
+  g <- function(x) exp(x * (theta - b) + x * (1 - x) * lambda)
+  num <- tryCatch(stats::integrate(function(x) x * g(x), 0, 1, stop.on.error = FALSE)$value, error = function(e) NA_real_)
+  den <- tryCatch(stats::integrate(g, 0, 1, stop.on.error = FALSE)$value, error = function(e) NA_real_)
+  if (is.na(num) || is.na(den) || den <= 0) return(NA_real_)
+  num / den
 }
 
 # ==============================================================================
@@ -420,9 +478,44 @@ K_BINS <- 6           # shared bin count for held-out interval scoring, all mode
                       # (smaller-N or narrow-range) items, which crashes mirt's
                       # fscores(response.pattern=...) when a held-out test person
                       # lands in a bin the training fold never populated
-TEST_FRAC <- 0.25     # person-level test-set fraction
+TEST_FRAC <- 0.25     # person-level test-set fraction (item PARAMETERS are
+                      # fit on the complement of this split; see MASK_FRAC
+                      # below for the separate, cell-level masking applied
+                      # only within the test persons)
+MASK_FRAC <- 0.25     # fraction of each TEST person's items hidden (set NA)
+                      # before estimating that person's theta -- this is what
+                      # makes scoring genuine missing-response prediction
+                      # rather than a self-consistency check. Each test
+                      # person always keeps at least 1 observed item (theta
+                      # needs something to condition on) and has at least 1
+                      # hidden item (something to actually score).
 
-fit_score_all <- function(Y01, label, K = K_BINS, test_frac = TEST_FRAC, seed) {
+# For each test person, mark which items are hidden (TRUE) vs. observed
+# (FALSE) for that person's theta estimation. n_hide is clamped to [1, J-1]
+# so no person ends up fully observed (nothing to score) or fully hidden
+# (nothing to condition theta on).
+make_hide_mask <- function(n_te, J, frac) {
+  hide <- matrix(FALSE, n_te, J)
+  n_hide <- max(1L, min(J - 1L, round(J * frac)))
+  for (i in seq_len(n_te)) hide[i, sample.int(J, n_hide)] <- TRUE
+  hide
+}
+
+# Adds RMSE and correlation between predicted response and the actual
+# held-out value to a model's summary row -- the "did we predict the
+# missing response itself" companion to mean_ll ("how much probability did
+# the model put on the interval it landed in"). Both are kept: they answer
+# different questions (a point estimate can be off in a way a wide,
+# well-calibrated density still scores well on, and vice versa).
+add_pred_metrics <- function(row, predicted, actual) {
+  ok <- is.finite(predicted) & is.finite(actual)
+  row$rmse_pred <- sqrt(mean((predicted[ok] - actual[ok])^2))
+  row$cor_pred  <- suppressWarnings(stats::cor(predicted[ok], actual[ok]))
+  row
+}
+
+fit_score_all <- function(Y01, label, K = K_BINS, test_frac = TEST_FRAC,
+                           mask_frac = MASK_FRAC, seed) {
   set.seed(seed)
   N <- nrow(Y01); J <- ncol(Y01)
   bins <- make_bins(K)
@@ -433,8 +526,19 @@ fit_score_all <- function(Y01, label, K = K_BINS, test_frac = TEST_FRAC, seed) {
   Yte <- Y01[test_idx, , drop = FALSE]
   n_tr <- nrow(Ytr)
 
-  # held-out cells to score: every (test person, item) combination
-  held <- expand.grid(person = seq_len(nrow(Yte)), item = seq_len(J))
+  # Cell-level masking: hide a random subset of each test person's items
+  # (set to NA) before any theta estimation touches them. Yte_hidden is what
+  # every theta_new_*() call below receives; Yte (unmasked) supplies the
+  # true values for the held-out cells actually being scored.
+  hide <- make_hide_mask(nrow(Yte), J, mask_frac)
+  Yte_hidden <- Yte
+  Yte_hidden[hide] <- NA
+
+  # held-out cells to score: only the (test person, item) pairs that were
+  # actually hidden from that person's own theta estimate -- genuine
+  # missing-response prediction, not scoring items theta was conditioned on.
+  held <- which(hide, arr.ind = TRUE)
+  held <- data.frame(person = held[, "row"], item = held[, "col"])
   held$value <- Yte[cbind(held$person, held$item)]
   held$bin <- bin_of(held$value, bins)
   held$lo <- bins$edges[held$bin]
@@ -442,20 +546,27 @@ fit_score_all <- function(Y01, label, K = K_BINS, test_frac = TEST_FRAC, seed) {
 
   out <- list()
   fits <- list()
+  preds <- list()
 
   # --- 1. naive linear --------------------------------------------------------
   res_lin <- tryCatch({
     fit_lin <- fit_naive_linear(Ytr)
-    th <- theta_new_linear(fit_lin, Yte)
+    th <- theta_new_linear(fit_lin, Yte_hidden)
     ll <- mapply(function(i, p, lo, hi) bin_logprob_linear(fit_lin, colnames(Yte)[i], th[p], lo, hi),
                  held$item, held$person, held$lo, held$hi)
-    list(fit = fit_lin,
-         row = data.frame(model = "naive_linear", label = label,
-                           n_held = sum(!is.na(ll)), mean_ll = mean(ll, na.rm = TRUE)))
+    pred <- mapply(function(i, p) predict_mean_linear(fit_lin, colnames(Yte)[i], th[p]),
+                    held$item, held$person)
+    row <- data.frame(model = "naive_linear", label = label,
+                       n_held = sum(!is.na(ll)), mean_ll = mean(ll, na.rm = TRUE))
+    list(fit = fit_lin, row = add_pred_metrics(row, pred, held$value),
+         pred = data.frame(model = "naive_linear", label = label, person = held$person,
+                            item = held$item, theta = th[held$person],
+                            predicted = pred, actual = held$value))
   }, error = function(e) e)
   if (!inherits(res_lin, "error")) {
     out$naive_linear <- res_lin$row
     fits$naive_linear <- res_lin$fit
+    preds$naive_linear <- res_lin$pred
   } else {
     message("  [", label, "] naive linear failed: ", conditionMessage(res_lin))
     fits$naive_linear <- res_lin
@@ -471,7 +582,7 @@ fit_score_all <- function(Y01, label, K = K_BINS, test_frac = TEST_FRAC, seed) {
   # Mueller for the same table (an earlier version let this propagate and
   # silently lost all 4 models' results for 3 of the batch tables).
   Ycat_tr <- discretize01(Ytr, K)
-  Ycat_te <- discretize01(Yte, K)
+  Ycat_te <- discretize01(Yte_hidden, K)
   for (disp in c("item", "fixed")) {
     key <- paste0("beta_irt_", disp, "_dispersion")
     res <- tryCatch({
@@ -479,13 +590,19 @@ fit_score_all <- function(Y01, label, K = K_BINS, test_frac = TEST_FRAC, seed) {
       th <- theta_new_beta_irt(fit_b, Ycat_te)
       ll <- mapply(function(i, p, b) bin_logprob_beta_irt(fit_b, i, K, th[p], b),
                    held$item, held$person, held$bin)
-      list(fit = fit_b,
-           row = data.frame(model = key, label = label,
-                             n_held = sum(!is.na(ll)), mean_ll = mean(ll, na.rm = TRUE)))
+      pred <- mapply(function(i, p) predict_mean_beta_irt(fit_b, i, th[p]),
+                      held$item, held$person)
+      row <- data.frame(model = key, label = label,
+                         n_held = sum(!is.na(ll)), mean_ll = mean(ll, na.rm = TRUE))
+      list(fit = fit_b, row = add_pred_metrics(row, pred, held$value),
+           pred = data.frame(model = key, label = label, person = held$person,
+                              item = held$item, theta = th[held$person],
+                              predicted = pred, actual = held$value))
     }, error = function(e) e)
     if (!inherits(res, "error")) {
       out[[key]] <- res$row
       fits[[key]] <- res$fit
+      preds[[key]] <- res$pred
     } else {
       message("  [", label, "] beta IRT (", disp, " dispersion) failed: ", conditionMessage(res))
       fits[[key]] <- res
@@ -494,17 +611,26 @@ fit_score_all <- function(Y01, label, K = K_BINS, test_frac = TEST_FRAC, seed) {
 
   # --- 3. Samejima CRM ---------------------------------------------------------
   Ytr_sq <- Ytr; Ytr_sq[] <- squeeze01(as.matrix(Ytr), n_tr)
-  Yte_sq <- Yte; Yte_sq[] <- squeeze01(as.matrix(Yte), n_tr)
+  # Yte_sq_hidden: squeeze applied to the MASKED test matrix -- squeeze01 is
+  # elementwise, so NA cells stay NA through the transform, and theta
+  # estimation below only ever sees the observed (non-hidden) items.
+  Yte_sq_hidden <- Yte_hidden; Yte_sq_hidden[] <- squeeze01(as.matrix(Yte_hidden), n_tr)
   fit_crm <- tryCatch(fit_samejima_crm(Ytr_sq, max_em = 200), error = function(e) e)
   if (!inherits(fit_crm, "error")) {
     th_tr <- tryCatch(theta_new_samejima_crm(fit_crm, Ytr_sq), error = function(e) e)
-    th_te <- tryCatch(theta_new_samejima_crm(fit_crm, Yte_sq), error = function(e) e)
+    th_te <- tryCatch(theta_new_samejima_crm(fit_crm, Yte_sq_hidden), error = function(e) e)
     if (!inherits(th_tr, "error") && !inherits(th_te, "error")) {
       rs <- .crm_resid_sd(fit_crm, Ytr_sq, th_tr)
       ll <- mapply(function(i, p, lo, hi) bin_logprob_samejima_crm(fit_crm, i, rs, th_te[p], lo, hi),
                    held$item, held$person, held$lo, held$hi)
-      out$samejima_crm <- data.frame(model = "samejima_crm", label = label,
-                                      n_held = sum(!is.na(ll)), mean_ll = mean(ll, na.rm = TRUE))
+      pred <- mapply(function(i, p) predict_mean_samejima_crm(fit_crm, i, rs, th_te[p]),
+                      held$item, held$person)
+      row <- data.frame(model = "samejima_crm", label = label,
+                         n_held = sum(!is.na(ll)), mean_ll = mean(ll, na.rm = TRUE))
+      out$samejima_crm <- add_pred_metrics(row, pred, held$value)
+      preds$samejima_crm <- data.frame(model = "samejima_crm", label = label, person = held$person,
+                                        item = held$item, theta = th_te[held$person],
+                                        predicted = pred, actual = held$value)
     } else message("  [", label, "] Samejima CRM theta estimation failed")
   } else message("  [", label, "] Samejima CRM fit failed: ", conditionMessage(fit_crm))
   fits$samejima_crm <- fit_crm
@@ -512,15 +638,22 @@ fit_score_all <- function(Y01, label, K = K_BINS, test_frac = TEST_FRAC, seed) {
   # --- 4. Mueller CRSM ----------------------------------------------------------
   fit_mu <- tryCatch(fit_muller_corsm(Ytr_sq), error = function(e) e)
   if (!inherits(fit_mu, "error")) {
-    th_te <- tryCatch(theta_new_muller_corsm(fit_mu, Yte_sq), error = function(e) e)
+    th_te <- tryCatch(theta_new_muller_corsm(fit_mu, Yte_sq_hidden), error = function(e) e)
     if (!inherits(th_te, "error")) {
       ll <- mapply(function(i, p, lo, hi) bin_logprob_muller_corsm(fit_mu, i, th_te[p], lo, hi),
                    held$item, held$person, held$lo, held$hi)
-      out$muller_corsm <- data.frame(model = "muller_corsm", label = label,
-                                      n_held = sum(!is.na(ll)), mean_ll = mean(ll, na.rm = TRUE))
+      pred <- mapply(function(i, p) predict_mean_muller_corsm(fit_mu, i, th_te[p]),
+                      held$item, held$person)
+      row <- data.frame(model = "muller_corsm", label = label,
+                         n_held = sum(!is.na(ll)), mean_ll = mean(ll, na.rm = TRUE))
+      out$muller_corsm <- add_pred_metrics(row, pred, held$value)
+      preds$muller_corsm <- data.frame(model = "muller_corsm", label = label, person = held$person,
+                                        item = held$item, theta = th_te[held$person],
+                                        predicted = pred, actual = held$value)
     } else message("  [", label, "] Mueller CRSM theta estimation failed")
   } else message("  [", label, "] Mueller CRSM fit failed: ", conditionMessage(fit_mu))
   fits$muller_corsm <- fit_mu
 
-  list(table = bind_rows(out), fits = fits, train_idx = train_idx, test_idx = test_idx)
+  list(table = bind_rows(out), predictions = bind_rows(preds), fits = fits,
+       train_idx = train_idx, test_idx = test_idx)
 }
