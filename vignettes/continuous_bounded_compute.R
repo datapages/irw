@@ -195,21 +195,28 @@ if (!file.exists(out_rds)) {
     Yraw[complete.cases(Yraw), , drop = FALSE]
   }
 
-  # westhoff2023_{stopd,pbat} and gilbert_meta_95 passed the wave-based
-  # structural fix (0 duplicate id x item rows once filtered to wave 1) but
-  # still fail at the Beta IRT scoring step even at K=6 bins (and Samejima
-  # CRM fitting too, for pbat specifically) -- some items in these 3 tables
-  # apparently have distributions narrow/skewed enough that a training-split
-  # bin still ends up empty. Left out of this pass rather than chasing K
-  # further or debugging per-table; a real gap to revisit, not silently
-  # dropped (see Limitations).
+  # westhoff2023_{stopd,pbat}, gilbert_meta_95, and mendes_2019_snycq: a
+  # prior version of this comment claimed westhoff2023/gilbert_meta_95 "fail
+  # at the Beta IRT scoring step" -- that claim was never actually backed by
+  # a run of this script (these 3 were never in BATCH_TABLES to begin with),
+  # so it's being tested here for real rather than assumed. mendes_2019_snycq
+  # is new to IRW (2026-08-01): wave1-filtered, 0-100 VAS-style scale, 12
+  # items, ~27% non-integer responses, 0 duplicate id x item rows, 157/159
+  # complete persons -- passes every structural check used elsewhere in this
+  # vignette (see vet_mendes.R-equivalent checks, not committed as a separate
+  # script since this table's vetting was a one-off during an already-running
+  # session).
   BATCH_TABLES <- tribble(
     ~table,                              ~occasion_col, ~low, ~high,
     "much_tte_2025_currentmotivation",   "wave",         0,    100,
     "test_taking_much_2025_cm",          NA_character_,  0,    100,
     "nas_rogoza_2024_study5_nas",        "wave",         0,    100,
     "nas_rogoza_2024_study5_ngs",        "wave",         0,    100,
-    "nas_rogoza_2024_study5_nvs",        "wave",         0,    100
+    "nas_rogoza_2024_study5_nvs",        "wave",         0,    100,
+    "westhoff2023_stopd",                "wave",         0,    100,
+    "westhoff2023_pbat",                 "wave",         0,    100,
+    "gilbert_meta_95",                   "wave",         0,    10,
+    "mendes_2019_snycq",                 "wave",         0,    100
   )
 
   batch_results <- list()

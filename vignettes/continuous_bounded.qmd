@@ -380,8 +380,11 @@ tables that pass structural fitness checks for these 4 models specifically
 (unique `(id, item)` pairs -- reducing to a single wave/rater where IRW's
 `wave`/`rater` columns require it, no ipsative/compositional row-sum
 constraint, and genuine fractional-value evidence rather than a merely
-fine-grained integer scale). The 7 tables that survive, used for every
-real-data result below:
+fine-grained integer scale). 11 tables survive and are used for every
+real-data result below -- 7 with all 4 core specs fitting cleanly, and 4
+more (added in a later pass) where one spec fails to fit for a specific,
+documented reason (see [Limitations](#limitations)) but the rest of the
+comparison remains valid:
 
 | Table | N | J | Note |
 |---|---|---|---|
@@ -392,6 +395,10 @@ real-data result below:
 | `nas_rogoza_2024_study5_nas` | 277 | 4 | wave-filtered; Narcissistic Antagonism subscale |
 | `nas_rogoza_2024_study5_ngs` | 274 | 4 | wave-filtered; Narcissistic Grandiosity subscale |
 | `nas_rogoza_2024_study5_nvs` | 278 | 4 | wave-filtered; Narcissistic Vulnerability subscale |
+| `mendes_2019_snycq` | 157 | 12 | wave-filtered; 0-100, ~27% non-integer; Samejima CRM fails to fit |
+| `westhoff2023_stopd` | 109 | 5 | wave-filtered; Beta IRT fails to fit (both variants) |
+| `westhoff2023_pbat` | 109 | 18 | wave-filtered; Samejima CRM fails to fit |
+| `gilbert_meta_95` | 115 | 12 | wave-filtered; Beta IRT fails to fit (both variants) |
 
 `ai_fear_dong_2026_ai` is a 48-item, 6-target x 8-trait factorial design
 (Care/Doctor/Journalist/Judge/Manager/Religious x competent/warm/etc.); only
@@ -581,7 +588,7 @@ other 6 tables analyzed below -- it's the general floor/ceiling behavior
 the 3 bounded-response models are built to handle and the naive linear
 model is not.
 
-### Held-out fit across all 7 real tables
+### Held-out fit across all 11 real tables
 
 ```{r}
 #| label: prep-real-scores
@@ -609,29 +616,33 @@ if (cache_ok) {
     scale_x_discrete(labels = model_labels) +
     facet_wrap(~label, ncol = 4) +
     labs(x = NULL, y = "Mean held-out log-probability (per response)",
-         title = "Held-out fit by model, across all 7 real IRW tables analyzed") +
+         title = "Held-out fit by model, across all 11 real IRW tables analyzed") +
     theme(axis.text.x = element_text(angle = 40, hjust = 1, size = 8))
 } else {
   cat("Cache not found -- run continuous_bounded_compute.R first.")
 }
 ```
 
-The pattern is consistent across all 7 tables and matches the simulation
-results above: the naive linear baseline is clearly worst everywhere, often
-by a wide margin (e.g. on the primary
+The pattern is consistent across all 11 tables and matches the simulation
+results above: the naive linear baseline is clearly worst everywhere it's
+compared, often by a wide margin (e.g. on the primary
 `lsbq_maleki_2025_non_persian_proficiency` table, naive linear's mean
 held-out log-probability is -6.08, against -1.13 to -2.51 for the 3
-bounded-response models). Unlike the simulation grid, a real ordering does
-emerge among the 3 bounded-response models here: **Samejima CRM is the
-worst of the 3 on every single one of the 7 real tables** -- sometimes by a
-wide margin (`lsbq`: -2.51 vs. -1.13 to -1.51 for the other two), sometimes
-narrowly (`ai_fear_dong_2026_ai`: -1.31 vs. -1.18). Beta IRT (either
-dispersion variant, interchangeably) wins outright on 4 of 7 tables
-(`lsbq`, `ai_fear_dong_2026_ai`, `much_tte_2025_currentmotivation`,
-`test_taking_much_2025_cm`); Mueller CRSM wins the other 3, all narcissism
-subscales from `nas_rogoza_2024_study5` (`nas`/`ngs`/`nvs`), with Beta IRT
-a close second in each. One plausible reason Samejima CRM trails here but
-not in simulation: its held-out score depends on an empirically-estimated
+bounded-response models). Among the 7 tables where all 3 bounded specs fit
+successfully, **Samejima CRM is the worst of the 3 on every single one** --
+sometimes by a wide margin (`lsbq`: -2.51 vs. -1.13 to -1.51 for the other
+two), sometimes narrowly (`ai_fear_dong_2026_ai`: -1.31 vs. -1.18). Beta IRT
+(either dispersion variant, interchangeably) wins outright on 6 of the 11
+tables (`lsbq`, `ai_fear_dong_2026_ai`, `much_tte_2025_currentmotivation`,
+`test_taking_much_2025_cm`, `mendes_2019_snycq`, and `westhoff2023_pbat` --
+the last 2 are tables where Samejima CRM wasn't fit at all, see below);
+Mueller CRSM wins the 3 narcissism
+subscales from `nas_rogoza_2024_study5` (`nas`/`ngs`/`nvs`). Samejima CRM's
+only 2 wins (`gilbert_meta_95`, `westhoff2023_stopd`) are both tables where
+Beta IRT itself failed to fit -- **among tables where all 3 bounded specs
+were actually in the running, Samejima never wins.** One plausible reason
+Samejima CRM trails here but not in simulation: its held-out score depends
+on an empirically-estimated
 residual SD on the transformed $Z$ scale (see `.crm_resid_sd()` in
 `continuous_bounded_helpers.R`, chosen because EstCRM's own EM-shrinkage
 precision term isn't straightforward to reverse-engineer), which may
@@ -669,7 +680,7 @@ if (cache_ok) {
     scale_x_discrete(labels = model_labels) +
     facet_wrap(~label, ncol = 4) +
     labs(x = NULL, y = "RMSE of predicted vs. actual response (held-out)",
-         title = "Predicted-response accuracy by model, across all 7 real IRW tables") +
+         title = "Predicted-response accuracy by model, across all 11 real IRW tables") +
     theme(axis.text.x = element_text(angle = 40, hjust = 1, size = 8))
 } else {
   cat("Cache not found -- run continuous_bounded_compute.R first.")
@@ -679,16 +690,20 @@ if (cache_ok) {
 This is where the story genuinely changes. **Naive linear's point
 predictions are competitive with, and often better than, all 3
 bounded-response models** -- the opposite of the log-probability picture.
-Naive linear has the *lowest* RMSE of all 5 specs on 4 of the 7 tables --
-`much_tte_2025_currentmotivation` (0.0999), `test_taking_much_2025_cm`
-(0.1048), `nas_rogoza_2024_study5_ngs` (0.1799), and, most strikingly, the
-primary `lsbq_maleki_2025_non_persian_proficiency` table (0.2238, ahead of
-Samejima CRM's 0.2331, Beta IRT's 0.2459/0.2498, and Mueller's 0.2680) --
-despite having by far the worst log-probability everywhere, including a
+Naive linear has the *lowest* RMSE of all specs it's compared against on 7
+of the 11 tables -- `much_tte_2025_currentmotivation` (0.0999),
+`test_taking_much_2025_cm` (0.1048), `nas_rogoza_2024_study5_ngs` (0.1799),
+`westhoff2023_stopd` (0.1684), `westhoff2023_pbat` (0.1970, vs. Beta IRT's
+0.3302 -- a large gap in naive's favor on that table specifically),
+`mendes_2019_snycq` (0.2666), and, most strikingly, the primary
+`lsbq_maleki_2025_non_persian_proficiency` table (0.2238, ahead of Samejima
+CRM's 0.2331, Beta IRT's 0.2459/0.2498, and Mueller's 0.2680) -- despite
+having by far the worst log-probability everywhere, including a
 catastrophic -6.08 on `lsbq` against -1.13 to -2.51 for the 3
 bounded-response models on that same table. It's essentially tied for best
 on `ai_fear_dong_2026_ai` (0.1961 vs. Beta IRT's 0.1958), and only clearly
-middling on 2 of the 7 (`nas`, `nvs`).
+beaten on 3 of the 11 (`nas` and `nvs`, by Mueller CRSM and Beta IRT
+respectively; `gilbert_meta_95`, by Samejima CRM).
 
 This isn't a contradiction -- it's what the two metrics are built to catch.
 RMSE only checks whether the *central tendency* is right; log-probability
@@ -731,6 +746,54 @@ the range, and none of them is dramatically better calibrated to the *point
 values themselves* than the others -- the real differentiator among models
 in this vignette is the log-probability metric, not this one.
 
+The same `rmse_pred`/`cor_pred` metrics were computed for every condition in
+the [full simulation grid](#the-full-recovery-grid-16-conditions-x-3-dgps)
+too -- the pattern holds up there just as cleanly:
+
+```{r}
+#| label: fig-grid-rmse-crossfit
+if (grid_cache_ok) {
+  grid_res$scores |>
+    filter(!boundary_inflation) |>
+    mutate(model = factor(model, levels = names(model_colors)),
+           dgp_label = recode(dgp, beta_irt = "DGP: Beta IRT", samejima_crm = "DGP: Samejima CRM",
+                               muller_corsm = "DGP: Mueller CRSM")) |>
+    group_by(dgp_label, model) |>
+    summarise(rmse_pred = mean(rmse_pred, na.rm = TRUE), .groups = "drop") |>
+    ggplot(aes(x = model, y = rmse_pred, fill = model)) +
+    geom_col(width = 0.6) +
+    scale_fill_manual(values = model_colors, labels = model_labels, guide = "none") +
+    scale_x_discrete(labels = model_labels) +
+    facet_wrap(~dgp_label, ncol = 3) +
+    labs(x = NULL, y = "Mean RMSE of predicted vs. actual response\n(averaged across N/J conditions)",
+         title = "Cross-fitting: predicted-response RMSE by model, averaged across all N/J conditions per DGP") +
+    theme(axis.text.x = element_text(angle = 40, hjust = 1, size = 8))
+} else {
+  cat("Grid cache not found -- run continuous_bounded_compute.R first.")
+}
+```
+
+Where the log-probability cross-fit chart showed real (if small) separation
+between the 3 bounded-response models and a large, consistent gap to naive
+linear, RMSE shows almost none of that: all 5 specs land within about 0.01
+of each other under every DGP (e.g. under the Beta IRT DGP, everything is
+within $[0.217, 0.222]$; under Samejima CRM's own DGP, within $[0.176,
+0.182]$). Naive linear is never the worst of the 5 on this metric, and under
+Mueller CRSM's own DGP it's actually the numerically *best* (0.270 vs.
+Mueller CRSM's own 0.278) -- the same pattern already seen in the real-data
+results above, now confirmed in simulation where the true generating model
+is known. Point-prediction accuracy simply isn't where these 4 specs
+differ; distributional fit is.
+
+Boundary inflation degrades RMSE for every spec by a roughly similar amount
+too (Beta IRT DGP, $N=300$/$J=8$: naive linear 0.229 $\to$ 0.359, the 3
+bounded-response models 0.229-0.235 $\to$ 0.351-0.378) -- unlike the
+log-probability version of this comparison, there's no clear asymmetry
+where naive linear degrades disproportionately more. That asymmetry was a
+distributional-fit story (a Gaussian's tails handle boundary piling worse
+than the other 3 models' densities do); it doesn't show up in a metric that
+only scores the point estimate.
+
 ## Limitations {#limitations}
 
 Known gaps this vignette does not yet address:
@@ -740,7 +803,7 @@ Known gaps this vignette does not yet address:
   (2002) [@ferrando2002theoretical] -- has not been attempted at all. Specs
   1-4 are now complete and validated (the grid ran cleanly), so its own
   sequencing rule no longer blocks it -- it just hasn't been picked up yet.
-- **Partial missingness in real data.** All 7 real tables used complete
+- **Partial missingness in real data.** All 11 real tables used complete
   cases only *before* the evaluation design's own synthetic masking is
   applied; IRW tables whose respondents have naturally-occurring partial
   missingness (as opposed to the missingness this vignette introduces
@@ -754,13 +817,28 @@ Known gaps this vignette does not yet address:
   repeated/cross-validated design -- so none of the held-out numbers above
   have an uncertainty band, and a single unlucky split could shift a close
   call between the 3 bounded-response models.
-- **One grid fit failed outright**: Samejima CRM's EM did not converge
-  (`missing value where TRUE/FALSE needed`) on one Mueller-CRSM-generated
-  condition ($N=300$, $J=8$, no boundary inflation). Not re-run with a
-  different seed or diagnosed further -- reported as a real
-  misspecification-robustness finding (EstCRM's EM can fail outright, not
-  just fit poorly, on data far from its assumptions) rather than treated as
-  a bug to route around.
+- **Samejima CRM's EM is prone to failing outright, not just fitting
+  poorly.** One grid condition (Mueller-CRSM-generated, $N=300$, $J=8$, no
+  boundary inflation) hit `missing value where TRUE/FALSE needed` during
+  EM. This isn't a one-off: the identical error recurred on 2 of the 4 real
+  tables added in the follow-up vetting pass, `westhoff2023_pbat` and
+  `mendes_2019_snycq` -- both otherwise clean, wave-filtered, structurally
+  valid tables (see [Real-data selection](#real-data-selection)). None of
+  these were re-run with a different seed or diagnosed further; reported as
+  a real, recurring misspecification/convergence fragility in `EstCRM`'s EM
+  rather than something to route around.
+- **Beta IRT fitting fails outright on some real tables, for a specific,
+  confirmed reason.** `westhoff2023_stopd` and `gilbert_meta_95` (both
+  dispersion variants) fail with `response.pattern input contains more
+  response categories than defined by the model` -- `mirt` compacts each
+  training split's observed categories to consecutive integers per item,
+  and a held-out person whose response lands in a category the training
+  split never populated gets rejected outright rather than scored as
+  missing. This is the same failure mode described just below (originally
+  found and fixed for a different table during development); it simply
+  wasn't fixable for these 2 by lowering the bin count the way it was
+  elsewhere. Confirmed by actually running `fit_score_all()` on both tables
+  (2026-08-01), not asserted from an earlier, untested claim.
 - **The grid's boundary-inflation condition covers only 1 of the 3 DGPs**
   (Beta IRT, $N=300$/$J=8$) -- not repeated for Samejima CRM or Mueller
   CoRSM, or at other N/J combinations.
@@ -803,9 +881,8 @@ Known gaps this vignette does not yet address:
   naive-linear/Samejima/Mueller's results for the same table too -- every
   model's fit-and-score block is now wrapped in its own `tryCatch` so one
   model's failure can't take down the other 3.
-- **The current 7 real tables are not the full set of viable candidates.**
-  A handful of additional tables are plausible additions but need a fresh
-  vetting pass before inclusion; see the vetting scripts/CSVs referenced in
+- **The current 11 real tables are not necessarily the full set of viable
+  candidates.** See the vetting scripts/CSVs referenced in
   [Real-data selection](#real-data-selection) for the working record of
   what's been checked so far.
 
