@@ -459,6 +459,33 @@ apply_boundary_inflation <- function(Y01, p0 = 0.1, p1 = 0.1) {
   Y01
 }
 
+# Round-number heaping wrapper (diagnostic condition only, same status as
+# apply_boundary_inflation() above -- a DGP perturbation, not a 5th model).
+# Motivated by a real pattern found in lsbq_maleki_2025_non_persian_
+# proficiency (see continuous_bounded.qmd's "Real data" section): its top
+# response values by frequency are, in order, the scale ceiling, then the
+# scale midpoint, then the two quarter-points -- i.e. heaping at salient
+# round fractions of the whole scale, not just the boundary. With
+# probability p_heap per cell, replaces the continuous draw with a value
+# drawn uniformly at random from `anchors` (independent of the underlying
+# continuous draw). A "snap to nearest anchor" version (rounding, which
+# preserves the cell's theta-correlated signal) was tried first and barely
+# degraded anything (<3% for every model) -- rounding to 1 of 5 points
+# spanning $[0,1]$ moves a value by at most 0.125, a much gentler
+# perturbation than boundary inflation's full swing to 0 or 1. Uniform-random
+# replacement is a deliberately harsher stand-in: it destroys the heaped
+# cells' information about theta entirely, which is closer to what genuine
+# response heaping does to a scale's measurement precision in practice (see
+# continuous_bounded.qmd's response-heaping section for how this compares,
+# and where it still falls short of the real-data gap it was meant to test).
+apply_response_heaping <- function(Y01, p_heap = 0.4, anchors = c(0, 0.25, 0.5, 0.75, 1)) {
+  N <- nrow(Y01); J <- ncol(Y01)
+  u <- matrix(runif(N * J), N, J)
+  heap_cells <- which(u < p_heap)
+  Y01[heap_cells] <- sample(anchors, length(heap_cells), replace = TRUE)
+  Y01
+}
+
 # ==============================================================================
 # Shared person-split fit/score routine, used by both continuous_bounded_
 # compute.R's pilot/batch sections and its simulation/recovery grid (Part D).

@@ -298,7 +298,8 @@ if (!file.exists(grid_out_rds)) {
   plan(multisession, workers = min(future::availableCores() - 2, 17))
 
   run_grid_condition <- function(dgp, N, J, dispersion_mode = NA_character_,
-                                  boundary_inflation = FALSE, seed) {
+                                  boundary_inflation = FALSE,
+                                  response_heaping = FALSE, seed) {
     source("vignettes/continuous_bounded_helpers.R")
     library(dplyr)
     set.seed(seed)
@@ -318,8 +319,9 @@ if (!file.exists(grid_out_rds)) {
     colnames(Y01) <- paste0("item", seq_len(J))
 
     if (boundary_inflation) Y01 <- apply_boundary_inflation(Y01, p0 = 0.1, p1 = 0.1)
+    if (response_heaping) Y01 <- apply_response_heaping(Y01, p_heap = 0.4)
 
-    label <- paste(dgp, N, J, dispersion_mode, boundary_inflation, sep = "_")
+    label <- paste(dgp, N, J, dispersion_mode, boundary_inflation, response_heaping, sep = "_")
     out <- tryCatch(fit_score_all(Y01, label = label, seed = seed + 1), error = function(e) NULL)
     if (is.null(out)) return(NULL)
 
@@ -335,34 +337,37 @@ if (!file.exists(grid_out_rds)) {
     }
 
     list(dgp = dgp, N = N, J = J, dispersion_mode = dispersion_mode,
-         boundary_inflation = boundary_inflation, scores = out$table, recovery_cor = recovery_cor)
+         boundary_inflation = boundary_inflation, response_heaping = response_heaping,
+         scores = out$table, recovery_cor = recovery_cor)
   }
 
   grid <- tibble::tribble(
-    ~dgp,            ~N,    ~J,  ~dispersion_mode, ~boundary_inflation,
-    "beta_irt",       300,   8,  "fixed",           FALSE,
-    "beta_irt",       300,  20,  "fixed",           FALSE,
-    "beta_irt",      1000,   8,  "fixed",           FALSE,
-    "beta_irt",      1000,  20,  "fixed",           FALSE,
-    "beta_irt",       300,   8,  "item",            FALSE,
-    "beta_irt",       300,  20,  "item",            FALSE,
-    "beta_irt",      1000,   8,  "item",            FALSE,
-    "beta_irt",      1000,  20,  "item",            FALSE,
-    "samejima_crm",   300,   8,  NA_character_,      FALSE,
-    "samejima_crm",   300,  20,  NA_character_,      FALSE,
-    "samejima_crm",  1000,   8,  NA_character_,      FALSE,
-    "samejima_crm",  1000,  20,  NA_character_,      FALSE,
-    "muller_corsm",   300,   8,  NA_character_,      FALSE,
-    "muller_corsm",   300,  20,  NA_character_,      FALSE,
-    "muller_corsm",  1000,   8,  NA_character_,      FALSE,
-    "muller_corsm",  1000,  20,  NA_character_,      FALSE,
-    "beta_irt",       300,   8,  "fixed",           TRUE
+    ~dgp,            ~N,    ~J,  ~dispersion_mode, ~boundary_inflation, ~response_heaping,
+    "beta_irt",       300,   8,  "fixed",           FALSE,               FALSE,
+    "beta_irt",       300,  20,  "fixed",           FALSE,               FALSE,
+    "beta_irt",      1000,   8,  "fixed",           FALSE,               FALSE,
+    "beta_irt",      1000,  20,  "fixed",           FALSE,               FALSE,
+    "beta_irt",       300,   8,  "item",            FALSE,               FALSE,
+    "beta_irt",       300,  20,  "item",            FALSE,               FALSE,
+    "beta_irt",      1000,   8,  "item",            FALSE,               FALSE,
+    "beta_irt",      1000,  20,  "item",            FALSE,               FALSE,
+    "samejima_crm",   300,   8,  NA_character_,      FALSE,              FALSE,
+    "samejima_crm",   300,  20,  NA_character_,      FALSE,              FALSE,
+    "samejima_crm",  1000,   8,  NA_character_,      FALSE,              FALSE,
+    "samejima_crm",  1000,  20,  NA_character_,      FALSE,              FALSE,
+    "muller_corsm",   300,   8,  NA_character_,      FALSE,              FALSE,
+    "muller_corsm",   300,  20,  NA_character_,      FALSE,              FALSE,
+    "muller_corsm",  1000,   8,  NA_character_,      FALSE,              FALSE,
+    "muller_corsm",  1000,  20,  NA_character_,      FALSE,              FALSE,
+    "beta_irt",       300,   8,  "fixed",           TRUE,                FALSE,
+    "beta_irt",       300,   8,  "fixed",           FALSE,               TRUE
   )
   grid$seed <- 100 + seq_len(nrow(grid))
 
   message("=== Running full simulation/recovery grid (", nrow(grid), " conditions) ===")
   grid_results <- future_pmap(
-    list(grid$dgp, grid$N, grid$J, grid$dispersion_mode, grid$boundary_inflation, grid$seed),
+    list(grid$dgp, grid$N, grid$J, grid$dispersion_mode, grid$boundary_inflation,
+         grid$response_heaping, grid$seed),
     run_grid_condition,
     .options = furrr_options(seed = TRUE)
   )
@@ -373,6 +378,7 @@ if (!file.exists(grid_out_rds)) {
     r$scores |> dplyr::mutate(dgp = r$dgp, N = r$N, J = r$J,
                                dispersion_mode = r$dispersion_mode,
                                boundary_inflation = r$boundary_inflation,
+                               response_heaping = r$response_heaping,
                                recovery_cor = r$recovery_cor)
   }))
 
