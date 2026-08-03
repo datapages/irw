@@ -22,7 +22,9 @@ This page has two tools:
 Plot = import("https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6/+esm")
 import {yamultiselect} from '@saneef/yet-another-multi-select'
 
-md = transpose(datasets)
+md_tagged = transpose(datasets_tagged)
+md_notags = transpose(datasets_all)
+md = use_qual_filters ? md_tagged : md_notags
 ```
 
 {{< include components/_style.qmd >}}
@@ -196,7 +198,7 @@ var_inputs = ([
 
 // generate filter function for each input and combine them
 range_filters = range_inputs.map(({ v, vals }) => range_filter(v, vals))
-overlap_filters = overlap_inputs.map(({ v, vals }) => overlap_filter(v, vals))
+overlap_filters = use_qual_filters ? overlap_inputs.map(({ v, vals }) => overlap_filter(v, vals)) : []
 overlap_null_filters = var_inputs.map(({ v, vals }) => overlap_null_filter(v, vals))
 all_filters = [...range_filters, ...overlap_filters, ...overlap_null_filters]
 
@@ -221,7 +223,7 @@ viewof y_var = Inputs.select(num_vars, {value: "n_participants", label: "Y axis"
 ```
 
 ```{ojs color-var}
-cat_array = color_vars.map((t) => [ti[t].label, t])
+cat_array = use_qual_filters ? color_vars.map((t) => [ti[t].label, t]) : []
 cat_vars = new Map([["None", null], ...cat_array])
 viewof color_var = Inputs.select(cat_vars, {label: "Color"})
 ```
@@ -299,7 +301,9 @@ Plot.plot({
 
 ::: {.table-container}
 ```{ojs result-message}
-html`<i>Filtered to ${ds.length} datasets out of ${md.length} total. Datasets with incomplete metadata (tags, bibliography, or quantitative descriptors) are excluded from this table.</i>`
+html`<i>Filtered to ${ds.length} datasets out of ${md.length} total. ${use_qual_filters
+  ? "Datasets with incomplete metadata (tags, bibliography, or quantitative descriptors) are excluded from this table."
+  : "Qualitative filtering is disabled, so datasets missing qualitative tags are included; datasets with incomplete bibliography or quantitative descriptors are still excluded."}</i>`
 ```
 
 ```{ojs table-funs}
@@ -356,8 +360,8 @@ viewof row = Inputs.table(dsf, {
   sort: "n_responses", reverse: true,
   required: false, multiple: false,
   //value: dsf[1],
-  // show columns "table", all numeric variables, and all tag variables
-  columns: ["table", ...Array.from(Object.keys(vi)), ...Array.from(Object.keys(ti))],
+  // show columns "table", all numeric variables, and (if enabled) all tag variables
+  columns: ["table", ...Array.from(Object.keys(vi)), ...(use_qual_filters ? Array.from(Object.keys(ti)) : [])],
   // use inline histograms in header
   header: hists,
   // use sparkbars and badges in cells
@@ -397,7 +401,7 @@ row ? html`<div class="pullout">
 
 ## {{< bi code class=header-icon >}}Code snippet
 
-The R code snippet below uses the <a href="https://itemresponsewarehouse.github.io/Rpkg" target="_blank">irw package</a> to fetch all of the tables that match the filters specified here. _Note: a difference between the functionality of the filters here and the behavior of_ `irw_filter()` _is that specifying values for a given argument of_ `irw_filter()` _will result in_ `NA` _values being dropped, while they can be included here. The "Has item text?" filter is also not reflected in the snippet, since_ `irw_filter()` _does not support filtering by item-text availability; use_ `irw_list_itemtext_tables()` _separately for that._
+The R code snippet below uses the <a href="https://itemresponsewarehouse.github.io/Rpkg" target="_blank">irw package</a> to fetch all of the tables that match the filters specified here. _Note: a difference between the functionality of the filters here and the behavior of_ `irw_filter()` _is that specifying values for a given argument of_ `irw_filter()` _will result in_ `NA` _values being dropped, while they can be included here. The "Has item text?" filter is also not reflected in the snippet, since_ `irw_filter()` _does not support filtering by item-text availability; use_ `irw_list_itemtext_tables()` _separately for that. When qualitative filtering is disabled (see the toggle above the "Filter by qualitative features" panel), none of the qualitative-tag arguments (age range, sample, license, etc.) are included in the snippet, matching the fact that no qualitative filtering is applied to the table above._
 
 ```{ojs}
 // simple templating function: replace strings of the form "{{variable}}" in the
@@ -417,9 +421,10 @@ range_arg = (v, vals) => is_default_range(v, vals) ? null : `${v} = c(${Math.pow
 range_args = range_inputs.map(({ v, vals }) => range_arg(v, vals))
 
 // construct arguments for overlap inputs if they're not their default values
+// (only meaningful when qualitative filtering is enabled)
 is_default_overlap = (v, vals) => tags[v].every(t => vals.includes(t))
 overlap_arg = (v, vals) => is_default_overlap(v, vals) ? null : `${v} = ${c(vals.filter(e => e !== "NA"))}`
-overlap_args = overlap_inputs.filter(d => d.v !== l && d.v !== "has_item_text").map(({ v, vals }) => overlap_arg(v, vals))
+overlap_args = use_qual_filters ? overlap_inputs.filter(d => d.v !== l && d.v !== "has_item_text").map(({ v, vals }) => overlap_arg(v, vals)) : []
 
 // special handling to construct var argument by combining variables and prefixes
 var_arg_vals = var_inputs.map(({v, vals}) => v === "prefix" ? vals.map(s => `${s}_`) : vals).flat()
@@ -428,7 +433,7 @@ var_arg = var_arg_vals.length ? `var = ${c(var_arg_vals)}` : null
 // special handling to construct longitudinal argument as boolean
 l = "longitudinal"
 long_vals = overlap_inputs.filter(d => d.v === l)[0].vals
-long_arg = is_default_overlap(l, long_vals) ? null : `${l} = ${long_vals[0] === "longitudinal" ? "TRUE" : "FALSE"}`
+long_arg = use_qual_filters && !is_default_overlap(l, long_vals) ? `${l} = ${long_vals[0] === "longitudinal" ? "TRUE" : "FALSE"}` : null
 
 // combine all arguments
 filter_args = [...range_args, var_arg, ...overlap_args, long_arg].filter(e => e !== null)
@@ -465,7 +470,21 @@ ds.length === 0 ? html`<em>No datasets match filters.</em>` : html`
 
 {{< bi filter >}} _Filter by qualitative features._
 
-::: {.side-inputs}
+```{ojs filter-qual-toggle}
+viewof use_qual_filters = Inputs.toggle({label: "Enable qualitative filtering", value: true})
+```
+
+```{ojs filter-qual-style}
+html`<style>
+#qual-filter-panel { opacity: ${use_qual_filters ? 1 : 0.45}; pointer-events: ${use_qual_filters ? "auto" : "none"}; transition: opacity 0.15s ease; }
+</style>`
+```
+
+```{ojs filter-qual-note}
+html`${use_qual_filters ? "" : html`<p><em>Qualitative filtering is disabled. Datasets missing qualitative tags (age range, sample, license, etc.) are now included in the results, but can't be filtered on those tags. Enable the toggle above to filter by them (this will also exclude untagged datasets again).</em></p>`}`
+```
+
+::: {.side-inputs #qual-filter-panel}
 
 ::: {.filters-container}
 

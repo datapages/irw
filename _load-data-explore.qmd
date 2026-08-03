@@ -118,12 +118,22 @@ urls <- ds |>
   list_rbind() |>
   mutate(table = str_to_lower(table), url = str_remove(url, "\\?.*$"))
 
-datasets <- metadata |> inner_join(tags) |> inner_join(urls) |> inner_join(bib_data |> select(-license)) |> arrange(table)
+# full set of tables with quantitative metadata + url + bibliography, regardless of
+# whether they have a row in the (manually curated) tags sheet -- used when
+# qualitative filtering is disabled in the explorer
+datasets_all <- metadata |> inner_join(urls) |> inner_join(bib_data) |>
+  mutate(license = license |> str_split(",") |> map(str_trim)) |>
+  arrange(table)
 
-# save(datasets, var_vals, tag_vals, color_vars, file = "ojs_data.RData")
+# subset of the above that also has qualitative tags -- used when qualitative
+# filtering is enabled
+datasets_tagged <- metadata |> inner_join(tags) |> inner_join(urls) |> inner_join(bib_data |> select(-license)) |> arrange(table)
+
+# save(datasets_tagged, datasets_all, var_vals, tag_vals, color_vars, file = "ojs_data.RData")
 # load("ojs_data.RData")
 
-ojs_define(datasets = datasets)
+ojs_define(datasets_tagged = datasets_tagged)
+ojs_define(datasets_all = datasets_all)
 ojs_define(tags = tag_vals)
 ojs_define(vars = var_vals)
 ojs_define(color_vars = color_vars)
