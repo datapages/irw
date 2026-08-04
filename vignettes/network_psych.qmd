@@ -16,6 +16,7 @@ format:
     code-fold: true
     toc: true
     toc-depth: 2
+    embed-resources: true
 execute:
   echo: true
   message: false
@@ -211,7 +212,18 @@ For each candidate table, `fit_network()`:
    edge shrunk to zero — gets auto-detected as unweighted and falls back
    to `Degree` instead. That's still a real, informative result (kept in
    the data below), just not one with a meaningful strength-discrimination
-   correlation, so that comparison is left `NA` for those tables.
+   correlation, so that comparison is left `NA` for those tables. This is
+   rare — 7 of the `r nrow(summary_df)` tables in this pass (about 1%):
+   `erf_breuer_2017_frmmc`, `gilbert_meta_38`, `lsat`,
+   `project_kids_wj_ak_grade` (all `IsingFit`/binary), and `Resistance`,
+   `sun_2025_morality_study2_peoplerespect`,
+   `sun_2025_morality_study2_peopletrust` (all `EBICglasso`/polytomous).
+   Small enough in number, and split across both estimators, that it reads
+   as ordinary regularization behavior on these specific items rather than
+   a systematic estimation problem — but a table-by-table check of
+   whether any of the seven point to a data or fitting issue specifically
+   (rather than a genuinely null network) hasn't been done and would be
+   worth doing.
 4. Fits a one-factor IRT model and extracts item discrimination: 2PL for
    binary items; the **generalized partial credit model (GPCM)**, not the
    graded response model used elsewhere on this site, for polytomous items
@@ -285,7 +297,11 @@ ordinal items, explicitly as a simplifying choice for consistency across
 a reanalysis spanning many published papers. They say directly that they
 know this is an approximation for non-continuous data, and that the
 ordinal Markov random field (fit via the `bgms` package) is the
-conceptually better-suited model for that case — they just didn't use it.
+conceptually better-suited model for that case — they didn't use it
+because it was newly available and considerably slower to fit at the
+time of their reanalysis (`bgms` has since gotten substantially faster),
+and because it still isn't how ordinal data is typically fit in empirical
+network-psychometrics practice.
 
 IRW is overwhelmingly binary/ordinal item response data, which makes this
 a real design decision here too, not just an aside:
@@ -294,11 +310,19 @@ a real design decision here too, not just an aside:
   GGM via `easybgm(..., package = "BGGM")`, forced uniformly regardless of
   each table's actual `n_categories` — the same simplifying choice the
   paper made, for the same reason: it's the only way to compare IRW's
-  breakdown directly against their headline percentages. `package = "BGGM"`
-  has to be forced explicitly and paired with `type = "continuous"`: the
+  breakdown directly against their headline percentages, and it also
+  matches how ordinal network data is typically handled in current
+  empirical practice, not just this paper's method. `package = "BGGM"` has
+  to be forced explicitly and paired with `type = "continuous"`: the
   installed `easybgm` (0.4.0) silently redirects back to `bgms` whenever
   `type = "binary"` is passed, even if `package = "BGGM"` was requested,
-  which would otherwise quietly defeat this whole comparison.
+  which would otherwise quietly defeat this whole comparison. **Update:**
+  Huth has since fixed this redirect bug upstream
+  ([easybgm on GitHub](https://github.com/KarolineHuth/easybgm)); this
+  pass still ran against the installed 0.4.0 with the explicit
+  `type = "continuous"` workaround above, so results are correct but a
+  future re-run against the patched package is a natural, if
+  compute-heavy, follow-up (see Limitations).
 - **Option B (secondary, small subset only):** fit the ordinal Markov
   random field via `bgms` instead — the model the paper itself calls more
   appropriate for this data type. Piloting this on real IRW tables found
@@ -309,8 +333,12 @@ a real design decision here too, not just an aside:
   binary and polytomous items) as an illustrative robustness check, not a
   full-batch analysis.
 
-Both use the paper's own matrix-F prior default (`prior_sd = 0.25`) and
-classify each edge into the paper's five-way breakdown by its BF10:
+Option A uses the paper's own matrix-F prior default (`prior_sd = 0.25`)
+for its GGM partial correlations; Option B's ordinal MRF (`bgms`) does not
+use this prior at all — it has its own default prior structure for the
+ordinal model, left at `easybgm`'s defaults rather than matched to
+Option A's `prior_sd`. Both are classified into the paper's five-way
+breakdown by BF10:
 strong presence (BF10 > 10), weak presence (3 < BF10 <= 10), inconclusive
 (1/3 <= BF10 <= 3), weak absence (1/10 <= BF10 < 1/3), or strong absence
 (BF10 < 1/10) — a small deviation from the paper's stated open-interval
@@ -376,7 +404,21 @@ lo_density <- summary_df$network_density[summary_df$table == lo_table]
 lo_a       <- discriminations_list[[lo_table]]
 n_lo_neg_a <- sum(lo_a < 0)
 lo_g       <- graphs_list[[lo_table]]
+hi_g       <- graphs_list[[hi_table]]
 lo_all_neg <- all(lo_g[upper.tri(lo_g)] <= 0)
+
+# network_density above is presence density (proportion of possible edges
+# nonzero); these additionally weight by edge strength and track sign, to
+# separate "how many edges survived" from "how strong/uniform they are"
+edge_stats <- function(g) {
+  ut <- g[upper.tri(g)]
+  nz <- ut[ut != 0]
+  list(weighted_density = sum(abs(ut)) / length(ut),
+       mean_abs_weight  = mean(abs(nz)),
+       prop_negative    = mean(nz < 0))
+}
+hi_edge_stats <- edge_stats(hi_g)
+lo_edge_stats <- edge_stats(lo_g)
 lo_irt_model <- if (summary_df$n_categories[summary_df$table == lo_table] == 2) {
   "2PL model"
 } else {
@@ -391,28 +433,46 @@ descriptions of the same items agree much less about which ones matter
 most, to the point of actively disagreeing about direction.
 
 What makes the contrast worth dwelling on is what *doesn't* differ much
-between them: both networks are comparably dense (density
-`r round(hi_density, 2)` and `r round(lo_density, 2)` respectively).
-Density and uniformity, the other half of
-Epskamp et al.'s prediction, don't distinguish these two cases well; only the
-strength-discrimination correlation reveals that one table matches the
+between them, at least by one measure: both networks have a comparable
+*presence* density (proportion of possible edges nonzero: `r round(hi_density, 2)`
+and `r round(lo_density, 2)` respectively). But presence density treats
+every nonzero edge the same regardless of strength, and by that count
+alone the two graphs look more alike than they actually are. Weighting by
+edge strength instead (mean \|partial correlation\| over present edges,
+and a weighted-density measure that also counts absent edges as zero)
+tells a different story: `r hi_table` averages
+`r round(hi_edge_stats$mean_abs_weight, 2)` per edge (weighted density
+`r round(hi_edge_stats$weighted_density, 2)`), while `r lo_table` averages
+`r round(lo_edge_stats$mean_abs_weight, 2)` (weighted density
+`r round(lo_edge_stats$weighted_density, 2)`) — visibly the sparser,
+weaker-signal network once strength is taken into account, even though
+its raw edge count is not far off. The more distinctive difference,
+though, is sign: every edge in `r hi_table` is positive, while
+`r round(lo_edge_stats$prop_negative * 100, 0)`% of `r lo_table`'s nonzero
+edges are negative. Density and uniformity, the other half of Epskamp et
+al.'s prediction, don't cleanly distinguish these two cases on a
+presence-only count; only the strength-discrimination correlation, and a
+closer look at edge weight and sign, reveal that one table matches the
 single-common-cause story and the other doesn't. A network that merely
-*looks* dense and uniform is not, on its own, evidence that IRT and
-network psychometrics agree about the items — this pair is a direct
-counterexample.
+*looks* dense on a presence-only count is not, on its own, evidence that
+IRT and network psychometrics agree about the items — this pair is a
+direct counterexample, and the discrepancy is smaller once weighted
+density is used instead of presence density.
 
 The disagreement in `r lo_table` isn't subtle, either:
 `r n_lo_neg_a` of its `r length(lo_a)` items get a *negative* IRT
 discrimination, meaning the `r lo_irt_model` estimates them as running
 opposite the trait it fit from the rest.
 `r if (lo_all_neg) "Every edge in the estimated network is negative (visible from the red edges above), not merely non-uniform in strength -- the two frameworks aren't just disagreeing on a matter of degree; the network sees a single tightly (negatively) coupled cluster where IRT sees a trait some items run backward on." else "The network still connects those items to every other about as strongly as any pair in hi_table, despite the sign disagreement in the IRT fit."`
-Practically,
-that matters most for anyone using either statistic to pick or drop items
-— shortening a scale by discrimination, or by network centrality, is not
-a neutral choice, and a table like this one is exactly where the two
-selections would part ways. Compare both examples to the aggregate
-picture below: most tables fall somewhere between these two extremes, but
-not always close to the middle.
+That has a plausible practical upshot for anyone using either statistic
+to pick or drop items — shortening a scale by discrimination or by
+network centrality would not be a neutral choice for a table like this
+one, since the two selections would part ways — though this vignette
+only shows that the two statistics disagree here, not how much that
+disagreement would actually move item-selection decisions in practice;
+that's a natural follow-up, not something demonstrated above. Compare
+both examples to the aggregate picture below: most tables fall somewhere
+between these two extremes, but not always close to the middle.
 
 ```{r}
 #| label: clifford-aside-inline
@@ -444,8 +504,75 @@ correlation doesn't always mean the same thing: sometimes it's a
 genuinely multidimensional or bipolar construct like this one, and
 sometimes -- as with the current lowest-correlation example above -- the
 network and the IRT model simply weight the same roughly-unidimensional
-items differently.
+items differently. IRW tables do get an independent unidimensionality
+check elsewhere on this site -- see [Cross-vignette payoff
+1](#cross-vignette-payoff-1-does-it-track-the-dimensionality-diagnostic)
+below, which splits this vignette's strength-discrimination correlation
+by the [dimensionality vignette](dimensionality.qmd)'s own
+parallel-analysis unidimensional/multidimensional call, rather than
+relying on a single worked example.
 :::
+
+### Do negative edges predict a worse match, generally?
+
+The `r lo_table` example above pairs a low strength-discrimination
+correlation with a network that's substantially negative-edged. Is that
+a coincidence of this one example, or does it hold across the sample?
+
+```{r}
+#| label: fig-negedge-vs-cor
+#| fig-cap: "Strength-discrimination correlation against the proportion of each table's nonzero edges that are negative. One point per table with a usable comparison. If negative edges are a marker of a breakdown between the two frameworks (as in the low-correlation example above), points should trend downward left to right."
+#| fig-height: 5
+
+negedge_df <- summary_df %>%
+  filter(!is.na(strength_a_cor)) %>%
+  rowwise() %>%
+  mutate(prop_neg_edges = {
+    g <- graphs_list[[table]]
+    ut <- g[upper.tri(g)]
+    nz <- ut[ut != 0]
+    if (length(nz) == 0) NA_real_ else mean(nz < 0)
+  }) %>%
+  ungroup() %>%
+  filter(!is.na(prop_neg_edges)) %>%
+  mutate(tooltip = paste0(
+    "Table: ", table,
+    "<br>Strength-a cor: ", round(strength_a_cor, 2),
+    "<br>Prop. negative edges: ", round(prop_neg_edges, 2)
+  ))
+
+p <- ggplot(negedge_df, aes(x = prop_neg_edges, y = strength_a_cor, text = tooltip)) +
+  geom_point(colour = irw_blue, size = 1.8, alpha = 0.6) +
+  geom_smooth(method = "loess", se = FALSE, colour = irw_red, linewidth = 0.8) +
+  labs(x = "Proportion of nonzero edges that are negative",
+       y = "Strength-discrimination correlation")
+
+ggplotly(p, tooltip = "text") |> layout(margin = list(t = 60))
+```
+
+```{r}
+#| label: negedge-inline
+#| echo: false
+
+n_negedge <- nrow(negedge_df)
+cor_negedge <- cor(negedge_df$prop_neg_edges, negedge_df$strength_a_cor)
+cor_negedge_test <- cor.test(negedge_df$prop_neg_edges, negedge_df$strength_a_cor)
+```
+
+It isn't a coincidence. Across all `r n_negedge` tables with a usable
+comparison, the proportion of negative edges correlates with the
+strength-discrimination correlation at r = `r round(cor_negedge, 2)`
+(`r if (cor_negedge_test$p.value < 0.001) "p < 0.001" else paste0("p = ", round(cor_negedge_test$p.value, 3))`)
+— a strong, negative relationship. Networks with mostly-positive edges
+tend to match IRT discrimination well; networks with a substantial share
+of negative edges tend not to. That's consistent with the theory itself:
+Epskamp et al.'s prediction is specifically for a single dominant common
+cause producing a densely, uniformly, *positively* connected network, so
+a network with many negative edges is close to a direct signal that the
+single-common-cause premise doesn't hold for that table (a bipolar or
+multidimensional structure like the `clifford_2018_police_blame` case
+above), not an independent nuisance factor layered on top of the
+strength-discrimination comparison.
 
 ### Does strength track discrimination in general?
 
@@ -513,8 +640,9 @@ join_dim_df <- summary_df %>%
 p <- ggplot(join_dim_df, aes(x = pmin(dim_ratio_12, 15), y = strength_a_cor, text = tooltip)) +
   geom_point(colour = irw_blue, size = 2, alpha = 0.7) +
   geom_smooth(method = "loess", se = FALSE, colour = irw_red, linewidth = 0.8) +
+  geom_vline(xintercept = 4, linetype = "dashed", colour = irw_grey) +
   scale_x_log10() +
-  labs(x = "Eigenvalue ratio (dimensionality vignette, log scale, capped at 15)",
+  labs(x = "Eigenvalue ratio (dimensionality vignette, log scale, capped at 15; dashed line = ratio 4 unidimensionality heuristic)",
        y = "Strength-discrimination correlation")
 
 ggplotly(p, tooltip = "text") |> layout(margin = list(t = 60))
@@ -901,17 +1029,94 @@ pairs at r = `r round(cor_strong_ld, 2)`, versus r = `r round(cor_all_ld, 2)`
 for network density against the same Q3-flagged proportion earlier.
 `r if (!is.na(cor_strong_ld) && !is.na(cor_all_ld) && abs(cor_strong_ld) > abs(cor_all_ld)) "The testlet signal is somewhat cleaner using strong-evidence-only edges than using raw regularized-network density." else "The testlet signal isn't obviously cleaner using strong-evidence-only edges than using raw regularized-network density -- density from LASSO-regularized edges and density from Bayesian strong-evidence edges appear to carry similar information here."`
 
+### Does the correspondence hold up better in overall more-stable networks?
+
+Dropping weak edges (above) changes what node strength is computed
+*from* — it leaves out edges that still contribute to the frequentist
+network's centrality ordering, which conflates two different questions:
+whether more stable estimation gives a better correspondence, and
+whether specifically discarding weakly-supported edges does. Here's a
+cleaner version of the first question: instead of rebuilding node
+strength from a trimmed edge set, keep each table's **full** regularized
+network and its already-computed strength-discrimination correlation
+unchanged, and instead split tables into groups by how much overall
+Bayesian support their edge set has — the proportion of a table's edges
+classified strong evidence (presence or absence combined) under Option A.
+
+```{r}
+#| label: fig-stability-vs-cor
+#| fig-cap: "Strength-discrimination correlation (full network, not edge-trimmed) against each table's overall proportion of strong-evidence edges (presence + absence combined). If more stable overall evidence goes with a better correspondence, points should trend upward left to right."
+#| fig-height: 5
+
+stability_df <- summary_df %>%
+  filter(has_bayes_match, !is.na(strength_a_cor),
+         !is.na(prop_strong_presence_ggm), !is.na(prop_strong_absence_ggm)) %>%
+  mutate(prop_strong_overall = prop_strong_presence_ggm + prop_strong_absence_ggm,
+         tooltip = paste0(
+           "Table: ", table,
+           "<br>Strength-a cor: ", round(strength_a_cor, 2),
+           "<br>Prop. strong evidence: ", round(prop_strong_overall, 2)
+         ))
+
+p <- ggplot(stability_df, aes(x = prop_strong_overall, y = strength_a_cor, text = tooltip)) +
+  geom_point(colour = irw_blue, size = 1.8, alpha = 0.6) +
+  geom_smooth(method = "loess", se = FALSE, colour = irw_red, linewidth = 0.8) +
+  scale_x_continuous(labels = scales::percent) +
+  labs(x = "Proportion of table's edges with strong Bayesian evidence (presence + absence)",
+       y = "Strength-discrimination correlation (full network)")
+
+ggplotly(p, tooltip = "text") |> layout(margin = list(t = 60))
+```
+
+```{r}
+#| label: stability-inline
+#| echo: false
+
+STABILITY_CUT <- 0.7
+n_stability     <- nrow(stability_df)
+cor_stability   <- cor(stability_df$prop_strong_overall, stability_df$strength_a_cor)
+stable_hi       <- stability_df$strength_a_cor[stability_df$prop_strong_overall >= STABILITY_CUT]
+stable_lo       <- stability_df$strength_a_cor[stability_df$prop_strong_overall <  STABILITY_CUT]
+med_stable_hi   <- median(stable_hi)
+med_stable_lo   <- median(stable_lo)
+wilcox_stability <- wilcox.test(stable_hi, stable_lo)$p.value
+```
+
+Across `r n_stability` tables, overall stability and the
+strength-discrimination correlation move together (r =
+`r round(cor_stability, 2)`). Splitting at
+`r scales::percent(STABILITY_CUT, accuracy = 1)` strong-evidence edges —
+`r length(stable_hi)` tables at or above that bar, `r length(stable_lo)`
+below it — the more-stable group has a median correlation of
+`r round(med_stable_hi, 2)` versus `r round(med_stable_lo, 2)` for the
+less-stable group (Wilcoxon
+`r if (wilcox_stability < 0.001) "p < 0.001" else paste0("p = ", round(wilcox_stability, 3))`).
+Unlike the strong-evidence-only edge trimming above, this comparison
+never removes an edge from the network used to compute strength — it
+only asks whether tables whose *overall* edge set is better-supported
+tend to show a cleaner correspondence with IRT discrimination, and by
+that test the answer is a reasonably clear yes: more stable estimation
+does go with better agreement between the two frameworks, independent of
+whether any specific edges get trimmed.
+
 ## Practical implications
 
 Where the strength-discrimination correlation is high and the network is
-dense and uniform, network psychometrics and IRT are, practically
-speaking, telling the same story about the same items — using either
-framework to identify the "best" items should agree. Where it breaks
-down, that's a signal worth taking seriously in its own right, independent
-of which framework you prefer: it means the two ways of describing item
-covariation actually disagree about which items matter most, and a table
-flagged as multidimensional or locally dependent elsewhere on this site
-is a reasonable place to expect exactly that disagreement.
+dense, uniform, and positively connected, network psychometrics and IRT
+are telling a similar story about the same items — using either
+framework to identify the "best" items would likely agree, though this
+vignette measures agreement between the two statistics rather than
+agreement between the item-selection decisions each would produce. Where
+it breaks down, that's worth taking seriously in its own right,
+independent of which framework you prefer: it means the two ways of
+describing item covariation disagree about which items matter most, and
+a table flagged as multidimensional or locally dependent elsewhere on
+this site, or with a substantial share of negative network edges (see
+above), is a reasonable place to expect exactly that disagreement. These
+recommendations follow from a relatively small, first-pass empirical
+scan rather than a full mechanistic account of *why* the two frameworks
+diverge when they do — read them as a starting point for where to look
+more carefully, not a settled prescription.
 
 ## Limitations
 
@@ -969,12 +1174,36 @@ is a reasonable place to expect exactly that disagreement.
   change above went unnoticed. Both are now pinned in `renv.lock`, which
   prevents a silent version drift like this going forward but doesn't
   retroactively confirm which version produced the results above.
-- **Matrix-F prior SD was not sensitivity-tested at IRW scale.** Both
-  Option A and Option B above use the package default (`prior_sd = 0.25`),
-  matching Huth et al.'s own default. They themselves ran a
-  prior-sensitivity check across three SD values on their own data; a
-  natural follow-up here would be the same check on a handful of IRW
-  tables, not run in this pass for compute reasons.
+- **Matrix-F prior SD was not sensitivity-tested at IRW scale.** Option A
+  above uses the package default (`prior_sd = 0.25`), matching Huth et
+  al.'s own default; this prior is specific to the GGM's partial
+  correlations and doesn't apply to Option B's ordinal MRF, which uses
+  its own default prior instead (see Data and methods). Huth et al.
+  themselves ran a prior-sensitivity check across three SD values on
+  their own data; a natural follow-up here would be the same check on a
+  handful of IRW tables, not run in this pass for compute reasons.
+- **The installed `easybgm` (0.4.0) redirect bug is fixed upstream but
+  not yet re-run here.** The `type = "binary"` → `bgms` silent-redirect
+  bug that Option A works around with an explicit `type = "continuous"`
+  (see Data and methods) has since been fixed in `easybgm`'s GitHub
+  source. Results above are still correct (the workaround handles it),
+  but re-running the full batch against the patched package, and updating
+  `renv.lock` to pin it, would remove the need for the workaround going
+  forward; not done here since it means re-running all of Option A.
+- **No stochastic-block-model check for multidimensionality.** `bgms`
+  includes a stochastic block model (SBM) test that can distinguish a
+  single-cluster network from a multi-cluster one directly from the
+  network side, rather than relying on the dimensionality vignette's
+  separate eigenvalue-ratio/parallel-analysis screen as a proxy. A
+  natural follow-up: for tables with a Bayes factor > 10 favoring a
+  one-cluster SBM structure, check whether the strength-discrimination
+  correspondence is any tighter than for tables where the SBM test
+  favors more than one cluster — a more direct version of the
+  dimensionality cross-check above, using the network model's own
+  cluster structure instead of an IRT-side diagnostic. Not run here;
+  it would need a new pass through `bgms` (likely restricted to the
+  Option B subset or a similarly-sized sample, given `bgms`'s runtime
+  cost noted above).
 - **Option A's uniform-GGM treatment of binary/ordinal data is an
   approximation this vignette inherited deliberately, not a claim it's the
   ideal model for IRW's data.** It's the same simplifying choice Huth et
