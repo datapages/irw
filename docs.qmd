@@ -109,12 +109,23 @@ data_index <- biblio |>
 
 ```{=html}
 <input type="text" id="searchBar" placeholder="Search datasets..." style="width: 100%; padding: 10px; margin-bottom: 20px; font-size: 16px;">
+<p id="search-placeholder" style="color: #888;">Start typing to search across all datasets by name, description, or reference.</p>
 <script>
 function searchDatasets() {
   var input = document.getElementById('searchBar');
-  var filter = input.value.toLowerCase();
+  var filter = input.value.toLowerCase().trim();
   var items = document.getElementsByClassName('dataset-item');
-  
+  var table = document.getElementById('dataset-table-wrapper');
+  var placeholder = document.getElementById('search-placeholder');
+
+  if (filter === '') {
+    table.style.display = 'none';
+    placeholder.style.display = '';
+    return;
+  }
+  table.style.display = '';
+  placeholder.style.display = 'none';
+
   for (var i = 0; i < items.length; i++) {
     var text = items[i].textContent || items[i].innerText;
     items[i].style.display = text.toLowerCase().indexOf(filter) > -1 ? '' : 'none';
@@ -219,16 +230,41 @@ document.getElementById('searchBar').addEventListener('input', searchDatasets);
   background-color: #cccccc;
   cursor: not-allowed;
 }
+
+.dataset-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.dataset-table th, .dataset-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e2e2;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: break-word;
+}
+.dataset-table th {
+  border-bottom: 2px solid #ccc;
+  font-weight: 600;
+}
+.dataset-table tr:hover {
+  background-color: #f7f7f7;
+}
+.dataset-table th:nth-child(1), .dataset-table td:nth-child(1) { width: 16%; }
+.dataset-table th:nth-child(2), .dataset-table td:nth-child(2) { width: 58%; }
+.dataset-table th:nth-child(3), .dataset-table td:nth-child(3) { width: 8%; }
+.dataset-table th:nth-child(4), .dataset-table td:nth-child(4) { width: 18%; }
 </style>
 ```
 
 ```{r}
 #| results: asis
-el <- function(ds) {
+row <- function(ds) {
   lic <- if (ds$license != "") glue("({ds$license})") else ""
   bibtex <- ds$BibTex  # Use BibTex column directly
   escaped_bibtex <- if (!is.na(bibtex) && bibtex != "") gsub("'", "\\\\'", bibtex) else ""
-  
+
   citation_button <- if (escaped_bibtex != "") {
     button_id <- paste0("cite-button-", make.names(ds$dataset))
     target_id <- paste0("cite-text-", make.names(ds$dataset))
@@ -241,25 +277,30 @@ el <- function(ds) {
   } else ""
 
   glue(
-    "
-    ::: {{.g-col-4 .dataset-item}}
-    ::: {{.callout-note collapse='true'}}
-    ## {ds$dataset}
-    {ds$description} {lic} [[link]]({ds$url})
-    <i>{ds$reference}</i>
-    {citation_button}
-    :::
-    :::
-    "
+    '
+    <tr class="dataset-item">
+      <td><strong>{ds$dataset}</strong></td>
+      <td>{ds$description} {lic} <i>{ds$reference}</i></td>
+      <td><a href="{ds$url}" target="_blank">link</a></td>
+      <td>{citation_button}</td>
+    </tr>
+    '
   )
 }
 
-els <- transpose(data_index) |> map(el) |> paste(collapse = "\n")
+rows <- transpose(data_index) |> map(row) |> paste(collapse = "\n")
 cat(glue(
-  "
-  ::: {{.grid}}
-  {els}
-  :::
-  "
+  '
+  <div id="dataset-table-wrapper" style="display: none;">
+  <table class="dataset-table">
+    <thead>
+      <tr><th>Dataset</th><th>Description</th><th>Source</th><th>Citation</th></tr>
+    </thead>
+    <tbody>
+    {rows}
+    </tbody>
+  </table>
+  </div>
+  '
 ))
 ```
