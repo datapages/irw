@@ -430,7 +430,7 @@ lo_edge_stats <- edge_stats(lo_g)
 lo_irt_model <- if (summary_df$n_categories[summary_df$table == lo_table] == 2) {
   "2PL model"
 } else {
-  "graded response model"
+  "generalized partial credit model"
 }
 ```
 
@@ -641,7 +641,8 @@ wilcox_sign  <- wilcox.test(has_neg_a$strength_a_cor, has_neg_a$abs_a_cor, paire
 
 Node strength, as used throughout this vignette (and as `qgraph`/`bootnet`
 compute it), is a sum of *absolute* edge weights — it can never be negative
-(confirmed across all `r n_items_total` items here: any negative? `r any_neg_strength`).
+(confirmed directly against all `r n_items_total` items here:
+`r if (any_neg_strength) "some are negative, contrary to that claim" else "none are"`).
 IRT discrimination is signed. That mismatch alone
 means any item mirt fits with a negative discrimination is close to
 guaranteed to drag the correlation down, independent of whether the
@@ -893,7 +894,9 @@ and IRT discrimination agree noticeably better.
 The comparison above uses the dimensionality vignette's eigenvalue-ratio
 screen — a call made entirely from the IRT side, applied here as a proxy
 for the network side. `bgms` includes a stochastic block model (SBM) test
-(Sekulovski et al. 2025) that asks the same question natively from inside
+— documented in the package as implementing the model from Sekulovski et
+al. (2025), not independently verified against that paper here — that asks
+the same question natively from inside
 the network model itself: does the estimated edge structure look like one
 tightly-connected cluster, or more than one? Following a reviewer
 suggestion, this fits the SBM (`bgms::bgm(..., edge_prior =
@@ -912,10 +915,8 @@ sbm_path <- "network_psych_data/network_psych_sbm_reliable.rds"
 sbm_ok <- file.exists(sbm_path)
 if (sbm_ok) {
   sbm_reliable <- readRDS(sbm_path)
-  n_sbm_total <- nrow(sbm_reliable) + 4L  # 4 excluded for severe divergence, noted below
   n_sbm_reliable <- nrow(sbm_reliable)
   max_bf_k1 <- max(sbm_reliable$bf_k1)
-  n_favor_one <- sum(sbm_reliable$bf_k1 > 10)
   cor_bf_strength <- cor(sbm_reliable$bf_k1, sbm_reliable$strength_a_cor)
   cor_p_strength  <- cor(sbm_reliable$post_p_k1, sbm_reliable$strength_a_cor)
 }
@@ -1346,7 +1347,7 @@ versus `r round(med_all_cor, 2)` for the all-edges version earlier on this
 page.
 `r if (!is.na(med_strong_cor) && !is.na(med_all_cor) && med_strong_cor > med_all_cor) "Restricting to strong-evidence edges sharpens the correspondence with IRT discrimination -- consistent with the idea that the earlier relationship was partly diluted by weakly-supported edges the regularized network kept anyway." else "Restricting to strong-evidence edges doesn't obviously sharpen the correspondence with IRT discrimination here -- the earlier relationship doesn't appear to be primarily a weak-edge dilution effect."`
 
-For the local-dependence check, the proportion of an table's edges
+For the local-dependence check, the proportion of a table's edges
 classified strong presence correlates with the proportion of Q3-flagged
 pairs at r = `r round(cor_strong_ld, 2)`, versus r = `r round(cor_all_ld, 2)`
 for network density against the same Q3-flagged proportion earlier.
@@ -1759,7 +1760,25 @@ Rscript vignettes/local_dependence_compute.R
 # 2. Re-run this vignette's compute script
 Rscript vignettes/network_psych_compute.R
 
-# 3. Re-render this page
+# 3. Ancillary analyses referenced above -- each is a standalone script, not
+#    part of the main compute pipeline, and each writes a small .rds this
+#    page reads directly (see file.exists() guards throughout):
+Rscript vignettes/network_psych_empty_audit.R          # "Why are 7 networks empty?"
+Rscript vignettes/network_psych_prior_sensitivity.R     # "How sensitive is the evidence classification to the prior?"
+Rscript vignettes/network_psych_sbm_check.R             # "A network-native multidimensionality check"
+
+# 4. Optional: verify the easybgm redirect-bug fix has no effect (see Data
+#    and methods) -- pins a patched fork first, then re-runs the full batch
+#    into an isolated directory. Not needed to reproduce the numbers above,
+#    which already reflect this verification; see
+#    network_psych_patched_easybgm_rerun_NOTES.md for the full writeup.
+# renv::install("KarolineHuth/easybgm@d5a3da0a50"); # then hand-edit renv.lock's
+#                                                    # easybgm entry -- see NOTES.md,
+#                                                    # renv::snapshot() rewrites unrelated
+#                                                    # package metadata across the file
+# RERUN_AGAINST_PATCHED_EASYBGM=TRUE Rscript vignettes/network_psych_compute.R
+
+# 5. Re-render this page
 quarto render vignettes/network_psych.qmd
 ```
 
