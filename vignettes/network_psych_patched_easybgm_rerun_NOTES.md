@@ -1,7 +1,10 @@
 # Prep notes: re-running Option A against the patched `easybgm`
 
-Status as of 2026-08-10: **prepared, not run.** This file is the single
-place documenting what "run #7" actually means and what's left to do.
+Status as of 2026-08-10: **DONE.** Pinned, run, diffed, written up in
+`network_psych.qmd` (Data and methods + Limitations). Confirmed: the
+redirect bug had zero effect on any result reported in this vignette,
+patched or not. This file is kept as a record of the reasoning and the
+verification approach, not an open TODO.
 
 ## What the bug actually is, and why it doesn't affect current results
 
@@ -51,29 +54,40 @@ current S3-era API) — pin the specific fix commit, not HEAD.
 - `fit_to_disk()`'s existing per-table caching means an interrupted re-run
   resumes cleanly, same as the original batch did.
 
-## What's still needed before this can actually run
+## What happened when it ran (2026-08-10)
 
-1. **Pin the package** (not done — modifies the tracked `renv.lock`, held
-   for an explicit go-ahead):
-   ```r
-   renv::install("KarolineHuth/easybgm@d5a3da0a50")
-   renv::snapshot()
-   ```
-2. **Run the batch:**
-   ```bash
-   RERUN_AGAINST_PATCHED_EASYBGM=TRUE REDIVIS_API_TOKEN=$(cat ~/.redivis_api_token) \
-     Rscript vignettes/network_psych_compute.R
-   ```
-   Runtime: the vignette's own text puts a full Option A batch at "well
-   under two [hours]" (contrast with Option B/`bgms`'s 7-27 hours) — this
-   is the smaller of the two "massive rerun" categories discussed for this
-   vignette, not a multi-hour ordeal.
-3. **Diff the two result sets**
-   (`vignettes/network_psych_data/network_psych_results.rds` vs.
-   `vignettes/network_psych_data_patched_rerun/network_psych_results.rds`):
-   confirm `summary` tables match (mod MCMC-seed noise) and no table's
-   evidence category classification flips.
-4. **If confirmed identical:** simplify the Limitations bullet about the
-   redirect bug (it's fully resolved, not just worked around), and decide
-   whether to keep `network_psych_data_patched_rerun/` as a small audit
-   artifact or delete it once the comparison is documented.
+1. **Pinned:** `renv::install("KarolineHuth/easybgm@d5a3da0a50")` into the
+   shared main-repo renv library, then `renv::snapshot(project = ".")`
+   targeted at this worktree's `renv.lock`. **Caveat:** a plain
+   `renv::snapshot()` rewrote the CRAN mirror URL for every package in the
+   lockfile (cosmetic `cran.rstudio.com` -> `packagemanager.posit.co`
+   noise, ~40 unrelated lines) — reverted that and hand-patched just the
+   `easybgm` entry's `Source`/`Remote*` fields, copied from the installed
+   package's own `DESCRIPTION`. Diff the lockfile before committing a
+   snapshot; don't trust it blindly on a shared file.
+2. **Ran:** `RERUN_AGAINST_PATCHED_EASYBGM=TRUE Rscript network_psych_compute.R`.
+   First attempt failed almost immediately (`future` "MultisessionFuture
+   interrupted", before any table completed) — likely resource contention
+   from running concurrently with the SBM check (item #5) at the same
+   time, not a code bug (no OOM evidence, 16GB free). Retried alone and it
+   completed cleanly: 902/959 candidates usable (contrast with the
+   original 610/660 — IRW gained ~300 candidate tables in the roughly
+   2.5 weeks since the original batch ran on 2026-07-23).
+3. **Diffed:** the larger/differently-ordered candidate pool shifts
+   `furrr`'s per-table seed assignment, which changes which respondents
+   get downsampled for any table over the 10,000-respondent cap —
+   unrelated to `easybgm`, but a real confound for a naive full-sample
+   diff. Restricted to the 514 tables with an identical sample+item count
+   in both runs: `strength_a_cor` (computed upstream of `easybgm` entirely
+   — from `bootnet`/`mirt`, never touches it) is bit-identical for 501/507;
+   the Bayesian evidence-category proportions (the actual target of this
+   check) differ by 0.001-0.005 on average — consistent with ordinary
+   Monte Carlo noise in `BGGM`'s own sampler, not a systematic shift from
+   the patch.
+4. **Written up:** Data and methods (Option A description) and Limitations
+   in `network_psych.qmd` both updated with the verification result.
+   `vignettes/network_psych_data_patched_rerun/` (the full 902-table
+   duplicate cache, ~8.3MB) was deleted after the comparison was run and
+   documented — it served its one purpose and isn't referenced by the
+   `.qmd`; re-run this script again if the comparison ever needs
+   reproducing.

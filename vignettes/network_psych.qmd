@@ -316,13 +316,21 @@ a real design decision here too, not just an aside:
   to be forced explicitly and paired with `type = "continuous"`: the
   installed `easybgm` (0.4.0) silently redirects back to `bgms` whenever
   `type = "binary"` is passed, even if `package = "BGGM"` was requested,
-  which would otherwise quietly defeat this whole comparison. **Update:**
-  Huth has since fixed this redirect bug upstream
-  ([easybgm on GitHub](https://github.com/KarolineHuth/easybgm)); this
-  pass still ran against the installed 0.4.0 with the explicit
-  `type = "continuous"` workaround above, so results are correct but a
-  future re-run against the patched package is a natural, if
-  compute-heavy, follow-up (see Limitations).
+  which would otherwise quietly defeat this whole comparison. Since this
+  call always passes `type = "continuous"`, the redirect never actually
+  fired for Option A here regardless. **Update:** Huth has since fixed the
+  redirect bug upstream ([easybgm on
+  GitHub](https://github.com/KarolineHuth/easybgm), commit `d5a3da0a50`),
+  and the full batch was re-run against the patched package to verify that
+  claim rather than take it on faith. Restricted to the 514 tables that
+  drew an identical respondent subsample in both runs (same sample and
+  item count — IRW gained roughly 300 new candidate tables in the time
+  between the two runs, so a straight full-sample comparison isn't
+  apples-to-apples), 501/507 give bit-identical `strength_a_cor` and the
+  Bayesian evidence-category proportions differ by 0.001-0.005 on average
+  — the size of ordinary Monte Carlo noise in `BGGM`'s own sampler, not a
+  systematic shift. Confirms the redirect bug had no effect on any result
+  reported here, patched or not; `renv.lock` now pins the patched commit.
 - **Option B (secondary, small subset only):** fit the ordinal Markov
   random field via `bgms` instead — the model the paper itself calls more
   appropriate for this data type. Piloting this on real IRW tables found
@@ -1657,14 +1665,21 @@ more carefully, not a settled prescription.
   scale, and the three SD values used (0.1/0.25/0.5) were chosen as a
   reasonable spread rather than independently confirmed against Huth et
   al.'s own three values.
-- **The installed `easybgm` (0.4.0) redirect bug is fixed upstream but
-  not yet re-run here.** The `type = "binary"` → `bgms` silent-redirect
-  bug that Option A works around with an explicit `type = "continuous"`
-  (see Data and methods) has since been fixed in `easybgm`'s GitHub
-  source. Results above are still correct (the workaround handles it),
-  but re-running the full batch against the patched package, and updating
-  `renv.lock` to pin it, would remove the need for the workaround going
-  forward; not done here since it means re-running all of Option A.
+- **The `easybgm` redirect-bug re-run (see Data and methods) compared old
+  vs. patched results on the table subset that drew an identical
+  respondent subsample in both runs, not the full candidate pool as a
+  whole** — needed because IRW gained new candidate tables in the time
+  between the two runs, which shifts the random-seed sequence `furrr`
+  assigns per table and changes which respondents get downsampled for any
+  large table, independent of anything about `easybgm`. Un-downsampled
+  tables (`n_participants` under the 10,000 cap) were unaffected by that
+  confound and are bit-identical for 501/507 on `strength_a_cor`; the
+  Bayesian evidence proportions, which are actually downstream of
+  `easybgm`, differ by 0.001-0.005 on average — ordinary Monte Carlo noise
+  in `BGGM`'s sampler, confirmed by re-running rather than assumed. The
+  ~300 large/downsampled tables weren't independently checked against this
+  confound beyond noting it's the expected explanation for their larger
+  observed differences.
 - **The stochastic-block-model check (see "A network-native
   multidimensionality check" above) ran on the 20-table Option B subset,
   and lost 6 of those 20 to data/convergence issues** (1 unsupported data
