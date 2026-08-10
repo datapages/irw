@@ -880,6 +880,61 @@ Parallel analysis is strict — only a small fraction of tables clear its
 bar for "unidimensional" — but among the ones that do, network centrality
 and IRT discrimination agree noticeably better.
 
+### A network-native multidimensionality check: the stochastic block model
+
+The comparison above uses the dimensionality vignette's eigenvalue-ratio
+screen — a call made entirely from the IRT side, applied here as a proxy
+for the network side. `bgms` includes a stochastic block model (SBM) test
+(Sekulovski et al. 2025) that asks the same question natively from inside
+the network model itself: does the estimated edge structure look like one
+tightly-connected cluster, or more than one? Following a reviewer
+suggestion, this fits the SBM (`bgms::bgm(..., edge_prior =
+"Stochastic-Block")`) on the same 20-table Option B stratified subset used
+for the ordinal-MRF robustness check elsewhere on this page, and derives a
+literal Bayes factor for one cluster vs. more than one (via Savage-Dickey
+against `bgm()`'s own zero-truncated-Poisson prior on cluster count), to
+compare against the strength-discrimination correlation the same way the
+eigenvalue-ratio check above does.
+
+```{r}
+#| label: sbm-check-inline
+#| echo: false
+
+sbm_path <- "network_psych_data/network_psych_sbm_reliable.rds"
+sbm_ok <- file.exists(sbm_path)
+if (sbm_ok) {
+  sbm_reliable <- readRDS(sbm_path)
+  n_sbm_total <- nrow(sbm_reliable) + 4L  # 4 excluded for severe divergence, noted below
+  n_sbm_reliable <- nrow(sbm_reliable)
+  max_bf_k1 <- max(sbm_reliable$bf_k1)
+  n_favor_one <- sum(sbm_reliable$bf_k1 > 10)
+  cor_bf_strength <- cor(sbm_reliable$bf_k1, sbm_reliable$strength_a_cor)
+  cor_p_strength  <- cor(sbm_reliable$post_p_k1, sbm_reliable$strength_a_cor)
+}
+```
+
+`r if (sbm_ok) paste0("Of the 20 candidate tables, one failed to fetch (an unsupported data type), one had no strength-discrimination match, and four had to be dropped for a severe MCMC convergence failure -- three tables' chains diverged on 100% of post-warmup samples, one on 25% -- leaving ", n_sbm_reliable, " tables with a trustworthy SBM fit and a usable comparison.") else "SBM results not available."`
+Two things came out of it. First, **no table clears the BF > 10 bar for
+one-cluster structure** — the highest Bayes factor across all
+`r if (sbm_ok) n_sbm_reliable else "--"` reliable tables is
+`r if (sbm_ok) round(max_bf_k1, 2) else "--"`, well short of "strong
+evidence" by the same BF10 convention used throughout this vignette. The
+two-group comparison a reviewer originally suggested (compare
+strength-discrimination correlation for BF>10-favoring-one-cluster tables
+against the rest) isn't possible in this sample — there is no
+one-cluster-favoring group. Second, the *continuous* version of the same
+signal still points the right way: both the Bayes factor and the raw
+posterior probability of one cluster correlate positively with the
+strength-discrimination correlation
+(r = `r if (sbm_ok) round(cor_bf_strength, 2) else "--"` and
+r = `r if (sbm_ok) round(cor_p_strength, 2) else "--"` respectively) —
+weak, on a sample this small, but in the direction the theory predicts, and
+independent evidence from a completely different diagnostic (the network's
+own cluster structure rather than an IRT-side eigenvalue ratio) pointing
+the same way as the dimensionality cross-check above. Given the small,
+divergence-thinned sample here, this reads as a plausible corroboration of
+the eigenvalue-ratio result, not a stronger replacement for it.
+
 ### Cross-vignette payoff 2: do locally dependent tables look denser?
 
 ```{r}
@@ -1359,6 +1414,73 @@ that test the answer is a reasonably clear yes: more stable estimation
 does go with better agreement between the two frameworks, independent of
 whether any specific edges get trimmed.
 
+### How sensitive is the evidence classification to the prior?
+
+Every result in this section rests on one prior choice: the matrix-F
+`prior_sd = 0.25` for Option A's GGM partial correlations, Huth et al.'s own
+default rather than anything tuned for IRW's data. Huth et al. ran their own
+prior-sensitivity check across 3 SD values on their data; here's the same
+idea on a 6-table handful drawn from the Option B stratified subset
+(`ecuador_2011_safety_avoidance`, `geiser_tam`, `gilbert_meta_12`,
+`2024_online_addiction_sabas`, `amatus_cipora_2024_pisa_me`,
+`che_2026_regulatory_self_efficacy`), refitting at `prior_sd` = 0.1, 0.25,
+and 0.5 and comparing every edge's evidence-category classification back to
+the 0.25 default.
+
+```{r}
+#| label: prior-sensitivity-inline
+#| echo: false
+
+prior_sens_path <- "network_psych_data/network_psych_prior_sensitivity_results.rds"
+prior_sens_ok <- file.exists(prior_sens_path)
+if (prior_sens_ok) {
+  prior_sens <- readRDS(prior_sens_path)
+  ps_comp <- prior_sens$comparison
+  n_ps_edges <- nrow(ps_comp)
+  flip_01 <- mean(ps_comp$evidence_category_sd0.25 != ps_comp$evidence_category_sd0.1, na.rm = TRUE)
+  flip_05 <- mean(ps_comp$evidence_category_sd0.25 != ps_comp$evidence_category_sd0.5, na.rm = TRUE)
+  sev <- c(strong_absence = 1, weak_absence = 2, inconclusive = 3,
+           weak_presence = 4, strong_presence = 5)
+  sev25 <- sev[ps_comp$evidence_category_sd0.25]
+  sev01 <- sev[ps_comp$evidence_category_sd0.1]
+  sev05 <- sev[ps_comp$evidence_category_sd0.5]
+  mean_step_01 <- mean(abs(sev25 - sev01), na.rm = TRUE)
+  mean_step_05 <- mean(abs(sev25 - sev05), na.rm = TRUE)
+  prop_sign_flip <- mean(
+    (sign(sev25 - 3) != sign(sev01 - 3) & sev25 != 3 & sev01 != 3) |
+    (sign(sev25 - 3) != sign(sev05 - 3) & sev25 != 3 & sev05 != 3),
+    na.rm = TRUE
+  )
+  cor_bf_01 <- cor(log10(pmax(ps_comp$bf10_sd0.25, 1e-10)),
+                    log10(pmax(ps_comp$bf10_sd0.1, 1e-10)), use = "complete.obs")
+  cor_bf_05 <- cor(log10(pmax(ps_comp$bf10_sd0.25, 1e-10)),
+                    log10(pmax(ps_comp$bf10_sd0.5, 1e-10)), use = "complete.obs")
+}
+```
+
+`r if (prior_sens_ok) paste0("Across ", n_ps_edges, " edges, ", scales::percent(flip_01, accuracy = 1), " change evidence category when the prior tightens to SD = 0.1, and ", scales::percent(flip_05, accuracy = 1), " when it loosens to SD = 0.5.") else "Prior-sensitivity results not available."`
+Read on its own, that looks like the five-way classification is quite
+unstable. It's less alarming once decomposed: the average edge only moves
+`r if (prior_sens_ok) round(mean_step_01, 2) else "--"` categories (out of
+4 possible steps) under the tighter prior and
+`r if (prior_sens_ok) round(mean_step_05, 2) else "--"` under the looser
+one — mostly a single step, e.g. `weak_absence` to `inconclusive`, not a
+jump from `strong_presence` to `strong_absence`. Genuine
+presence-vs-absence reversals (crossing `inconclusive` entirely) happen for
+only `r if (prior_sens_ok) scales::percent(prop_sign_flip, accuracy = 1) else "--"`
+of edges. And the underlying continuous evidence, before any threshold is
+applied, is reasonably stable: `log10(BF10)` correlates at
+`r if (prior_sens_ok) round(cor_bf_01, 2) else "--"` (SD 0.1) and
+`r if (prior_sens_ok) round(cor_bf_05, 2) else "--"` (SD 0.5) against the
+default prior's values. The five-way classification's apparent instability
+is mostly an artifact of hard thresholds sitting close to where edges
+naturally cluster (near BF10 = 1/3 and BF10 = 10) — a known property of
+discretizing a continuous quantity, not evidence that the underlying
+Bayesian estimates themselves move around unpredictably with the prior.
+This was checked on 6 tables only, not the full candidate pool — enough to
+see the pattern, not enough to rule out a table where prior choice matters
+more than it did here.
+
 ### Decomposing the gap: dimensionality, local dependence, stability, and negative edges together
 
 Van der Maas et al. (2006) and Epskamp et al. (2018) derive a tight
@@ -1523,14 +1645,18 @@ more carefully, not a settled prescription.
   change above went unnoticed. Both are now pinned in `renv.lock`, which
   prevents a silent version drift like this going forward but doesn't
   retroactively confirm which version produced the results above.
-- **Matrix-F prior SD was not sensitivity-tested at IRW scale.** Option A
-  above uses the package default (`prior_sd = 0.25`), matching Huth et
-  al.'s own default; this prior is specific to the GGM's partial
-  correlations and doesn't apply to Option B's ordinal MRF, which uses
-  its own default prior instead (see Data and methods). Huth et al.
-  themselves ran a prior-sensitivity check across three SD values on
-  their own data; a natural follow-up here would be the same check on a
-  handful of IRW tables, not run in this pass for compute reasons.
+- **Matrix-F prior sensitivity was checked on a 6-table handful, not the
+  full candidate pool** (see "How sensitive is the evidence classification
+  to the prior?" above). The five-way evidence-category classification
+  looks unstable at first glance (roughly half of edges change category
+  under a tighter or looser prior), but the underlying continuous BF10 is
+  much more stable (log-scale correlation ~0.6 against the default prior)
+  and genuine presence-vs-absence reversals are rare (~2%) — most flips are
+  single-step moves across a nearby threshold, not evidence the Bayesian
+  estimates themselves are prior-dominated. Not checked at full-batch
+  scale, and the three SD values used (0.1/0.25/0.5) were chosen as a
+  reasonable spread rather than independently confirmed against Huth et
+  al.'s own three values.
 - **The installed `easybgm` (0.4.0) redirect bug is fixed upstream but
   not yet re-run here.** The `type = "binary"` → `bgms` silent-redirect
   bug that Option A works around with an explicit `type = "continuous"`
@@ -1539,20 +1665,18 @@ more carefully, not a settled prescription.
   but re-running the full batch against the patched package, and updating
   `renv.lock` to pin it, would remove the need for the workaround going
   forward; not done here since it means re-running all of Option A.
-- **No stochastic-block-model check for multidimensionality.** `bgms`
-  includes a stochastic block model (SBM) test that can distinguish a
-  single-cluster network from a multi-cluster one directly from the
-  network side, rather than relying on the dimensionality vignette's
-  separate eigenvalue-ratio/parallel-analysis screen as a proxy. A
-  natural follow-up: for tables with a Bayes factor > 10 favoring a
-  one-cluster SBM structure, check whether the strength-discrimination
-  correspondence is any tighter than for tables where the SBM test
-  favors more than one cluster — a more direct version of the
-  dimensionality cross-check above, using the network model's own
-  cluster structure instead of an IRT-side diagnostic. Not run here;
-  it would need a new pass through `bgms` (likely restricted to the
-  Option B subset or a similarly-sized sample, given `bgms`'s runtime
-  cost noted above).
+- **The stochastic-block-model check (see "A network-native
+  multidimensionality check" above) ran on the 20-table Option B subset,
+  and lost 6 of those 20 to data/convergence issues** (1 unsupported data
+  type, 1 no strength-discrimination match, 4 severe MCMC divergence — 3 at
+  100% of post-warmup samples). No table in the remaining 14 cleared the
+  BF > 10 bar for one-cluster structure, so the originally-planned
+  two-group comparison (one-cluster-favoring tables vs. the rest) couldn't
+  run; the continuous version (Bayes factor / posterior probability of one
+  cluster vs. strength-discrimination correlation) showed a weak positive
+  relationship consistent with the eigenvalue-ratio cross-check, but on a
+  small, divergence-thinned sample. Not run at full-batch scale, for the
+  same runtime-cost reasons noted throughout this section for `bgms`.
 - **Option A's uniform-GGM treatment of binary/ordinal data is an
   approximation this vignette inherited deliberately, not a claim it's the
   ideal model for IRW's data.** It's the same simplifying choice Huth et

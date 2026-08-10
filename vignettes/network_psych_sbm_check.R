@@ -75,7 +75,11 @@ fit_one_sbm <- function(table_name) {
   unique_ids <- unique(df$id)
   if (length(unique_ids) > MAX_N) df <- df[df$id %in% sample(unique_ids, MAX_N), ]
 
-  resp <- irw_long2resp(df)
+  resp <- tryCatch(irw_long2resp(df), error = function(e) {
+    message("    irw_long2resp() failed for ", table_name, ": ", conditionMessage(e))
+    NULL
+  })
+  if (is.null(resp)) return(NULL)
   resp$id <- NULL
   resp <- resp[, sapply(resp, function(x) length(unique(na.omit(x))) > 1), drop = FALSE]
   resp_num <- as.matrix(sapply(resp, as.numeric))
@@ -99,22 +103,13 @@ fit_one_sbm <- function(table_name) {
   })
   if (is.null(sbm)) return(NULL)
 
-  # posterior_num_blocks: data frame with posterior inclusion probabilities
-  # for each possible number of clusters (see ?bgms::bgm, "Value" section).
-  # Exact column names not independently re-verified against a live fit
-  # object -- confirm num_blocks_df's column names on the first real run
-  # (message() below prints them for exactly that reason) before trusting
-  # post_p_k1 downstream.
+  # posterior_num_blocks: single-column data frame ("probability"), row i
+  # (by position, 1-indexed) = P(K = i). Confirmed against a live fit on
+  # synthetic data (bgm() on an 8-item random matrix): 8 rows, decreasing
+  # probability, no separate K/cluster-count column -- the row position IS
+  # the cluster count.
   num_blocks_df <- sbm$posterior_num_blocks
-  message("    posterior_num_blocks columns: ", paste(names(num_blocks_df), collapse = ", "))
-
-  k_col   <- grep("block|cluster|^k$", names(num_blocks_df), ignore.case = TRUE, value = TRUE)[1]
-  p_col   <- grep("prob|post", names(num_blocks_df), ignore.case = TRUE, value = TRUE)[1]
-  post_p_k1 <- num_blocks_df[[p_col]][num_blocks_df[[k_col]] == 1]
-  if (length(post_p_k1) != 1) {
-    message("    could not uniquely identify P(K=1) for ", table_name, " -- skipping BF calc")
-    post_p_k1 <- NA_real_
-  }
+  post_p_k1 <- num_blocks_df$probability[1]
 
   bf_k1 <- if (!is.na(post_p_k1) && post_p_k1 < 1) {
     (post_p_k1 / (1 - post_p_k1)) / PRIOR_ODDS_K1
@@ -134,7 +129,10 @@ fit_one_sbm <- function(table_name) {
 
 results <- map_dfr(SBM_TABLES, function(tbl) {
   message("Table: ", tbl)
-  fit_one_sbm(tbl)
+  tryCatch(fit_one_sbm(tbl), error = function(e) {
+    message("    unexpected error for ", tbl, ": ", conditionMessage(e))
+    NULL
+  })
 })
 
 # Join to the main results cache's strength-discrimination correlation and
