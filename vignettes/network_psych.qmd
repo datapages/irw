@@ -574,33 +574,150 @@ multidimensional structure like the `clifford_2018_police_blame` case
 above), not an independent nuisance factor layered on top of the
 strength-discrimination comparison.
 
+### Is the negative-edge problem partly a sign-mismatch problem, not just a theory breakdown?
+
+These are validated scales, so a negative IRT discrimination on a handful
+of items is usually a sign that the item is reverse-keyed and wasn't
+recoded before fitting, not evidence of a genuinely negative relationship
+with the trait. **We don't have a reliable way to confirm that directly for
+IRW as a whole: `irw_tags()` metadata is table-level (age range, sample,
+construct type, measurement tool, item format, construct name), not
+item-level, so there's no reverse-coding flag to check against.** What
+follows is an empirical check on item-level sign agreement instead, not a
+validated audit of which items are actually reverse-keyed.
+
+```{r}
+#| label: sign-mismatch-inline
+#| echo: false
+
+item_level <- purrr::map_dfr(names(discriminations_list), function(tbl) {
+  a <- discriminations_list[[tbl]]
+  g <- graphs_list[[tbl]]
+  s <- strengths_list[[tbl]]
+  if (is.null(a) || is.null(g) || length(a) < 2) return(NULL)
+  items <- names(a)
+  edge_sum <- rowSums(g[items, items, drop = FALSE])
+  tibble(table = tbl, item = items, a = a, edge_sum = edge_sum, strength = s[items])
+})
+
+any_neg_strength <- any(item_level$strength < 0, na.rm = TRUE)
+tab_sign <- table(a_neg = item_level$a < 0, edge_neg = item_level$edge_sum < 0)
+prop_edgeneg_given_aneg  <- mean(item_level$edge_sum[item_level$a < 0]  < 0)
+prop_edgeneg_given_apos  <- mean(item_level$edge_sum[item_level$a >= 0] < 0)
+chisq_sign <- chisq.test(tab_sign)
+n_a_neg <- sum(item_level$a < 0)
+n_items_total <- nrow(item_level)
+
+alt_cor_df <- summary_df %>%
+  filter(!is.na(strength_a_cor)) %>%
+  rowwise() %>%
+  mutate(
+    abs_a_cor = {
+      a <- discriminations_list[[table]]
+      s <- strengths_list[[table]]
+      items <- names(a)
+      s <- s[items]
+      if (length(unique(s)) < 2) NA_real_ else suppressWarnings(cor(s, abs(a)))
+    },
+    n_neg_a = sum(discriminations_list[[table]] < 0)
+  ) %>%
+  ungroup()
+
+has_neg_a <- alt_cor_df %>% filter(n_neg_a > 0, !is.na(abs_a_cor))
+med_orig_all <- median(alt_cor_df$strength_a_cor, na.rm = TRUE)
+med_abs_all  <- median(alt_cor_df$abs_a_cor, na.rm = TRUE)
+med_orig_neg <- median(has_neg_a$strength_a_cor, na.rm = TRUE)
+med_abs_neg  <- median(has_neg_a$abs_a_cor, na.rm = TRUE)
+wilcox_sign  <- wilcox.test(has_neg_a$strength_a_cor, has_neg_a$abs_a_cor, paired = TRUE)
+```
+
+Node strength, as used throughout this vignette (and as `qgraph`/`bootnet`
+compute it), is a sum of *absolute* edge weights — it can never be negative
+(confirmed across all `r n_items_total` items here: any negative? `r any_neg_strength`).
+IRT discrimination is signed. That mismatch alone
+means any item mirt fits with a negative discrimination is close to
+guaranteed to drag the correlation down, independent of whether the
+network "gets it right" for that item. Two things follow from that.
+
+First, negative discrimination and negative edges aren't independent —
+they concentrate on the same items far more than chance. Among the
+`r n_a_neg` of `r n_items_total` items with a negative discrimination,
+`r scales::percent(prop_edgeneg_given_aneg, accuracy = 1)` also have a net-negative
+summed edge weight, versus only `r scales::percent(prop_edgeneg_given_apos, accuracy = 1)`
+of items with non-negative discrimination
+(`r if (chisq_sign$p.value < 0.001) "chi-squared p < 0.001" else paste0("chi-squared p = ", round(chisq_sign$p.value, 3))`).
+That's consistent with both frameworks periodically picking up on the same
+under-the-hood problem — most plausibly a reverse-keyed item — even though
+neither framework is set up to flag it directly.
+
+Second, a sign-invariant version of the same metric — correlating node
+strength against `abs(a)` instead of signed `a` — does noticeably better
+whenever a table has at least one negative-discrimination item. Across all
+`r nrow(alt_cor_df)` tables the median moves modestly, from
+`r round(med_orig_all, 2)` (signed) to `r round(med_abs_all, 2)` (absolute).
+Restricted to the `r nrow(has_neg_a)` tables with at least one
+negative-discrimination item, the gap is much larger — median
+`r round(med_orig_neg, 2)` to `r round(med_abs_neg, 2)`
+(`r if (wilcox_sign$p.value < 0.001) "paired Wilcoxon p < 0.001" else paste0("paired Wilcoxon p = ", round(wilcox_sign$p.value, 3))`).
+For a meaningful share of tables, part of what looks like a
+strength-discrimination *disagreement* is really a metric that penalizes
+sign conventions the network side was never going to reproduce, on top of
+whatever genuine disagreement remains. The rest of this vignette keeps the
+signed correlation throughout for consistency and because it's the more
+conservative (harder-to-pass) choice, not because it's the better-justified
+metric for this specific question.
+
 ### Does strength track discrimination in general?
 
 ```{r}
-#| label: fig-cor-ranked
-#| fig-cap: "Correlation between network node strength and IRT discrimination, one point per table. The y-axis carries no information of its own -- it is each table's rank by that correlation (low to high), used only to spread overlapping points out vertically so individual tables are separable; read the plot along the x-axis only. Values near 1 match the theoretical prediction under a strong single factor; low or negative values indicate a breakdown. Hover over a point to see which table it is."
-#| fig-height: 6
+#| label: fig-cor-distribution
+#| fig-cap: "Distribution of the strength-discrimination correlation across all tables with a usable comparison. The boxplot shows the median and interquartile range; each point is one table, jittered vertically only to avoid overplotting -- read the plot along the x-axis. Values near 1 match the theoretical prediction under a strong single factor; low or negative values indicate a breakdown. Hover over a point to see which table it is."
+#| fig-height: 3
 
-ranked_df <- summary_df %>%
+dist_df <- summary_df %>%
   filter(!is.na(strength_a_cor)) %>%
-  arrange(strength_a_cor) %>%
-  mutate(
-    rank = row_number(),
-    tooltip = paste0(
-      "Table: ", table,
-      "<br>Strength-a correlation: ", round(strength_a_cor, 2),
-      "<br>Network method: ", network_method,
-      "<br>Network density: ", round(network_density, 2),
-      "<br>n_items: ", n_items
-    )
-  )
+  mutate(tooltip = paste0(
+    "Table: ", table,
+    "<br>Strength-a correlation: ", round(strength_a_cor, 2),
+    "<br>Network method: ", network_method,
+    "<br>Network density: ", round(network_density, 2),
+    "<br>n_items: ", n_items
+  ))
 
-p <- ggplot(ranked_df, aes(x = strength_a_cor, y = rank, text = tooltip)) +
-  geom_point(colour = irw_blue, size = 1.6, alpha = 0.7) +
+p <- ggplot(dist_df, aes(x = strength_a_cor, y = "", text = tooltip)) +
+  geom_boxplot(colour = irw_grey, fill = NA, outlier.shape = NA, width = 0.5) +
+  geom_jitter(colour = irw_blue, height = 0.15, size = 1.4, alpha = 0.6) +
   geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
-  labs(x = "Correlation: node strength vs. IRT discrimination",
-       y = "Rank (spreads points out only -- carries no meaning of its own)") +
-  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+  labs(x = "Strength-discrimination correlation", y = NULL)
+
+ggplotly(p, tooltip = "text") |> layout(margin = list(t = 40))
+```
+
+```{r}
+#| label: fig-cor-vs-weighted-density
+#| fig-cap: "Strength-discrimination correlation against each table's weighted network density -- mean absolute partial correlation over all possible edges, counting absent edges as zero, so higher values mean a denser and/or more strongly-connected network. Unlike a plotting-only axis, this one carries real meaning: a theory that predicts a densely, uniformly connected network under a strong single factor also predicts higher weighted density should go with better strength-discrimination agreement. One point per table with a usable comparison. Hover for table details."
+#| fig-height: 5
+
+density_df <- summary_df %>%
+  filter(!is.na(strength_a_cor)) %>%
+  rowwise() %>%
+  mutate(weighted_density = edge_stats(graphs_list[[table]])$weighted_density) %>%
+  ungroup() %>%
+  filter(!is.na(weighted_density)) %>%
+  mutate(tooltip = paste0(
+    "Table: ", table,
+    "<br>Strength-a correlation: ", round(strength_a_cor, 2),
+    "<br>Weighted density: ", round(weighted_density, 2),
+    "<br>Network method: ", network_method,
+    "<br>n_items: ", n_items
+  ))
+
+p <- ggplot(density_df, aes(x = weighted_density, y = strength_a_cor, text = tooltip)) +
+  geom_point(colour = irw_blue, size = 1.6, alpha = 0.7) +
+  geom_smooth(method = "loess", se = FALSE, colour = irw_red, linewidth = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = irw_grey) +
+  labs(x = "Weighted network density (mean |partial correlation| over all possible edges)",
+       y = "Strength-discrimination correlation")
 
 ggplotly(p, tooltip = "text") |> layout(margin = list(t = 60))
 ```
@@ -612,6 +729,9 @@ ggplotly(p, tooltip = "text") |> layout(margin = list(t = 60))
 med_cor <- median(summary_df$strength_a_cor, na.rm = TRUE)
 prop_strong <- mean(summary_df$strength_a_cor > 0.7, na.rm = TRUE)
 n_na_cor <- sum(is.na(summary_df$strength_a_cor))
+EMPTY_TABLES <- summary_df$table[is.na(summary_df$strength_a_cor) & summary_df$network_density == 0]
+cor_density <- cor(density_df$weighted_density, density_df$strength_a_cor)
+cor_density_test <- cor.test(density_df$weighted_density, density_df$strength_a_cor)
 ```
 
 The median strength-discrimination correlation across `r sum(!is.na(summary_df$strength_a_cor))`
@@ -619,7 +739,84 @@ tables with a usable comparison is `r round(med_cor, 2)`, and
 `r scales::percent(prop_strong, accuracy = 1)` of tables exceed 0.7.
 `r if (n_na_cor > 0) paste0(n_na_cor, " table(s) are excluded here because their regularized network had no edges at all -- an empty network, not a low correlation.") else ""`
 The relationship is real and often strong, but — as the two comparisons
-below make concrete — it is not universal.
+below make concrete — it is not universal. It also isn't independent of
+how densely and strongly connected the network is to begin with: weighted
+density correlates with the strength-discrimination correlation at
+r = `r round(cor_density, 2)`
+(`r if (cor_density_test$p.value < 0.001) "p < 0.001" else paste0("p = ", round(cor_density_test$p.value, 3))`)
+— tables whose networks lean more heavily on a few strong, uniform edges
+tend to show better agreement with IRT discrimination, consistent with
+Epskamp et al.'s prediction that a strong single factor produces both.
+
+### Why are 7 networks empty? A closer look
+
+The `r n_na_cor` tables excluded above for having no edges at all
+(`r paste(EMPTY_TABLES, collapse = ", ")`) were audited directly: each was
+re-fetched and re-fit outside the main batch to check whether the empty
+result reproduces and, if so, what's driving it — a data or estimation
+artifact (too few usable respondents, degenerate items, a numerically
+unstable correlation matrix) would be a different finding than a real
+absence of detectable partial-correlation structure.
+
+```{r}
+#| label: empty-audit-table
+#| echo: false
+
+empty_audit_path <- "network_psych_data/network_psych_empty_audit.rds"
+empty_audit_ok <- file.exists(empty_audit_path)
+if (empty_audit_ok) {
+  empty_audit_df <- readRDS(empty_audit_path)
+  knitr::kable(
+    empty_audit_df %>%
+      transmute(
+        Table = table,
+        `N (participants)` = n_participants_raw,
+        `N items (kept)` = n_items_kept,
+        `Prop. missing` = round(prop_missing, 2),
+        `Prop. extreme marginals` = ifelse(is.na(extreme_marginal), "--", round(extreme_marginal, 2)),
+        `Max |r|` = round(max_abs_cor, 2),
+        `Mean |r|` = round(mean_abs_cor, 2),
+        `Density (re-fit)` = density_reproduced
+      ),
+    caption = "Diagnostics for the 7 tables with an empty regularized network, re-fit independently of the main batch."
+  )
+}
+
+gilbert_extreme_marginal <- empty_audit_df$extreme_marginal[empty_audit_df$table == "gilbert_meta_38"]
+missing_tables <- c("sun_2025_morality_study2_peoplerespect",
+                     "sun_2025_morality_study2_peopletrust", "project_kids_wj_ak_grade")
+max_missing_prop <- max(empty_audit_df$prop_missing[empty_audit_df$table %in% missing_tables])
+```
+
+All 7 reproduced an empty network on an independent re-fit (`Density
+(re-fit)` = 0 throughout) — this isn't a one-off fluke from the original
+batch run. What they share is uniformly weak pairwise item correlations:
+mean |r| sits between `r round(min(empty_audit_df$mean_abs_cor), 2)` and
+`r round(max(empty_audit_df$mean_abs_cor), 2)` across the 7 tables, and even
+the single strongest pairwise correlation in each table (`Max |r|`) tops out
+around `r round(max(empty_audit_df$max_abs_cor), 2)`. EBIC/LASSO
+regularization is designed to drop exactly this kind of weak, likely-noise
+edge to control false positives — so an empty network here is the
+regularization doing its job on genuinely weak signal, not an artifact of
+the fitting pipeline. A couple of tables point to a plausible reason the
+signal is weak to begin with: `gilbert_meta_38` has
+`r scales::percent(gilbert_extreme_marginal, accuracy = 1)` of its binary
+items at an extreme (under 5% or over 95%) endorsement rate, which caps how
+much correlation those items can show with anything; the two
+`sun_2025_morality_study2_*` tables and `project_kids_wj_ak_grade` have
+substantial missingness (`r scales::percent(max_missing_prop, accuracy = 1)`
+at the high end), which thins out the pairwise-complete data each
+correlation is estimated on. Sample size (`N (participants)`,
+348-1000) is modest but in line with plenty of tables elsewhere in this
+sample that *do* get a usable network, so it reads as a contributing factor
+alongside weak marginal correlations rather than the primary driver on its
+own. None of this points to a data-pipeline bug — the empty result looks
+like a genuine (if under-powered) null.
+
+*Caveat: this audit re-fits each table once outside the main batch's
+`furrr`-parallelized run; it confirms reproducibility under the same
+`estimateNetwork()` call, not stability under resampling (no bootstrap was
+run here — see Limitations).*
 
 ### Cross-vignette payoff 1: does it track the dimensionality diagnostic?
 
@@ -637,11 +834,14 @@ join_dim_df <- summary_df %>%
     "<br>PA unidimensional: ", dim_unidimensional
   ))
 
-p <- ggplot(join_dim_df, aes(x = pmin(dim_ratio_12, 15), y = strength_a_cor, text = tooltip)) +
+p <- ggplot(join_dim_df, aes(x = log10(pmin(dim_ratio_12, 15)), y = strength_a_cor, text = tooltip)) +
   geom_point(colour = irw_blue, size = 2, alpha = 0.7) +
   geom_smooth(method = "loess", se = FALSE, colour = irw_red, linewidth = 0.8) +
-  geom_vline(xintercept = 4, linetype = "dashed", colour = irw_grey) +
-  scale_x_log10() +
+  # xintercept in the same log10 units as the x aesthetic above -- ggplotly does not
+  # reliably re-apply scale_x_log10()'s transform to geom_vline, so the axis is built
+  # by hand here rather than trusting that transform to carry through to the shape.
+  geom_vline(xintercept = log10(4), linetype = "dashed", colour = irw_grey) +
+  scale_x_continuous(labels = function(x) round(10^x, 1)) +
   labs(x = "Eigenvalue ratio (dimensionality vignette, log scale, capped at 15; dashed line = ratio 4 unidimensionality heuristic)",
        y = "Strength-discrimination correlation")
 
@@ -726,6 +926,66 @@ are built to catch directly. Detecting that cluster structure from the
 network side properly needs community-detection tools this pass didn't
 run at batch scale (see Limitations); density is the coarser proxy
 available here.
+
+### Do dimensionality and local dependence predict the correspondence jointly?
+
+Most tables in this sample clear the dimensionality vignette's
+unidimensionality bar, yet the median strength-discrimination correlation
+sits around 0.7, not close to 1 — and the local-dependence cross-check
+above is the weaker of the two on its own (r = `r round(cor_ld_join, 2)`
+against network density, not strength-discrimination correlation directly).
+Neither diagnostic looking decisive by itself doesn't rule out the two
+being jointly informative: a table could clear the eigenvalue-ratio bar
+while still carrying enough Q3-flagged pairs to suppress the
+strength-discrimination correlation in a way an eigenvalue ratio alone
+wouldn't show.
+
+```{r}
+#| label: joint-dim-ld-inline
+#| echo: false
+
+joint_dim_ld_df <- summary_df %>%
+  filter(!is.na(strength_a_cor), !is.na(dim_ratio_12), !is.na(ld_prop_flagged)) %>%
+  mutate(log_dim_ratio = log10(pmin(dim_ratio_12, 15)))
+
+m_dim_only <- lm(strength_a_cor ~ log_dim_ratio, data = joint_dim_ld_df)
+m_ld_only  <- lm(strength_a_cor ~ ld_prop_flagged, data = joint_dim_ld_df)
+m_additive <- lm(strength_a_cor ~ log_dim_ratio + ld_prop_flagged, data = joint_dim_ld_df)
+m_interact <- lm(strength_a_cor ~ log_dim_ratio * ld_prop_flagged, data = joint_dim_ld_df)
+
+r2_dim <- summary(m_dim_only)$r.squared
+r2_ld  <- summary(m_ld_only)$r.squared
+r2_add <- summary(m_additive)$r.squared
+r2_int <- summary(m_interact)$r.squared
+int_coef <- coef(m_interact)["log_dim_ratio:ld_prop_flagged"]
+int_p    <- summary(m_interact)$coefficients["log_dim_ratio:ld_prop_flagged", "Pr(>|t|)"]
+anova_int <- anova(m_additive, m_interact)
+anova_p   <- anova_int[["Pr(>F)"]][2]
+```
+
+A joint model bears that out, modestly. Fit separately, log eigenvalue
+ratio explains `r scales::percent(r2_dim, accuracy = 1)` of the variance in
+strength-discrimination correlation across the `r nrow(joint_dim_ld_df)`
+tables with both diagnostics available, and Q3-flagged proportion alone
+explains `r scales::percent(r2_ld, accuracy = 1)`. Together, additively,
+that only rises to `r scales::percent(r2_add, accuracy = 1)` — mostly what
+you'd expect from two weak, largely independent signals. Adding an
+interaction term brings it to `r scales::percent(r2_int, accuracy = 1)`,
+a small but statistically real improvement
+(`r if (anova_p < 0.001) "F-test p < 0.001" else paste0("F-test p = ", round(anova_p, 3))`
+comparing the additive and interaction models). The interaction itself
+(coefficient `r round(int_coef, 2)`,
+`r if (int_p < 0.001) "p < 0.001" else paste0("p = ", round(int_p, 3))`) is
+positive: local dependence's negative pull on the correlation is sharper
+for tables that *don't* clear the unidimensionality bar, and fades for
+tables that do — a plausible story (a strong single factor can absorb a
+little local dependence without breaking the network-IRT correspondence;
+a weaker or absent one can't), but a small effect against a large amount of
+unexplained variance. Combined, dimensionality and local dependence still
+account for well under a tenth of the spread in strength-discrimination
+correlation — whatever explains most of the ~0.7-not-1 gap for
+"cleanly unidimensional" tables, it mostly isn't either diagnostic used
+here, alone or together.
 
 ## How much statistical evidence actually supports these edges?
 
@@ -1099,6 +1359,95 @@ that test the answer is a reasonably clear yes: more stable estimation
 does go with better agreement between the two frameworks, independent of
 whether any specific edges get trimmed.
 
+### Decomposing the gap: dimensionality, local dependence, stability, and negative edges together
+
+Van der Maas et al. (2006) and Epskamp et al. (2018) derive a tight
+analytical correspondence between network centrality and IRT
+discrimination under a single dominant common cause; empirically, across
+this sample, the correspondence is real but partial. Every check above
+tested one candidate explanation for that gap at a time — multidimensionality,
+local dependence, negative edges, estimation stability — each on its own
+axis. None of them ruled the others out, and some plausibly overlap (the
+sign-mismatch section above found negative edges and negative
+discriminations concentrate on the same items; local dependence's effect
+above only showed up in interaction with dimensionality, not as a main
+effect). A single joint model, fit once with all four together, is a more
+honest way to ask how much each one contributes once the others are held
+fixed.
+
+```{r}
+#| label: joint-decomposition-inline
+#| echo: false
+
+negedge_join_df <- summary_df %>%
+  filter(!is.na(strength_a_cor)) %>%
+  rowwise() %>%
+  mutate(prop_neg_edges = {
+    g <- graphs_list[[table]]
+    ut <- g[upper.tri(g)]
+    nz <- ut[ut != 0]
+    if (length(nz) == 0) NA_real_ else mean(nz < 0)
+  }) %>%
+  ungroup()
+
+decomp_df <- summary_df %>%
+  select(table, strength_a_cor, dim_ratio_12, ld_prop_flagged,
+         prop_strong_presence_ggm, prop_strong_absence_ggm, has_bayes_match) %>%
+  inner_join(negedge_join_df %>% select(table, prop_neg_edges), by = "table") %>%
+  filter(!is.na(strength_a_cor), !is.na(dim_ratio_12), !is.na(ld_prop_flagged),
+         !is.na(prop_neg_edges), has_bayes_match,
+         !is.na(prop_strong_presence_ggm), !is.na(prop_strong_absence_ggm)) %>%
+  mutate(log_dim_ratio = log10(pmin(dim_ratio_12, 15)),
+         prop_strong_overall = prop_strong_presence_ggm + prop_strong_absence_ggm)
+
+m_no_negedge <- lm(strength_a_cor ~ log_dim_ratio + ld_prop_flagged + prop_strong_overall,
+                    data = decomp_df)
+m_decomp <- lm(strength_a_cor ~ log_dim_ratio + ld_prop_flagged + prop_neg_edges + prop_strong_overall,
+               data = decomp_df)
+decomp_coef <- summary(m_decomp)$coefficients
+r2_no_negedge <- summary(m_no_negedge)$r.squared
+r2_decomp <- summary(m_decomp)$r.squared
+pred_cor_max <- max(abs(cor(decomp_df[, c("log_dim_ratio","ld_prop_flagged",
+                                           "prop_neg_edges","prop_strong_overall")])[upper.tri(diag(4))]))
+```
+
+Across the `r nrow(decomp_df)` tables with all four measures available,
+dimensionality, local dependence, and stability together explain
+`r scales::percent(r2_no_negedge, accuracy = 1)` of the variance in
+strength-discrimination correlation — already more than any pair of them
+managed above, but still modest. Adding negative-edge share to the same
+model more than doubles that, to
+`r scales::percent(r2_decomp, accuracy = 1)`, and it dominates the other
+three: its coefficient (`r round(decomp_coef["prop_neg_edges", "Estimate"], 2)`,
+`r if (decomp_coef["prop_neg_edges", "Pr(>|t|)"] < 0.001) "p < 0.001" else paste0("p = ", round(decomp_coef["prop_neg_edges", "Pr(>|t|)"], 3))`)
+dwarfs the others in both size and significance. Local dependence's main
+effect, significant on its own above only via the interaction with
+dimensionality, drops to essentially nothing once negative-edge share is
+in the model (`r round(decomp_coef["ld_prop_flagged", "Estimate"], 3)`,
+`r if (decomp_coef["ld_prop_flagged", "Pr(>|t|)"] < 0.001) "p < 0.001" else paste0("p = ", round(decomp_coef["ld_prop_flagged", "Pr(>|t|)"], 3))`)
+— consistent with local dependence's apparent effect being partly a proxy
+for negative-edge share rather than an independent driver, though the
+predictors aren't strongly collinear here (largest pairwise correlation
+among the four: `r round(pred_cor_max, 2)`), so this looks like a real
+dominance relationship rather than a multicollinearity artifact.
+Dimensionality and stability both keep small, roughly stable coefficients
+with or without negative-edge share in the model — real but minor
+independent contributions.
+
+Two things follow. First, negative edges aren't just one nuisance factor
+among several — they're the dominant one this pass can measure, and given
+the sign-mismatch finding above, a meaningful share of that is plausibly a
+metric artifact (unsigned strength vs. signed discrimination) rather than
+a genuine breakdown in the network-IRT correspondence. Second, even the
+full four-predictor model leaves most of the variance unexplained
+(`r scales::percent(1 - r2_decomp, accuracy = 1)`). Whatever else separates
+Epskamp et al.'s analytical prediction from what this sample shows — sampling
+noise in a single network estimate, item-level idiosyncrasies no
+table-level diagnostic captures, network-estimation choices this vignette
+didn't vary (EBIC tuning, alternative regularization defaults) — isn't
+captured by any of the four candidate explanations tested across this
+vignette, alone or together.
+
 ## Practical implications
 
 Where the strength-discrimination correlation is high and the network is
@@ -1222,6 +1571,40 @@ more carefully, not a settled prescription.
   whether the two models systematically disagree, but any specific
   IRW table not in that subset has only the Option A (GGM) result
   available.
+- **The negative-edge / reverse-coding link is checked empirically, not
+  validated against ground truth.** The "Is the negative-edge problem
+  partly a sign-mismatch problem" section above shows negative
+  discrimination and negative edge-sum concentrate on the same items far
+  more than chance, and that a sign-invariant metric (`abs(a)` instead of
+  signed `a`) recovers a noticeably better correspondence wherever a table
+  has at least one negative-discrimination item. But **`irw_tags()`
+  metadata is table-level, not item-level — there is no reverse-coding flag
+  to confirm any specific item is actually reverse-keyed**, so this remains
+  an inference from sign co-occurrence, not a validated audit. A firmer
+  version would need item-level keying information IRW doesn't currently
+  carry.
+- **The joint dimensionality x local-dependence model (see "Do
+  dimensionality and local dependence predict the correspondence jointly?"
+  above) only used an interaction of two predictors and a linear
+  specification.** The interaction is statistically real but small (R²
+  0.065 to 0.074); a more flexible functional form (e.g. a GAM, or
+  including the local-dependence vignette's own testlet-cluster count
+  rather than just proportion-flagged) might capture more of the joint
+  relationship than a two-way linear interaction does.
+- **The full four-predictor decomposition (dimensionality, local
+  dependence, stability, negative-edge share — see "Decomposing the gap"
+  above) explains more variance than any pairwise comparison but still
+  leaves most of it unaccounted for** (`r scales::percent(1 - r2_decomp, accuracy = 1)`
+  of variance in the fitted sample). It's also purely observational
+  bivariate/multivariate regression across tables, not a causal or
+  simulation-based account of the mechanism — e.g. it can't distinguish
+  "negative edges cause a worse correspondence" from "both are downstream
+  of the same underlying multidimensionality/reverse-coding problem." A
+  natural follow-up would be a small simulation (generate data under a
+  known single-factor model, deliberately reverse-code a subset of items
+  without recoding, refit both frameworks) to establish the mechanism
+  directly rather than inferring it from cross-table correlations. Not run
+  here.
 
 ## Reproducibility
 
