@@ -31,7 +31,26 @@ library(easybgm)   # amendment: Bayesian edge evidence (Huth et al. 2026); loads
 
 set.seed(20260722)
 
-out_dir  <- "vignettes/network_psych_data"
+# Prep for a verification re-run against the patched easybgm (see
+# fit_bayesian_edge_evidence() below for what the patch actually fixes --
+# it does NOT change Option A's behavior, since Option A never passes
+# type = "binary" in the first place; see the comment there before changing
+# anything about *what* gets fit here). Set
+# RERUN_AGAINST_PATCHED_EASYBGM=TRUE in the environment to write every
+# output to a separate directory, so a verification re-run against the
+# patched package can never touch the already-correct, currently published
+# 610-table results, and so the two can be diffed afterward. Not yet
+# runnable as of this writing -- the patched package isn't pinned in
+# renv.lock yet (see network_psych_patched_easybgm_rerun_NOTES.md). Default
+# FALSE reproduces today's published behavior exactly, against the
+# currently-pinned CRAN easybgm 0.4.0.
+RERUN_AGAINST_PATCHED_EASYBGM <- as.logical(Sys.getenv("RERUN_AGAINST_PATCHED_EASYBGM", "FALSE"))
+
+out_dir  <- if (RERUN_AGAINST_PATCHED_EASYBGM) {
+  "vignettes/network_psych_data_patched_rerun"
+} else {
+  "vignettes/network_psych_data"
+}
 fits_dir <- file.path(out_dir, "fits")
 dir.create(fits_dir, recursive = TRUE, showWarnings = FALSE)
 bib_file <- file.path(out_dir, "references.bib")
@@ -216,11 +235,21 @@ evidence_proportions <- function(categories, suffix) {
 # Option A (primary): GGM via BGGM, forced uniformly across item types. Reuses
 # the already-fetched, already-cleaned `resp` from fit_network() rather than
 # re-fetching. type = "continuous" is forced regardless of n_categories --
-# easybgm() silently redirects package = "BGGM" back to bgms whenever
-# type = "binary" is passed (checked against the installed easybgm 0.4.0
-# source directly), which would silently defeat Option A's whole point of a
-# uniform GGM comparison, so type must never be anything but "continuous"
-# here.
+# this is Option A's whole design point (a uniform GGM comparison matching
+# Huth et al.'s own simplifying choice), not a workaround, and this call
+# must never pass type = "binary" for that reason alone.
+#
+# Separately: the installed easybgm (0.4.0) has a bug where
+# easybgm(..., type = "binary") silently redirects package = "BGGM" back to
+# bgms regardless of what package was requested. Because this call always
+# passes type = "continuous", that buggy line never executes here -- the
+# bug has no effect on Option A's results, patched or not. Karoline Huth
+# fixed it upstream (github.com/KarolineHuth/easybgm, commit d5a3da0a50,
+# 2026-08-03) anyway, since it matters for anyone calling easybgm() with
+# type = "binary" directly (which this vignette doesn't). The
+# RERUN_AGAINST_PATCHED_EASYBGM re-run (see out_dir above) exists purely to
+# *verify* that claim -- confirm results are unchanged against the patched
+# package -- not to change what gets fit.
 fit_bayesian_edge_evidence <- function(resp, table_name, time_budget_sec = BGGM_TIME_BUDGET_SEC) {
   resp_num <- as.matrix(sapply(resp, as.numeric))
   resp_num <- na.omit(resp_num)  # BGGM::explore()'s own default (impute = FALSE) does this
