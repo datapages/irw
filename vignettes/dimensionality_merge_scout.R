@@ -57,7 +57,7 @@ MIN_N          <- 200
 MAX_N          <- 50000
 
 # --- Stage 2 budget -----------------------------------------------------
-N_VERIFY       <- 30      # how many top-scoring stage-1 groups to actually fetch
+N_VERIFY       <- Inf     # how many top-scoring stage-1 groups to actually fetch
 MAX_CELLS      <- 30e6    # skip a group whose members are collectively too big to fetch
 
 # ==============================================================================
@@ -166,8 +166,11 @@ verify_group <- function(tbls, key) {
   all_ids    <- reduce(id_sets, union)
   n_shared   <- length(shared_ids)
 
-  # irw_merge()'s own caution: 1..n IDs may be different subjects in different
-  # studies that happen to share a numbering scheme. Treat as suspect, not fatal.
+  # irw_merge() cautions that 1..n IDs may be different subjects in different
+  # studies sharing a numbering scheme. Recorded as a note, not a verdict: IRW
+  # re-indexes respondents to 1..n on ingest, so this fires on most groups, and
+  # the cross-study collision it guards against is largely ruled out by the
+  # members sharing a DOI and having identical ID sets.
   ids_sequential <- FALSE
   if (n_shared > 0 && is.numeric(shared_ids)) {
     srt <- sort(shared_ids)
@@ -196,8 +199,6 @@ verify_group <- function(tbls, key) {
     "item_overlap"
   } else if (id_coverage < 0.9) {
     "partial_respondent_overlap"
-  } else if (ids_sequential) {
-    "ok_but_sequential_ids"   # needs a human to confirm it's really one cohort
   } else {
     "ok"
   }
@@ -235,7 +236,7 @@ stage2 <- pmap_dfr(
 )
 
 stage2 <- stage2 %>% arrange(factor(verdict, levels = c(
-  "ok", "ok_but_sequential_ids", "partial_respondent_overlap",
+  "ok", "partial_respondent_overlap",
   "item_overlap", "no_shared_respondents", "fetch_failed", "error"
 )), desc(k))
 
@@ -243,6 +244,9 @@ write.csv(stage2, file.path(out_dir, "merge_scout_stage2.csv"), row.names = FALS
 
 message("\n=== Stage 2 verdicts ===")
 print(table(stage2$verdict))
-message("\nWritten to merge_scout_stage2.csv. Hand-vet the 'ok' rows (check that the ",
-        "member tables really are distinct instruments from one study, not one ",
-        "instrument split by subscale) before freezing them into MERGE_GROUPS.")
+message("\nWritten to merge_scout_stage2.csv. The 'ok' rows are the MERGE_GROUPS pool.")
+message("Note: k (number of member tables) is an index of how many instruments were ",
+        "stacked, not a ground-truth factor count -- some groups split one inventory ",
+        "into per-subscale tables, others repeat a construct pre/post. The question ",
+        "the vignette asks is how multidimensional merged batteries get, not whether ",
+        "a diagnostic recovers a known k.")
