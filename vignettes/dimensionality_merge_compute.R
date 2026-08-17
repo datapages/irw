@@ -513,15 +513,21 @@ build_merged <- function(tables) {
   long <- bind_rows(parts)
   long <- long[long$id %in% shared, ]
 
-  item_source <- long |> distinct(item, source_table)
-
   resp <- irw_long2resp(long[, c("id", "item", "resp")])
   resp$id <- NULL
   resp <- resp[, sapply(resp, function(x) length(unique(na.omit(x))) > 1), drop = FALSE]
 
+  # irw_long2resp() prefixes every column with "item_", so the source table has
+  # to be recovered from the column names rather than joined against the long
+  # data. Column names look like "item_<source table>::<item>".
+  item_source <- tibble(
+    item         = names(resp),
+    source_table = sub("::.*$", "", sub("^item_", "", names(resp)))
+  )
+
   list(
     resp        = resp,
-    item_source = item_source[item_source$item %in% names(resp), ],
+    item_source = item_source,
     n_shared    = length(shared),
     n_tables    = length(parts),
     tables      = map_chr(parts, function(p) p$source_table[1])
@@ -547,8 +553,27 @@ fit_merged <- function(group) {
                        error = function(e) { message("    tetrachoric failed: ", conditionMessage(e)); NULL })
   } else if (n_categories >= 3 && n_categories <= 10) {
     cor_method <- "polychoric"
-    cormat <- tryCatch(suppressWarnings(suppressMessages(psych::polychoric(resp, max.cat = 10, progress = FALSE)$rho)),
-                       error = function(e) { message("    polychoric failed: ", conditionMessage(e)); NULL })
+    # Merged batteries routinely stack instruments with different scale lengths
+    # (a 5-point scale beside a 6-point one), which leaves sparse cells in the
+    # bivariate tables. psych's default continuity correction (0.5) can then
+    # push polycor into an unusable matrix -- psych's own advice in that case
+    # is correct = 0, so retry that way before giving up.
+    poly <- function(correct) tryCatch(
+      suppressWarnings(suppressMessages(
+        psych::polychoric(resp, max.cat = 10, correct = correct, progress = FALSE)$rho
+      )),
+      error = function(e) { message("    polychoric (correct = ", correct, ") failed: ",
+                                    conditionMessage(e)); NULL }
+    )
+    cormat <- poly(0.5)
+    if (is.null(cormat) || anyNA(cormat)) {
+      message("    retrying polychoric with correct = 0")
+      retry <- poly(0)
+      if (!is.null(retry) && !anyNA(retry)) {
+        cormat     <- retry
+        cor_method <- "polychoric (correct = 0)"
+      }
+    }
   } else {
     cor_method <- "pearson"
     message("    n_categories = ", n_categories, " outside 2-10; falling back to Pearson correlations")

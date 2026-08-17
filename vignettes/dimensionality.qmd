@@ -452,15 +452,27 @@ the figures below drift as IRW's bibliography grows. Instead
 `dimensionality_merge_scout.R` reimplements the same grouping, applies the
 checks as *hard* filters, and freezes the survivors into
 `dimensionality_merge_compute.R`. Of 468 merge groups, 112 passed a metadata
-screen (3–12 member tables, identical N, 20–150 total items) and
-`r nrow(merge_df)` survived verification against the fetched data. Item overlap
-was the one substantive failure — five groups turned out to have the same
-instrument ingested twice under a single DOI.
+screen (3–12 member tables, identical N, 20–150 total items) and 107 survived
+verification against the fetched data — every member table sharing an identical
+respondent set with no overlapping items. Item overlap was the one substantive
+failure: five groups turned out to have the same instrument ingested twice
+under a single DOI.
 
 Each merged battery then goes through the *identical* pipeline used above:
 correlation matrix, eigen-decomposition, parallel analysis. Item names are
 prefixed with their source table, and the matrix is restricted to respondents
-present in every member table.
+present in every member table. `r nrow(merge_df)` of the 107 produced usable
+results.
+
+One wrinkle is specific to merging. Batteries routinely stack instruments with
+different scale lengths — a 5-point scale beside a 6-point one — which leaves
+sparse cells in the bivariate contingency tables and can drive
+`psych::polychoric()`'s default continuity correction into an unusable
+correlation matrix. Following psych's own advice in that situation, those cases
+are retried with `correct = 0`, which recovered
+`r sum(merge_df$cor_method == "polychoric (correct = 0)")` batteries that would
+otherwise have been dropped. This doesn't arise in the single-table pass, where
+one instrument means one response scale throughout.
 
 ```{r}
 #| label: fig-merge-vs-single
