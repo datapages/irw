@@ -153,8 +153,9 @@ ordinary ability/difficulty relationship.
 
 Because $\gamma = 0$ is a single point on the boundary of $\gamma \geq 0$,
 it can't be tested with an ordinary credible interval the way a normal
-parameter could. The package used here (`lsirm12pl`) implements the
-spike-and-slab model-selection extension from the original paper
+parameter could. The package used here [`lsirm12pl`; @go2025lsirm12pl]
+implements the spike-and-slab model-selection extension from the original
+paper
 [@ishwaran2005spike]: a mixture prior on $\log \gamma$ with a "spike"
 component concentrated near $\gamma = 0$ and a "slab" component allowing
 $\gamma > 0$, plus an indicator $\phi$ for which component is active at
@@ -167,6 +168,15 @@ going into this vignette (see Limitations) -- the current CRAN version of
 exposes spike-and-slab fitting directly via `lsirm1pl_ss()` (dichotomous
 items) and `lsirmgrm_ss()` (graded/polytomous items), so no hand-rolled
 WAIC comparison was needed.
+
+The graded-response variant is not merely a software convenience. The
+latent space graded response model has its own development and evaluation
+[@decarolis2026lsgrm], which extends the binary LSIRM of @jeon2021mapping
+to ordered-category responses and is aimed squarely at the Likert-scale
+self-report instruments that make up most of the study set below. That
+matters for how the results here should be read: the polytomous fits are
+an application of a model developed and studied for exactly this kind of
+data, not an off-label use of a binary method.
 
 ## Data and methods
 
@@ -267,9 +277,9 @@ For each table, `fit_lsirm()` in the compute script:
    (`credentialform_lnirt`, `depression_anxiety_stress`, `fisher_temperment`,
    `face_memory_test`, `artistic_preferences`).
 3. Fits the 1PL LSIRM with spike-and-slab (`lsirm1pl_ss()`) for dichotomous
-   tables, or the graded-response variant (`lsirmgrm_ss()`) for polytomous
-   tables, both with a 2D latent space and the full 15,000-iteration MCMC
-   settings (2,500 burn-in, thinned by 5), matching the original paper's
+   tables, or the graded-response variant [`lsirmgrm_ss()`;
+   @decarolis2026lsgrm] for polytomous tables, both with a 2D latent space
+   and the full 15,000-iteration MCMC settings (2,500 burn-in, thinned by 5), matching the original paper's
    defaults.
 4. Records posterior mean item and respondent positions, the $\gamma$
    posterior mean and 95% credible interval, the inclusion probability, and
@@ -636,13 +646,17 @@ specific tables, though the mixed result held across both downsampled and
 non-downsampled speeded tables, which argues against downsampling being
 the sole driver of the mixed picture.
 
-**The GRM extension is a package feature, not something the original paper
-evaluated.** 13 of 16 tables use `lsirmgrm_ss()`, the graded-response
-variant `lsirm12pl` provides, rather than the binary-response model the
-original paper's examples focus on. The null-calibration check validates
-that this specific extension isn't trivially miscalibrated, but its
-broader performance characteristics haven't been independently studied
-here beyond that one simulated scenario.
+**The graded-response variant is newer and less exercised than the binary
+model.** 13 of 16 tables use `lsirmgrm_ss()` rather than the
+binary-response model @jeon2021mapping's examples focus on. That variant
+does have its own methodological treatment [@decarolis2026lsgrm], so this
+is not an unevaluated package add-on -- but it has a far shorter track
+record of applied use than the binary LSIRM, and the simulation studies
+behind it necessarily cover a limited slice of the conditions IRW tables
+present. The null-calibration check above confirms it isn't trivially
+miscalibrated on one clean single-factor scenario; nothing here extends
+that to the skew, sparsity, and category imbalance of real self-report
+data.
 
 **Only the 1PL (Rasch-equivalent) latent-space variant was fit.** The
 package also exposes a 2PL LSIRM (`lsirm2pl_ss()`, allowing item
