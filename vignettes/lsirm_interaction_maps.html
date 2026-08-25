@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.10.18">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="dcterms.date" content="2026-08-25">
+<meta name="description" content="The Rasch model assumes local independence, but nothing about a standard fit warns you when that assumption fails. The Latent Space Item Response Model (LSIRM) adds a single respondent-item distance term and turns the same question into a picture: an “interaction map” where items and respondents that share unexplained structure are pulled close together. We fit it to 16 IRW tables – known testlet structure, suspected speededness, and blind exploratory draws – and find a split by response format so clean it forced a validity check on the estimator itself.">
+
+<title>Latent Space Item Response Models: Seeing Local Dependence as Geometry – Item Response Warehouse</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+/* CSS for citations */
+div.csl-bib-body { }
+div.csl-entry {
+  clear: both;
+}
+.hanging-indent div.csl-entry {
+  margin-left:2em;
+  text-indent:-2em;
+}
+div.csl-left-margin {
+  min-width:2em;
+  float:left;
+}
+div.csl-right-inline {
+  margin-left:2em;
+  padding-left:1em;
+}
+div.csl-indent {
+  margin-left: 2em;
+}</style>
+
+
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-2a3c10f9616b1f78fbb4509e1d5f2705.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+<script async="" src="https://www.googletagmanager.com/gtag/js?id=G-NM0Y0TP4RY"></script>
+
+<script type="text/javascript">
+
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
+</script>
+
+  <script src="https://cdnjs.cloudflare.com/polyfill/v3/polyfill.min.js?features=es6"></script>
+  <script defer="" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-chtml.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+const typesetMath = (el) => {
+  if (window.MathJax) {
+    // MathJax Typeset
+    window.MathJax.typeset([el]);
+  } else if (window.katex) {
+    // KaTeX Render
+    var mathElements = el.getElementsByClassName("math");
+    var macros = [];
+    for (var i = 0; i < mathElements.length; i++) {
+      var texText = mathElements[i].firstChild;
+      if (mathElements[i].tagName == "SPAN" && texText && texText.data) {
+        window.katex.render(texText.data, mathElements[i], {
+          displayMode: mathElements[i].classList.contains('display'),
+          throwOnError: false,
+          macros: macros,
+          fleqn: false
+        });
+      }
+    }
+  }
+}
+window.Quarto = {
+  typesetMath
+};
+</script>
+
+</head>
+
+<body class="nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="../index.html">
+    <span class="navbar-title">Item Response Warehouse</span>
+    </a>
+  </div>
+            <div id="quarto-search" class="" title="Search"></div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="../index.html"> 
+<span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-data" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Data</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-data">    
+        <li>
+    <a class="dropdown-item" href="../overview.html">
+ <span class="dropdown-text">Overview of IRW Data Standards</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../data.html">
+ <span class="dropdown-text">Browse the IRW Data</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../metadata.html">
+ <span class="dropdown-text">Metadata for IRW tables</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../docs.html">
+ <span class="dropdown-text">Data Documentation</span></a>
+  </li>  
+        <li><hr class="dropdown-divider"></li>
+        <li>
+    <a class="dropdown-item" href="../itemtext.html">
+ <span class="dropdown-text">Item Text Standard</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../itemtext_desc.html">
+ <span class="dropdown-text">Item Text Descriptives</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../itemtext_issues.html">
+ <span class="dropdown-text">Known Issues</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../itemtext_merge.html">
+ <span class="dropdown-text">Merging with IRW data</span></a>
+  </li>  
+        <li><hr class="dropdown-divider"></li>
+        <li>
+    <a class="dropdown-item" href="../standard.html">
+ <span class="dropdown-text">The Core IRW Data Standard</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../comps_standard.html">
+ <span class="dropdown-text">The Competition Data Standard</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../nominal_standard.html">
+ <span class="dropdown-text">The Nominal Data Standard</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../simsyn.html">
+ <span class="dropdown-text">Simulated and Synthetic Data</span></a>
+  </li>  
+        <li><hr class="dropdown-divider"></li>
+        <li>
+    <a class="dropdown-item" href="../contribute.html">
+ <span class="dropdown-text">Contributing Data to the IRW</span></a>
+  </li>  
+    </ul>
+  </li>
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-get-started" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">Get Started</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-get-started">    
+        <li>
+    <a class="dropdown-item" href="../getstarted.html">
+ <span class="dropdown-text">Getting Started</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../training.html">
+ <span class="dropdown-text">Training Resources</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../problems.html">
+ <span class="dropdown-text">Problem Set Examples</span></a>
+  </li>  
+    </ul>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="../vignettes/index.html"> 
+<span class="menu-text">Vignettes</span></a>
+  </li>  
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-about" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+ <span class="menu-text">About</span>
+    </a>
+    <ul class="dropdown-menu" aria-labelledby="nav-menu-about">    
+        <li>
+    <a class="dropdown-item" href="../about.html">
+ <span class="dropdown-text">About the IRW</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../research.html">
+ <span class="dropdown-text">Research!</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../othersites.html">
+ <span class="dropdown-text">Related data resources</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="../contact.html">
+ <span class="dropdown-text">Contact Us</span></a>
+  </li>  
+    </ul>
+  </li>
+</ul>
+            <ul class="navbar-nav navbar-nav-scroll ms-auto">
+  <li class="nav-item dropdown ">
+    <a class="nav-link dropdown-toggle" href="#" id="nav-menu-bi-github" role="link" data-bs-toggle="dropdown" aria-expanded="false">
+      <i class="bi bi-github" role="img">
+</i> 
+ <span class="menu-text"></span>
+    </a>
+    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="nav-menu-bi-github">    
+        <li>
+    <a class="dropdown-item" href="https://github.com/itemresponsewarehouse/misc/tree/main/data">
+ <span class="dropdown-text">Data processing</span></a>
+  </li>  
+        <li>
+    <a class="dropdown-item" href="https://itemresponsewarehouse.github.io/Rpkg/">
+ <span class="dropdown-text">irw: R package for managing IRW data</span></a>
+  </li>  
+    </ul>
+  </li>
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+</div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul class="collapse">
+  <li><a href="#motivation" id="toc-motivation" class="nav-link active" data-scroll-target="#motivation">Motivation</a></li>
+  <li><a href="#method-in-brief" id="toc-method-in-brief" class="nav-link" data-scroll-target="#method-in-brief">Method in brief</a></li>
+  <li><a href="#data-and-methods" id="toc-data-and-methods" class="nav-link" data-scroll-target="#data-and-methods">Data and methods</a></li>
+  <li><a href="#results" id="toc-results" class="nav-link" data-scroll-target="#results">Results</a></li>
+  <li><a href="#is-this-really-about-response-format-or-is-the-estimator-biased" id="toc-is-this-really-about-response-format-or-is-the-estimator-biased" class="nav-link" data-scroll-target="#is-this-really-about-response-format-or-is-the-estimator-biased">Is this really about response format, or is the estimator biased?</a></li>
+  <li><a href="#case-study-lsirm-and-q3-on-the-same-two-tables" id="toc-case-study-lsirm-and-q3-on-the-same-two-tables" class="nav-link" data-scroll-target="#case-study-lsirm-and-q3-on-the-same-two-tables">Case study: LSIRM and Q3 on the same two tables</a></li>
+  <li><a href="#does-the-stragglers-near-the-end-pattern-show-up" id="toc-does-the-stragglers-near-the-end-pattern-show-up" class="nav-link" data-scroll-target="#does-the-stragglers-near-the-end-pattern-show-up">Does the “stragglers near the end” pattern show up?</a></li>
+  <li><a href="#what-to-notice" id="toc-what-to-notice" class="nav-link" data-scroll-target="#what-to-notice">What to notice</a></li>
+  <li><a href="#limitations" id="toc-limitations" class="nav-link" data-scroll-target="#limitations">Limitations</a></li>
+  <li><a href="#reproducibility" id="toc-reproducibility" class="nav-link" data-scroll-target="#reproducibility">Reproducibility</a></li>
+  <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Latent Space Item Response Models: Seeing Local Dependence as Geometry</h1>
+</div>
+
+<div>
+  <div class="description">
+    <p>The Rasch model assumes local independence, but nothing about a standard fit warns you when that assumption fails. The Latent Space Item Response Model (LSIRM) adds a single respondent-item distance term and turns the same question into a picture: an “interaction map” where items and respondents that share unexplained structure are pulled close together. We fit it to 16 IRW tables – known testlet structure, suspected speededness, and blind exploratory draws – and find a split by response format so clean it forced a validity check on the estimator itself.</p>
+  </div>
+</div>
+
+
+<div class="quarto-title-meta">
+
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">August 25, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<div class="callout callout-style-default callout-note no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Note
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>This vignette – including the dataset search, the compute script, the analysis design, and the writing below – was produced largely by Claude (Anthropic), working from a task specification and with human review. Treat the methodological choices and interpretations accordingly, and check the compute script (<code>lsirm_interaction_maps_compute.R</code>) directly if you’re relying on the numbers here.</p>
+</div>
+</div>
+<section id="motivation" class="level2">
+<h2 class="anchored" data-anchor-id="motivation">Motivation</h2>
+<p>The Latent Space Item Response Model [LSIRM; <span class="citation" data-cites="jeon2021mapping">Jeon et al. (<a href="#ref-jeon2021mapping" role="doc-biblioref">2021</a>)</span>] adds a single extra term to the Rasch model: a distance penalty between each respondent and each item in a shared, unobserved 2D space, which lets the data decide whether local independence – the assumption that once you condition on a respondent’s position on the latent trait, their responses to different items are unrelated – actually holds. The <a href="../vignettes/local_dependence.html">local dependence vignette</a> checks the same assumption a different way, with Yen’s Q3: fit the model, subtract what it predicts, and see whether anything is left to correlate between item pairs. That residual approach answers “is independence violated” with a number per pair, but it doesn’t show <em>why</em> items and respondents interact, or which respondents are involved. LSIRM’s distance term does both at once: when it isn’t needed, the model collapses back to an ordinary Rasch fit; when it is, respondents and items that share unexplained structure are pulled close together in the space, and the result is directly visualizable: an <strong>interaction map</strong>. Local dependence stops being an abstract residual correlation and becomes a picture – clusters you can point at.</p>
+</section>
+<section id="method-in-brief" class="level2">
+<h2 class="anchored" data-anchor-id="method-in-brief">Method in brief</h2>
+<p>For a respondent <span class="math inline">\(j\)</span> and item <span class="math inline">\(i\)</span> with an ordinary Rasch model, the log-odds of a correct/endorsed response would be <span class="math inline">\(\theta_j - \beta_i\)</span> (respondent ability minus item difficulty). LSIRM adds one term:</p>
+<p><span class="math display">\[\text{logit}\, P(Y_{ji} = 1) = \theta_j + \beta_i - \gamma \lVert z_j - w_i \rVert\]</span></p>
+<p>where <span class="math inline">\(z_j\)</span> and <span class="math inline">\(w_i\)</span> are the respondent’s and item’s positions in a shared 2D Euclidean space, and <span class="math inline">\(\gamma \geq 0\)</span> scales how much that distance matters. When <span class="math inline">\(\gamma = 0\)</span>, the distance term vanishes and the model <em>is</em> the Rasch model; the further <span class="math inline">\(z_j\)</span> sits from <span class="math inline">\(w_i\)</span>, the more the distance term drags the predicted log-odds down relative to what <span class="math inline">\(\theta_j -
+\beta_i\)</span> alone would predict – interaction the main effects didn’t capture. Fitting the positions and <span class="math inline">\(\gamma\)</span> jointly by MCMC produces the interaction map: a scatter of item points and respondent points in the same space, where proximity signals shared unexplained structure (a testlet, a common stimulus, a shared response tendency) rather than an ordinary ability/difficulty relationship.</p>
+<p>Because <span class="math inline">\(\gamma = 0\)</span> is a single point on the boundary of <span class="math inline">\(\gamma \geq 0\)</span>, it can’t be tested with an ordinary credible interval the way a normal parameter could. The package used here [<code>lsirm12pl</code>; <span class="citation" data-cites="go2025lsirm12pl">Go et al. (<a href="#ref-go2025lsirm12pl" role="doc-biblioref">2025</a>)</span>] implements the spike-and-slab model-selection extension from the original paper <span class="citation" data-cites="ishwaran2005spike">(<a href="#ref-ishwaran2005spike" role="doc-biblioref">Ishwaran and Rao 2005</a>)</span>: a mixture prior on <span class="math inline">\(\log \gamma\)</span> with a “spike” component concentrated near <span class="math inline">\(\gamma = 0\)</span> and a “slab” component allowing <span class="math inline">\(\gamma &gt; 0\)</span>, plus an indicator <span class="math inline">\(\phi\)</span> for which component is active at each MCMC iteration. The posterior mean of <span class="math inline">\(\phi\)</span> – reported below as the <strong>inclusion probability</strong> – is the model-selection answer: values near 0 mean the data are consistent with an ordinary Rasch fit; values near 1 mean the interaction term is doing real work. This resolves an open question going into this vignette (see Limitations) – the current CRAN version of <code>lsirm12pl</code> (2.0.3, not the 1.3.9 assumed when this vignette was scoped) exposes spike-and-slab fitting directly via <code>lsirm1pl_ss()</code> (dichotomous items) and <code>lsirmgrm_ss()</code> (graded/polytomous items), so no hand-rolled WAIC comparison was needed.</p>
+<p>The graded-response variant is not merely a software convenience. The latent space graded response model has its own development and evaluation <span class="citation" data-cites="decarolis2026lsgrm">(<a href="#ref-decarolis2026lsgrm" role="doc-biblioref">De Carolis et al. 2026</a>)</span>, which extends the binary LSIRM of <span class="citation" data-cites="jeon2021mapping">Jeon et al. (<a href="#ref-jeon2021mapping" role="doc-biblioref">2021</a>)</span> to ordered-category responses and is aimed squarely at the Likert-scale self-report instruments that make up most of the study set below. That matters for how the results here should be read: the polytomous fits are an application of a model developed and studied for exactly this kind of data, not an off-label use of a binary method.</p>
+</section>
+<section id="data-and-methods" class="level2">
+<h2 class="anchored" data-anchor-id="data-and-methods">Data and methods</h2>
+<section id="study-set-selection" class="level3">
+<h3 class="anchored" data-anchor-id="study-set-selection">Study-set selection</h3>
+<p>MCMC here is far more expensive per table than the mirt-based models used elsewhere on this site – the original paper’s own examples ran 30-60 minutes per table at N~200-700, I~7-24 – so this vignette deliberately selects 16 tables rather than batch-fitting across all of IRW, in two rounds:</p>
+<p><strong>Round 1 (hypothesis-driven, 5 tables)</strong>, chosen to bracket the diagnostic:</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Tables with known item_family (testlet) structure -- ground truth on</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">#    which items *should* cluster if LSIRM is picking up real dependence.</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">#    Cross-referencing the local-dependence vignette's own item_family</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co">#    census: only 2 of ~800 IRW tables carry a usable grouping at all.</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">#    g308_sirt is dichotomous; chakraborty2026_IWAH_IRW is graded.</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Tables suspected of speededness -- candidates for the "respondents</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co">#    cluster near the last items" pattern described in the LSIRM paper's</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">#    discussion section. Cross-referenced against the (unmerged)</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co">#    speededness-vignette branch's own classification:</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co">#    credentialform_lnirt and nature_relatedness were both flagged</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co">#    "likely speeded" there.</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="co"># 3. A presumed-Rasch-like negative control with no known family/testlet</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="co">#    structure and no speededness suspicion: blum_2018_imak_bin.</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<p><strong>Round 2 (expansion, 11 more tables)</strong>, added after Round 1 cleared the go/no-go bar and raised a “what predicts a positive finding” question that needed more data points:</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 4. The remaining 5 tables classified "likely speeded" by the same</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="co">#    speededness screen, completing that bucket in full: brain_hemisphere,</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co">#    artistic_preferences, depression_anxiety_stress, fisher_temperment,</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co">#    face_memory_test.</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 5. A *blind* random sample (seed 20260723) of 6 more tables from</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co">#    irw_filter(n_items = c(5, 60), n_participants = c(100, 5000)),</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co">#    excluding every table already in the study set -- deliberately not</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="co">#    hand-picked for any hypothesis: sd3ypl_klimczak_2019_ses,</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co">#    BPAQ_Christopher_2024_PSS10, prpt_hellmann_2021_conscientiousness,</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="co">#    chen2026_sc, disgust_berger2014, autism_blotner_2025_s1_aq.</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>summary_df <span class="sc">|&gt;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">role =</span> <span class="fu">case_when</span>(</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>      table <span class="sc">==</span> <span class="st">"g308_sirt"</span>                    <span class="sc">~</span> <span class="st">"item_family"</span>,</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>      table <span class="sc">==</span> <span class="st">"chakraborty2026_IWAH_IRW"</span>     <span class="sc">~</span> <span class="st">"item_family"</span>,</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>      table <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"credentialform_lnirt"</span>, <span class="st">"nature_relatedness"</span>,</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"brain_hemisphere"</span>, <span class="st">"artistic_preferences"</span>,</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"depression_anxiety_stress"</span>, <span class="st">"fisher_temperment"</span>,</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>                   <span class="st">"face_memory_test"</span>)         <span class="sc">~</span> <span class="st">"speededness suspect"</span>,</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>      table <span class="sc">==</span> <span class="st">"blum_2018_imak_bin"</span>           <span class="sc">~</span> <span class="st">"negative control"</span>,</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span>                                     <span class="sc">~</span> <span class="st">"blind exploratory"</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    ),</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">domain =</span> <span class="fu">case_when</span>(</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>      table <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"g308_sirt"</span>, <span class="st">"credentialform_lnirt"</span>, <span class="st">"blum_2018_imak_bin"</span>) <span class="sc">~</span> <span class="st">"cognitive/ability"</span>,</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>      table <span class="sc">==</span> <span class="st">"face_memory_test"</span> <span class="sc">~</span> <span class="st">"cognitive/ability (graded)"</span>,</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span> <span class="sc">~</span> <span class="st">"personality/attitude/clinical"</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(table, role, domain, n_items, n_participants, n_categories) <span class="sc">|&gt;</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(role, domain) <span class="sc">|&gt;</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div id="tbl-scouting-set" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-scouting-set-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;1: The full 16-table study set. ‘Domain’ is a rough characterization from each table’s construct/context (cognitive-ability task vs.&nbsp;personality/attitude/clinical self-report scale), not an IRW metadata field – flagged because it turns out to matter (see below).
+</figcaption>
+<div aria-describedby="tbl-scouting-set-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 30%">
+<col style="width: 16%">
+<col style="width: 24%">
+<col style="width: 6%">
+<col style="width: 12%">
+<col style="width: 10%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">table</th>
+<th style="text-align: left;">role</th>
+<th style="text-align: left;">domain</th>
+<th style="text-align: right;">n_items</th>
+<th style="text-align: right;">n_participants</th>
+<th style="text-align: right;">n_categories</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">sd3ypl_klimczak_2019_ses</td>
+<td style="text-align: left;">blind exploratory</td>
+<td style="text-align: left;">personality/attitude/clinical</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">325</td>
+<td style="text-align: right;">4</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">BPAQ_Christopher_2024_PSS10</td>
+<td style="text-align: left;">blind exploratory</td>
+<td style="text-align: left;">personality/attitude/clinical</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">109</td>
+<td style="text-align: right;">5</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">prpt_hellmann_2021_conscientiousness</td>
+<td style="text-align: left;">blind exploratory</td>
+<td style="text-align: left;">personality/attitude/clinical</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">700</td>
+<td style="text-align: right;">5</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">chen2026_sc</td>
+<td style="text-align: left;">blind exploratory</td>
+<td style="text-align: left;">personality/attitude/clinical</td>
+<td style="text-align: right;">19</td>
+<td style="text-align: right;">195</td>
+<td style="text-align: right;">5</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">disgust_berger2014</td>
+<td style="text-align: left;">blind exploratory</td>
+<td style="text-align: left;">personality/attitude/clinical</td>
+<td style="text-align: right;">25</td>
+<td style="text-align: right;">700</td>
+<td style="text-align: right;">5</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">autism_blotner_2025_s1_aq</td>
+<td style="text-align: left;">blind exploratory</td>
+<td style="text-align: left;">personality/attitude/clinical</td>
+<td style="text-align: right;">40</td>
+<td style="text-align: right;">535</td>
+<td style="text-align: right;">4</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">g308_sirt</td>
+<td style="text-align: left;">item_family</td>
+<td style="text-align: left;">cognitive/ability</td>
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">700</td>
+<td style="text-align: right;">2</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">chakraborty2026_IWAH_IRW</td>
+<td style="text-align: left;">item_family</td>
+<td style="text-align: left;">personality/attitude/clinical</td>
+<td style="text-align: right;">30</td>
+<td style="text-align: right;">634</td>
+<td style="text-align: right;">5</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">blum_2018_imak_bin</td>
+<td style="text-align: left;">negative control</td>
+<td style="text-align: left;">cognitive/ability</td>
+<td style="text-align: right;">23</td>
+<td style="text-align: right;">317</td>
+<td style="text-align: right;">2</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">credentialform_lnirt</td>
+<td style="text-align: left;">speededness suspect</td>
+<td style="text-align: left;">cognitive/ability</td>
+<td style="text-align: right;">40</td>
+<td style="text-align: right;">700</td>
+<td style="text-align: right;">2</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">face_memory_test</td>
+<td style="text-align: left;">speededness suspect</td>
+<td style="text-align: left;">cognitive/ability (graded)</td>
+<td style="text-align: right;">40</td>
+<td style="text-align: right;">700</td>
+<td style="text-align: right;">5</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">nature_relatedness</td>
+<td style="text-align: left;">speededness suspect</td>
+<td style="text-align: left;">personality/attitude/clinical</td>
+<td style="text-align: right;">32</td>
+<td style="text-align: right;">700</td>
+<td style="text-align: right;">8</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">brain_hemisphere</td>
+<td style="text-align: left;">speededness suspect</td>
+<td style="text-align: left;">personality/attitude/clinical</td>
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">700</td>
+<td style="text-align: right;">5</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">artistic_preferences</td>
+<td style="text-align: left;">speededness suspect</td>
+<td style="text-align: left;">personality/attitude/clinical</td>
+<td style="text-align: right;">40</td>
+<td style="text-align: right;">700</td>
+<td style="text-align: right;">8</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">depression_anxiety_stress</td>
+<td style="text-align: left;">speededness suspect</td>
+<td style="text-align: left;">personality/attitude/clinical</td>
+<td style="text-align: right;">40</td>
+<td style="text-align: right;">700</td>
+<td style="text-align: right;">8</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">fisher_temperment</td>
+<td style="text-align: left;">speededness suspect</td>
+<td style="text-align: left;">personality/attitude/clinical</td>
+<td style="text-align: right;">40</td>
+<td style="text-align: right;">700</td>
+<td style="text-align: right;">8</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+</section>
+<section id="per-table-computation" class="level3">
+<h3 class="anchored" data-anchor-id="per-table-computation">Per-table computation</h3>
+<p>For each table, <code>fit_lsirm()</code> in the compute script:</p>
+<ol type="1">
+<li>Fetches the wide response matrix directly via <code>irw_fetch(table, resp = TRUE)</code>, and separately fetches the long format to recover <code>item_family</code> (if present) and a within-person item-presentation-order column (same fallback logic as the speededness vignette: a named order column if one exists, first-appearance order otherwise).</li>
+<li>Downsamples respondents to at most 700 and items to at most 40, mirroring the downsampling pattern already used in <a href="../vignettes/2pl_across_datasets.html">2PL across datasets</a>. Item downsampling always keeps the true last 10 items by presentation order (so the “stragglers near the end” check below stays meaningful) and systematically samples the rest; this triggered for every table with more than 40 items (<code>credentialform_lnirt</code>, <code>depression_anxiety_stress</code>, <code>fisher_temperment</code>, <code>face_memory_test</code>, <code>artistic_preferences</code>).</li>
+<li>Fits the 1PL LSIRM with spike-and-slab (<code>lsirm1pl_ss()</code>) for dichotomous tables, or the graded-response variant [<code>lsirmgrm_ss()</code>; <span class="citation" data-cites="decarolis2026lsgrm">De Carolis et al. (<a href="#ref-decarolis2026lsgrm" role="doc-biblioref">2026</a>)</span>] for polytomous tables, both with a 2D latent space and the full 15,000-iteration MCMC settings (2,500 burn-in, thinned by 5), matching the original paper’s defaults.</li>
+<li>Records posterior mean item and respondent positions, the <span class="math inline">\(\gamma\)</span> posterior mean and 95% credible interval, the inclusion probability, and BIC.</li>
+</ol>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>fit_lsirm <span class="ot">&lt;-</span> <span class="cf">function</span>(table_name) {</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  mat <span class="ot">&lt;-</span> <span class="fu">fetch_wide</span>(table_name)  <span class="co"># irw_fetch(resp = TRUE), cleaned, downsampled</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  fit <span class="ot">&lt;-</span> <span class="cf">if</span> (is_dichotomous) <span class="fu">lsirm1pl_ss</span>(mat, <span class="at">ndim =</span> <span class="dv">2</span>) <span class="cf">else</span> <span class="fu">lsirmgrm_ss</span>(mat, <span class="at">ndim =</span> <span class="dv">2</span>)</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  <span class="co"># gamma_estimate, pi_estimate (inclusion probability), z_estimate, w_estimate ...</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div class="callout callout-style-default callout-note no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Note
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>To reproduce with current IRW holdings, re-run <code>lsirm_interaction_maps_compute.R --full</code> and commit the updated <code>lsirmdata/lsirm_interaction_maps_results_full.rds</code>.</p>
+</div>
+</div>
+</section>
+</section>
+<section id="results" class="level2">
+<h2 class="anchored" data-anchor-id="results">Results</h2>
+<section id="does-the-data-need-the-interaction-term-at-all" class="level3">
+<h3 class="anchored" data-anchor-id="does-the-data-need-the-interaction-term-at-all">Does the data need the interaction term at all?</h3>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>summary_df <span class="sc">|&gt;</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">format   =</span> <span class="fu">ifelse</span>(is_dichotomous, <span class="st">"dichotomous"</span>, <span class="st">"polytomous/graded"</span>),</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">gamma_ci =</span> <span class="fu">sprintf</span>(<span class="st">"%.2f [%.2f, %.2f]"</span>, gamma_mean, gamma_lo, gamma_hi),</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">favors   =</span> <span class="fu">ifelse</span>(pi_estimate <span class="sc">&gt;</span> <span class="fl">0.5</span>, <span class="st">"Latent space (gamma &gt; 0)"</span>, <span class="st">"Rasch (gamma = 0)"</span>)</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">arrange</span>(is_dichotomous, <span class="fu">desc</span>(pi_estimate)) <span class="sc">|&gt;</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">select</span>(table, format, gamma_ci, pi_estimate, favors) <span class="sc">|&gt;</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>(<span class="at">col.names =</span> <span class="fu">c</span>(<span class="st">"Table"</span>, <span class="st">"Format"</span>, <span class="st">"Gamma [95% CI]"</span>, <span class="st">"P(gamma &gt; 0)"</span>, <span class="st">"Model favored"</span>),</span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>               <span class="at">digits =</span> <span class="dv">3</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div id="tbl-gamma" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-gamma-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;2: Posterior mean gamma (with 95% credible interval) and posterior inclusion probability for gamma &gt; 0, one row per table, sorted by response format then by P(gamma &gt; 0). Inclusion probability above 0.5 favors the latent-space model over an ordinary Rasch fit; below 0.5 favors Rasch.
+</figcaption>
+<div aria-describedby="tbl-gamma-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 11%">
+<col style="width: 22%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Table</th>
+<th style="text-align: left;">Format</th>
+<th style="text-align: left;">Gamma [95% CI]</th>
+<th style="text-align: right;">P(gamma &gt; 0)</th>
+<th style="text-align: left;">Model favored</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">prpt_hellmann_2021_conscientiousness</td>
+<td style="text-align: left;">polytomous/graded</td>
+<td style="text-align: left;">1.49 [1.39, 1.60]</td>
+<td style="text-align: right;">0.997</td>
+<td style="text-align: left;">Latent space (gamma &gt; 0)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">chakraborty2026_IWAH_IRW</td>
+<td style="text-align: left;">polytomous/graded</td>
+<td style="text-align: left;">1.19 [1.11, 1.27]</td>
+<td style="text-align: right;">0.995</td>
+<td style="text-align: left;">Latent space (gamma &gt; 0)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">sd3ypl_klimczak_2019_ses</td>
+<td style="text-align: left;">polytomous/graded</td>
+<td style="text-align: left;">1.26 [1.13, 1.42]</td>
+<td style="text-align: right;">0.994</td>
+<td style="text-align: left;">Latent space (gamma &gt; 0)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">depression_anxiety_stress</td>
+<td style="text-align: left;">polytomous/graded</td>
+<td style="text-align: left;">1.28 [1.23, 1.31]</td>
+<td style="text-align: right;">0.992</td>
+<td style="text-align: left;">Latent space (gamma &gt; 0)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">autism_blotner_2025_s1_aq</td>
+<td style="text-align: left;">polytomous/graded</td>
+<td style="text-align: left;">1.09 [1.03, 1.17]</td>
+<td style="text-align: right;">0.992</td>
+<td style="text-align: left;">Latent space (gamma &gt; 0)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">nature_relatedness</td>
+<td style="text-align: left;">polytomous/graded</td>
+<td style="text-align: left;">1.05 [1.01, 1.09]</td>
+<td style="text-align: right;">0.989</td>
+<td style="text-align: left;">Latent space (gamma &gt; 0)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">BPAQ_Christopher_2024_PSS10</td>
+<td style="text-align: left;">polytomous/graded</td>
+<td style="text-align: left;">0.99 [0.76, 1.20]</td>
+<td style="text-align: right;">0.984</td>
+<td style="text-align: left;">Latent space (gamma &gt; 0)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">face_memory_test</td>
+<td style="text-align: left;">polytomous/graded</td>
+<td style="text-align: left;">0.91 [0.84, 1.00]</td>
+<td style="text-align: right;">0.983</td>
+<td style="text-align: left;">Latent space (gamma &gt; 0)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">disgust_berger2014</td>
+<td style="text-align: left;">polytomous/graded</td>
+<td style="text-align: left;">0.88 [0.80, 0.96]</td>
+<td style="text-align: right;">0.980</td>
+<td style="text-align: left;">Latent space (gamma &gt; 0)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">chen2026_sc</td>
+<td style="text-align: left;">polytomous/graded</td>
+<td style="text-align: left;">0.90 [0.77, 1.06]</td>
+<td style="text-align: right;">0.979</td>
+<td style="text-align: left;">Latent space (gamma &gt; 0)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">fisher_temperment</td>
+<td style="text-align: left;">polytomous/graded</td>
+<td style="text-align: left;">0.84 [0.80, 0.92]</td>
+<td style="text-align: right;">0.978</td>
+<td style="text-align: left;">Latent space (gamma &gt; 0)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">brain_hemisphere</td>
+<td style="text-align: left;">polytomous/graded</td>
+<td style="text-align: left;">0.80 [0.75, 0.85]</td>
+<td style="text-align: right;">0.973</td>
+<td style="text-align: left;">Latent space (gamma &gt; 0)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">artistic_preferences</td>
+<td style="text-align: left;">polytomous/graded</td>
+<td style="text-align: left;">0.76 [0.72, 0.80]</td>
+<td style="text-align: right;">0.967</td>
+<td style="text-align: left;">Latent space (gamma &gt; 0)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">credentialform_lnirt</td>
+<td style="text-align: left;">dichotomous</td>
+<td style="text-align: left;">1.82 [1.53, 1.98]</td>
+<td style="text-align: right;">1.000</td>
+<td style="text-align: left;">Latent space (gamma &gt; 0)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">blum_2018_imak_bin</td>
+<td style="text-align: left;">dichotomous</td>
+<td style="text-align: left;">0.05 [0.01, 0.16]</td>
+<td style="text-align: right;">0.012</td>
+<td style="text-align: left;">Rasch (gamma = 0)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">g308_sirt</td>
+<td style="text-align: left;">dichotomous</td>
+<td style="text-align: left;">0.03 [0.00, 0.08]</td>
+<td style="text-align: right;">0.003</td>
+<td style="text-align: left;">Rasch (gamma = 0)</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p><strong>In plain terms:</strong> “inclusion probability” is the model’s own confidence, on a 0-to-1 scale, that the extra “interaction” ingredient is actually needed to explain the data – above 0.5 means “yes, include it”; near 1 means “yes, almost certainly”; near 0 means “no, an ordinary Rasch model already explains this fine.” Read that way, the table above says something striking: <strong>every single one of the 13 multi-point-scale tables</strong> – including all 6 that were picked completely at random, with no reason to expect anything special – comes back with the model over 96% sure the interaction ingredient is needed. The 3 right/wrong tables split the way we originally expected going in: two come back near-certain it’s <em>not</em> needed (<code>g308_sirt</code>, <code>blum_2018_imak_bin</code>), and one comes back the most certain of anything in the whole set that it <em>is</em> needed (<code>credentialform_lnirt</code>, at 99.96% confidence). A split that tracks question format (right/wrong vs.&nbsp;multi-point scale) this cleanly – especially once random, unrelated tables were thrown in and still followed the same pattern – is a red flag worth checking before trusting it as a real finding about these tables, rather than a quirk of how the tool handles multi-point scales. That check is the next section.</p>
+</section>
+<section id="interaction-maps" class="level3">
+<h3 class="anchored" data-anchor-id="interaction-maps">Interaction maps</h3>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>build_position_df <span class="ot">&lt;-</span> <span class="cf">function</span>(tbl) {</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  pos <span class="ot">&lt;-</span> positions[[tbl]]</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  z <span class="ot">&lt;-</span> <span class="fu">as.data.frame</span>(pos<span class="sc">$</span>z); <span class="fu">names</span>(z)[<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>] <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"dim1"</span>, <span class="st">"dim2"</span>)</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  z<span class="sc">$</span>type <span class="ot">&lt;-</span> <span class="st">"respondent"</span>; z<span class="sc">$</span>label <span class="ot">&lt;-</span> <span class="fu">rownames</span>(pos<span class="sc">$</span>z); z<span class="sc">$</span>family <span class="ot">&lt;-</span> <span class="cn">NA_character_</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  w <span class="ot">&lt;-</span> <span class="fu">as.data.frame</span>(pos<span class="sc">$</span>w); <span class="fu">names</span>(w)[<span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>] <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"dim1"</span>, <span class="st">"dim2"</span>)</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  w<span class="sc">$</span>type <span class="ot">&lt;-</span> <span class="st">"item"</span>; w<span class="sc">$</span>label <span class="ot">&lt;-</span> <span class="fu">rownames</span>(pos<span class="sc">$</span>w)</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>  fam <span class="ot">&lt;-</span> item_family_list[[tbl]]</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>  w<span class="sc">$</span>family <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(fam)) <span class="fu">as.character</span>(fam<span class="sc">$</span>item_family[<span class="fu">match</span>(w<span class="sc">$</span>label, fam<span class="sc">$</span>item)]) <span class="cf">else</span> <span class="cn">NA_character_</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>  df <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(z[, <span class="fu">c</span>(<span class="st">"dim1"</span>,<span class="st">"dim2"</span>,<span class="st">"type"</span>,<span class="st">"label"</span>,<span class="st">"family"</span>)],</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>                  w[, <span class="fu">c</span>(<span class="st">"dim1"</span>,<span class="st">"dim2"</span>,<span class="st">"type"</span>,<span class="st">"label"</span>,<span class="st">"family"</span>)])</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>  df<span class="sc">$</span>table <span class="ot">&lt;-</span> tbl</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>  df</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>position_df <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(<span class="fu">lapply</span>(summary_df<span class="sc">$</span>table, build_position_df))</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>panel_order <span class="ot">&lt;-</span> summary_df <span class="sc">|&gt;</span> <span class="fu">arrange</span>(is_dichotomous, <span class="fu">desc</span>(pi_estimate)) <span class="sc">|&gt;</span> <span class="fu">pull</span>(table)</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>panel_labels <span class="ot">&lt;-</span> <span class="fu">setNames</span>(</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">sprintf</span>(<span class="st">"%s (P[gamma&gt;0] = %.2f)"</span>, summary_df<span class="sc">$</span>table, summary_df<span class="sc">$</span>pi_estimate),</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>  summary_df<span class="sc">$</span>table</span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>position_df<span class="sc">$</span>panel <span class="ot">&lt;-</span> <span class="fu">factor</span>(panel_labels[position_df<span class="sc">$</span>table], <span class="at">levels =</span> panel_labels[panel_order])</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(position_df, <span class="fu">aes</span>(<span class="at">x =</span> dim1, <span class="at">y =</span> dim2, <span class="at">shape =</span> type)) <span class="sc">+</span></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">data =</span> <span class="fu">filter</span>(position_df, <span class="fu">is.na</span>(family)), <span class="at">colour =</span> irw_grey, <span class="at">alpha =</span> <span class="fl">0.5</span>, <span class="at">size =</span> <span class="fl">1.4</span>) <span class="sc">+</span></span>
+<span id="cb6-26"><a href="#cb6-26" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_point</span>(<span class="at">data =</span> <span class="fu">filter</span>(position_df, <span class="sc">!</span><span class="fu">is.na</span>(family)), <span class="fu">aes</span>(<span class="at">colour =</span> family), <span class="at">size =</span> <span class="fl">2.2</span>) <span class="sc">+</span></span>
+<span id="cb6-27"><a href="#cb6-27" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_shape_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="at">respondent =</span> <span class="dv">16</span>, <span class="at">item =</span> <span class="dv">17</span>)) <span class="sc">+</span></span>
+<span id="cb6-28"><a href="#cb6-28" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span>panel, <span class="at">scales =</span> <span class="st">"free"</span>, <span class="at">ncol =</span> <span class="dv">4</span>) <span class="sc">+</span></span>
+<span id="cb6-29"><a href="#cb6-29" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="cn">NULL</span>, <span class="at">y =</span> <span class="cn">NULL</span>, <span class="at">shape =</span> <span class="cn">NULL</span>, <span class="at">colour =</span> <span class="st">"item_family"</span>) <span class="sc">+</span></span>
+<span id="cb6-30"><a href="#cb6-30" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"bottom"</span>, <span class="at">strip.text =</span> <span class="fu">element_text</span>(<span class="at">size =</span> <span class="dv">8</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div class="cell-output-display">
+<div id="fig-interaction-maps" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-interaction-maps-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="lsirm_interaction_maps_files/figure-html/fig-interaction-maps-1.png" class="img-fluid figure-img" width="1152">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-interaction-maps-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;1: Interaction maps for all 16 study-set tables, grouped by response format (dichotomous first) and sorted by posterior inclusion probability within format. Points are posterior mean positions in the shared 2D latent space: circles are respondents, triangles are items. Items sharing a known item_family grouping (where available) are colored; all other points are grey. Panel titles show each table’s posterior inclusion probability for gamma &gt; 0.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p><code>chakraborty2026_IWAH_IRW</code> (top group, colored by <code>item_family</code>) shows visibly tighter item clustering by group than the two near-null dichotomous panels’ diffuse scatter. Beyond that one labeled case, though, the maps mostly demonstrate the same thing the gamma table does: broad, structured spread across nearly every polytomous panel regardless of role (speededness suspect or blind exploratory), and near-patternless noise in <code>g308_sirt</code> and <code>blum_2018_imak_bin</code>.</p>
+</section>
+</section>
+<section id="is-this-really-about-response-format-or-is-the-estimator-biased" class="level2">
+<h2 class="anchored" data-anchor-id="is-this-really-about-response-format-or-is-the-estimator-biased">Is this really about response format, or is the estimator biased?</h2>
+<p>A split this clean – every multi-point-scale table positive, most right/wrong tables null – is more consistent with a quirk in the tool than with 13 independent real discoveries. Put plainly: before believing “multi-point scales have hidden structure and right/wrong tests mostly don’t,” we need to rule out the boring explanation that the fitting method itself just runs hot on any multi-point-scale data, whether or not anything real is going on. So the question gets turned on the tool: does <code>lsirmgrm_ss()</code> (the multi-point-scale version of the fitting method) claim high confidence on <em>any</em> multi-point-scale data, even data we build by hand to have zero true interaction?</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Simulate a clean single-factor GRM dataset: realistic item discrimination</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="co"># and category thresholds, N/I matched to the study set, gamma = 0 by</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="co"># construction (no interaction structure of any kind).</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>a <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">rlnorm</span>(<span class="dv">20</span>, <span class="dv">0</span>, <span class="fl">0.3</span>), <span class="at">ncol =</span> <span class="dv">1</span>)</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>d <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">t</span>(<span class="fu">apply</span>(<span class="fu">matrix</span>(<span class="fu">rnorm</span>(<span class="dv">20</span> <span class="sc">*</span> <span class="dv">4</span>), <span class="at">ncol =</span> <span class="dv">4</span>), <span class="dv">1</span>, <span class="cf">function</span>(x) <span class="fu">sort</span>(x, <span class="at">decreasing =</span> <span class="cn">TRUE</span>))), <span class="at">ncol =</span> <span class="dv">4</span>)</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>sim_dat <span class="ot">&lt;-</span> mirt<span class="sc">::</span><span class="fu">simdata</span>(a, d, <span class="at">N =</span> <span class="dv">700</span>, <span class="at">itemtype =</span> <span class="st">"graded"</span>)</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>sim_fit <span class="ot">&lt;-</span> <span class="fu">lsirmgrm_ss</span>(sim_dat, <span class="at">ndim =</span> <span class="dv">2</span>, <span class="at">niter =</span> <span class="dv">15000</span>, <span class="at">nburn =</span> <span class="dv">2500</span>, <span class="at">nthin =</span> <span class="dv">5</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+</div>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">tibble</span>(</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">case             =</span> <span class="fu">c</span>(<span class="st">"Simulated null GRM data (this check)"</span>, <span class="st">"Real polytomous tables (range, n=13)"</span>),</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">pi_estimate      =</span> <span class="fu">c</span>(.cache<span class="sc">$</span>null_calibration<span class="sc">$</span>pi_estimate,</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>                       <span class="fu">paste0</span>(<span class="fu">sprintf</span>(<span class="st">"%.3f"</span>, <span class="fu">min</span>(summary_df<span class="sc">$</span>pi_estimate[<span class="sc">!</span>summary_df<span class="sc">$</span>is_dichotomous])),</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>                              <span class="st">" to "</span>,</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>                              <span class="fu">sprintf</span>(<span class="st">"%.3f"</span>, <span class="fu">max</span>(summary_df<span class="sc">$</span>pi_estimate[<span class="sc">!</span>summary_df<span class="sc">$</span>is_dichotomous])))),</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">gamma            =</span> <span class="fu">c</span>(<span class="fu">sprintf</span>(<span class="st">"%.3f"</span>, .cache<span class="sc">$</span>null_calibration<span class="sc">$</span>gamma_mean),</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>                       <span class="fu">paste0</span>(<span class="fu">sprintf</span>(<span class="st">"%.2f"</span>, <span class="fu">min</span>(summary_df<span class="sc">$</span>gamma_mean[<span class="sc">!</span>summary_df<span class="sc">$</span>is_dichotomous])),</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>                              <span class="st">" to "</span>,</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>                              <span class="fu">sprintf</span>(<span class="st">"%.2f"</span>, <span class="fu">max</span>(summary_df<span class="sc">$</span>gamma_mean[<span class="sc">!</span>summary_df<span class="sc">$</span>is_dichotomous]))))</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>(<span class="at">col.names =</span> <span class="fu">c</span>(<span class="st">"Case"</span>, <span class="st">"P(gamma &gt; 0)"</span>, <span class="st">"Gamma"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div id="tbl-null-calibration" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-null-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;3: Null-calibration check: lsirmgrm_ss() fit to simulated single-factor GRM data with no true interaction structure, versus the range of results actually observed across the 13 real polytomous study-set tables.
+</figcaption>
+<div aria-describedby="tbl-null-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th style="text-align: left;">Case</th>
+<th style="text-align: left;">P(gamma &gt; 0)</th>
+<th style="text-align: left;">Gamma</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">Simulated null GRM data (this check)</td>
+<td style="text-align: left;">0.0084</td>
+<td style="text-align: left;">0.056</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">Real polytomous tables (range, n=13)</td>
+<td style="text-align: left;">0.967 to 0.997</td>
+<td style="text-align: left;">0.76 to 1.49</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>The tool passes this check: fed data with no true interaction at all, it correctly comes back unconfident (0.008 out of 1, essentially “no”) rather than falsely claiming there’s something there. <strong>In plain terms, that rules out the laziest explanation</strong> – the method doesn’t just rubber-stamp “yes” on every multi-point-scale dataset regardless of content – and shifts the weight of evidence toward the 13-for-13 result being a real property of these particular tables, not a broken tool. But it doesn’t fully settle the question, because of a mix-up baked into which tables happened to land in each bucket:</p>
+<p><strong>Response format and what the tables actually measure are tangled together here, almost perfectly.</strong> Every right/wrong table in this set is a cognitive-ability task (testlet reading comprehension, a credentialing exam, figural analogies); every multi-point-scale table (with one partial exception, <code>face_memory_test</code>, a graded confidence/memory task rather than a personality scale) is a Likert-type personality, attitude, or clinical self-report scale (conscientiousness, disgust sensitivity, autism screening, depression/anxiety/stress, and so on). So we can’t yet tell whether the pattern above is really about <em>how questions are answered</em> (right/wrong vs.&nbsp;a 1-5 scale) or about <em>what’s being measured</em> (ability vs.&nbsp;personality/attitude) – the two happen to line up perfectly in this batch of tables, like two variables that always move together, making it impossible to say from this data alone which one is actually driving the result. Likert personality batteries are well known to carry genuine item redundancy – reverse-worded twins, near-duplicate phrasing, shared method variance, halo and acquiescence response styles – in a way ability tests are usually designed to avoid. So “format predicts a positive finding” in this particular batch may really be “domain predicts a positive finding,” with format riding along as a near-perfect proxy rather than a causal driver in its own right. Disentangling the two would need either a polytomous cognitive-ability battery or a dichotomous personality scale (rare in IRW, per the format breakdown in the <a href="../vignettes/local_dependence.html">local dependence vignette</a>) in the study set – neither was available in this pass.</p>
+<p><strong>One simulation is a spot check, not an exhaustive calibration.</strong> The null data above uses a fairly benign single-factor GRM with independently drawn, moderate item discriminations. Real personality-scale data can have features the simulation doesn’t – skewed trait distributions, floor/ ceiling effects, more categories with sparse endorsement – that could in principle inflate gamma through a channel other than genuine content overlap. This check makes the “always positive on polytomous data” story less likely, not impossible.</p>
+</section>
+<section id="case-study-lsirm-and-q3-on-the-same-two-tables" class="level2">
+<h2 class="anchored" data-anchor-id="case-study-lsirm-and-q3-on-the-same-two-tables">Case study: LSIRM and Q3 on the same two tables</h2>
+<p><code>g308_sirt</code> and <code>chakraborty2026_IWAH_IRW</code> aren’t just this vignette’s item_family picks – they’re also the <em>only two</em> IRW tables the <a href="../vignettes/local_dependence.html">local dependence vignette</a> found with usable <code>item_family</code> metadata, out of roughly 800 tables checked there. That gives a direct, same-table comparison between a residual-based diagnostic (Q3) and a geometric one (LSIRM):</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">tibble</span>(</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">table              =</span> <span class="fu">c</span>(<span class="st">"g308_sirt"</span>, <span class="st">"chakraborty2026_IWAH_IRW"</span>),</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">q3_prop_flagged    =</span> <span class="fu">c</span>(<span class="fl">0.021</span>, <span class="fl">0.260</span>),</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">q3_mean_abs        =</span> <span class="fu">c</span>(<span class="fl">0.065</span>, <span class="fl">0.147</span>),</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">lsirm_gamma        =</span> summary_df<span class="sc">$</span>gamma_mean[<span class="fu">match</span>(<span class="fu">c</span>(<span class="st">"g308_sirt"</span>, <span class="st">"chakraborty2026_IWAH_IRW"</span>), summary_df<span class="sc">$</span>table)],</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">lsirm_p_gamma_gt_0 =</span> summary_df<span class="sc">$</span>pi_estimate[<span class="fu">match</span>(<span class="fu">c</span>(<span class="st">"g308_sirt"</span>, <span class="st">"chakraborty2026_IWAH_IRW"</span>), summary_df<span class="sc">$</span>table)]</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>) <span class="sc">|&gt;</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>(<span class="at">digits =</span> <span class="dv">3</span>, <span class="at">col.names =</span> <span class="fu">c</span>(<span class="st">"Table"</span>, <span class="st">"Q3: prop. flagged"</span>, <span class="st">"Q3: mean |Q3|"</span>,</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>                                          <span class="st">"LSIRM: gamma"</span>, <span class="st">"LSIRM: P(gamma&gt;0)"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div id="tbl-q3-vs-lsirm" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-q3-vs-lsirm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;4: Q3 (residual correlation) and LSIRM (interaction-map) diagnostics compared directly on the two IRW tables with known item_family structure. Q3 numbers are from local_dependence_results.rds (local_dependence.qmd).
+</figcaption>
+<div aria-describedby="tbl-q3-vs-lsirm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 18%">
+<col style="width: 24%">
+<col style="width: 13%">
+<col style="width: 18%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Table</th>
+<th style="text-align: right;">Q3: prop. flagged</th>
+<th style="text-align: right;">Q3: mean |Q3|</th>
+<th style="text-align: right;">LSIRM: gamma</th>
+<th style="text-align: right;">LSIRM: P(gamma&gt;0)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">g308_sirt</td>
+<td style="text-align: right;">0.021</td>
+<td style="text-align: right;">0.065</td>
+<td style="text-align: right;">0.027</td>
+<td style="text-align: right;">0.003</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">chakraborty2026_IWAH_IRW</td>
+<td style="text-align: right;">0.260</td>
+<td style="text-align: right;">0.147</td>
+<td style="text-align: right;">1.191</td>
+<td style="text-align: right;">0.995</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>The two diagnostics agree closely. <code>chakraborty2026_IWAH_IRW</code> – a scale where <code>item_family</code> groups the <em>same base item repeated across measurement rounds</em> – shows both a high proportion of Q3-flagged pairs (26%) and a near-certain LSIRM inclusion probability (0.995); <code>g308_sirt</code> shows both a low flagged proportion (2%) and a near-zero inclusion probability (0.003). That agreement is reassuring on its own (two very different diagnostics landing on the same conclusion from the same data), but <code>g308_sirt</code> is also the more interesting result: its source paper – “A Comparison of Different Psychometric Approaches to Modeling Testlet Structures: An Example with C-Tests” (Schroeders, Robitzsch &amp; Schipolowski, 2014; see <code>lsirmdata/irw_references.bib</code>) – is explicitly <em>about</em> modeling testlet structure in that instrument. Both diagnostics here say the item_family grouping IRW carries for this particular table doesn’t translate into strong detectable local dependence in this data – a useful caution that <code>item_family</code> metadata describes a testlet <em>assignment</em>, not a guarantee that the assignment shows up as measurable dependence in every dataset carrying it.</p>
+</section>
+<section id="does-the-stragglers-near-the-end-pattern-show-up" class="level2">
+<h2 class="anchored" data-anchor-id="does-the-stragglers-near-the-end-pattern-show-up">Does the “stragglers near the end” pattern show up?</h2>
+<p>The original LSIRM paper’s discussion section describes a specific signature worth checking directly: in a speeded test, respondents who don’t finish should cluster near the <em>last</em> items in the interaction map, because the shared “ran out of time” interaction is exactly the kind of structure the distance term is built to absorb. All 7 tables classified <code>"likely speeded"</code> by the (unmerged) speededness-vignette branch’s independent omission-pattern screen are now in the study set, giving a much better-powered look at this than the original 2-table check.</p>
+<div class="cell">
+<details class="code-fold">
+<summary>Code</summary>
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>item_cluster_check <span class="ot">&lt;-</span> <span class="cf">function</span>(tbl) {</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  w   <span class="ot">&lt;-</span> positions[[tbl]]<span class="sc">$</span>w</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  ord <span class="ot">&lt;-</span> item_order[[tbl]]</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>  ord <span class="ot">&lt;-</span> ord[<span class="fu">match</span>(<span class="fu">rownames</span>(w), ord<span class="sc">$</span>item), ]</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  n   <span class="ot">&lt;-</span> <span class="fu">nrow</span>(ord)</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>  k   <span class="ot">&lt;-</span> <span class="fu">max</span>(<span class="dv">3</span>, <span class="fu">round</span>(<span class="fl">0.2</span> <span class="sc">*</span> n))</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>  last_items  <span class="ot">&lt;-</span> ord<span class="sc">$</span>item[<span class="fu">order</span>(<span class="sc">-</span>ord<span class="sc">$</span>position)][<span class="dv">1</span><span class="sc">:</span>k]</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>  first_items <span class="ot">&lt;-</span> ord<span class="sc">$</span>item[<span class="fu">order</span>(ord<span class="sc">$</span>position)][<span class="dv">1</span><span class="sc">:</span>k]</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>  d  <span class="ot">&lt;-</span> <span class="fu">as.matrix</span>(<span class="fu">dist</span>(w))</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>  li <span class="ot">&lt;-</span> <span class="fu">rownames</span>(w) <span class="sc">%in%</span> last_items</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>  fi <span class="ot">&lt;-</span> <span class="fu">rownames</span>(w) <span class="sc">%in%</span> first_items</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">tibble</span>(</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>    <span class="at">table           =</span> tbl,</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>    <span class="at">mean_dist_last  =</span> <span class="fu">mean</span>(d[li, li][<span class="fu">lower.tri</span>(d[li, li])]),</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>    <span class="at">mean_dist_first =</span> <span class="fu">mean</span>(d[fi, fi][<span class="fu">lower.tri</span>(d[fi, fi])]),</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>    <span class="at">mean_dist_all   =</span> <span class="fu">mean</span>(d[<span class="fu">lower.tri</span>(d)])</span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>  )</span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>speeded_tables <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">"credentialform_lnirt"</span>, <span class="st">"nature_relatedness"</span>, <span class="st">"brain_hemisphere"</span>,</span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>                    <span class="st">"artistic_preferences"</span>, <span class="st">"depression_anxiety_stress"</span>,</span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>                    <span class="st">"fisher_temperment"</span>, <span class="st">"face_memory_test"</span>)</span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a><span class="fu">bind_rows</span>(<span class="fu">lapply</span>(<span class="fu">c</span>(speeded_tables, <span class="st">"blum_2018_imak_bin"</span>, <span class="st">"g308_sirt"</span>), item_cluster_check)) <span class="sc">|&gt;</span></span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">matches_prediction =</span> <span class="fu">ifelse</span>(mean_dist_last <span class="sc">&lt;</span> mean_dist_first, <span class="st">"yes (last &lt; first)"</span>, <span class="st">"no"</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>  knitr<span class="sc">::</span><span class="fu">kable</span>(<span class="at">digits =</span> <span class="dv">2</span>, <span class="at">col.names =</span> <span class="fu">c</span>(<span class="st">"Table"</span>, <span class="st">"Mean dist. (last 20%)"</span>, <span class="st">"Mean dist. (first 20%)"</span>,</span>
+<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>                                          <span class="st">"Mean dist. (all pairs)"</span>, <span class="st">"Matches prediction?"</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</details>
+<div id="tbl-position-clustering" class="cell quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-position-clustering-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Table&nbsp;5: Mean pairwise distance among the last 20% and first 20% of items (by presentation position) in the fitted item space, versus the mean pairwise distance across all items, for all 7 speededness-suspect tables plus the two null-gamma tables as a reference. A tighter cluster among last-position items than first-position items (or than the overall average) would support the stragglers-near-the-end pattern; ‘last &lt; first’ marks cases matching that prediction.
+</figcaption>
+<div aria-describedby="tbl-position-clustering-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output-display">
+<table class="cell caption-top table table-sm table-striped small">
+<colgroup>
+<col style="width: 22%">
+<col style="width: 19%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 17%">
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">Table</th>
+<th style="text-align: right;">Mean dist. (last 20%)</th>
+<th style="text-align: right;">Mean dist. (first 20%)</th>
+<th style="text-align: right;">Mean dist. (all pairs)</th>
+<th style="text-align: left;">Matches prediction?</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">credentialform_lnirt</td>
+<td style="text-align: right;">0.30</td>
+<td style="text-align: right;">0.25</td>
+<td style="text-align: right;">1.28</td>
+<td style="text-align: left;">no</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">nature_relatedness</td>
+<td style="text-align: right;">1.58</td>
+<td style="text-align: right;">1.23</td>
+<td style="text-align: right;">2.64</td>
+<td style="text-align: left;">no</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">brain_hemisphere</td>
+<td style="text-align: right;">2.63</td>
+<td style="text-align: right;">1.90</td>
+<td style="text-align: right;">2.14</td>
+<td style="text-align: left;">no</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">artistic_preferences</td>
+<td style="text-align: right;">1.49</td>
+<td style="text-align: right;">1.91</td>
+<td style="text-align: right;">2.75</td>
+<td style="text-align: left;">yes (last &lt; first)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">depression_anxiety_stress</td>
+<td style="text-align: right;">1.15</td>
+<td style="text-align: right;">0.83</td>
+<td style="text-align: right;">2.36</td>
+<td style="text-align: left;">no</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">fisher_temperment</td>
+<td style="text-align: right;">2.17</td>
+<td style="text-align: right;">2.31</td>
+<td style="text-align: right;">2.57</td>
+<td style="text-align: left;">yes (last &lt; first)</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">face_memory_test</td>
+<td style="text-align: right;">0.55</td>
+<td style="text-align: right;">2.57</td>
+<td style="text-align: right;">1.66</td>
+<td style="text-align: left;">yes (last &lt; first)</td>
+</tr>
+<tr class="even">
+<td style="text-align: left;">blum_2018_imak_bin</td>
+<td style="text-align: right;">NaN</td>
+<td style="text-align: right;">NaN</td>
+<td style="text-align: right;">0.43</td>
+<td style="text-align: left;">NA</td>
+</tr>
+<tr class="odd">
+<td style="text-align: left;">g308_sirt</td>
+<td style="text-align: right;">0.46</td>
+<td style="text-align: right;">0.51</td>
+<td style="text-align: right;">0.45</td>
+<td style="text-align: left;">yes (last &lt; first)</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>With the full speeded bucket in hand, this comes back <strong>genuinely mixed, not a confirmation or a rejection</strong>. Of the 7 speeded-suspect tables, 3 show last-position items clustering tighter than first-position items as predicted (<code>artistic_preferences</code>, <code>fisher_temperment</code> weakly, <code>face_memory_test</code> strongly – its last-item cluster is less than a quarter the spread of its first-item cluster); the other 4 show the opposite (<code>credentialform_lnirt</code>, <code>nature_relatedness</code>, <code>brain_hemisphere</code>, <code>depression_anxiety_stress</code>). There’s no obvious feature separating the two groups (both directions include dichotomous and polytomous tables, small and large item counts). <code>face_memory_test</code> is the one clean example matching the paper’s discussion-section pattern qualitatively; the rest suggest that either the effect is real but table-specific (present only for some speeded-test designs or item types), or that this pairwise item-distance proxy is too indirect a test without linking it to actual respondent-level omission behavior (available in the speededness-vignette’s own cached data, but not joined in here). Reported as an open, mixed finding rather than forced into either direction.</p>
+</section>
+<section id="what-to-notice" class="level2">
+<h2 class="anchored" data-anchor-id="what-to-notice">What to notice</h2>
+<ul>
+<li><strong>Response format (or the domain it’s aliased with) is the dominant driver in this batch, not the specific mechanism we scoped for.</strong> Every one of 13 polytomous tables – known-structure, speeded-suspect, and 6 hypothesis-free blind draws alike – shows a decisive inclusion probability (&gt;0.96). Only the 3 dichotomous tables show real variation. This dwarfs the original “does known structure produce a positive finding” question the study was scoped around.</li>
+<li><strong>The estimator itself checks out on synthetic data</strong>, but the study design can’t yet separate <em>format</em> (dichotomous vs.&nbsp;graded) from <em>domain</em> (cognitive-ability task vs.&nbsp;personality/attitude self-report) – they’re nearly perfectly aliased here. That’s the single most important open question this pass raises, not a settled conclusion.</li>
+<li><strong>Clean separation still shows up where there’s independent ground truth.</strong> <code>chakraborty2026_IWAH_IRW</code>‘s known repeated-item structure produces visibly tighter clustering by <code>item_family</code> than the null dichotomous tables’ diffuse scatter, and agrees closely with the existing Q3 diagnostic on the same table.</li>
+<li><strong>A clean null is just as informative.</strong> <code>blum_2018_imak_bin</code> and <code>g308_sirt</code> (the latter despite carrying known testlet-structure metadata) both come back Rasch-like – and agree with Q3 on <code>g308_sirt</code> specifically, which is convergent evidence across two independent methods, not a fitting artifact.</li>
+<li><strong>The speededness “stragglers” signature is a genuine mixed bag</strong>, not a confirmation or a rejection, across the full 7-table speeded bucket: 3 tables show the predicted last-item clustering, 4 don’t. <code>face_memory_test</code> is the one strong, clean match to the paper’s discussion-section pattern.</li>
+<li><strong>MCMC cost is still the real constraint on scope.</strong> Even at 16 tables with respondent/item downsampling, this is a hand-assembled study set, not a systematic survey – see Limitations.</li>
+</ul>
+</section>
+<section id="limitations" class="level2">
+<h2 class="anchored" data-anchor-id="limitations">Limitations</h2>
+<p><strong>This is a hand-assembled study set, not a systematic survey – even after expansion.</strong> 16 tables were chosen across two rounds (5 hypothesis-driven, 11 more completing a bucket or drawn blind), not sampled to represent IRW as a whole. The 6 blind exploratory tables reduce selection bias somewhat but were drawn from a size-filtered pool (<code>n_items</code> 5-60, <code>n_participants</code> 100-5,000), not all of IRW. Nothing here should be read as a calibrated estimate of how often LSIRM-detectable interaction occurs across IRW generally.</p>
+<p><strong>Response format and instrument domain are confounded in this study set, and that’s the central open question, not a footnote.</strong> Every dichotomous table is a cognitive-ability task; nearly every polytomous table is a personality/attitude/clinical Likert scale. The null-calibration check above rules out the crudest explanation (a biased estimator that always says yes on graded data) but can’t by itself tell us whether format or domain is doing the causal work. Resolving this needs a polytomous cognitive-ability battery and/or a dichotomous personality scale in the study set – both are rare to nonexistent in current IRW holdings, per the format breakdown already documented in the <a href="../vignettes/local_dependence.html">local dependence vignette</a>.</p>
+<p><strong>Item downsampling is a compromise.</strong> Every table with more than 40 items (<code>credentialform_lnirt</code>, <code>depression_anxiety_stress</code>, <code>fisher_temperment</code>, <code>face_memory_test</code>, <code>artistic_preferences</code>) had items reduced, keeping the true last 10 by position and sampling the rest systematically. This could plausibly distort the stragglers-near-the-end check above for those specific tables, though the mixed result held across both downsampled and non-downsampled speeded tables, which argues against downsampling being the sole driver of the mixed picture.</p>
+<p><strong>The graded-response variant is newer and less exercised than the binary model.</strong> 13 of 16 tables use <code>lsirmgrm_ss()</code> rather than the binary-response model <span class="citation" data-cites="jeon2021mapping">Jeon et al. (<a href="#ref-jeon2021mapping" role="doc-biblioref">2021</a>)</span>’s examples focus on. That variant does have its own methodological treatment <span class="citation" data-cites="decarolis2026lsgrm">(<a href="#ref-decarolis2026lsgrm" role="doc-biblioref">De Carolis et al. 2026</a>)</span>, so this is not an unevaluated package add-on – but it has a far shorter track record of applied use than the binary LSIRM, and the simulation studies behind it necessarily cover a limited slice of the conditions IRW tables present. The null-calibration check above confirms it isn’t trivially miscalibrated on one clean single-factor scenario; nothing here extends that to the skew, sparsity, and category imbalance of real self-report data.</p>
+<p><strong>Only the 1PL (Rasch-equivalent) latent-space variant was fit.</strong> The package also exposes a 2PL LSIRM (<code>lsirm2pl_ss()</code>, allowing item discrimination to vary). A flat interaction map under the 1PL variant – as seen for the negative-control tables here – could in principle still mask discrimination-driven structure that a 2PL fit would catch; this is flagged as a natural extension rather than attempted in this pass.</p>
+</section>
+<section id="reproducibility" class="level2">
+<h2 class="anchored" data-anchor-id="reproducibility">Reproducibility</h2>
+<p>Results were computed on July 23, 2026 using 16 of 16 study-set tables at full production MCMC settings (15,000 iterations, 2,500 burn-in). To reproduce:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Re-run the compute script (from the project root)</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="co">#    -- fast scouting settings (for quick iteration on new tables):</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="fu">source</span>(<span class="st">"vignettes/lsirm_interaction_maps_compute.R"</span>)</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="co">#    -- full production settings (used for the numbers on this page):</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="fu">system</span>(<span class="st">"Rscript vignettes/lsirm_interaction_maps_compute.R --full"</span>)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. Re-render this page</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>quarto<span class="sc">::</span><span class="fu">quarto_render</span>(<span class="st">"vignettes/lsirm_interaction_maps.qmd"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="callout callout-style-default callout-tip no-icon callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+Tip
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>To cite the datasets used, run:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">irw_save_bibtex</span>(scouting_tables, <span class="at">output_file =</span> <span class="st">"lsirmdata/irw_references.bib"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
+<hr>
+</section>
+<section id="references" class="level2">
+
+
+
+
+</section>
+
+<div id="quarto-appendix" class="default"><section class="quarto-appendix-contents" role="doc-bibliography" id="quarto-bibliography"><h2 class="anchored quarto-appendix-heading">References</h2><div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-decarolis2026lsgrm" class="csl-entry" role="listitem">
+De Carolis, Ludovica, Inhan Kang, and Minjeong Jeon. 2026. <span>“A Latent Space Graded Response Model for <span>L</span>ikert-Scale Psychological Assessments.”</span> <em>Multivariate Behavioral Research</em> 61: 394–419.
+</div>
+<div id="ref-go2025lsirm12pl" class="csl-entry" role="listitem">
+Go, Dongyoung, Gwanghee Kim, Jina Park, Junyong Park, Minjeong Jeon, and Ick Hoon Jin. 2025. <span>“Lsirm12pl: An <span>R</span> Package for <span>B</span>ayesian Estimation of Latent Space Item Response Models.”</span> <em>The R Journal</em> 3.
+</div>
+<div id="ref-ishwaran2005spike" class="csl-entry" role="listitem">
+Ishwaran, Hemant, and J. Sunil Rao. 2005. <span>“Spike and Slab Variable Selection: Frequentist and Bayesian Strategies.”</span> <em>The Annals of Statistics</em> 33 (2): 730–73.
+</div>
+<div id="ref-jeon2021mapping" class="csl-entry" role="listitem">
+Jeon, Minjeong, Ick Hoon Jin, Michael Schweinberger, and Samuel Baugh. 2021. <span>“Mapping Unobserved Item-Respondent Interactions: A Latent Space Item Response Model with Interaction Map.”</span> <em>Psychometrika</em> 86 (2): 378–403.
+</div>
+</div></section></div></main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp("https:\/\/itemresponsewarehouse\.org");
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
