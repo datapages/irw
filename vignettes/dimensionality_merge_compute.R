@@ -481,6 +481,46 @@ MERGE_GROUPS <- list(
 )
 
 # ==============================================================================
+# 1b. Construct-duplication vetting
+#
+#     The scout's checks are structural: identical respondent sets, disjoint
+#     items. Neither notices when a "battery" of k tables covers fewer than k
+#     distinct constructs, which would inflate the instrument-count axis in the
+#     figures. The groups below were removed after a manual pass over member
+#     names and the `construct_name` field of irw_tags(). Three defects:
+#
+#       (a) one instrument split into per-subscale tables,
+#       (b) a composite scale sitting alongside its own component subscales,
+#       (c) one construct administered twice (pre/post), or one study ingested
+#           under two DOIs.
+#
+#     Only 31 of the 107 groups have any construct_name tagging, so this pass
+#     is a filter on what could be checked, not a guarantee about the rest;
+#     see the vignette's limitations section.
+# ==============================================================================
+
+EXCLUDED_GROUPS <- c(
+  # (a) single instrument split into subscales
+  afaya_2020_medication_knowledge          = "all 7 members tagged as subscales of one diabetes-knowledge questionnaire",
+  shan_2020_pd                             = "all 6 members are subscales of the Acculturative Stress Scale for International Students (ASSIS)",
+  anunciacao_2025_emotional_responsibility = "all 5 members are domains of the single CASEL framework instrument",
+  avilatamayo_2022_skills_dev              = "all 5 members tagged as the Internal Corporate Social Responsibility Questionnaire",
+  ghanbari_2016_helma_understand           = "all 7 members are the named subscales of HELMA (access, reading, understanding, appraisal, use, numeracy, communication)",
+
+  # (b) composite scale alongside its own components
+  dwyer_2025_genomics_os                   = "subscales of one genomics-attitudes survey, with 'Overall Support' a composite over the other five",
+  shu_2025_translation_mcpis               = "MacLeod Clark Professional Identity Scale alongside its own subscales",
+  lorenz_2016_resilience                   = "'psycap' is the PsyCap composite over hope/efficacy/resilience/optimism, all separately present; also optimism1/2 and efficacy1/2",
+
+  # (c) repeated administration or duplicate ingest
+  okeke2025_decision_confidence_pre        = "decision_confidence, ai_usefulness and cognitive_agility each appear pre and post; 10 tables cover ~6 constructs, one of which is a response-time table",
+  much_tte_2025_matrixreasoning            = "same five constructs and same 1244 respondents as test_taking_much_2025_ct under a second DOI; the better-tagged group is kept"
+)
+
+MERGE_GROUPS <- Filter(function(g) !(g$anchor %in% names(EXCLUDED_GROUPS)), MERGE_GROUPS)
+
+
+# ==============================================================================
 # 2. Build one merged response matrix
 # ==============================================================================
 

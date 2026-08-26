@@ -412,6 +412,7 @@ if (merge_ok) {
   merge_cormats <- .mcache$cormats
   merge_items   <- .mcache$item_sources
   merge_date    <- .mcache$date_run
+  merge_n_groups <- length(.mcache$merge_groups)
 } else {
   merge_df <- tibble(
     anchor = character(), n_tables = integer(), n_items = integer(),
@@ -420,6 +421,7 @@ if (merge_ok) {
     tables = character()
   )
   merge_cormats <- list(); merge_items <- list(); merge_date <- Sys.Date()
+  merge_n_groups <- 0L
 }
 ```
 
@@ -458,11 +460,25 @@ respondent set with no overlapping items. Item overlap was the one substantive
 failure: five groups turned out to have the same instrument ingested twice
 under a single DOI.
 
+Those checks are structural, though, and a group can pass all of them while
+still covering fewer distinct constructs than it has member tables — which
+would inflate the instrument-count axis in @fig-merge-nfact. A further pass
+over member names and the `construct_name` field of `irw_tags()` removed ten
+groups on three grounds: one instrument split into per-subscale tables (the
+seven `afaya_2020_*_knowledge` tables are all subscales of a single
+diabetes-knowledge questionnaire; the seven `ghanbari_2016_helma_*` tables are
+the named subscales of HELMA); a composite scale sitting beside its own
+components (`lorenz_2016_psycap` alongside hope, efficacy, resilience and
+optimism); and repeated administration or duplicate ingest (`okeke2025_*`
+measures three constructs both pre and post, and one study appears under two
+DOIs). The exclusions and their reasons are listed in `EXCLUDED_GROUPS` in
+`dimensionality_merge_compute.R`, leaving `r merge_n_groups` groups.
+
 Each merged battery then goes through the *identical* pipeline used above:
 correlation matrix, eigen-decomposition, parallel analysis. Item names are
 prefixed with their source table, and the matrix is restricted to respondents
-present in every member table. `r nrow(merge_df)` of the 107 produced usable
-results.
+present in every member table. `r nrow(merge_df)` of the `r merge_n_groups`
+produced usable results.
 
 One wrinkle is specific to merging. Batteries routinely stack instruments with
 different scale lengths — a 5-point scale beside a 6-point one — which leaves
@@ -640,11 +656,18 @@ to summarize `r nrow(summary_df)` tables in one figure.
 **Merged batteries index how much was stacked, not how many factors are
 really there.** The number of member tables in @fig-merge-nfact counts
 instruments a study contributed to IRW, and IRW's table boundaries don't
-always align with construct boundaries — some studies split one inventory
-into per-subscale tables, others include a construct twice (pre/post). The
-merge groups are filtered for complete respondent overlap and disjoint items,
-but not hand-vetted for construct distinctness, so the 1:1 line is a reference
-rather than a target.
+always align with construct boundaries. Groups where they clearly diverged —
+one inventory split into per-subscale tables, a composite beside its own
+components, a construct administered twice — were removed (see above), but
+that vetting leans on `construct_name`, which is populated for only about a
+third of the groups; the rest were judged on member names alone. Some residual
+construct duplication is therefore likely, and it would bias the instrument
+count upward, so the 1:1 line remains a reference rather than a target.
+Reassuringly, the comparison the section actually rests on is insensitive to
+this: dropping the ten clearest cases left the median first-factor variance for
+merged batteries unchanged (0.295) and moved the median eigenvalue ratio from
+3.04 to 2.87. What the vetting changes is the credibility of the
+instrument-count axis, not the single-versus-merged contrast.
 
 **Local dependence and low dimensionality aren't the same thing.** A table
 can show local item dependence (testlets, shared stems) without failing a
