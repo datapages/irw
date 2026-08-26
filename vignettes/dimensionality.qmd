@@ -136,7 +136,11 @@ multidimensional data doesn't produce an error — it produces a single
 composite ability estimate that quietly averages over whatever structure
 was actually there. This vignette asks a simple empirical question: across
 real IRW instruments, how often does the data actually look
-one-dimensional, and does that vary by construct type?
+one-dimensional, and does that vary by construct type? It then asks the
+complement — [what happens when several instruments given to the same
+respondents are merged back into one battery](#merged-batteries) — since a
+single IRW table is usually a single instrument, which caps how
+multidimensional any one table can be.
 
 We use two classic *exploratory* diagnostics, not a confirmatory test: the
 ratio of the first to second eigenvalue of the item correlation matrix
@@ -165,7 +169,10 @@ We cap items at 40 (and require at least 5) for compute reasons: tetrachoric
 and polychoric correlation matrices, and parallel analysis on top of them,
 both scale poorly as item count grows, and this needs to run across every
 eligible IRW table. `r r_all_candidates` tables met this criterion as of
-`r format(date_run, "%B %Y")`.
+`r format(date_run, "%B %Y")`. The cap also bounds how multidimensional
+anything in this pass can look; the [merged-battery
+section](#merged-batteries) relaxes it to 150 items for a smaller, curated set
+of multi-instrument studies.
 `r if (is_pilot) "This page currently runs on a small pilot subset (see the warning above); a full pass analyzes all of them." else paste0("This pass analyzes all ", r_n_tables_run, " of them.")`
 
 ### Per-table computation
@@ -390,6 +397,216 @@ math_row <- summary_df %>% filter(table == "4thgrade_math_sirt")
 
 `r if (nrow(bfi_row) > 0) paste0("The Big Five inventory -- 5 named traits by construction -- has a 1st/2nd eigenvalue ratio of ", round(bfi_row$ratio_12, 2), " and parallel analysis suggests ", bfi_row$nfact_suggested, " factors: both diagnostics correctly flag it as clearly multidimensional.") else "psychtools_bfi is not present in this run."` `r if (nrow(math_row) > 0) paste0("The math test has a ratio of ", round(math_row$ratio_12, 2), ", well above the personality battery's -- the diagnostic moves in the expected direction even though (see below) parallel analysis alone still suggests more than one factor for it.") else ""`
 
+### What happens when we merge instruments? {#merged-batteries}
+
+```{r}
+#| label: merge-setup
+#| echo: false
+
+merge_path <- "dimensionality_data/dimensionality_merge_results.rds"
+merge_ok   <- file.exists(merge_path)
+
+if (merge_ok) {
+  .mcache      <- readRDS(merge_path)
+  merge_df     <- .mcache$summary
+  merge_cormats <- .mcache$cormats
+  merge_items   <- .mcache$item_sources
+  merge_date    <- .mcache$date_run
+  merge_n_groups <- length(.mcache$merge_groups)
+} else {
+  merge_df <- tibble(
+    anchor = character(), n_tables = integer(), n_items = integer(),
+    n_participants = integer(), n_categories = integer(), cor_method = character(),
+    ratio_12 = numeric(), prop_var_1 = numeric(), nfact_suggested = integer(),
+    tables = character()
+  )
+  merge_cormats <- list(); merge_items <- list(); merge_date <- Sys.Date()
+  merge_n_groups <- 0L
+}
+```
+
+Everything above analyzes IRW tables one at a time, and that quietly caps how
+multidimensional the answer can be: an IRW table is usually a *single
+instrument*, so we have mostly been asking whether individual scales are
+internally unidimensional. The more interesting question for anyone fitting a
+model to a real assessment battery is what happens when a respondent's whole
+session is put back together.
+
+IRW supports exactly that. Tables sharing a DOI are typically several
+instruments from one study, given to one cohort, ingested separately — so
+stacking them recovers the full battery each respondent actually saw. The
+`irw` package exposes this directly:
+
+```{r}
+#| label: merge-demo
+#| eval: false
+
+# Discover and merge every table sharing a DOI (or BibTex) with this one:
+merged <- irw_merge("chakraborty2026_IWAH_IRW")
+```
+
+`irw_merge()` groups by DOI (falling back to BibTex), `rbind`s the members, and
+reports consistency checks — equal N, shared respondent IDs, no item overlap —
+before proceeding. We don't call it at render time for two reasons: its
+confirmation prompt returns its default in a non-interactive session, so those
+checks would pass as messages rather than filters; and a live lookup would let
+the figures below drift as IRW's bibliography grows. Instead
+`dimensionality_merge_scout.R` reimplements the same grouping, applies the
+checks as *hard* filters, and freezes the survivors into
+`dimensionality_merge_compute.R`. Of 468 merge groups, 112 passed a metadata
+screen (3–12 member tables, identical N, 20–150 total items) and 107 survived
+verification against the fetched data — every member table sharing an identical
+respondent set with no overlapping items. Item overlap was the one substantive
+failure: five groups turned out to have the same instrument ingested twice
+under a single DOI.
+
+Those checks are structural, though, and a group can pass all of them while
+still covering fewer distinct constructs than it has member tables — which
+would inflate the instrument-count axis in @fig-merge-nfact. A further pass
+over member names and the `construct_name` field of `irw_tags()` removed ten
+groups on three grounds: one instrument split into per-subscale tables (the
+seven `afaya_2020_*_knowledge` tables are all subscales of a single
+diabetes-knowledge questionnaire; the seven `ghanbari_2016_helma_*` tables are
+the named subscales of HELMA); a composite scale sitting beside its own
+components (`lorenz_2016_psycap` alongside hope, efficacy, resilience and
+optimism); and repeated administration or duplicate ingest (`okeke2025_*`
+measures three constructs both pre and post, and one study appears under two
+DOIs). The exclusions and their reasons are listed in `EXCLUDED_GROUPS` in
+`dimensionality_merge_compute.R`, leaving `r merge_n_groups` groups.
+
+Each merged battery then goes through the *identical* pipeline used above:
+correlation matrix, eigen-decomposition, parallel analysis. Item names are
+prefixed with their source table, and the matrix is restricted to respondents
+present in every member table. `r nrow(merge_df)` of the `r merge_n_groups`
+produced usable results.
+
+One wrinkle is specific to merging. Batteries routinely stack instruments with
+different scale lengths — a 5-point scale beside a 6-point one — which leaves
+sparse cells in the bivariate contingency tables and can drive
+`psych::polychoric()`'s default continuity correction into an unusable
+correlation matrix. Following psych's own advice in that situation, those cases
+are retried with `correct = 0`, which recovered
+`r sum(merge_df$cor_method == "polychoric (correct = 0)")` batteries that would
+otherwise have been dropped. This doesn't arise in the single-table pass, where
+one instrument means one response scale throughout.
+
+```{r}
+#| label: fig-merge-vs-single
+#| eval: !expr merge_ok
+#| fig-cap: "Proportion of item-correlation variance carried by the first factor, for single IRW tables (the analysis above) and for merged multi-instrument batteries. Merging shifts the distribution decisively downward -- exactly as it should, and a useful check that the diagnostic is measuring what we think it is."
+#| fig-height: 4
+
+compare_df <- bind_rows(
+  transmute(summary_df, kind = "Single table", prop_var_1),
+  transmute(merge_df,   kind = "Merged battery", prop_var_1)
+) %>%
+  mutate(kind = factor(kind, levels = c("Single table", "Merged battery")))
+
+ggplot(compare_df, aes(x = prop_var_1, fill = kind)) +
+  geom_density(alpha = 0.55, colour = NA) +
+  scale_fill_manual(values = c("Single table" = irw_grey, "Merged battery" = irw_blue)) +
+  labs(x = "Proportion of variance on the 1st factor", y = "Density", fill = NULL) +
+  theme(legend.position = "top")
+```
+
+```{r}
+#| label: merge-inline
+#| eval: !expr merge_ok
+#| echo: false
+
+med_single <- median(summary_df$prop_var_1, na.rm = TRUE)
+med_merged <- median(merge_df$prop_var_1, na.rm = TRUE)
+med_ratio_single <- median(summary_df$ratio_12, na.rm = TRUE)
+med_ratio_merged <- median(merge_df$ratio_12, na.rm = TRUE)
+med_nfact_merged <- median(merge_df$nfact_suggested, na.rm = TRUE)
+merge_k_range    <- range(merge_df$n_tables)
+```
+
+The first factor carries a median of `r round(100 * med_single)`% of the
+variance in single tables but only `r round(100 * med_merged)`% in merged
+batteries, and the median eigenvalue ratio falls from
+`r round(med_ratio_single, 2)` to `r round(med_ratio_merged, 2)`. This is the
+high-dimensional end of the warehouse: real sessions in which respondents
+answered `r merge_k_range[1]`–`r merge_k_range[2]` distinct instruments, with a
+median parallel-analysis count of `r med_nfact_merged` factors.
+
+```{r}
+#| label: fig-merge-nfact
+#| eval: !expr merge_ok
+#| fig-cap: "Parallel-analysis factor count against the number of instruments stacked into each battery. The dashed line is 1:1. Instrument count is an index of how much was merged, not a ground-truth factor count -- some groups split one inventory into per-subscale tables, others repeat a construct pre/post -- so read the line as a rough reference, not a target."
+#| fig-height: 4.5
+
+p <- merge_df %>%
+  mutate(tooltip = paste0(
+    "Anchor: ", anchor,
+    "<br>Instruments merged: ", n_tables,
+    "<br>PA factors: ", nfact_suggested,
+    "<br>Ratio: ", round(ratio_12, 2),
+    "<br>n_items: ", n_items,
+    "<br>N: ", n_participants
+  )) %>%
+  ggplot(aes(x = n_tables, y = nfact_suggested, text = tooltip)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = irw_red) +
+  geom_jitter(width = 0.15, height = 0.15, colour = irw_blue, alpha = 0.6, size = 1.8) +
+  labs(x = "Number of instruments merged", y = "Parallel-analysis factor count")
+
+ggplotly(p, tooltip = "text")
+```
+
+Two things are worth reading off @fig-merge-nfact. Parallel analysis does track
+instrument count — merged batteries land far above the single-factor solutions
+common in the single-table pass — but it scatters widely around the 1:1 line
+rather than recovering it, and the over-extraction discussed
+[below](#two-diagnostics-one-disagreement) means points above the line are
+expected. Points well *below* the line are the more interesting ones: batteries
+where several nominally distinct instruments collapse into fewer empirical
+dimensions than the study design implies.
+
+```{r}
+#| label: fig-merge-heatmap
+#| eval: !expr merge_ok
+#| fig-cap: "Item correlation matrix for one merged battery, with items ordered by source instrument and white lines marking instrument boundaries. Within-instrument blocks stand out against much weaker between-instrument correlation -- the structure a single eigenvalue ratio necessarily flattens into one number."
+#| fig-height: 6.5
+
+exemplar <- merge_df %>%
+  filter(!is.na(nfact_suggested), n_items <= 150, n_tables >= 5) %>%
+  filter(!sapply(anchor, function(a) is.null(merge_cormats[[a]]))) %>%
+  arrange(desc(n_tables)) %>%
+  slice(1)
+
+if (nrow(exemplar) == 1) {
+  cm  <- merge_cormats[[exemplar$anchor]]
+  isr <- merge_items[[exemplar$anchor]]
+  ord <- isr$item[order(isr$source_table, isr$item)]
+  ord <- ord[ord %in% rownames(cm)]
+  cm  <- cm[ord, ord]
+
+  src      <- isr$source_table[match(ord, isr$item)]
+  boundary <- which(diff(as.integer(factor(src, levels = unique(src)))) != 0) + 0.5
+
+  hm_df <- expand.grid(row = seq_along(ord), col = seq_along(ord)) %>%
+    mutate(r = as.vector(cm))
+
+  ggplot(hm_df, aes(x = col, y = row, fill = r)) +
+    geom_raster() +
+    geom_vline(xintercept = boundary, colour = "white", linewidth = 0.4) +
+    geom_hline(yintercept = boundary, colour = "white", linewidth = 0.4) +
+    scale_fill_gradient2(low = irw_red, mid = "white", high = irw_blue,
+                         midpoint = 0, limits = c(-1, 1), name = "r") +
+    scale_y_reverse(expand = c(0, 0)) +
+    scale_x_continuous(expand = c(0, 0)) +
+    coord_fixed() +
+    labs(x = NULL, y = NULL,
+         subtitle = paste0(exemplar$anchor, " -- ", exemplar$n_tables,
+                           " instruments, ", exemplar$n_items, " items, N = ",
+                           exemplar$n_participants)) +
+    theme(axis.text = element_blank(), axis.ticks = element_blank(),
+          panel.grid = element_blank())
+} else {
+  cat("No merged battery with a cached correlation matrix in this run.")
+}
+```
+
 ### Two diagnostics, one disagreement {#two-diagnostics-one-disagreement}
 
 The eigenvalue ratio and parallel analysis agree on *direction* — the math
@@ -436,6 +653,22 @@ comparably-sized factors and nothing else. The full eigenvalue spectrum
 alone; the ratio is used here as a single sortable number because it needs
 to summarize `r nrow(summary_df)` tables in one figure.
 
+**Merged batteries index how much was stacked, not how many factors are
+really there.** The number of member tables in @fig-merge-nfact counts
+instruments a study contributed to IRW, and IRW's table boundaries don't
+always align with construct boundaries. Groups where they clearly diverged —
+one inventory split into per-subscale tables, a composite beside its own
+components, a construct administered twice — were removed (see above), but
+that vetting leans on `construct_name`, which is populated for only about a
+third of the groups; the rest were judged on member names alone. Some residual
+construct duplication is therefore likely, and it would bias the instrument
+count upward, so the 1:1 line remains a reference rather than a target.
+Reassuringly, the comparison the section actually rests on is insensitive to
+this: dropping the ten clearest cases left the median first-factor variance for
+merged batteries unchanged (0.295) and moved the median eigenvalue ratio from
+3.04 to 2.87. What the vetting changes is the credibility of the
+instrument-count axis, not the single-versus-merged contrast.
+
 **Local dependence and low dimensionality aren't the same thing.** A table
 can show local item dependence (testlets, shared stems) without failing a
 global dimensionality check, and vice versa. See the [local dependence
@@ -447,8 +680,14 @@ diagnostic.
 Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
 
 ```r
-# 1. Re-run the compute script (from the project root)
-source("vignettes/dimensionality_compute.R")
+# 1. Re-run the compute scripts (from the project root)
+source("vignettes/dimensionality_compute.R")        # single-table pass
+source("vignettes/dimensionality_merge_compute.R")  # merged multi-instrument batteries
+
+# 1a. Optional: re-discover merge groups against current IRW holdings.
+#     Writes candidate CSVs for review; the vetted groups are then frozen
+#     into MERGE_GROUPS in dimensionality_merge_compute.R.
+source("vignettes/dimensionality_merge_scout.R")
 
 # 2. Re-render this page
 quarto::quarto_render("vignettes/dimensionality.qmd")
