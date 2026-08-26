@@ -64,6 +64,8 @@ All code runs with `echo: false`, `message: false`, `warning: false`, `error: fa
 
 ## TODOs
 
+- [ ] Every vignette should link to its own source code. Most Reproducibility sections name the companion script (e.g. `dimensionality_compute.R`) as plain text — 17 of 19 vignettes mention a script, but only 3 link to GitHub. Turn these into real links to the `.qmd` and any `*_compute.R` on GitHub, ideally via a shared include so the URL pattern lives in one place
+
 - [ ] Do more with `construct_name` (measure description) from the tags sheet — currently excluded from `tag_vals` in `_load-data-explore.qmd:96` so it never appears in filters or the table. Options: (1) add it to the info callout box in `index.qmd` (~line 378), (2) add a free-text search filter for it, (3) show it as a column in the dataset table
 
 Vignette-branch status, merge history, and the survey-vignette harmonization scaffold/checklist are tracked in Claude's memory, not here — see `project_vignette_harmonization_2026_07_21.md` and `project_vignette_branches_status.md`.
