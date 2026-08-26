@@ -14,7 +14,7 @@ quarto preview                        # Dev server on port 4200
 quarto render vignettes/cfa.qmd       # Render a single file
 ```
 
-The site deploys automatically via GitHub Actions (`.github/workflows/quarto_publish.yaml`) on push to `main`, publishing to `gh-pages`.
+The site is published by GitHub Actions (`.github/workflows/quarto_publish.yaml`) to `gh-pages`. This is **not** automatic: the workflow is `workflow_dispatch` only, so pushing to `main` does not deploy. Trigger a publish by hand — `gh workflow run quarto_publish.yaml`, or the "Render and Publish" workflow in the Actions UI.
 
 ## Environment Setup
 
