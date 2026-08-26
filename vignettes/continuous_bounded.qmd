@@ -69,6 +69,10 @@ if (cache_ok) res <- readRDS(cache_path)
 grid_cache_path <- "continuous_bounded_data/continuous_bounded_grid_results.rds"
 grid_cache_ok <- file.exists(grid_cache_path)
 if (grid_cache_ok) grid_res <- readRDS(grid_cache_path)
+
+info_cache_path <- "continuous_bounded_data/continuous_bounded_info_results.rds"
+info_cache_ok <- file.exists(info_cache_path)
+if (info_cache_ok) info_res <- readRDS(info_cache_path)
 ```
 
 ## Motivation
@@ -527,6 +531,172 @@ naive linear's and Samejima CRM's mass without translating it (steeper
 slope on the same $\theta$), and does nothing to Beta IRT's or Mueller
 CRSM's density, consistent with neither model having a discrimination
 parameter.
+
+### Comparing information curves across models {#information-curves}
+
+The densities above show *where* probability mass sits; item information
+shows *how precisely* each model can pin down $\theta$ from a response, as
+a function of $\theta$ itself. This is worth looking at on its own, because
+information curves can diverge sharply across these 4 models even for
+items with matched difficulty/discrimination, in a way the mean and
+density widgets above don't make obvious -- a point raised directly by
+Dylan Molenaar (author of the `BoundIRT` package discussed in
+[Limitations](#limitations) [@molenaar2026boundirt]) in feedback on an
+earlier draft of this vignette.
+
+Fisher information is computed the same way for all 4 models here, without
+relying on a model-specific closed form: $I(\theta) = E\!\left[\left(\dfrac{\partial}{\partial\theta}\log
+f(X\mid\theta)\right)^{2}\right]$, with the score obtained by central finite
+difference on each model's own log-density (the same `*Density()` functions
+used for the plots above) and the expectation evaluated by numerical
+integration over $X$. This is a numerical approximation, not an
+analytically derived information function -- adequate for a qualitative
+comparison of *shape* across models, but not a substitute for each model's
+published closed-form information function if a precise value is needed.
+
+```{ojs}
+//| echo: false
+//| output: false
+
+function scoreSquaredTimesDensity(x, theta, densityOfTheta, h) {
+  const fC = densityOfTheta(x, theta);
+  if (fC <= 1e-10) return 0;
+  const fP = densityOfTheta(x, theta + h);
+  const fM = densityOfTheta(x, theta - h);
+  const logFP = Math.log(Math.max(fP, 1e-300));
+  const logFM = Math.log(Math.max(fM, 1e-300));
+  const score = (logFP - logFM) / (2 * h);
+  return score * score * fC;
+}
+
+function fisherInformationAt(densityOfTheta, theta, lo, hi, n, h = 0.001) {
+  return simpson((x) => scoreSquaredTimesDensity(x, theta, densityOfTheta, h), lo, hi, n);
+}
+
+// For the 3 bounded-response models, integrating over x directly on a fixed
+// grid (as fisherInformationAt above does) silently fails at extreme
+// parameter values: a steep model-implied slope can concentrate almost all
+// response density into an x-window far narrower than the grid resolves,
+// so the integral is undercounted and the curve falsely collapses toward 0
+// -- caught by checking Samejima CRM against its own closed form (Fisher
+// info there is analytically alpha^2/sigma^2, exactly constant in theta,
+// since Z is a Gaussian location family and Fisher information is
+// invariant under the 1-to-1 Z->X transform); the naive grid showed a false
+// collapse near the theta range's edges at high slider values where the
+// true curve is flat. Substituting z = logit(x) as the integration
+// variable fixes this generically: a spike near x=0 or x=1 becomes a
+// normal-width bump on the z scale, which a uniform grid over z resolves
+// correctly regardless of how extreme the original x-concentration was.
+function fisherInformationBoundedAt(densityOfTheta, theta, h = 0.001, zlo = -30, zhi = 30, n = 400) {
+  const integrand = (z) => {
+    const x = 1 / (1 + Math.exp(-z));
+    const jac = x * (1 - x); // dx/dz
+    const fC = densityOfTheta(x, theta) * jac;
+    if (fC <= 1e-300) return 0;
+    const fP = densityOfTheta(x, theta + h) * jac;
+    const fM = densityOfTheta(x, theta - h) * jac;
+    const score = (Math.log(Math.max(fP, 1e-300)) - Math.log(Math.max(fM, 1e-300))) / (2 * h);
+    return score * score * fC;
+  };
+  return simpson(integrand, zlo, zhi, n);
+}
+```
+
+```{ojs}
+//| echo: false
+
+info_b_input = Inputs.range([-2, 2], {value: 0, step: 0.1, label: "Item difficulty / δⱼ (b)"})
+info_a_input = Inputs.range([0.3, 2.5], {value: 1, step: 0.1, label: "Discrimination (a)"})
+info_tau_input = Inputs.range([-2, 4], {value: 1, step: 0.1, label: "Beta IRT dispersion (τⱼ)"})
+info_b = Generators.input(info_b_input)
+info_a = Generators.input(info_a_input)
+info_tau = Generators.input(info_tau_input)
+
+html`<div style="display:flex; flex-wrap:wrap; gap:2rem; align-items:center;">${info_b_input}${info_a_input}${info_tau_input}</div>`
+```
+
+```{ojs}
+//| echo: false
+
+info_naive_of    = (x, th) => naiveDensity(x, th, info_b, info_a, fixed_nl_sigma)
+info_beta_of     = (x, th) => betaIrtDensity(x, th, info_b, info_tau)
+info_samejima_of = (x, th) => samejimaDensity(x, th, info_a, info_b, fixed_sam_sigma)
+info_mueller_of  = (x, th) => muellerDensity(x, th, info_b, fixed_mu_lambda)
+
+info_curve_data = theta_grid.flatMap((theta) => {
+  // naive linear is unbounded, so its integration window has to track the
+  // (possibly far-off-[0,1]) mean as theta/b/a move, unlike the 3 bounded
+  // models, whose domain is fixed at [0,1] regardless of parameters
+  const nlMean = naiveMean(theta, info_b, info_a);
+  const nlLo = nlMean - 8 * fixed_nl_sigma;
+  const nlHi = nlMean + 8 * fixed_nl_sigma;
+  return [
+    { theta, model: "naive_linear", info: fisherInformationAt(info_naive_of, theta, nlLo, nlHi, 100) },
+    { theta, model: "beta_irt",     info: fisherInformationBoundedAt(info_beta_of, theta) },
+    { theta, model: "samejima_crm", info: fisherInformationBoundedAt(info_samejima_of, theta) },
+    { theta, model: "muller_corsm", info: fisherInformationBoundedAt(info_mueller_of, theta) }
+  ];
+})
+
+Plot.plot({
+  width: 900,
+  height: 380,
+  x: {label: "Ability (θ)", domain: [-3, 3]},
+  y: {label: "Fisher information I(θ)"},
+  color: {
+    domain: Object.keys(model_colors),
+    range: Object.values(model_colors),
+    legend: true,
+    tickFormat: (d) => model_labels[d]
+  },
+  marks: [
+    Plot.line(info_curve_data.filter((d) => d.model === "naive_linear"), {
+      x: "theta", y: "info", stroke: "model", strokeDasharray: "4,3"
+    }),
+    Plot.line(info_curve_data.filter((d) => d.model !== "naive_linear"), {
+      x: "theta", y: "info", stroke: "model"
+    })
+  ]
+})
+```
+
+With difficulty/discrimination matched across all 4 models (drag $b$ and
+$a$ above and watch every curve move together), the shapes still don't
+match -- and not along the split you might expect from "3 bounded models
+vs. 1 unbounded baseline." **Two of the 4 curves are exactly flat in
+$\theta$, for two different reasons.** Naive linear's information (dashed
+grey) is constant because it's a plain Gaussian location family with
+linear mean, where information reduces to $a^2/\sigma^2$ independent of
+$\theta$ -- unsurprising, since the model is unbounded and pays no
+attention to $[0,1]$ at all. Samejima CRM's information (red) is *also*
+exactly constant, at $\alpha^2/\sigma^2$ -- a much less obvious fact, since
+the model's raw-scale density is visibly non-Gaussian and does change
+shape with $\theta$ (see the density widget above). The resolution: CRM
+models a Gaussian location family on the *transformed* scale
+($Z=\alpha(\theta-b)+e$), and Fisher information is invariant under any
+one-to-one transform of the observed data -- so observing the bounded
+$X=\text{logistic}(Z)$ carries exactly the same information about $\theta$
+as observing $Z$ directly would, at every $\theta$, regardless of how
+skewed $X$'s own density looks. **Only Beta IRT and Mueller CRSM actually
+have $\theta$-varying information**, and for different reasons than each
+other: Beta IRT's (blue/purple) is single-peaked and comes closest to the
+"more informative in the middle of the range" intuition information curves
+usually carry, with $\tau_j$ (which has no effect on any model's mean)
+reshaping its height and width without moving it; Mueller CRSM's (green)
+is much flatter overall but still genuinely slopes, asymmetrically once
+$\lambda\neq0$, rather than sitting dead level like naive linear's or
+Samejima's. So two analysts fitting ostensibly comparable "bounded IRT"
+models to the same item can walk away with opposite conclusions about
+whether that item's precision even depends on ability at all --
+exactly the kind of divergence a mean-curve or single-density snapshot
+doesn't surface, and the reason it's included here as its own comparison
+rather than folded into an existing widget.
+
+See [Empirical information curves](#empirical-information-curves-the-primary-real-table)
+in [Real data](#real-data) below for the same comparison using item
+parameters actually fitted to a real IRW table, rather than the
+hand-set values above -- including a genuine estimation failure the
+sliders here can't produce.
 
 ### Estimation and model comparison
 
@@ -1127,6 +1297,91 @@ concentration at the ceiling specifically, or some combination -- matters
 in a way the simulated version doesn't fully capture; see that section
 for the actual numbers and what was tried.
 
+### Empirical information curves: the primary real table
+
+The [interactive widget in Model equations](#comparing-information-curves-across-models)
+uses illustrative, hand-set item parameters. Whether the same divergence
+shows up with *actually fitted* item parameters is a separate, more
+useful question -- so all 4 core specs (5 counting both Beta IRT
+dispersion variants) were refit on the full primary real table,
+`lsbq_maleki_2025_non_persian_proficiency` (3 items, $N=308$; no train/test
+split here, since this is about what the fitted item parameters imply, not
+held-out prediction), and each fitted item's Fisher information curve
+computed the same numerical way as the widget above (central-difference
+score, adaptive quadrature over $X$) -- see
+`continuous_bounded_info_compute.R`.
+
+```{r}
+#| label: fig-real-info-curves
+#| fig-width: 9
+#| fig-height: 5
+if (info_cache_ok) {
+  ic <- info_res$info_curves |>
+    mutate(model = factor(model, levels = names(model_colors)))
+  # naive linear's item 17.1.W is a Heywood case (see note below) whose
+  # information is ~7 orders of magnitude larger than every other
+  # curve -- clipping the y-axis (not the underlying data) so the other
+  # 14 curves stay legible; the clipped point is called out in the prose
+  # just below instead of a plot caption, which would clip the same way
+  # the title/legend did at this facet width.
+  ic |>
+    ggplot(aes(x = theta, y = info, color = model)) +
+    geom_line(linewidth = 0.8) +
+    scale_color_manual(values = model_colors, labels = model_labels, name = NULL) +
+    guides(color = guide_legend(nrow = 2, byrow = TRUE)) +
+    coord_cartesian(ylim = c(0, 8)) +
+    facet_wrap(~item, ncol = 3) +
+    labs(x = expression(paste("Ability (", theta, ")")), y = "Fisher information I(θ)",
+         title = "Empirical item information, all 4 fitted specs",
+         subtitle = info_res$table) +
+    theme(legend.position = "bottom", plot.title = element_text(size = 13))
+} else {
+  cat("Info cache not found -- run continuous_bounded_info_compute.R first.")
+}
+```
+
+Naive linear's curve for item `17.1.W` is off this scale entirely
+(~$1.2\times10^7$, a Heywood case -- see below) and isn't visible in the
+plot above; the y-axis is clipped at 8 to keep the other 14 curves legible.
+Three things stand out, confirming the widget's story on real fitted
+items and adding one it can't show:
+
+- **Naive linear and Samejima CRM are exactly flat here too, on every one
+  of the 3 real items** (their `min`/`median`/`max` in the underlying data
+  agree to 4+ significant figures per item -- see
+  `continuous_bounded_info_compute.R`'s output). This is the same
+  transform-invariance fact from the widget above, not a coincidence of
+  round slider values: CRM's information genuinely doesn't depend on which
+  real item or table it's fit to, only on that item's own $\alpha_j/\sigma_j$
+  ratio.
+- **Beta IRT is the only spec that visibly peaks and tapers across all 3
+  items, and *where* it peaks moves a lot from item to item.** Item-varying
+  dispersion peaks around $\theta\approx-0.75$ on `17.1.R`, $\theta\approx
+  -0.25$ on `17.1.W`, but $\theta\approx-2.5$ on `17.1.S` -- the same model
+  spec, refit per item, locating its most-informative region in
+  substantially different places. Mueller CRSM is technically non-constant
+  too on every item, but far more mildly (its range is under a factor of
+  1.6 on each item, against Beta IRT's factor of roughly 2.3-7 across the
+  2 dispersion variants and 3 items), consistent with
+  the widget's own comparison above.
+- **Naive linear's item `17.1.W` fit is degenerate.** Its CFA residual
+  variance estimate for that item is slightly *negative*
+  ($\widehat{\sigma}^2\approx -0.006$, a lavaan Heywood case -- the fit
+  itself warns `some estimated ov variances are negative`), which the
+  information formula ($a^2/\sigma^2$ for this model, floored at a tiny
+  positive value once $\sigma^2$ is clamped away from 0) turns into an
+  information curve on the order of $10^7$ -- not a real measurement
+  property, just a division-by-near-zero artifact of an unstable variance
+  estimate on this particular item. This is a genuine failure mode the
+  hand-set widget above can't show (its sliders never let $\sigma\to0$),
+  and a concrete reason to distrust naive linear's information (not just
+  its distributional shape, already shown unreliable elsewhere in this
+  section) on any item where its own fit is this close to a boundary case.
+
+This vignette's other 10 real tables were not checked for the same
+pattern -- this is a one-table illustration, not a systematic audit of
+every fitted item across all 11 tables.
+
 ### Held-out fit across all 11 real tables
 
 ```{r}
@@ -1430,11 +1685,12 @@ Known gaps this vignette does not yet address:
   (Beta IRT, $N=300$/$J=8$) -- not repeated for Samejima CRM or Mueller
   CoRSM, or at other N/J combinations.
 - **Potential extension: the `BoundIRT` R package** (Molenaar, CRAN, July
-  2026) fits Beta IRT, Samejima IRT, Simplex IRT, and Normal IRT under one
-  Bayesian (Stan/MCMC) framework, which would let the held-out comparison
-  above be replaced with a principled fully-marginalized log-likelihood
-  (bridge sampling) or LOOIC/WAIC -- a direct fix for the ad hoc
-  bin-probability metric flagged just below -- and it natively models
+  2026; documented in a preprint aiming for journal submission
+  [@molenaar2026boundirt]) fits Beta IRT, Samejima IRT, Simplex IRT, and
+  Normal IRT under one Bayesian (Stan/MCMC) framework, which would let the
+  held-out comparison above be replaced with a principled fully-marginalized
+  log-likelihood (bridge sampling) or LOOIC/WAIC -- a direct fix for the ad
+  hoc bin-probability metric flagged just below -- and it natively models
   zero/one inflation (Molenaar et al.'s (2022) extension [@molenaar2022zero]), which none of the
   4 specs here handle despite the boundary piling documented above. It does
   not implement Mueller's CRSM, so that spec would still need the current
