@@ -31,7 +31,7 @@ Data is fetched live from **Redivis** using `REDIVIS_API_TOKEN` (required env va
 ### Content
 - Root `.qmd` files are top-level pages (index, about, data, standards, etc.)
 - `vignettes/` — standalone analysis tutorials; some have companion `*_compute.R` + `.Rout` files for pre-computed heavy outputs
-- `components/` — reusable Quarto includes: `_hist.qmd` (Observable histogram), `_interval.qmd` (range slider), `_tol.qmd` (tolerance slider), `_style.qmd` (CSS setup for data explorer)
+- `components/` — reusable Quarto includes: `_hist.qmd` (Observable histogram), `_interval.qmd` (range slider), `_tol.qmd` (tolerance slider), `_style.qmd` (CSS setup for data explorer), `_source-links.qmd` (per-vignette "Source code for this page" links, backed by `components/source_links.R`, which is where the GitHub URL pattern lives)
 - Partial files prefixed with `_` are included via `{{< include >}}` in other pages
 
 ### Data pipeline: R + OJS dual-layer
@@ -63,8 +63,6 @@ All code runs with `echo: false`, `message: false`, `warning: false`, `error: fa
 - `lavaan` — SEM/CFA modeling
 
 ## TODOs
-
-- [ ] Every vignette should link to its own source code. Most Reproducibility sections name the companion script (e.g. `dimensionality_compute.R`) as plain text — 17 of 19 vignettes mention a script, but only 3 link to GitHub. Turn these into real links to the `.qmd` and any `*_compute.R` on GitHub, ideally via a shared include so the URL pattern lives in one place
 
 - [ ] Do more with `construct_name` (measure description) from the tags sheet — currently excluded from `tag_vals` in `_load-data-explore.qmd:96` so it never appears in filters or the table. Options: (1) add it to the info callout box in `index.qmd` (~line 378), (2) add a free-text search filter for it, (3) show it as a column in the dataset table
 
