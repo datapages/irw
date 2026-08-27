@@ -34,6 +34,16 @@ corpus <- bind_rows(lapply(names(alloc), function(s) {
   pool[sample.int(nrow(pool), min(alloc[[s]], nrow(pool))), ]
 })) %>% arrange(table)
 
+## Post-draw exclusion, applied AFTER sampling so the remaining tables keep the
+## identities they were drawn with. The two HEXACO tables are 40 items at the
+## full N = 2,000 cap, which puts each of them at roughly 19 core-hours -- about
+## a quarter of the entire run between them. Dropped on compute cost alone.
+## They are NOT replaced: backfilling from the frame would systematically swap
+## wide tables for narrow ones and bias the corpus toward small item counts,
+## which is exactly the dimension the transportability section is about.
+EXCLUDED <- c("hexaco_ashton_2014_c", "hexaco_ashton_2014_h")
+corpus <- corpus[!corpus$table %in% EXCLUDED, ]
+
 corpus$eff_N   <- pmin(corpus$n_participants, 2000L)
 corpus$N_short <- corpus$n_participants < 2000L
 
