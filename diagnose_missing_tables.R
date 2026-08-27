@@ -21,7 +21,7 @@ tag_table <- irw_meta$table("tags:7nkh")$to_tibble() |>
 biblio <- irw_meta$table("biblio:qahg")$to_tibble() |>
   mutate(table = str_to_lower(table))
 
-ds <- c("item_response_warehouse", "item_response_warehouse_2", "item_response_warehouse_3", "item_response_warehouse_4")
+ds <- c("item_response_warehouse", "item_response_warehouse_2", "item_response_warehouse_3", "item_response_warehouse_4", "item_response_warehouse_5", "item_response_warehouse_6")
 physical_tables <- ds |>
   lapply(function(d) {
     tabs <- redivis$user("datapages")$dataset(d)$list_tables()
