@@ -470,8 +470,8 @@ mf |> distinct(table, .keep_all = TRUE) |>
     `Items: min` = min(n_items), `Items: median` = median(n_items),
     `Items: max` = max(n_items), `Items: % at 10` = sprintf("%.0f%%", 100*mean(n_items == 10)),
     `N: min` = min(n_resp), `N: median` = median(n_resp), `N: max` = max(n_resp)) |>
+  mutate(across(everything(), as.character)) |>
   pivot_longer(everything(), names_to = "Quantity", values_to = "Value") |>
-  mutate(Value = as.character(Value)) |>
   kable(caption = "Our corpus against their training design of 10 items and 100 respondents.")
 ```
 
@@ -519,7 +519,18 @@ bounds the error that introduces.
 
 ## Reproducibility
 
-{{< include ../components/_source-links.qmd >}}
+```{r}
+#| output: asis
+## components/source_links.R hardcodes the vignettes/ directory; this page lives
+## in analysis/, so the links are emitted here against the same URL pattern.
+files <- c("plenitude_replication.qmd", "plenitude_replication_compute.R",
+           "plenitude_lib.R", "plenitude_data_prep.R", "plenitude_sample.R",
+           "plenitude_collate.R")
+files <- files[file.exists(files)]
+cat("\n**Source code for this page:** ",
+    paste(sprintf("[`%s`](https://github.com/datapages/irw/blob/main/analysis/%s)", files, files),
+          collapse = " \u00b7 "), "\n\n", sep = "")
+```
 
 Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate, from
 the project root:
