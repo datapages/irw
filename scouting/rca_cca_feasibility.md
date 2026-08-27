@@ -381,3 +381,307 @@ The blocking reason for all eight GSS modules is a single licensing question, no
 3. Online Appendix E (per-module variable construction) — behind SAGE institutional access; not retrieved.
 4. `id`-comparability verified on 4 of 114 merge groups.
 5. `mfe` is **archived from CRAN** (installed here from the source archive, with `clusterCrit`, `ECoL`, `infotheo`, `rrcov` as deps). Any pipeline depending on `evaluate.metafeatures()` inherits an archived dependency for the `PercentOut` feature alone.
+
+---
+---
+
+# Amendment (2026-08-27, follow-on)
+
+Appended, not rewritten. Everything above stands as originally written. This
+section revisits threshold 2 on a defensible comparison and establishes the code
+findings rigorously.
+
+## Task A — Threshold 2 on a fairer footing
+
+### A1. Like-for-like dispersion — THE THRESHOLD FLIPS
+
+The original test compared an IRW **IQR** (n=29) against a Table 9 **range** (n=9). That
+is not like-for-like. All three comparisons, on the 13 comparable features
+(`PercentOut` excluded as a scale artifact — see Task B1):
+
+| Feature | IRW IQR | T9 IQR | IQR vs IQR | IRW range | T9 range | range vs range | IQR vs range |
+|---|---|---|---|---|---|---|---|
+| OverallKurt | 0.821 | 0.695 | **PASS** | 8.47 | 2.30 | PASS | fail |
+| OverallRightKurt | 0.120 | 0.301 | fail | 0.902 | 1.06 | fail | fail |
+| OverallSD | 0.756 | 0.529 | **PASS** | 26.5 | 1.60 | PASS | fail |
+| Skewness | 0.395 | 0.547 | fail | 3.74 | 1.31 | PASS | fail |
+| VarColPC1 | 17.4 | 5.68 | **PASS** | 2140 | 46.7 | PASS | fail |
+| SkewColPC1 | 0.466 | 0.603 | fail | 2.68 | 1.63 | PASS | fail |
+| SkewColPC2 | 0.340 | 0.522 | fail | 1.27 | 2.06 | fail | fail |
+| Mean_Row_Corr | 0.168 | 0.223 | fail | 0.654 | 0.564 | PASS | fail |
+| Row_Corr_Kurtosis | 0.551 | 0.735 | fail | 2.40 | 3.94 | fail | fail |
+| CorrRightKurt | 0.704 | 0.662 | **PASS** | 11.5 | 2.67 | PASS | fail |
+| Mean_Col_Kurtosis | 0.850 | 0.412 | **PASS** | 8.66 | 3.61 | PASS | fail |
+| Mean_SD_Ratio | 0.0706 | 0.082 | fail | 0.456 | 0.436 | PASS | fail |
+| intrinsicDimProp | 0.0965 | 0.116 | fail | 0.389 | 0.371 | PASS | fail |
+| **Totals (of 13)** | | | **5** | | | **10** | **0** |
+
+**On the like-for-like IQR-vs-IQR test, 5 of 13 features pass — meeting the "at least five" bar exactly.**
+
+### A2. Excluding the high-category tail
+
+Two of 29 matrices have `n_categories > 20` (`test_taking_much_2025_cm` and
+`climatechange_geiger_2025`, both 101-category rating scales). Dropping them (n = 27):
+
+| Comparison | all 29 | excl. n_cat>20 (n=27) |
+|---|---|---|
+| IQR vs IQR | 5 | **5** (same five features) |
+| range vs range | 10 | **6** |
+| IQR vs range | 0 | 0 |
+
+Two things follow, and they point in opposite directions:
+
+- **Your prediction about the range comparison was right.** It drops 10 → 6 when the two
+  wide-category tables are removed, confirming the range advantage was substantially
+  tail-driven and that range at n=29 is outlier-sensitive.
+- **My "tightly packed middle" claim was wrong.** The IQR-vs-IQR pass count is *unchanged*
+  at 5, and it is the *same five features* (OverallKurt, OverallSD, VarColPC1,
+  CorrRightKurt, Mean_Col_Kurtosis). The middle of the IRW distribution is genuinely wider
+  than the middle of theirs on those five, and that is not an artifact of the tail.
+
+### A3. The N confound
+
+Meta-features recomputed with N capped at 2,000 (matching their ~1,500–2,500 datasets)
+instead of 5,000. Only **5 of 29** matrices were actually affected.
+
+| | N cap 5,000 | N cap 2,000 |
+|---|---|---|
+| IQR-vs-IQR passes (of 13) | 5 | **6** |
+| median absolute change in IRW IQR | — | **1.4%** |
+| features flipping pass/fail | — | 1 (`intrinsicDimProp`) |
+
+The cap is not driving the result. Median IQR shift is 1.4%; the only feature to flip does
+so *toward* passing. `intrinsicDimProp` (+43% IQR) and `SkewColPC1`/`CorrRightKurt` (+19%)
+are the N-sensitive ones, consistent with them being the coarsest/most tail-dependent
+features. **The objection is closed: correcting the N confound does not weaken the
+comparison, it marginally strengthens it.**
+
+### Reverse-keying as a distribution
+
+| Group | n | min | Q1 | median | Q3 | max | n > 0.5 |
+|---|---|---|---|---|---|---|---|
+| single | 17 | 0.058 | 0.115 | **0.154** | 0.368 | 0.624 | 2 |
+| merged | 2 | 0.014 | 0.138 | 0.262 | 0.386 | 0.510 | 1 |
+
+By method (singles): CCA median 0.149 (max 0.624), RCA 0.306 (max 0.391),
+Recursive Relationality 0.115 (max 0.611).
+
+The distribution is **right-skewed, not centered** — most runs sit at 0.06–0.15, with a
+tail reaching 0.62. A median of 0.154 understates the risk in the same way it overstates
+the typical case: RCA is the most *consistently* contaminated (median 0.306, but a tight
+range), while CCA and Recursive Relationality are usually clean with occasional bad
+failures. Worth watching, not disqualifying.
+
+### Threshold 2: status changed
+
+**Threshold 2 passes under the like-for-like test, and the pass is robust.** 5 of 13 on
+IQR-vs-IQR with all 29 matrices; the same 5 excluding the high-category tail; 6 of 13 at
+N = 2,000. The original MISSED verdict was an artifact of comparing an IQR against a range.
+
+Per the brief I am stopping here rather than revisiting the vignette design. Reporting the
+status change and leaving the decision open. Note the pass is *marginal* (5 against a bar
+of 5) and rests on five features of which two — `OverallSD` and `VarColPC1` — are
+scale-dependent and therefore sensitive to the response-category mix of whatever corpus
+slice is used.
+
+**Data:** `scouting/A1_dispersion_all29.csv`, `A2_dispersion_cat20.csv`,
+`A3_Nsensitivity.csv`, `scout_metafeatures_N2000.csv`.
+
+## Task B1 — Static code audit
+
+The Drive artifacts are not in version control and the GitHub repo (`a617939`) contains
+only a README, so there is no upstream commit SHA to pin. **Findings are pinned by SHA-256
+of the files as retrieved 2026-08-27:**
+
+| File | SHA-256 |
+|---|---|
+| `metafeature_RCA.R` (494 lines) | `167751976405b6870dcd8e0166d4ef1c9afd948b4c3ddb8a665bb238a4c231cf` |
+| `f_outer.cpp` (46 lines) | `a6a854fa96704521e39abb7dba44645d674834832f933a99cd55c4c670618498` |
+| `metafeature_models_cleaned.RDS` | `38d7b0529123adfd4a61d244d60617b09eb12dfa22575554b4828eab9da21033` |
+
+Reproduction script: `scouting/b1_audit.R`.
+
+### Finding 1 — `num_vars = 10` hardcode
+
+**Location:** `metafeature_RCA.R:213` — `evaluate.metafeatures <- function(df, num_vars = 10)`.
+Used at **line 262** (`intrinsicDemnsionalityProp <- intrinsicDemnsionality/num_vars`) and
+**line 268** (`PercentOut = ((nrOut/num_vars) * 100)`).
+
+**Mechanism:** `num_vars` is never inferred from `df`. It is the denominator for exactly two
+of the fourteen features. The other twelve are computed directly from the matrix and are
+unaffected.
+
+**Demonstration** (400 respondents, synthetic):
+
+| Matrix | Feature | default (`num_vars=10`) | correct (`num_vars=ncol`) | |
+|---|---|---|---|---|
+| 10 items | intrinsicDimProp | 0.600 | 0.600 | same |
+| 10 items | all others | — | — | same |
+| **18 items** | **intrinsicDimProp** | **1.000** | **0.556** | **diverges** |
+| **18 items** | **PercentOut** | **170.00** | **94.44** | **diverges** |
+| 18 items | other 12 features | — | — | identical |
+
+At 18 items the released default returns **PercentOut = 170%** — a percentage exceeding
+100, which is impossible by construction and is a self-evident signal of the defect. The
+`intrinsicDimProp` failure is quieter and worse: it silently saturates at 1.000.
+
+**The documented workflow always hits this path.** `select.method()` at
+`metafeature_RCA.R:282-287` calls `evaluate.metafeatures(data)` with **no** `num_vars`
+argument, and the README instructs users to call `select.method()`. Any user running the
+released tool on a matrix that is not exactly 10 items wide gets two corrupted features
+feeding the method-selection regressions.
+
+### Scoping question — narrow erratum, not broader
+
+**Answer: the defect does not touch the simulation results (Tables 4–7). It is confined to
+the empirical application.**
+
+Evidence: **Table 3** (paper p.1852) lists the grid-search parameters — number of schemas,
+schema variance, maximum error variance, shift, scaling, probability of inversion.
+**Item count is not among them.** The text at p.1846 confirms items were fixed: *"the
+original—unshifted and unscaled—schema (i.e., a vector of values for each of the 10 items)
+is drawn from a normal distribution for each item."* All 198,000 simulated datasets have
+exactly 10 items, so `num_vars = 10` is *correct* on the simulation side, and the fitted
+regressions in `metafeature_models_cleaned.RDS` are unaffected.
+
+**Further — Table 9 itself appears to have been computed with the correct denominator.**
+Its intrinsic-dimensionality column is 0.429, 0.357, 0.333, 0.500, 0.200, 0.286, 0.313,
+0.571, 0.333. Had `num_vars` been left at 10, every value would be a multiple of 0.1. They
+are not: they resolve to 3/7, 5/14, 1/3, 1/2, 1/5, 2/7, 5/16, 4/7, 1/3 — denominators
+consistent with actual module item counts. So the authors passed `num_vars` explicitly for
+the empirical table.
+
+**Net:** this is a defect in the *released tool* as handed to other researchers, not
+(on the available evidence) an error in the paper's own published numbers. That is the
+narrower of the two possibilities, and it should be stated that way.
+
+### Finding 2 — `OverallRightKurt` on a logical vector
+
+**Location:** `metafeature_RCA.R:233` — `overall_right_kurt = Kurt(df > mean(df, na.rm = T))`.
+The intended helper `right_half_kurt` is defined at **line 217** and, by exhaustive grep of
+the file, **never called** (single occurrence).
+
+**Mechanism:** `df > mean(df)` is a logical matrix. `DescTools::Kurt` coerces it to 0/1, so
+the feature is the excess kurtosis of a Bernoulli indicator — a deterministic function of
+the proportion above the mean, carrying no information about the shape of the right tail.
+
+**Demonstration** (400 × 12 synthetic):
+
+| | Value |
+|---|---|
+| as released, `Kurt(df > mean(df))` | **−1.847932** |
+| as intended, `right_half_kurt(as.numeric(df))` | **−1.999943** |
+| Bernoulli closed form `(1−6p(1−p))/(p(1−p))` at p = 0.4042 | **−1.847452** |
+
+The released value matches the Bernoulli closed form to three decimals, confirming it is a
+pure function of `p` and nothing else. This explains the feature's anomalous behaviour
+elsewhere: it has the narrowest spread of any feature in the IRW pilot (IQR 0.120) and the
+lowest reported simulation overlap in Table 9 (3%) — both consistent with a near-degenerate
+quantity.
+
+### Finding 3 — Louvain hardcoded
+
+**Location:** `metafeature_RCA.R:289` — `metaRCA <- function(data, measure = "Recursive Relationality")`.
+The signature exposes **only** `data` and `measure`. Community detection is fixed at
+**line 345** (`cluster_out <- cluster_louvain(net, weights = E(net)$weight)`) and again in
+the ensemble at **line 446**. Grep for `leading.eigen|walktrap|fastgreedy|infomap|spinglass`
+over the file returns nothing — no alternative is implemented or reachable.
+
+This matters because the paper itself reports that swapping leading-eigenvector for Louvain
+accounted for a meaningful share of RCA's measured improvement over Boutyline's baseline.
+A degree of freedom the authors identify as consequential is not exposed to users of the
+released tool.
+
+### Finding 4 — `PercentOut` scale
+
+**Location:** `metafeature_RCA.R:268`, `PercentOut = ((nrOut/num_vars) * 100)`, with `nrOut`
+from `mfe::statistical(..., "nrOutliers")` at line 259. `mfe`'s documentation defines
+`nrOutliers` as *"Number of attributes with outliers values"* — an integer count of columns.
+
+**Mechanism:** `PercentOut` is therefore an integer count divided by an item count, times
+100. It can only take values on the lattice {0, 100/p, 200/p, …} and lies in [0, 100].
+
+**Demonstration:** the smallest attainable non-zero value across any plausible item count
+(p = 40) is **2.5**. Table 9's published `PercentOut` column is
+0.000, 0.002, 0.002, 0.004, 0.006, 0.007, 0.008, 0.022, 0.048 — **every non-zero entry is
+at least 50× smaller than the smallest value the released formula can produce.**
+
+**What transformation would produce those magnitudes?** A *cell* proportion rather than a
+*variable* proportion. Computing the fraction of individual cells that are Tukey outliers
+across 12 IRW tables gives a range of [0.000, 0.065] with median 0.018 — the same order of
+magnitude as Table 9's [0.000, 0.048]. That is consistent with Table 9's column being the
+proportion of outlying *observations*, despite the column being headed "Percent of
+Variables with Outlier Observations."
+
+**Unresolved hypothesis — stated as such.** Table 9's intrinsic-dimensionality column is
+consistent with the released code correctly parameterised (Finding 1), while its
+`PercentOut` column is *inconsistent with the released formula on any parameterisation*.
+Two features in the same table appear to come from different computations. One reading is
+that the published empirical meta-features were not produced by the released
+`evaluate.metafeatures()`. **That claim is not established here and should not be asserted
+on this evidence alone.** What would settle it: reconstructing the nine matrices from
+Appendix E's item selections and running the released function against published Table 9
+(Task B2, currently blocked). A cheaper partial test: if the authors confirm which
+`PercentOut` definition was used, the discrepancy either resolves to a labelling/scaling
+slip in the table or does not.
+
+## Task B2 — Blocked, not attempted
+
+Gate not satisfied. Online Appendix E (per-module variable construction) is required and
+remains unreachable: `journals.sagepub.com/doi/suppl/10.1177/00491241211031273` returns
+**HTTP 403**, as does the paper's own cited `smr.sagepub.com/supplemental/`. GSS item-level
+data is separately blocked pending Task C.
+
+Per instruction, **no reconstruction was attempted from guessed module boundaries.** A
+failed reproduction from the wrong item selections would be worse than none, and would
+contaminate the Finding 4 hypothesis above rather than testing it.
+
+## Closed open items
+
+- **`models_w_noise.RDS`** — **resolved.** The file had in fact downloaded (96.7 MB, valid
+  gzip); the earlier "timeout" killed the shell after `curl` completed. However it **fails
+  to load** via `readRDS` (the companion `metafeature_models_cleaned.RDS` loads fine and
+  contains 9 fitted `lm` models, one per distance measure, each with an intercept plus the
+  14 meta-features). Whether the file is corrupt in transit or in a non-RDS format is
+  undetermined; it is needed only for the noise-robustness predictions.
+- **`mfe` archived from CRAN** — **resolved with a verified drop-in.** `mfe`'s rule
+  (`mfe/R/statistical.R:353-360`) uses `stats::quantile` (type 7), not `boxplot.stats`
+  hinges. This four-line replacement reproduces it exactly on 15 random cases:
+
+  ```r
+  nrOutliers <- function(m) sum(apply(m, 2, function(x) {
+    qs <- stats::quantile(x); iqr <- (qs[4] - qs[2]) * 1.5
+    (qs[2] - iqr) > qs[1] | (qs[4] + iqr) < qs[5]
+  }))
+  ```
+  No archived dependency is required. (A naive `boxplot.stats` implementation does **not**
+  match — it disagreed on 1 of 8 test cases.)
+- **`Permission via Email` count** — corrected: **111** tables, not 106. The exact-string
+  count is 106; a further 5 carry it in combination (e.g. `Permission via Email, CC BY 4.0`).
+- **`id`-comparability coverage** — extended from 4 to **24 of 114 merge groups (21%)**.
+  A further 20 groups were sampled across group sizes (2–7 member tables, capped at 4
+  tables tested per group, 68 tables fetched) and **all 20 verified at 100% minimum
+  pairwise id overlap**. Combined tally: 23 VERIFIED, 1 PARTIAL (`alsuhibani_2022`, whose
+  ids are namespaced by sub-sample). No new failure modes appeared.
+
+  This raises confidence that id-stability is the rule and disjoint sub-samples the
+  exception, but note the sample was restricted to groups with `min_n_participants <=
+  20000`, so very large multi-wave studies remain untested. The pairwise-overlap gate
+  should still run inside any real pipeline rather than being assumed —
+  `silva_2018` is the standing warning: 100% overlap at 3 tables, 0% at 5.
+
+  Data: `scouting/id_verification_extended.csv`.
+
+## Revised threshold table
+
+| # | Threshold | Original verdict | Revised verdict |
+|---|---|---|---|
+| 1 | Corpus size | MET | **MET** (24/114 groups now id-verified) |
+| 2 | Feature spread | MISSED | **MET (marginal)** — 5/13 like-for-like, robust to tail removal and N cap |
+| 3 | Non-degeneracy | MET | **MET** (η² right-skewed, median 0.154 singles) |
+| 4 | Compute | MET | **MET** |
+
+**All four thresholds are now met.** The original NO-GO rested on threshold 2, and
+threshold 2 failed only under a comparison that was not like-for-like. Stating that
+plainly, per instruction, and leaving the decision on the vignette open rather than
+reopening the design.
