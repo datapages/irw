@@ -292,31 +292,77 @@ simulations.
 Their Table 12 reported correlations of roughly .54 to .68 between predicted
 accuracy and the five internal validity criteria across their nine datasets.
 
+Two of the criteria — within-class sum of squares and Calinski–Harabasz — scale
+with the number of respondents and items, and our tables span 6–40 items and
+300–2,000 respondents where their nine were far more alike. Pooling raw criterion
+values across such tables lets between-table scale differences dominate the
+within-table ranking that the question is actually about. So we report the
+correlation **within each table** and summarise across tables, which is the
+like-for-like quantity, and give the pooled correlation alongside it for direct
+comparison with their published number.
+
 ```{r}
 #| label: q1
 d <- pr |> filter(reading == "pct_cells") |>
   inner_join(va, by = c("table","replicate","method"))
 
+## sign convention: flip the cost-like criteria so a positive correlation always
+## means "predicted accuracy agrees with the criterion"
+orient <- function(cr) if (cr %in% LOWER_BETTER) -1 else 1
+
 q1 <- lapply(names(CRITERIA), function(cr) {
-  x <- d[[cr]]; y <- d$predicted
-  ok <- is.finite(x) & is.finite(y)
-  if (sum(ok) < 10) return(NULL)
-  ## flip sign for cost-like criteria so a positive value always means
-  ## "prediction agrees with the criterion"
-  s <- if (cr %in% LOWER_BETTER) -1 else 1
-  ct <- cor.test(y[ok], s * x[ok])
-  data.frame(Criterion = CRITERIA[[cr]], n = sum(ok),
-             r = ct$estimate, lo = ct$conf.int[1], hi = ct$conf.int[2])
+  dd <- d |> mutate(val = orient(cr) * .data[[cr]]) |> filter(is.finite(val), is.finite(predicted))
+  if (nrow(dd) < 10) return(NULL)
+
+  ## pooled, as their Table 12 reads
+  ct <- cor.test(dd$predicted, dd$val)
+
+  ## within-table, then summarised across tables
+  wt <- dd |> group_by(table) |>
+    filter(n() >= 5, sd(val) > 0, sd(predicted) > 0) |>
+    summarise(r = cor(predicted, val), .groups = "drop")
+  ci <- if (nrow(wt) > 2) t.test(wt$r)$conf.int else c(NA, NA)
+
+  data.frame(Criterion = CRITERIA[[cr]],
+             `Tables` = nrow(wt),
+             `Mean within-table r` = mean(wt$r),
+             `lo` = ci[1], `hi` = ci[2],
+             `Pooled r` = unname(ct$estimate),
+             `plo` = ct$conf.int[1], `phi` = ct$conf.int[2],
+             check.names = FALSE)
 }) |> bind_rows()
 
-q1 |> mutate(`r [95% CI]` = sprintf("%s [%s, %s]", fmt(r), fmt(lo), fmt(hi))) |>
-  select(Criterion, n, `r [95% CI]`) |>
-  kable(caption = "Q1. Correlation between predicted accuracy and each internal validity criterion, pooled over tables and replicates. Signs are oriented so positive always means agreement. Their nine-dataset values were .54-.68.")
+q1 |>
+  transmute(Criterion, Tables,
+            `Mean within-table r [95% CI]` = sprintf("%s [%s, %s]",
+              fmt(`Mean within-table r`), fmt(lo), fmt(hi)),
+            `Pooled r [95% CI]` = sprintf("%s [%s, %s]",
+              fmt(`Pooled r`), fmt(plo), fmt(phi))) |>
+  kable(caption = "Q1. Agreement between predicted accuracy and each internal validity criterion. Signs are oriented so positive always means agreement. Their nine-dataset values were .54-.68.")
+```
+
+```{r}
+#| label: fig-q1-dist
+#| fig-cap: "Distribution of the within-table correlation between predicted accuracy and each criterion. One value per table."
+lapply(names(CRITERIA), function(cr) {
+  d |> mutate(val = orient(cr) * .data[[cr]]) |>
+    filter(is.finite(val), is.finite(predicted)) |>
+    group_by(table) |> filter(n() >= 5, sd(val) > 0, sd(predicted) > 0) |>
+    summarise(r = cor(predicted, val), .groups = "drop") |>
+    mutate(criterion = CRITERIA[[cr]])
+}) |> bind_rows() |>
+  ggplot(aes(r)) +
+  geom_histogram(bins = 25, fill = "#4292c6") +
+  geom_vline(xintercept = 0, colour = "grey30") +
+  facet_wrap(~ criterion) +
+  labs(x = "Within-table correlation of predicted accuracy with the criterion",
+       y = "Tables") +
+  theme_minimal(base_size = 11)
 ```
 
 ```{r}
 #| label: fig-q1
-#| fig-cap: "Predicted accuracy against each validity criterion. One point per table x replicate x method."
+#| fig-cap: "Predicted accuracy against each validity criterion, pooled. One point per table x replicate x method. The two scale-dependent criteria show the between-table spread that motivates the within-table summary above."
 d |> select(predicted, all_of(names(CRITERIA))) |>
   pivot_longer(-predicted, names_to = "criterion", values_to = "value") |>
   filter(is.finite(value)) |>
