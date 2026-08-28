@@ -47,6 +47,33 @@ LOWER_BETTER <- c("within_ss", "wb_ratio")
 fmt <- function(x, d = 2) formatC(x, format = "f", digits = d)
 ```
 
+```{r}
+#| label: run-status
+#| output: asis
+n_drawn <- nrow(corpus)
+cov <- mf |> count(table, name = "reps")
+full_reps <- sum(cov$reps == 3)
+complete <- nrow(cov) >= n_drawn && all(cov$reps == 3)
+if (!complete) {
+  cat(sprintf(
+"::: {.callout-important}
+## Draft: partial run
+
+The compute run is still in progress. Every number on this page is computed from
+**%d of the %d drawn tables** (%d fits; %d tables have all three replicates,
+%d have fewer). Tables were fitted cheapest-first, so the coverage is *not* a
+random subset of the corpus — it is biased toward tables with few items and few
+respondents, and the widest and largest tables are disproportionately still
+outstanding. Treat every quantity below as provisional, and read the method
+comparisons in particular with care: the measures whose cost scales steeply in
+item count are being judged here mostly on narrow tables.
+:::
+
+",
+    nrow(cov), n_drawn, n_fits, full_reps, nrow(cov) - full_reps))
+}
+```
+
 ## Motivation
 
 Sotoudeh and DiMaggio [-@sotoudeh2021plenitude] set out to make the choice of a
@@ -220,13 +247,20 @@ tot_hours <- sum(so$secs, na.rm = TRUE) / 3600
 
 ```{r}
 #| label: tbl-readings
+## OverallRightKurt_corrected is undefined when every value above the mean is
+## identical (Kurt of a constant), so the rk_corrected reading is summarised over
+## its finite cases and the undefined count is reported rather than hidden.
 pr |>
   group_by(reading) |>
-  summarise(min = min(predicted), median = median(predicted), max = max(predicted),
-            `out of [0,1]` = sprintf("%.0f%%", 100*mean(predicted < 0 | predicted > 1)),
+  summarise(min = min(predicted, na.rm = TRUE),
+            median = median(predicted, na.rm = TRUE),
+            max = max(predicted, na.rm = TRUE),
+            `below 0` = sprintf("%.0f%%", 100*mean(predicted < 0, na.rm = TRUE)),
+            `above 1` = sprintf("%.0f%%", 100*mean(predicted > 1, na.rm = TRUE)),
+            undefined = sum(!is.finite(predicted)),
             .groups = "drop") |>
   mutate(across(c(min, median, max), ~ fmt(.x, 3))) |>
-  kable(caption = "Predicted accuracy under each reading of the ambiguous inputs. Accuracy is a proportion; values outside [0,1] are impossible.")
+  kable(caption = "Predicted accuracy under each reading of the ambiguous inputs. Accuracy is a proportion, so values outside [0,1] are impossible by construction.")
 ```
 
 The brief for this replication treated the `PercentOut` scale as unresolved and
@@ -256,6 +290,8 @@ w <- Reduce(function(a, b) full_join(a, b, by = c("table","replicate")),
               winner_by(r) |> rename(!!r := winner)))
 agree <- sapply(c("primary","rk_corrected","positional"),
                 function(r) mean(w[[r]] == w$pct_cells, na.rm = TRUE))
+n_oor <- sum(pr$reading == "pct_cells" & pr$predicted > 1, na.rm = TRUE)
+p_oor <- mean(pr$predicted[pr$reading == "pct_cells"] > 1, na.rm = TRUE)
 ```
 
 Winner-per-table agreement with the `pct_cells` reading:
@@ -377,6 +413,68 @@ d |> select(predicted, all_of(names(CRITERIA))) |>
   theme_minimal(base_size = 11)
 ```
 
+```{r}
+#| label: q1-readout
+q1r <- setNames(q1$`Mean within-table r`, q1$Criterion)
+pos <- q1$Criterion[q1$`Mean within-table r` > 0]
+neg <- q1$Criterion[q1$`Mean within-table r` < 0]
+```
+
+**What replicates.** On `r length(pos)` of the five criteria the within-table
+correlation sits in or near their published .54–.68 band. On
+`r length(neg)` of them — `r paste(neg, collapse = " and ")` — it is
+*negative*: methods with higher predicted accuracy score systematically
+**worse**. Their Table 12 reported no negative entries.
+
+Before reading either the positive or the negative results at face value, it is
+worth asking how much of both is the number of recovered classes. Four of the
+five criteria are computed from a partition, and partitions with more parts score
+differently on them almost mechanically.
+
+```{r}
+#| label: tbl-kconfound
+kj <- so |> select(table, replicate, method, k) |>
+  inner_join(va, by = c("table","replicate","method"))
+
+krow <- function(cr) {
+  w <- kj |> mutate(v = .data[[cr]]) |> filter(is.finite(v)) |>
+    group_by(table, replicate) |> filter(n() >= 5, sd(k) > 0, sd(v) > 0) |>
+    summarise(rho = cor(k, v, method = "spearman"), .groups = "drop")
+  data.frame(Criterion = CRITERIA[[cr]], `rho with k` = mean(w$rho), check.names = FALSE)
+}
+kt <- bind_rows(lapply(names(CRITERIA), krow))
+
+kp <- pr |> filter(reading == "pct_cells") |>
+  inner_join(so |> select(table, replicate, method, k), by = c("table","replicate","method")) |>
+  group_by(table, replicate) |> filter(sd(k) > 0, sd(predicted) > 0) |>
+  summarise(rho = cor(predicted, k, method = "spearman"), .groups = "drop")
+rho_pred_k <- mean(kp$rho)
+
+kt |> mutate(`rho with k` = fmt(`rho with k`)) |>
+  kable(caption = "Mean within-run Spearman correlation between the number of recovered classes and each criterion, on the criterion's raw scale. A criterion strongly tied to k is measuring partition granularity as much as partition quality.")
+```
+
+Predicted accuracy is itself positively associated with class count
+(mean within-run rho = `r fmt(rho_pred_k)`): the methods the models favour return
+*more* classes, not fewer. Combine that with the table above and both halves of
+the Q1 result look partly mechanical. Within-class SS and the within-between
+ratio rise with k on this data, so on a "lower is better" orientation the
+high-predicted, high-k methods are penalised — which is the negative correlation.
+Pearson's Γ also rises with k, which pushes the same methods the other way and
+inflates the criterion where the replication looks most successful.
+
+We report this rather than adjust for it. Partialling k out would depart from
+their construction, and the point of the exercise is to run their procedure as
+published. But it materially qualifies the answer to Q1: **the agreement between
+prediction and validation that does replicate is not cleanly separable from both
+sides preferring finer partitions**, and the disagreement that does not replicate
+is not cleanly separable from the same thing with its sign flipped.
+
+Note finally how far the pooled and within-table columns diverge — pooled values
+run well below the within-table means on every criterion. That gap is the
+between-table scale variance discussed above, and it is why the within-table
+summary is the one to read.
+
 ### Q2 — Does the winner vary?
 
 ```{r}
@@ -416,6 +514,46 @@ conc |> mutate(top_share = sprintf("%.0f%%", 100*top_share)) |>
   kable(caption = "Q2. Concentration of wins. A high share for one method on one basis is evidence against 'no free lunch' on that basis.")
 ```
 
+```{r}
+#| label: q2-readout
+pred_top   <- conc |> filter(basis == "Predicted accuracy")
+crit       <- conc |> filter(basis != "Predicted accuracy") |> arrange(desc(top_share))
+concentr   <- crit |> filter(top_share >= 0.5)
+spread     <- crit |> filter(top_share <  0.5)
+```
+
+**The two sides of the comparison behave very differently, and that is the
+finding.**
+
+On predicted accuracy the answer is stark: `r pred_top$top_method` alone wins
+`r fmt(100*pred_top$top_share, 0)`% of runs, with only
+`r pred_top$n_distinct_winners` methods ever nominated at all. Whatever else is
+true, **their fitted models do not discriminate between datasets at this scale** —
+handed `r n_tables` varied item-response tables, the procedure recommends
+essentially the same measure every time. On the prediction side, "no free lunch"
+is not merely weaker than nine datasets suggested; it is close to absent.
+
+On the validity criteria the answer is more mixed, and it does not support a
+single headline. `r nrow(concentr)` of the five are dominated by one method —
+`r paste(sprintf("%s takes %s of %s", concentr$top_method, sprintf("%.0f%%", 100*concentr$top_share), concentr$basis), collapse = "; ")`.
+The other `r nrow(spread)` are genuinely spread, with top shares of only
+`r paste(sprintf("%.0f%%", 100*spread$top_share), collapse = ", ")` across
+`r paste(spread$n_distinct_winners, collapse = ", ")` distinct winners
+respectively. So by the criteria, different tables really do call for different
+measures a good deal of the time.
+
+Two things follow. First, the criteria disagree sharply with each other about who
+wins — `r dplyr::n_distinct(crit$top_method)` different methods top the five
+yardsticks — so "which measure is best" is not well posed without naming the
+criterion. Second, the criterion most favourable to correlation-based measures is
+the one on which `r crit$top_method[1]` dominates most heavily, which is precisely
+the artefact their own caveat warns about and not independent evidence.
+
+The honest summary is therefore split: **their prediction machinery fails to
+discriminate, while their claim that no measure wins everywhere survives on the
+majority of the validity criteria.** Those are different claims and only one of
+them replicates.
+
 ### Q3 — Do their method-level characterizations hold?
 
 ```{r}
@@ -443,6 +581,27 @@ q3 |> mutate(across(where(is.numeric), ~ fmt(.x, 3))) |>
   rename(Method = method) |>
   kable(caption = "Q3. Mean rank across the five validity criteria (lower is better; ten methods so 5.5 is chance), the rate of finishing top-3, and mean predicted accuracy. The ensemble has no fitted model.")
 ```
+
+```{r}
+#| label: q3-readout
+best <- q3$method[1]; worst <- q3$method[nrow(q3)]
+rng  <- range(q3$`Mean rank across criteria`)
+```
+
+Mean ranks span only `r fmt(rng[1])` to `r fmt(rng[2])` against a chance value of
+5.5 — that is, across ten methods and five criteria, **the measures barely
+separate**. `r best` ranks best and `r worst` worst, but the whole field sits
+inside a band roughly one and a half rank positions wide.
+
+Against their specific characterizations: recursive relationality does hold up as
+a generalist, ranking near the top and carrying the highest mean predicted
+accuracy. Correlation does not — it has the *highest* top-3 rate of any method
+while ranking near the bottom on mean rank, which is the signature of a
+specialist rather than a generalist: superb on the criteria that suit it,
+mediocre elsewhere. Euclidean and cosine were predicted to underperform; cosine
+does, but Euclidean sits mid-field. The ensemble does well, consistent with their
+account, though it has no fitted model and so cannot be checked against predicted
+accuracy.
 
 ### Class solutions and degeneracy
 
