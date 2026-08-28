@@ -232,7 +232,7 @@ future_walk2(jobs$table, jobs$rep_i, run_one,
              .options = furrr_options(seed = TRUE,
                globals = c("FITDIR","CACHE","SEEDS","N_CAP","SEM_TIME","models",
                            "worker_init","reverse_key_eta2","validity_criteria")),
-             .progress = TRUE)
+             .progress = FALSE)
 plan(sequential)
 
 ## ---------------------------------------------------------------------------
