@@ -1,0 +1,186 @@
+---
+title: "IRW Collections"
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(dplyr)
+library(stringr)
+library(glue)
+library(htmltools)
+library(irw)
+
+reg <- irw_collections()
+
+KIND_META <- tibble::tribble(
+  ~kind,        ~heading,                     ~blurb,
+  "design",     "Study &amp; instrument design",
+    "How the study was run, and what structure the data carries. Derived from the columns each table actually has, so these cover every documented table.",
+  "instrument", "Instrument family",
+    "Which measure was administered. These group together tables that record the same instrument under different names &mdash; 63 Big Five tables are spread across more than forty spellings of the construct name.",
+  "construct",  "Construct",
+    "What is being measured, across instruments."
+)
+```
+
+Collections are labelled groupings of IRW tables. Ask for a *type* of data ---
+randomized trials, Big Five inventories, anything with a Q matrix --- and get
+back the tables, ready to fetch.
+
+A table belongs to as many collections as apply: `frac20` is in both
+`math` and `q_matrix`.
+
+```{r}
+#| label: coverage-note
+#| echo: false
+#| results: asis
+n_tagged <- 2251L
+n_total  <- 3650L
+n_part <- sum(reg$coverage == "tagged-subset-only")
+cat(glue(
+  '::: {{.callout-warning appearance="simple"}}\n',
+  '## Not every collection sees the whole warehouse\n\n',
+  'Collections built from the tag annotations searched only the **{format(n_tagged, big.mark=",")} ',
+  'of {format(n_total, big.mark=",")}** tables that carry tags, and tag coverage is much lower in the ',
+  'newer warehouses. {n_part} of the {nrow(reg)} collections below are marked ',
+  '`tagged-subset-only` for that reason: they are useful starting points, but they are ',
+  'not exhaustive, and they lean toward older tables. Treat them as "the ones we know of", ',
+  'not "all of them". The rest searched every documented table.\n',
+  ':::\n\n'
+))
+```
+
+## Using a collection
+
+::: panel-tabset
+
+## R
+
+```{r}
+#| eval: false
+#| echo: true
+library(irw)
+
+irw_collections()                    # what exists: kind, definition, coverage, size
+tabs <- irw_collection("depression") # 70 table names, and a note on coverage
+
+# Narrow to a modellable corpus. Note irw_filter()'s default density = c(0.5, 1),
+# which is why 70 becomes 32 rather than the 41 that pass on sample size alone.
+tabs <- irw_filter(collection = "depression", n_participants = c(500, Inf))
+
+dat <- irw_fetch(tabs)               # named list, one long-format table each
+irw_save_bibtex(tabs, output_file = "depression.bib")
+
+# Cross-collection questions -- what no single filter argument reaches.
+# Math assessments administered in booklets: linking and DIF work.
+intersect(irw_collection("math"), irw_collection("multistage"))
+
+# Note c(...) is a UNION, not an intersection:
+irw_filter(collection = c("rct", "response_time"))
+
+irw_collection_members(tables = "frac20")   # which collections is this table in?
+```
+
+## Python
+
+```{python}
+#| eval: false
+#| echo: true
+#| python.reticulate: false
+import irw
+
+irw.collections()
+tabs = irw.collection("depression")
+
+tabs = irw.filter(collection="depression", n_participants=[500, None])
+dat  = irw.fetch(tabs)               # dict keyed by table name
+
+sorted(set(irw.collection("math", quiet=True)) &
+       set(irw.collection("multistage", quiet=True)))
+
+irw.filter(collection=["rct", "response_time"])   # union, not intersection
+irw.collection_members(tables="frac20")
+```
+
+:::
+
+```{r}
+#| label: cards
+#| echo: false
+#| results: asis
+cat('
+<style>
+.coll-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 2rem; }
+@media (max-width: 768px) { .coll-grid { grid-template-columns: 1fr; } }
+.coll-card { border: 1px solid #dee2e6; border-left: 4px solid #2780e3; border-radius: 6px;
+  padding: 1rem 1.25rem; background: #fff; transition: box-shadow 0.15s;
+  display: flex; flex-direction: column; }
+.coll-card.partial { border-left-color: #c98a30; }
+.coll-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+.coll-name { font-family: var(--bs-font-monospace, monospace); font-size: 0.95rem;
+  font-weight: 600; color: #212529; margin-bottom: 0.15rem; }
+.coll-label { font-size: 0.8rem; color: #6c757d; margin-bottom: 0.5rem; }
+.coll-desc { font-size: 0.85rem; color: #495057; flex: 1; line-height: 1.5; margin-bottom: 0.75rem; }
+.coll-foot { margin-top: auto; padding-top: 0.6rem; display: flex; flex-wrap: wrap;
+  gap: 0.5rem; align-items: baseline; }
+.coll-n { font-size: 0.85rem; font-weight: 600; color: #212529; }
+.coll-cov { font-size: 0.72rem; padding: 0.12rem 0.5rem; border-radius: 100px;
+  background: #e8f1fb; color: #1a5c9e; white-space: nowrap; }
+.coll-cov.partial { background: #f6ead6; color: #8f5410; }
+.coll-cov.curated { background: #eceef0; color: #495057; }
+</style>
+')
+
+for (k in KIND_META$kind) {
+  meta <- KIND_META[KIND_META$kind == k, ]
+  rows <- reg[reg$kind == k, ]
+  if (nrow(rows) == 0) next
+
+  cat(glue('\n## {meta$heading}\n\n{meta$blurb}\n\n'))
+  cat('<div class="coll-grid">\n')
+
+  for (i in seq_len(nrow(rows))) {
+    r <- rows[i, ]
+    partial <- r$coverage == "tagged-subset-only"
+    ##Strip the denominator clause the pipeline appends -- it is shown as a
+    ##chip below instead, and reads as clutter inside the prose.
+    desc <- str_squish(str_remove(r$definition, "\\s*\\(searched the.*?\\)\\s*$"))
+    cov_txt <- dplyr::case_when(
+      r$coverage == "tagged-subset-only" ~ glue("of {format(n_tagged, big.mark=',')} tagged"),
+      r$coverage == "curated-only"       ~ "hand-curated",
+      TRUE                               ~ glue("of all {format(n_total, big.mark=',')}")
+    )
+    cov_cls <- dplyr::case_when(
+      r$coverage == "tagged-subset-only" ~ "partial",
+      r$coverage == "curated-only"       ~ "curated",
+      TRUE                               ~ ""
+    )
+    cat(as.character(HTML(glue(
+      '<div class="coll-card{if (partial) " partial" else ""}">',
+      '<div class="coll-name">{r$collection}</div>',
+      '<div class="coll-label">{r$label}</div>',
+      '<div class="coll-desc">{htmlEscape(desc)}</div>',
+      '<div class="coll-foot">',
+      '<span class="coll-n">{r$n_tables} tables</span>',
+      '<span class="coll-cov {cov_cls}">{cov_txt}</span>',
+      '</div></div>\n'
+    ))))
+  }
+  cat('</div>\n\n')
+}
+```
+
+## How collections are built
+
+Each collection is one row in a [version-controlled
+registry](https://github.com/ben-domingue/irw/blob/main/src/collections/registry.csv)
+carrying its definition and the rule that produces its membership --- the
+presence of a column (`treat` for `rct`, `qmatrix*` for `q_matrix`), or a
+pattern over the recorded construct name. `continuous_response` is the one
+collection assembled by hand, because the available signals disagree too often
+for a rule to settle it.
+
+Adding a collection is therefore a change to data, not to code, and every
+membership records the basis on which it was decided. See
+[issue #1633](https://github.com/ben-domingue/irw/issues/1633).

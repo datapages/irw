@@ -141,6 +141,16 @@ viewof variable = yamultiselect(vars.variable, { label: "Variable" })
 viewof prefix = yamultiselect(vars.prefix, { label: "Variable prefix" })
 ```
 
+```{ojs filter-collection}
+// Collections (issue #1633). yamultiselect rather than the checkbox idiom used
+// for the tag facets: 22 values is too many to scan, and the checkbox default
+// is all-selected, which would read as a constraint the user never set. Empty
+// here correctly means "no constraint" -- hence overlap_null_filter below.
+// Lives in this panel, not the qualitative one, because the design collections
+// come from metadata and so apply even when qualitative filtering is off.
+viewof collection_sel = yamultiselect(collection_opts, { label: "Collection" })
+```
+
 :::
 :::
 
@@ -196,11 +206,29 @@ var_inputs = ([
   { v: "prefix",   vals: prefix   },
 ])
 
+// The multiselect shows "rct  (178)" so the size and the coverage caveat are
+// visible at the point of choosing; map the chosen labels back to bare slugs.
+collection_vals = collection_sel.map(o => collection_key[collection_opts.indexOf(o)])
+
+// Null-filter semantics: nothing selected means no constraint.
+//
+// This does NOT reuse overlap_null_filter. That helper does `d[t].includes(v)`,
+// which is exact membership on an array but SUBSTRING matching on a string --
+// and ojs_define collapses a length-1 list to a bare string, so a table in
+// exactly one collection arrives as e.g. "intensive_longitudinal". Substring
+// matching would then make it match a "longitudinal" filter, because
+// "intensive_longitudinal".includes("longitudinal") is true. Normalise to an
+// array first and compare exactly.
+as_array = (x) => Array.isArray(x) ? x : (x === null || x === undefined || x === "" ? [] : [x])
+collection_filter = (vals) => (d) =>
+  vals.length ? as_array(d.collection).some(c => vals.includes(c)) : true
+
 // generate filter function for each input and combine them
 range_filters = range_inputs.map(({ v, vals }) => range_filter(v, vals))
 overlap_filters = use_qual_filters ? overlap_inputs.map(({ v, vals }) => overlap_filter(v, vals)) : []
 overlap_null_filters = var_inputs.map(({ v, vals }) => overlap_null_filter(v, vals))
-all_filters = [...range_filters, ...overlap_filters, ...overlap_null_filters]
+collection_filters = [collection_filter(collection_vals)]
+all_filters = [...range_filters, ...overlap_filters, ...overlap_null_filters, ...collection_filters]
 
 // apply filters to metadata
 ds = all_filters.reduce((mdf, fun) => mdf.filter(fun), md)
@@ -435,8 +463,11 @@ l = "longitudinal"
 long_vals = overlap_inputs.filter(d => d.v === l)[0].vals
 long_arg = use_qual_filters && !is_default_overlap(l, long_vals) ? `${l} = ${long_vals[0] === "longitudinal" ? "TRUE" : "FALSE"}` : null
 
+// collection argument; the OJS name must match irw_filter()'s formal exactly
+collection_arg = collection_vals.length ? `collection = ${c(collection_vals)}` : null
+
 // combine all arguments
-filter_args = [...range_args, var_arg, ...overlap_args, long_arg].filter(e => e !== null)
+filter_args = [...range_args, var_arg, collection_arg, ...overlap_args, long_arg].filter(e => e !== null)
 filter_str = filter_args.length ? `\n  ${filter_args.join(",\n  ")}  \n` : ""
 
 // load template and fill arguments into it
