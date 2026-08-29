@@ -40,13 +40,25 @@ n_total  <- 3650L
 n_part <- sum(reg$coverage == "tagged-subset-only")
 cat(glue(
   '::: {{.callout-warning appearance="simple"}}\n',
-  '## Not every collection sees the whole warehouse\n\n',
-  'Collections built from the tag annotations searched only the **{format(n_tagged, big.mark=",")} ',
-  'of {format(n_total, big.mark=",")}** tables that carry tags, and tag coverage is much lower in the ',
-  'newer warehouses. {n_part} of the {nrow(reg)} collections below are marked ',
-  '`tagged-subset-only` for that reason: they are useful starting points, but they are ',
-  'not exhaustive, and they lean toward older tables. Treat them as "the ones we know of", ',
-  'not "all of them". The rest searched every documented table.\n',
+  '## Please check a collection before relying on it\n\n',
+  '**Membership is our judgment, and you should verify it for your own purposes.** ',
+  'Most collections are assigned by a rule --- the presence of a column, or a pattern ',
+  'matched against the construct name each table was annotated with. A pattern over ',
+  'free text will sometimes catch a table you would exclude, and miss one you would ',
+  'include. `continuous_response` is assigned by hand, which makes it a judgment of a ',
+  'different kind rather than a safer one. Nothing here has been checked table by table. ',
+  'Every membership records the basis on which it was decided --- see ',
+  '`irw_collection_members()` --- so you can inspect a collection and form your own view; ',
+  'please do so before using one as the sample for an analysis.\n\n',
+  '**Coverage is also uneven.** Collections built from the tag annotations searched only ',
+  'the **{format(n_tagged, big.mark=",")} of {format(n_total, big.mark=",")}** tables that ',
+  'carry tags, and tag coverage is much lower in the newer warehouses. {n_part} of the ',
+  '{nrow(reg)} collections below are marked `tagged-subset-only` for that reason: they are ',
+  'useful starting points, but they are not exhaustive, and they lean toward older tables. ',
+  'Treat them as "the ones we know of", not "all of them". The rest searched every ',
+  'documented table.\n\n',
+  'Corrections are welcome --- open an issue on ',
+  '[ben-domingue/irw](https://github.com/ben-domingue/irw/issues).\n',
   ':::\n\n'
 ))
 ```
@@ -182,5 +194,8 @@ collection assembled by hand, because the available signals disagree too often
 for a rule to settle it.
 
 Adding a collection is therefore a change to data, not to code, and every
-membership records the basis on which it was decided. See
+membership records the basis on which it was decided. That last point is
+deliberate: a rule-assigned membership and a hand-assigned one carry different
+weight, and both are open to being wrong, so the record of *how* a table got
+into a collection travels with the collection itself. See
 [issue #1633](https://github.com/ben-domingue/irw/issues/1633).
