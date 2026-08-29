@@ -12,7 +12,7 @@ library(glue)
 library(jsonlite)
 library(redivis)
 
-irw_meta <- redivis$user("bdomingu")$dataset("irw_meta:bdxt")
+irw_meta <- redivis$user("datapages")$dataset("irw_meta:bdxt")
 metadata_table <- irw_meta$table("metadata:h5gs")$to_tibble()
 
 metadata <- metadata_table |>
@@ -118,16 +118,50 @@ urls <- ds |>
   list_rbind() |>
   mutate(table = str_to_lower(table), url = str_remove(url, "\\?.*$"))
 
+# Collections (issue #1633): labelled groupings, long format -- one row per
+# (table, collection). Collapsed to a list-column so the OJS overlap filter can
+# do `d.collection.includes(v)` the same way it does for the tag columns.
+#
+# Joined onto BOTH datasets_all and datasets_tagged on purpose: the `design`
+# collections are derived from metadata.csv, so they are meaningful even when
+# qualitative filtering is off. That is why the facet below lives in the
+# always-active variables panel rather than the qualitative one.
+collection_members <- irw_meta$table("collection_members:j7rp")$to_tibble()
+collections_by_table <- collection_members |>
+  mutate(table = str_to_lower(table)) |>
+  group_by(table) |>
+  summarise(collection = list(sort(unique(collection))), .groups = "drop")
+
+add_collections <- function(df) {
+  df |>
+    left_join(collections_by_table, by = "table") |>
+    mutate(collection = map(collection, \(x) if (is.null(x)) character(0) else x))
+}
+
+# Options for the multiselect, commonest first, each labelled with its size and
+# -- where it matters -- the fact that it is not exhaustive. This is the only
+# place a site user meets the coverage caveat.
+collections_reg <- irw_meta$table("collections:va83")$to_tibble()
+collection_opts <- collections_reg |>
+  arrange(desc(n_tables)) |>
+  mutate(opt = paste0(collection, "  (", n_tables,
+                      if_else(coverage == "tagged-subset-only", ", tagged subset only", ""),
+                      ")")) |>
+  pull(opt)
+collection_key <- collections_reg |> arrange(desc(n_tables)) |> pull(collection)
+
 # full set of tables with quantitative metadata + url + bibliography, regardless of
 # whether they have a row in the (manually curated) tags sheet -- used when
 # qualitative filtering is disabled in the explorer
 datasets_all <- metadata |> inner_join(urls) |> inner_join(bib_data) |>
   mutate(license = license |> str_split(",") |> map(str_trim)) |>
+  add_collections() |>
   arrange(table)
 
 # subset of the above that also has qualitative tags -- used when qualitative
 # filtering is enabled
-datasets_tagged <- metadata |> inner_join(tags) |> inner_join(urls) |> inner_join(bib_data |> select(-license)) |> arrange(table)
+datasets_tagged <- metadata |> inner_join(tags) |> inner_join(urls) |> inner_join(bib_data |> select(-license)) |>
+  add_collections() |> arrange(table)
 
 # save(datasets_tagged, datasets_all, var_vals, tag_vals, color_vars, file = "ojs_data.RData")
 # load("ojs_data.RData")
@@ -137,4 +171,6 @@ ojs_define(datasets_all = datasets_all)
 ojs_define(tags = tag_vals)
 ojs_define(vars = var_vals)
 ojs_define(color_vars = color_vars)
+ojs_define(collection_opts = collection_opts)
+ojs_define(collection_key = collection_key)
 ```

@@ -10,7 +10,7 @@ library(dplyr)
 library(stringr)
 library(redivis)
 
-irw_meta <- redivis$user("bdomingu")$dataset("irw_meta:bdxt")
+irw_meta <- redivis$user("datapages")$dataset("irw_meta:bdxt")
 
 metadata_table <- irw_meta$table("metadata:h5gs")$to_tibble() |>
   mutate(table = str_to_lower(table))
