@@ -54,14 +54,18 @@ na_vals <- c("no access to the osf page", "non-verbal task",
              "missing description", "need help", "no link or info",
              "Missing (NA)")
 
-comma <- "~"
+## Tag columns are multi-select, stored as one comma-joined string. A plain
+## split is correct because no tag value contains a comma: the one that did,
+## "Internet-based (Mturkers, etc)", was renamed to "Internet-based" when
+## 03_tags.R started normalizing the sheet export (issue #1720). Until then
+## this block swapped that comma for a "~", split, then swapped it back.
+## Don't reintroduce that -- fix the vocabulary instead.
 tags <- tag_table |>
   mutate(table = str_to_lower(table)) |>
   left_join(bib_data |> select(table, license)) |>
   mutate(across(everything(), \(s) if_else(s %in% na_vals, "NA", s))) |>
   mutate(across(everything(), \(s) replace_na(s, "NA"))) |>
-  mutate(sample = sample |> str_replace_all(",(?= etc)", comma) |> str_remove_all('\\"')) |>
-  mutate(across(-table, \(s) s |> str_split(",") |> map(str_trim) |> map(\(x) str_replace_all(x, comma, ",")))) |>
+  mutate(across(-table, \(s) s |> str_split(",") |> map(str_trim))) |>
   left_join(metadata |> select(table, longitudinal)) |>
   relocate(longitudinal, .before = age_range) |>
   mutate(has_item_text = if_else(table %in% itemtext_tables, "Yes", "No"),
