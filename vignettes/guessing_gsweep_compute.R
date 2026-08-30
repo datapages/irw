@@ -56,10 +56,26 @@ sweep_one <- function(i) {
   # mask. Points on a sweep are therefore comparable to each other, but the
   # value at g = 1/m need not reproduce the main table's Mixture column exactly.
   set.seed(20260830 + i)
-  resp <- tryCatch(prepare_table(table_name, m), error = function(e) {
-    message("    fetch/prepare failed: ", conditionMessage(e)); NULL
-  })
+
+  # Reuse the subsampled matrix guessing_compute.R already wrote. Refetching
+  # would pull ~45M long-format rows per ENEM table to keep 3,000 people (see
+  # the memory note in guessing_compute.R), and would also sample a different
+  # set of respondents than the main results table used.
+  prep_file <- file.path(prep_dir, paste0(table_name, ".rds"))
+  resp <- if (file.exists(prep_file)) {
+    readRDS(prep_file)
+  } else {
+    tryCatch(prepare_table(table_name, m), error = function(e) {
+      message("    fetch/prepare failed: ", conditionMessage(e)); NULL
+    })
+  }
   if (is.null(resp)) return(NULL)
+
+  # Same zero-variance screen the main run applies, for the same reason.
+  item_p <- colMeans(resp, na.rm = TRUE)
+  degenerate <- is.na(item_p) | item_p %in% c(0, 1)
+  if (any(degenerate)) resp <- resp[, !degenerate, drop = FALSE]
+  if (ncol(resp) < 5) return(NULL)
 
   ho <- mask_holdout(resp, HOLDOUT_FRAC)
   res <- tryCatch(

@@ -53,7 +53,9 @@ set.seed(20260722)
 
 out_dir  <- "vignettes/guessingdata"
 fits_dir <- file.path(out_dir, "fits")
+prep_dir <- file.path(out_dir, "prepared")
 dir.create(fits_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(prep_dir, recursive = TRUE, showWarnings = FALSE)
 
 HOLDOUT_FRAC <- 0.2
 SUBSAMPLE_N  <- 3000   # ENEM tables only; gilbert_meta_* used at full N
@@ -98,22 +100,68 @@ TABLES <- tribble(
 
 prepare_table <- function(table_name, m) {
   df <- irw_fetch(table_name)
-  df <- df |> mutate(resp = suppressWarnings(as.numeric(resp))) |>
-    filter(resp %in% c(0, 1))
+
+  # Peak memory lives in this function, not in the model fits: the enem_*_1mil_*
+  # tables are ~1M respondents x ~45 items, so the fetched long frame is ~45M
+  # rows, while everything downstream works on a SUBSAMPLE_N x ~45 matrix. Keep
+  # the fetched object as small as possible and drop it as soon as it is no
+  # longer needed, rather than letting several full-size copies coexist.
+  df <- df[, c("id", "item", "resp"), drop = FALSE]   # drop unused columns first
+  df$resp <- suppressWarnings(as.numeric(df$resp))
+  df <- df[!is.na(df$resp) & df$resp %in% c(0, 1), , drop = FALSE]
 
   ids <- unique(df$id)
   if (length(ids) > SUBSAMPLE_N) {
     ids <- sample(ids, SUBSAMPLE_N)
-    df <- df |> filter(id %in% ids)
+    df  <- df[df$id %in% ids, , drop = FALSE]
+    # The subset is now ~0.3% of the fetched rows; release the rest before the
+    # reshape, which would otherwise allocate on top of the full-size frame.
+    gc(verbose = FALSE)
   }
 
-  wide <- df |> select(id, item, resp) |>
+  wide <- df |>
     distinct(id, item, .keep_all = TRUE) |>
     tidyr::pivot_wider(names_from = item, values_from = resp)
+  rm(df); gc(verbose = FALSE)
+
   mat <- as.matrix(wide[, -1])
   rownames(mat) <- wide$id
   storage.mode(mat) <- "numeric"
+  rm(wide); gc(verbose = FALSE)
   as.data.frame(mat)
+}
+
+# Sequential fetch/subsample pass, so the memory-bound fetch and the CPU-bound
+# fitting never overlap. Measured on enem_2013_1mil_mt: RSS 3.1 GB after the
+# fetch, 5.1 GB after the type/validity filter, 6.1 GB by the time the
+# 3,000-person subsample (135,000 rows, ~4 MB) exists -- and R does not return
+# those pages to the OS, so a worker that fetched stayed multi-GB for the whole
+# fitting phase. The mitigations in prepare_table() shrink that, but the fetch
+# itself is irreducible: irw_fetch() has no server-side row or person limit, so
+# all ~45M rows must be materialized to keep 0.3% of them.
+#
+# Running the fetches one at a time caps peak at a single table's fetch rather
+# than one per worker, and leaves the parallel pass reading ~4 MB files.
+# Tables already prepared or already fitted are skipped, so this resumes.
+prepare_to_disk <- function() {
+  for (i in seq_len(nrow(TABLES))) {
+    table_name <- TABLES$table[i]
+    prep_file <- file.path(prep_dir, paste0(table_name, ".rds"))
+    fit_file  <- file.path(fits_dir, paste0(table_name, ".rds"))
+    if (file.exists(prep_file) || file.exists(fit_file)) {
+      message("  Already prepared or fitted, skipping fetch: ", table_name)
+      next
+    }
+    message("  Fetching: ", table_name)
+    resp <- tryCatch(prepare_table(table_name, TABLES$m[i]), error = function(e) {
+      message("    fetch/prepare failed: ", conditionMessage(e)); NULL
+    })
+    if (!is.null(resp)) {
+      saveRDS(resp, prep_file)
+      message("    -> ", nrow(resp), " x ", ncol(resp), " saved")
+    }
+    rm(resp); gc(verbose = FALSE)
+  }
 }
 
 # ==============================================================================
@@ -123,10 +171,41 @@ prepare_table <- function(table_name, m) {
 fit_one_table <- function(table_name, m, m_verified) {
   message("  Processing: ", table_name)
 
-  resp <- tryCatch(prepare_table(table_name, m), error = function(e) {
-    message("    fetch/prepare failed: ", conditionMessage(e)); NULL
-  })
+  # Read the matrix prepared by prepare_to_disk(); only fall back to fetching
+  # here if fit_one_table() is called directly, outside the two-pass driver.
+  prep_file <- file.path(prep_dir, paste0(table_name, ".rds"))
+  resp <- if (file.exists(prep_file)) {
+    readRDS(prep_file)
+  } else {
+    tryCatch(prepare_table(table_name, m), error = function(e) {
+      message("    fetch/prepare failed: ", conditionMessage(e)); NULL
+    })
+  }
   if (is.null(resp)) return(NULL)
+
+  # Drop items with no observed variance. mirt cannot estimate a difficulty
+  # for an item everyone gets right or everyone gets wrong, so a single such
+  # item fails the Rasch fit and takes the whole table with it.
+  #
+  # This is not hypothetical: the enem_*_1mil_lc tables carry elective
+  # English/Spanish blocks that only a subset of candidates sit, and in one
+  # 3,000-person draw of enem_2019_1mil_lc five of those items came back with
+  # ~1,500 observed responses that were *all* zero -- a coding artifact of the
+  # block the candidate did not take, not 1,500 people getting an item wrong.
+  # Which elective items appear at all depends on who is sampled, so without
+  # this screen the table's usability varies with the subsample draw.
+  item_p <- colMeans(resp, na.rm = TRUE)
+  degenerate <- is.na(item_p) | item_p %in% c(0, 1)
+  n_dropped <- sum(degenerate)
+  if (n_dropped > 0) {
+    message("    dropping ", n_dropped, " zero-variance item(s): ",
+            paste(names(resp)[degenerate], collapse = ", "))
+    resp <- resp[, !degenerate, drop = FALSE]
+  }
+  if (ncol(resp) < 5) {
+    message("    fewer than 5 usable items after screening; skipping table")
+    return(NULL)
+  }
 
   ni <- ncol(resp); np <- nrow(resp)
   ho <- mask_holdout(resp, HOLDOUT_FRAC)
@@ -206,6 +285,7 @@ fit_one_table <- function(table_name, m, m_verified) {
   list(
     table = table_name, m = m, m_verified = m_verified,
     n_items = ni, n_participants = np, n_heldout = nrow(ho$mask_idx),
+    n_items_dropped = n_dropped,
     true_vals = ho$true_vals,
     preds = preds,
     converged = converged,
@@ -239,7 +319,23 @@ fit_to_disk <- function(i) {
 }
 
 if (!isTRUE(getOption("guessing.testmode"))) {
-  plan(multisession, workers = min(4, parallel::detectCores() %/% 2))
+  # 2 workers, not the repo's usual min(4, detectCores() %/% 2). Peak memory
+  # here is dominated by the fetched long-format table, not by model fitting:
+  # eight of the eleven tables are enem_*_1mil_* (~1M respondents x ~45 items,
+  # so ~45M long rows) and prepare_table() has to fetch the whole thing before
+  # it can subsample to SUBSAMPLE_N. A previous run at 4 workers reached 4-5 GB
+  # RSS each, filled 30 GB and drove the machine into swap. Worker count is the
+  # blunt lever on concurrent peak; see prepare_table() for the per-worker one.
+  # Pass 1: fetch + subsample, one table at a time (memory-bound).
+  message("\nPreparing tables (sequential fetch) ...")
+  prepare_to_disk()
+
+  # Pass 2: fit, in parallel over the small prepared matrices (CPU-bound).
+  # Nothing nests underneath furrr here: mirt is serial (no mirtCluster()
+  # call anywhere in this project) and R is linked against reference BLAS,
+  # not a threaded one. OMP_NUM_THREADS is pinned to 1 by the launcher as a
+  # belt-and-braces guard in case that linkage ever changes.
+  plan(multisession, workers = 2)
   message("\nFitting ", nrow(TABLES), " tables...")
   future_map(seq_len(nrow(TABLES)), fit_to_disk, .options = furrr_options(seed = TRUE))
   plan(sequential)
@@ -267,6 +363,7 @@ summarize_one <- function(r) {
   tibble(
     table = r$table, m = r$m, m_verified = r$m_verified,
     n_items = r$n_items, n_participants = r$n_participants, n_heldout = r$n_heldout,
+    n_items_dropped = r$n_items_dropped %||% 0L,
     converged_rasch = r$converged$rasch, converged_2pl = r$converged$pl2,
     converged_1plg = r$converged$plg, converged_3pl = r$converged$pl3,
     converged_ag = r$converged$ag, converged_mix = r$converged$mix,

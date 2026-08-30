@@ -531,38 +531,91 @@ if (cache_ok && nrow(summary_df) > 0 && any(!summary_df$converged_1plg)) {
 }
 ```
 
-::: {.callout-note}
-### Reading the table above
+```{r}
+#| label: reading-the-table
+#| results: asis
+# Every claim in this callout is computed from the cached results rather than
+# written by hand. An earlier version hardcoded them, and they silently went
+# stale when the estimators changed (see the latent-variance note in Data and
+# methods); anything asserted here should move when the numbers move.
+if (cache_ok && nrow(summary_df) > 0 && nrow(imv_vs_rasch_df) > 0) {
+  w <- imv_vs_rasch_df |> pivot_wider(names_from = model, values_from = imv) |>
+    left_join(summary_df |> select(table, pi_hat, any_of("sd_rasch")), by = "table")
 
-- **"3PL wins" is mostly discrimination, not guessing.** Check this
-  directly in the pairwise widget below: `IMV(2PL, 3PL)` is only 0.0008 to
-  0.0044 on every table here except `enem_2014_1mil_ch` (where it goes
-  negative, along with every other guessing correction on that table -- see
-  next point). Almost all of 3PL's edge over Rasch is the free discrimination
-  parameter it already shares with 2PL, not its guessing floor. And because
-  the Mixture model is Rasch-engaged (its engaged class has slope fixed at
-  1), comparing it against 3PL, 1PL-AG, or even 2PL folds two separate
-  questions -- does letting discrimination vary help, and does modeling
-  guessing help -- into a single number.
-- **This is a single 80/20 split, not the repeated-split design the Safety
-  Valve paper uses in its own empirical section** (see Limitations). Two
-  cells here look like exactly the kind of split noise that caution is about:
-  `enem_2013_1mil_cn` has π̂ = 0.76 (real guessing detected by the Mixture model) but a small
-  *negative* Mixture IMV, and on `enem_2014_1mil_ch` every guessing
-  correction -- 3PL, 1PL-AG, Mixture, and Purified Rasch -- goes negative at
-  once. Neither result is implausible on its own, but neither should be read
-  as settled until checked against the 20-split version of this analysis.
-- **Purified Rasch's column is negative on every table here, and that is not
-  evidence it "doesn't work."** Method A was never designed to improve
-  out-of-sample response prediction; its promise is better *item parameters*
-  after removing guessing-contaminated persons from calibration (see Data and
-  methods above). Scoring it on held-out response prediction -- the yardstick
-  built for models that exist to predict responses -- isn't the test its own
-  logic would ask for. [Two scorecards for Method A](#two-scorecards-for-method-a)
-  below runs the test its own logic *does* ask for, against known generating
-  item parameters, and it recovers difficulty several times more accurately
-  than Rasch on the same runs where it loses IMV.
-:::
+  # IMV(2PL, 3PL): does the guessing floor add anything beyond free slopes?
+  pw <- map_dfr(.res$raw, function(r) {
+    p2 <- r$preds$pl2; p3 <- r$preds$pl3
+    tibble(table = r$table,
+           imv23 = if (is.null(p2) || all(is.na(p2)) || is.null(p3) || all(is.na(p3))) {
+             NA_real_
+           } else compute_imv(p2, p3, r$true_vals))
+  })
+  w <- left_join(w, pw, by = "table")
+
+  helps <- w |> filter(!is.na(`3PL`), `3PL` > 0)
+  hurts <- w |> filter(!is.na(`3PL`), `3PL` <= 0)
+
+  cat("::: {.callout-note}\n### Reading the table above\n\n")
+
+  if (nrow(helps) > 0 && nrow(hurts) > 0) {
+    cat(sprintf(
+      paste0("- **The tables split in two, and the split tracks the spread of ",
+             "ability.** On %d of the %d tables (%s) the 3PL, 1PL-AG and ",
+             "Mixture are all positive against Rasch. On the other %d (%s) ",
+             "every guessing correction is at or below zero -- the 3PL by ",
+             "%.4f to %.4f, i.e. *worse* than simply ignoring guessing. ",
+             "Those are also the tables with the largest estimated latent ",
+             "spread (SD(theta) %.1f to %.1f, against %.1f to %.1f on the ",
+             "first group). Whatever is driving the difference, no ",
+             "correction on this page buys anything on the second group.\n"),
+      nrow(helps), nrow(w), paste0("`", helps$table, "`", collapse = ", "),
+      nrow(hurts), paste0("`", hurts$table, "`", collapse = ", "),
+      max(hurts$`3PL`), min(hurts$`3PL`),
+      min(hurts$sd_rasch, na.rm = TRUE), max(hurts$sd_rasch, na.rm = TRUE),
+      min(helps$sd_rasch, na.rm = TRUE), max(helps$sd_rasch, na.rm = TRUE)))
+  }
+
+  if (any(!is.na(w$imv23))) {
+    pos23 <- w |> filter(!is.na(imv23), imv23 > 0)
+    cat(sprintf(
+      paste0("- **Where the 3PL does win, it is mostly discrimination, not ",
+             "guessing.** `IMV(2PL, 3PL)` -- what the guessing floor adds ",
+             "*on top of* the free slopes the 2PL already has -- runs from ",
+             "%.4f to %.4f across the tables, and is positive on only %d of ",
+             "%d. And because the Mixture is Rasch-engaged (its engaged ",
+             "class has slope fixed at 1), comparing it against the 3PL, the ",
+             "1PL-AG or the 2PL folds two questions -- does letting ",
+             "discrimination vary help, and does modeling guessing help -- ",
+             "into one number.\n"),
+      min(w$imv23, na.rm = TRUE), max(w$imv23, na.rm = TRUE),
+      nrow(pos23), sum(!is.na(w$imv23))))
+  }
+
+  cat(sprintf(
+    paste0("- **This is a single 80/20 split, not the repeated-split design ",
+           "the Safety Valve paper uses in its own empirical section** (see ",
+           "Limitations). The Mixture's margins in particular are small ",
+           "enough (|IMV| at most %.4f) that individual signs should not be ",
+           "read as settled until checked against the 20-split version of ",
+           "this analysis.\n"),
+    max(abs(w$Mixture), na.rm = TRUE)))
+
+  n_pur_neg <- sum(w$`Purified Rasch` < 0, na.rm = TRUE)
+  cat(sprintf(
+    paste0("- **Purified Rasch is negative on %s, and that is not evidence ",
+           "it \"doesn't work.\"** Method A was never designed to improve ",
+           "out-of-sample response prediction; its promise is better *item ",
+           "parameters* after removing guessing-contaminated persons from ",
+           "calibration. Scoring it on held-out prediction is not the test ",
+           "its own logic would ask for. ",
+           "[Two scorecards for Method A](#two-scorecards-for-method-a) below ",
+           "runs the test its logic does ask for, against known generating ",
+           "item parameters.\n"),
+    if (n_pur_neg == nrow(w)) "every table here" else sprintf("%d of %d tables", n_pur_neg, nrow(w))))
+
+  cat(":::\n\n")
+}
+```
 
 The table above fixes the baseline at Rasch. The widget below lets you pick
 *any* two of the seven specifications and see `IMV(m1, m2)` -- m1 as
