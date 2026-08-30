@@ -1,6 +1,8 @@
 # ANES 2012 — access and terms: what we could and could not determine
 
-**Status:** UNRESOLVED. Needs a human to read the data use agreement.
+**Status:** ASKED DIRECTLY. ben-domingue emailed ANES 2026-08-29 rather than reading the
+DUA — see `05_anes_2016_permission.md`. Awaiting response. Everything below stands as the
+reasoning behind that email.
 
 ## What the 403 was
 

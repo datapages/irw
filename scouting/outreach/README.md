@@ -1,6 +1,7 @@
 # Outreach drafts — RCA/CCA scouting follow-on
 
-**These are drafts. Ben sends them; the agent does not.** Nothing here has been sent.
+**These are drafts. Ben sends them; the agent does not.** `05` was sent 2026-08-29;
+nothing else here has been sent.
 
 | File | To | Purpose |
 |---|---|---|
@@ -8,6 +9,7 @@
 | `02_anes_2012_note.md` | internal | What we could and could not determine about ANES terms |
 | `03_sotoudeh_code_findings.md` | Ramina Sotoudeh | Neutral report of the four code findings |
 | `04_per_module_ingestion_notes.md` | internal | Scoring/format notes per module |
+| `05_anes_2016_permission.md` | anes@electionstudies.org | Request permission to repost ANES 2016 thermometer responses — **SENT 2026-08-29** |
 
 ## On framing precedent
 
