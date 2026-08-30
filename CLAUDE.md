@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is the **Item Response Warehouse (IRW)** website — a Quarto-based static documentation site published at https://itemresponsewarehouse.org/. It is not an R package; it is a publication-focused website with embedded R data analysis.
 
+Project map: [`ARCHITECTURE.md`](https://github.com/ben-domingue/irw/blob/main/ARCHITECTURE.md) in `ben-domingue/irw` covers the four
+repositories and what each owns, the Redivis layout, the Google Sheets, the data
+flow, and which document is authoritative when two disagree.
+
 ## Build Commands
 
 ```bash
