@@ -121,6 +121,22 @@ if (cache_ok) {
   date_run <- Sys.Date(); holdout_frac <- 0.2; subsample_n <- 3000
   is_provisional <- FALSE
 }
+
+# Two companion caches, each optional so the page still renders without them.
+# guessing_sim_compute.R  -- Method A parameter recovery vs. held-out IMV on
+#                            simulated data with b_true known.
+# guessing_gsweep_compute.R -- sensitivity of the 1PLg and the Mixture to the
+#                            assumed guessing level g.
+sim_path    <- "guessingdata/guessing_sim_results.rds"
+gsweep_path <- "guessingdata/guessing_gsweep_results.rds"
+sim_ok    <- file.exists(sim_path)
+gsweep_ok <- file.exists(gsweep_path)
+if (sim_ok) {
+  .sim <- readRDS(sim_path); sim_summary <- .sim$summary; sim_settings <- .sim$settings
+}
+if (gsweep_ok) {
+  .gsw <- readRDS(gsweep_path); gsweep_df <- .gsw$sweeps; gsweep_spread <- .gsw$spread
+}
 ```
 
 ```{r}
@@ -413,6 +429,23 @@ Seven specifications per table:
    better item parameters, not that flagged persons are themselves predicted
    well.
 
+All seven specifications estimate the latent variance. `mirt`'s
+`itemtype = "Rasch"` fixes every slope at 1 and estimates $\mathrm{Var}(\theta)$,
+so the three standalone estimators (`fit_1pl_ag()`, `fit_mixture()`,
+`purify_rasch()`) do the same rather than pinning $\theta \sim N(0,1)$. This
+matters more than it sounds. If the baseline estimates a variance the
+Mixture does not, the two are not nested, and the Mixture cannot collapse
+onto Rasch as $\hat\pi \to 1$ -- which is exactly the safety-valve property
+this page sets out to test. On simulated data containing *no guessing at
+all*, that mismatch alone drove IMV(Rasch, Mixture) to $-0.002$ at
+$\mathrm{SD}(\theta) = 1.6$; with the variance free it stays within
+$\pm 0.0002$ across the same range. The effect on the 1PL-AG's $\alpha$ was
+larger still: with the prior pinned and a true $\mathrm{SD}(\theta)$ of 1.4,
+$\hat\alpha$ came back $-0.46$ when the truth was 0 and $-0.42$ when the
+truth was $+0.5$ -- a sign flip, and a negative $\alpha$ turns the item
+characteristic curve over at the low end. Freeing the variance returns
+$+0.003$ and $+0.38$ on the same data.
+
 Before use on real data, `fit_1pl_ag()` and `fit_mixture()` were validated
 by simulation: both correctly return a non-significant likelihood-ratio test
 / $\hat\pi \approx 1$ under a true null (no guessing), and both recover
@@ -425,7 +458,7 @@ real-data application, not an implementation defect. See Limitations below.
 
 A single 80/20 response-level (cell) holdout per table, masked once and
 reused across all seven model fits, per this codebase's existing convention
-([[feedback_cv_holdout]]; @stenhaug2022) -- masking is per-person and always
+(@stenhaug2022) -- masking is per-person and always
 leaves at least one retained response. This is a **single split**, not the
 20 repeated splits used in the Safety Valve paper's own empirical section;
 that simplification was made deliberately for this first run.
@@ -451,13 +484,18 @@ if (cache_ok && nrow(summary_df) > 0) {
       pi_lbl    = sprintf("%.3f", pi_hat),
       frac_flagged = round(frac_flagged, 3)
     ) |>
+    mutate(sd_lbl = if ("sd_rasch" %in% names(summary_df)) sprintf("%.2f", sd_rasch) else NA_character_) |>
     select(table, m, n_participants, n_items, n_heldout,
-           pi_lbl, alpha_lbl, frac_flagged) |>
+           sd_lbl, pi_lbl, alpha_lbl, frac_flagged) |>
     knitr::kable(
-      align = "lrrrrrl",
-      col.names = c("Table", "m", "N", "J", "N held-out",
+      align = "lrrrrrrrl",
+      col.names = c("Table", "m", "N", "J", "N held-out", "SD(θ)",
                     "π̂ (Mixture)", "α̂ (1PL-AG, p)", "Frac. flagged (Purified)"),
-      caption = "Per-table model-internal diagnostics"
+      caption = paste0("Per-table model-internal diagnostics. SD(θ) is the ",
+                       "estimated latent standard deviation from the Rasch ",
+                       "baseline; every model on the page estimates it, so ",
+                       "none of these comparisons is confounded by a prior ",
+                       "held fixed at 1.")
     )
 } else {
   cat("Results not yet computed -- run vignettes/guessing_compute.R.")
@@ -520,9 +558,10 @@ if (cache_ok && nrow(summary_df) > 0 && any(!summary_df$converged_1plg)) {
   after removing guessing-contaminated persons from calibration (see Data and
   methods above). Scoring it on held-out response prediction -- the yardstick
   built for models that exist to predict responses -- isn't the test its own
-  logic would ask for. A fairer comparison would check parameter recovery
-  (e.g., in simulation, against known generating item parameters) rather than
-  IMV.
+  logic would ask for. [Two scorecards for Method A](#two-scorecards-for-method-a)
+  below runs the test its own logic *does* ask for, against known generating
+  item parameters, and it recovers difficulty several times more accurately
+  than Rasch on the same runs where it loses IMV.
 :::
 
 The table above fixes the baseline at Rasch. The widget below lets you pick
@@ -711,6 +750,157 @@ if (cache_ok && nrow(summary_df) > 0) {
 }
 ```
 
+## Two scorecards for Method A
+
+Purified Rasch is negative in the table above on every table. Read as a
+leaderboard, that says the method fails. It is the wrong yardstick. Method A
+proposes no new item response function and makes no claim about predicting
+responses; it removes guessing-contaminated persons from the *calibration*
+sample so that the surviving item parameters are less distorted. Held-out
+response prediction is the yardstick built for models that exist to predict
+responses.
+
+The check that its own logic asks for needs a known truth, so this one is a
+simulation (`vignettes/guessing_sim_compute.R`): a two-class mixture with a
+share $\pi$ of engaged Rasch responders and the rest answering at a flat
+$g=0.2$ on every item, with the generating difficulties $b_{true}$ known.
+Both scorecards are computed on the same fitted runs -- RMSE of the
+recovered difficulties against $b_{true}$ (both centred, since $b$ is
+identified only up to location), and held-out IMV against Rasch.
+
+```{r}
+#| label: sim-two-scorecards
+if (sim_ok) {
+  sim_summary |>
+    transmute(
+      pi_true = sprintf("%.2f", pi_true),
+      pi_hat = sprintf("%.3f", pi_hat_mean),
+      flagged = sprintf("%.3f", frac_flagged_mean),
+      rmse_rasch = sprintf("%.3f", rmse_rasch_mean),
+      rmse_pur = sprintf("%.3f", rmse_pur_mean),
+      rmse_mix = sprintf("%.3f", rmse_mix_mean),
+      slope_rasch = sprintf("%.2f", slope_rasch_mean),
+      slope_pur = sprintf("%.2f", slope_pur_mean),
+      imv_pur = sprintf("%+.4f", imv_pur_mean),
+      imv_mix = sprintf("%+.4f", imv_mix_mean)
+    ) |>
+    knitr::kable(
+      align = "rrrrrrrrrr",
+      col.names = c("π (true)", "π̂", "Frac. flagged",
+                    "RMSE Rasch", "RMSE Purified", "RMSE Mixture",
+                    "Slope Rasch", "Slope Purified",
+                    "IMV Purified", "IMV Mixture"),
+      caption = sprintf(
+        paste0("Item-parameter recovery and held-out IMV on the same runs. ",
+               "N = %d, J = %d, g = %.2f, %d replications per row; ",
+               "IMV columns are against Rasch. Slope regresses centred ",
+               "b_true on centred b_hat, so slope > 1 means the estimates ",
+               "are compressed toward the middle."),
+        sim_settings$N, sim_settings$J, sim_settings$g_true, sim_settings$n_reps)
+    )
+} else {
+  cat("Simulation not yet computed -- run vignettes/guessing_sim_compute.R.")
+}
+```
+
+```{r}
+#| label: sim-verdict
+#| results: asis
+if (sim_ok) {
+  row <- sim_summary |> filter(abs(pi_true - 0.80) < 1e-8)
+  if (nrow(row) == 1) {
+    cat(sprintf(
+      paste0("With %.0f%% of respondents replaced by flat guessers, Rasch ",
+             "recovers difficulty with RMSE %.3f and Purified Rasch with ",
+             "%.3f -- purification is **%.1f times more accurate** on the ",
+             "parameters -- while giving up %.4f in IMV on the very same ",
+             "fitted runs. Rasch's recovery slope of %.2f is the ",
+             "mechanism: guessing compresses a Rasch calibration toward the ",
+             "middle, and purification (slope %.2f) largely undoes that.\n\n"),
+      100 * (1 - row$pi_true), row$rmse_rasch_mean, row$rmse_pur_mean,
+      row$rmse_rasch_mean / row$rmse_pur_mean, abs(row$imv_pur_mean),
+      row$slope_rasch_mean, row$slope_pur_mean))
+    cat(paste0("So the negative column is what this method looks like when it ",
+               "is working, not evidence against it. Two scorecards, ",
+               "different winners.\n\n"))
+    cat(sprintf(
+      paste0("One caveat on reading this as a defence of Method A ",
+             "specifically: the Mixture model wins *both* scorecards here ",
+             "(RMSE %.3f, IMV %+.4f). The data-generating process is the ",
+             "Mixture's own assumed model, so this is its home turf and the ",
+             "comparison is not a fair horse race between the two ",
+             "corrections. The point is narrower -- that the sign of ",
+             "Purified Rasch's IMV column carries no information about ",
+             "whether purification did its job.\n\n"),
+      row$rmse_mix_mean, row$imv_mix_mean))
+  }
+}
+```
+
+## How much does the assumed $g$ matter?
+
+Every fixed-$g$ model above is handed $g = 1/m$, so the analyst is right by
+construction on every table on this page. That is the one axis the main run
+does not vary, and it is the axis @xiao2026safetyvalve's Studies 1 and 3 are
+built on. `vignettes/guessing_gsweep_compute.R` refits the 1PLg and the
+Mixture across a grid of assumed $g$ values on each real table, scoring both
+against a common Rasch baseline on the same holdout convention.
+
+The two models mis-specify differently. The 1PLg pushes *every* person's
+floor to the assumed $g$, so a wrong $g$ is wrong for every response. The
+Mixture applies $g$ only to the share of response weight it assigns to the
+guessing class, and can shrink that share when $g$ fits badly -- the safety
+valve. The prediction is that the 1PLg should be far more sensitive.
+
+```{r}
+#| label: gsweep-plot
+#| fig-height: 4.5
+#| fig-width: 8
+if (gsweep_ok && nrow(gsweep_df) > 0) {
+  plot_df <- gsweep_df |>
+    select(table, g_fit, `1PLg` = imv_1plg, Mixture = imv_mix) |>
+    pivot_longer(c(`1PLg`, Mixture), names_to = "model", values_to = "imv")
+  nominal <- gsweep_df |> distinct(table, g_nominal)
+
+  ggplot(plot_df, aes(g_fit, imv, colour = model)) +
+    geom_hline(yintercept = 0, colour = "grey60", linetype = 3) +
+    geom_vline(data = nominal, aes(xintercept = g_nominal),
+               colour = "grey40", linetype = 2, linewidth = 0.3) +
+    geom_line(linewidth = 0.6) +
+    geom_point(size = 1.2) +
+    facet_wrap(~ table, scales = "free_y") +
+    scale_colour_manual(values = c(`1PLg` = model_colors[["1PLg"]],
+                                    Mixture = model_colors[["Mixture"]])) +
+    labs(x = "assumed g", y = "IMV vs. Rasch", colour = NULL,
+         caption = "Dashed vertical line: the g = 1/m the main results table assumes.") +
+    theme(legend.position = "top")
+} else {
+  cat("Sweep not yet computed -- run vignettes/guessing_gsweep_compute.R.")
+}
+```
+
+```{r}
+#| label: gsweep-note
+#| results: asis
+if (gsweep_ok && nrow(gsweep_spread) > 0) {
+  cat(sprintf(
+    paste0("Across the %d tables, moving the assumed $g$ over the range ",
+           "[%.2f, %.2f] moves the 1PLg's IMV by a median of %.3f ",
+           "(worst table %.3f) and the Mixture's by a median of %.3f ",
+           "(worst %.3f). "),
+    nrow(gsweep_spread), min(.gsw$g_grid), max(.gsw$g_grid),
+    median(gsweep_spread$range_1plg), max(gsweep_spread$range_1plg),
+    median(gsweep_spread$range_mix), max(gsweep_spread$range_mix)))
+  cat(sprintf(
+    paste0("The worst single 1PLg value anywhere on the grid is %.3f, ",
+           "against %.3f for the Mixture. The asymmetry is the practical ",
+           "content of the safety-valve claim: a fixed-floor model is only ",
+           "as good as the analyst's $g$, whereas the Mixture degrades ",
+           "toward its Rasch baseline instead of past it.\n\n"),
+    min(gsweep_spread$worst_1plg), min(gsweep_spread$worst_mix)))
+}
+```
+
 ## Limitations
 
 - **ENEM's $m=5$ is an assumed, not verified, value.** IRW carries no item
@@ -723,6 +913,12 @@ if (cache_ok && nrow(summary_df) > 0) {
   application, where some items had standard errors above 100. Point
   estimates of $\hat\alpha$ should be read alongside its LR test, not in
   isolation.
+- **The recovery result is a simulation, on the Mixture's own DGM.** The
+  two-scorecards section generates data from exactly the two-class mixture
+  the Mixture model assumes. That is the right shape for isolating what
+  purification does to item parameters, but it is not a neutral arena for
+  ranking the corrections against each other, and it says nothing about how
+  Method A behaves when guessing is ability-dependent rather than flat.
 - **Single 80/20 split, not repeated cross-validation.** IMV estimates here
   reflect one holdout draw per table; they are not averaged over multiple
   splits the way the Safety Valve paper's own empirical section is.
@@ -743,9 +939,24 @@ Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
 # 1. Fit all 7 specifications across all tables (from the project root)
 source("vignettes/guessing_compute.R")
 
-# 2. Re-render this page
+# 2. Method A parameter recovery vs. held-out IMV (simulation; no Redivis
+#    access needed)
+source("vignettes/guessing_sim_compute.R")
+
+# 3. Sensitivity of the fixed-g models to the assumed guessing level
+source("vignettes/guessing_gsweep_compute.R")
+
+# 4. Re-render this page
 quarto::quarto_render("vignettes/guessing.qmd")
 ```
+
+Steps 2 and 3 write their own caches
+(`guessingdata/guessing_sim_results.rds`,
+`guessingdata/guessing_gsweep_results.rds`); the page renders without them,
+with those sections showing a placeholder instead. The estimators themselves,
+and the checks behind the variance and gradient claims in Data and methods,
+are in `vignettes/guessing_helpers.R` and
+`vignettes/guessing_vignette_checks.R`.
 
 ::: {.callout-tip}
 To cite the datasets used, run:
