@@ -33,11 +33,23 @@ source("vignettes/guessing_compute.R")   # prepare_table(), TABLES, QUAD, consta
 source("vignettes/guessing_g_sweep.R")   # fit_1plg_fixedq(), g_sweep()
 options(guessing.testmode = FALSE)
 
-out_dir <- "vignettes/guessingdata"
-G_GRID  <- c(0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50)
+out_dir   <- "vignettes/guessingdata"
+sweep_dir <- file.path(out_dir, "sweeps")
+dir.create(sweep_dir, recursive = TRUE, showWarnings = FALSE)
+G_GRID    <- c(0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50)
+
+# Each table's sweep is cached to its own file and skipped if present, so a
+# worker that dies partway (this run was OOM-killed once when sharing the
+# machine with the main fit) can be resumed by re-running the script rather
+# than starting over.
 
 sweep_one <- function(i) {
   table_name <- TABLES$table[i]; m <- TABLES$m[i]
+  out_file <- file.path(sweep_dir, paste0(table_name, ".rds"))
+  if (file.exists(out_file)) {
+    message("  Skipping (already done): ", table_name)
+    return(readRDS(out_file))
+  }
   message("  Sweeping: ", table_name)
   # An independent holdout draw at the same fraction as guessing_compute.R --
   # furrr gives each worker its own stream there, so this is not the identical
@@ -59,11 +71,15 @@ sweep_one <- function(i) {
   res$table <- table_name
   res$m <- m
   res$g_nominal <- 1 / m        # the value the main results table assumes
-  as_tibble(res)
+  res <- as_tibble(res)
+  saveRDS(res, out_file)
+  res
 }
 
 if (!isTRUE(getOption("guessing.testmode"))) {
-  plan(multisession, workers = min(4, parallel::detectCores() %/% 2))
+  # 2 workers, not 4: each holds a full response matrix plus 7 refits, and
+  # the earlier 4-worker run exhausted memory alongside the main fit.
+  plan(multisession, workers = 2)
   all_sweeps <- future_map(seq_len(nrow(TABLES)), sweep_one,
                            .options = furrr_options(seed = TRUE)) |>
     compact() |> bind_rows()

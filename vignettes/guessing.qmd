@@ -823,6 +823,21 @@ if (sim_ok) {
     cat(paste0("So the negative column is what this method looks like when it ",
                "is working, not evidence against it. Two scorecards, ",
                "different winners.\n\n"))
+    null_row <- sim_summary |> filter(abs(pi_true - 1) < 1e-8)
+    if (nrow(null_row) == 1 && null_row$rmse_pur_mean > null_row$rmse_rasch_mean) {
+      cat(sprintf(
+        paste0("Method A has no safety valve of its own, though. On the ",
+               "no-guessing row it still flags %.1f%% of respondents and ",
+               "drops them from calibration, and recovery gets slightly ",
+               "*worse* than plain Rasch as a result (RMSE %.3f vs. %.3f). ",
+               "The cost is small, but unlike the Mixture -- which collapses ",
+               "onto its Rasch baseline when there is nothing to correct -- ",
+               "purification always pays something for the persons it ",
+               "removes.\n\n"),
+        100 * null_row$frac_flagged_mean, null_row$rmse_pur_mean,
+        null_row$rmse_rasch_mean))
+    }
+
     cat(sprintf(
       paste0("One caveat on reading this as a defence of Method A ",
              "specifically: the Mixture model wins *both* scorecards here ",
