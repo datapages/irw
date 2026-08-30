@@ -6,7 +6,25 @@
 
 ---
 
-## Recommendation: NO-GO on the corpus-scale vignette
+> [!IMPORTANT]
+> **Verdict superseded — read the amendment first.** The NO-GO below rested
+> entirely on threshold 2, which failed only because it compared an IRW
+> *interquartile range* against Table 9's *full range* — not a like-for-like
+> test. Retested IQR against IQR, 5 of 13 comparable features pass, and the
+> result is robust to dropping the high-category tail and to the N = 2,000 cap.
+> **All four thresholds are met.** See "Amendment (2026-08-27, follow-on)" below.
+>
+> Everything above that amendment is preserved exactly as first written, per the
+> amendment's own convention of appending rather than rewriting. The
+> recommendation in the next section is therefore the *original* one and no
+> longer the operative verdict.
+>
+> The corpus-scale vignette was subsequently built: see
+> `analysis/plenitude_replication.qmd` and PR #99, which draws its sampling
+> frame from `scouting/scout_eligible_tables.csv` and carries forward the code
+> defects documented in Task B1.
+
+## Recommendation: NO-GO on the corpus-scale vignette (SUPERSEDED — see above)
 
 Three of the four thresholds pass. The one that fails is the one that decides whether the vignette has a subject.
 
