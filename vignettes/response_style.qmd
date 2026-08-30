@@ -2,11 +2,12 @@
 title: "Extreme and Midpoint Responding in Likert-Format IRW Data"
 description: |
   How prevalent are extreme (ERS) and midpoint (MRS) response styles in
-  Likert-format IRW data, and do they distort substantive conclusions --
-  like factor loadings -- if left unmodeled? We screen IRW's Likert-scale
-  tables (4-7 response categories, at least 5 items), compute person-level
-  ERS/MRS indices, and compare single-factor CFA loadings before and after a
-  simple ipsatization-based style control.
+  Likert-format IRW data, and can you tell from the responses alone whether
+  style is confounded with content? We screen IRW's Likert-scale tables
+  (4-7 response categories, at least 5 items), compute person-level ERS/MRS
+  indices, and show that the dependence between a sum-score style index and
+  the substantive score is strong but non-monotone -- so a Pearson
+  correlation, the obvious screen, sees almost none of it.
 date: today
 bibliography: response_style_data/references.bib
 format:
@@ -41,27 +42,18 @@ cache_ok   <- file.exists(cache_path)
 if (cache_ok) {
   .cache           <- readRDS(cache_path)
   summary_df       <- .cache$summary
-  loadings_df      <- .cache$loadings
+  binned_df        <- .cache$binned
+  persons_df       <- .cache$persons
   candidate_tables <- .cache$candidate_tables
   date_run         <- .cache$date_run
-  draft_from_local <- isTRUE(.cache$DRAFT_FROM_LOCAL_FIXTURES)
   r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
   r_n_tables_run   <- length(candidate_tables)
 } else {
-  summary_df <- tibble(
-    table = character(), construct_type = character(), n_items = integer(),
-    n_participants = integer(), min_cat = numeric(), max_cat = numeric(),
-    n_categories = numeric(), has_midpoint = logical(), mean_ers = numeric(),
-    sd_ers = numeric(), mean_mrs = numeric(), sd_mrs = numeric(),
-    ers_score_cor = numeric(), mrs_score_cor = numeric(),
-    style_sensitivity = numeric(), cfa_raw_converged = logical(),
-    cfa_ips_converged = logical()
-  )
-  loadings_df <- tibble(table = character(), item = character(),
-                         loading_raw = numeric(), loading_ipsatized = numeric())
+  summary_df  <- tibble()
+  binned_df   <- tibble()
+  persons_df  <- tibble()
   candidate_tables <- character()
   date_run <- Sys.Date()
-  draft_from_local <- FALSE
   r_all_candidates <- 0L
   r_n_tables_run   <- 0L
 }
@@ -77,41 +69,25 @@ knitr::opts_chunk$set(eval = cache_ok)
 
 if (!cache_ok) cat(
   "::: {.callout-warning}\n",
-  "**Cache not found** — figures and tables will not appear. Generate results ",
-  "by running the compute script, then re-render:\n\n",
+  "**Cache not found** — the IRW figures will not appear (the simulation ",
+  "sections below still run). Generate results by running the compute ",
+  "script, then re-render:\n\n",
   "```r\nRscript vignettes/response_style_compute.R\n```\n",
   ":::\n", sep = ""
 )
 ```
 
-```{r}
-#| label: draft-warning
-#| echo: false
-#| eval: true
-#| output: asis
-
-if (cache_ok && draft_from_local) cat(
-  "::: {.callout-warning}\n",
-  "**Draft preview, not final results.** This render uses a local snapshot ",
-  "of IRW `.Rdata` fixtures (not a live `irw_filter()`/`irw_fetch()` run ",
-  "against Redivis), selected with the same 4-7 category / >=5 item logic ",
-  "described below but without the `item_format` tag filter (unavailable ",
-  "offline). Numbers here are real computed results from real IRW tables, ",
-  "run through the actual `analyze_response_style()` function -- but the ",
-  "table set and exact figures will change once `response_style_compute.R` ",
-  "is run for real against Redivis. Treat this page as a layout/content ",
-  "draft only.\n",
-  ":::\n", sep = ""
-)
-```
-
 ::: {.callout-note}
-This vignette — including the dataset search, the compute script, the
-analysis design, and the writing below — was produced largely by Claude
-(Anthropic), working from a task specification and with human review.
-Treat the methodological choices and interpretations accordingly, and
-check the compute script (`response_style_compute.R`) directly if you're
-relying on the numbers here.
+## About this vignette
+
+The dataset search, compute script, analysis design, and writing here were
+produced largely by Claude (Anthropic), working from a task specification
+and with human review. Check the compute script
+(`response_style_compute.R`) directly if you're relying on the numbers.
+
+We thank **Carl F. Falk** (McGill University) for reviewing this vignette
+and for directing us to the literature it is built on
+[@falk2020mnrm; @savalei2014recovering; @falk2016flexible].
 :::
 
 ## Motivation
@@ -134,23 +110,23 @@ being measured. Three response styles are especially well documented:
   related in that it's also a property of *how* someone uses the scale
   rather than *what* they think.
 
-These aren't just a nuisance for individual items — they're a **known
-confound**: if response style correlates with the substantive score a scale
-is trying to measure (rather than being pure, construct-irrelevant noise),
-then style and construct are statistically entangled, and any downstream
-model (a factor loading, a group comparison, a validity correlation) that
-treats the raw score as a clean measure of the construct is contaminated by
-however people use the scale.
+The cheap way to measure the first two is a **sum-score index**: count the
+proportion of a person's responses that land on an endpoint (ERS) or on the
+midpoint (MRS). It requires no model, runs in one line, and is what most
+applied papers do. This vignette is largely about why that index cannot, on
+its own, tell you whether style is contaminating your measurement — and what
+the honest version of that question looks like.
 
-This vignette asks three concrete questions of the Likert-format tables in
-the IRW:
+Three concrete questions of the Likert-format tables in the IRW:
 
 1. **How common is extreme responding, and does it vary a lot across
    datasets?**
-2. **Is response style entangled with the substantive score, or does it
-   behave like independent noise?**
-3. **Does controlling for style — even with a crude method — change a
-   basic substantive conclusion (a factor loading)?**
+2. **Can we tell, from a sum-score style index alone, whether style is
+   entangled with the substantive score?**
+3. **Does a simple, widely used "style control" fix anything?**
+
+The short answers turn out to be: it varies enormously; no, and the usual
+screen for it is actively misleading; and no.
 
 ### See extreme responding in action
 
@@ -248,15 +224,15 @@ that proportion is built from very few trials and is correspondingly noisy
 ERS of 0.67 by chance alone). Five items is still a fairly low floor — treat
 person-level style estimates from tables near it as noisier than those from
 longer batteries. The respondent floor rules out tables too small for
-table-level ERS/MRS means and CFA fits to be anything but sampling noise.
+table-level ERS/MRS means to be anything but sampling noise.
 
 This selection is deliberately not exhaustive: `r r_all_candidates` tables
 met these criteria as of `r format(date_run, "%B %Y")`, and this pass
 analyzes a **random sample of `r r_n_tables_run` of them** rather than the
 full list — some candidate tables run past 100 items and tens of thousands
 of respondents, and running all of them in one pass isn't practical.
-`fit_to_disk()`'s on-disk cache (see below) means a later pass with a larger
-or different sample adds to what's already here rather than redoing it.
+`fit_to_disk()`'s on-disk cache means a later pass with a larger or
+different sample adds to what's already here rather than redoing it.
 
 ### Per-table computation
 
@@ -269,50 +245,31 @@ For each candidate table, `fit_response_style()`:
    the table-level metadata) and **drops the table if per-item category
    ranges are inconsistent** — e.g. some items coded 1-4 and others 1-7 —
    since that indicates either a coding problem or a mixed response format
-   that a single ERS/MRS definition can't cleanly apply to. Tables dropped
-   for this reason are logged (with their observed min/max ranges) in the
-   compute script's console output.
+   that a single ERS/MRS definition can't cleanly apply to.
 3. Computes, per person: ERS (proportion of non-missing responses at the
    minimum or maximum category), MRS (proportion at the midpoint category —
-   left `NA` for tables with an even number of categories, since there is no
-   midpoint to speak of), and the person's mean response level across items
-   (used below both as a net-acquiescence proxy and as the substantive
-   "raw score").
-4. Correlates ERS and MRS with that raw score across people, within each
-   table.
-5. Fits a single-factor CFA (`lavaan::cfa()`, as in the
-   [CFA tutorial](cfa.qmd)) two ways: once on the raw item responses, and
-   once on **ipsatized** responses (each person's own item responses minus
-   their own mean across items — a simple, common style control). We
-   compare standardized loadings between the two fits and summarize the
-   mean absolute change as a table-level **style-sensitivity** metric. If a
-   table's CFA doesn't converge cleanly on both the raw and ipsatized data,
-   we record `NA` for style sensitivity rather than force a comparison on an
-   unstable fit.
-
-```{r}
-#| label: fit-function
-#| eval: false
-
-analyze_response_style <- function(table_name, wide, tags_meta) {
-  # ... category-range consistency check, per-person ERS/MRS/mean level,
-  #     ERS/MRS-score correlations, raw vs. ipsatized single-factor CFA ...
-}
-
-fit_response_style <- function(table_name) {
-  wide <- fetch_wide(table_name)  # irw_fetch(resp = TRUE) with a long2resp fallback
-  analyze_response_style(table_name, wide, tags_meta)
-}
-```
-
-Of the `r r_n_tables_run` sampled tables, `r nrow(summary_df)` produced
-usable response-style results after the checks above (the rest were dropped
-for an inconsistent category range, too few respondents after cleaning, or a
-CFA that didn't converge).
+   left `NA` for tables with an even number of categories), and the person's
+   mean response across items, which is the substantive raw score for a
+   single-factor Likert battery.
+4. Characterises the **shape** of the relationship between each style index
+   and that raw score, using three statistics of increasing generality:
+   the Pearson correlation (linear association only), a binned $\eta^2$
+   (proportion of style variance explained by 20 quantile bins of the raw
+   score — assumption-free, detects any shape), and the $R^2$ from
+   regressing the style index on a natural spline of the raw score. The gap
+   between $r^2$ and the other two is the object of interest.
 
 ::: {.callout-note}
-To reproduce with current IRW holdings, re-run `response_style_compute.R`
-and commit the updated `response_style_data/response_style_results.rds`.
+## What this vignette does not do
+
+A natural next step would be to fit a single-factor CFA to raw responses and
+again to **ipsatized** responses (each person's items minus their own mean),
+and read the change in standardized loadings as a measure of how much
+response style distorts the substantive solution. This vignette does not do
+that, because the comparison is not interpretable — wrong target and wrong
+estimator. Since the method is common, the reasons are worked through in
+[their own section below](#why-person-mean-centering-isnt-the-fix) rather
+than left implicit.
 :::
 
 ## Results
@@ -354,48 +311,268 @@ Instead — see the spread in @fig-ers-ranked — a handful of tables sit far to
 the right, with a substantial fraction of *all* responses landing on a scale
 endpoint, while others sit much lower. Table-level ERS is not a fixed
 property of "using a Likert scale" in general; it varies with the
-instrument, the sample, and (very plausibly, though we can't isolate it
-here) the substantive content being asked about.
+instrument, the sample, and the substantive content being asked about.
 
-### Is response style entangled with the substantive score?
+That last clause is doing more work than it looks. If mean ERS varies with
+content, then ERS and content are not separate things you can measure
+independently — which is exactly what the next section is about.
+
+### A correlation is the wrong test for confounding {#a-correlation-is-the-wrong-test}
+
+The natural screen is: correlate each person's ERS with their raw score. Near
+zero means style is construct-irrelevant noise; far from zero means style and
+construct are entangled. It is an appealing test, and it is not a valid one.
+
+The reason is that the relationship between a sum-score style index and the
+raw score is typically **strong but non-monotone** — U-shaped for ERS,
+inverted-U for MRS — and a Pearson correlation is close to blind to a
+symmetric U. @falk2020mnrm make this point directly (their Figure 4 shows "a
+distinct U-shaped non-linear relationship" between the substantive trait and
+sum-score ERS, and conclude that "it would be difficult for such methods to
+disentangle ERS from the construct of interest").
+
+Worse, part of the U is **arithmetically forced**. On a scale running from
+$c_{\min}$ to $c_{\max}$, a person can avoid the endpoints entirely only
+while their mean stays within the range the interior categories span,
+$[c_{\min}+1,\ c_{\max}-1]$. Push the mean outside that band and endpoint
+responses become unavoidable: reaching a mean $m < c_{\min}+1$ requires at
+least a fraction $(c_{\min}+1-m)$ of responses at $c_{\min}$. So ERS must
+rise toward 1 at both ends of the score range, in any dataset, whether or
+not a single respondent has anything resembling a response style.
+
+Here is what that does to the screen. We simulate a strictly unidimensional
+5-category battery — a content trait, item noise, and **no response-style
+process at all**:
 
 ```{r}
-#| label: fig-ers-score-cor
-#| fig-cap: "ERS-score correlation for each table, plotted against that table's mean ERS. Points far from zero indicate a table where extreme responding is not independent of the substantive score it's measured alongside."
-#| fig-height: 5
+#| label: fig-sim-ushape
+#| eval: true
+#| fig-cap: "Simulated data with NO response-style process: 12 items, 5 categories, responses driven only by a single content trait plus noise. Each point is one simulated respondent. The dashed line is the arithmetic lower bound on ERS given a person's mean score. The Pearson correlation is essentially zero; the dependence is nearly total."
+#| fig-height: 4.5
 
-ggplot(summary_df %>% filter(!is.na(ers_score_cor)),
-       aes(x = mean_ers, y = ers_score_cor)) +
-  geom_hline(yintercept = 0, linetype = "dashed", colour = irw_grey) +
-  geom_point(colour = irw_red, alpha = 0.75, size = 2) +
-  labs(x = "Mean ERS", y = "Correlation: person ERS vs. person mean score") +
-  coord_cartesian(ylim = c(-1, 1))
+set.seed(7)
+K <- 5; n_items_sim <- 12; n_sim <- 3000
+
+theta_sim <- rnorm(n_sim)
+sim_mat <- sapply(seq_len(n_items_sim), function(j) {
+  z <- theta_sim * 0.9 + rnorm(n_sim, 0, sqrt(1 - 0.9^2))
+  as.integer(cut(z, breaks = c(-Inf, -1.2, -0.4, 0.4, 1.2, Inf), labels = 1:K))
+})
+
+sim_ers  <- rowMeans(sim_mat == 1 | sim_mat == K)
+sim_mean <- rowMeans(sim_mat)
+
+# Arithmetic lower bound on ERS given the person's mean (see text)
+ers_lower_bound <- function(m, min_cat, max_cat) {
+  pmin(1, pmax(pmax(0, (min_cat + 1) - m), pmax(0, m - (max_cat - 1))))
+}
+
+sim_r    <- cor(sim_ers, sim_mean)
+sim_eta2 <- {
+  bin   <- cut(sim_mean, breaks = unique(quantile(sim_mean, seq(0, 1, length.out = 21))),
+               include.lowest = TRUE)
+  grand <- mean(sim_ers)
+  sum(tapply(sim_ers, bin, function(v) length(v) * (mean(v) - grand)^2), na.rm = TRUE) /
+    sum((sim_ers - grand)^2)
+}
+
+bound_df <- tibble(m = seq(1, K, length.out = 400)) %>%
+  mutate(bound = ers_lower_bound(m, 1, K))
+
+ggplot(tibble(sim_mean, sim_ers), aes(sim_mean, sim_ers)) +
+  geom_point(alpha = 0.12, colour = irw_blue, size = 1) +
+  geom_line(data = bound_df, aes(m, bound),
+            linetype = "dashed", colour = irw_red, linewidth = 0.8) +
+  geom_smooth(method = "loess", formula = y ~ x, se = FALSE,
+              colour = "black", linewidth = 0.9) +
+  annotate("label", x = 3, y = 0.92, hjust = 0.5, size = 4.2, label.size = 0,
+           label = sprintf("Pearson r = %.3f  (r² = %.3f)\nbinned η² = %.2f",
+                           sim_r, sim_r^2, sim_eta2)) +
+  labs(x = "Person mean response (the substantive score)",
+       y = "Person ERS") +
+  coord_cartesian(ylim = c(0, 1))
 ```
 
-A correlation near zero in @fig-ers-score-cor is the reassuring case: ERS
-behaves like independent, construct-irrelevant noise for that table, and a
-substantive score built from the raw responses isn't obviously contaminated
-by it. A correlation far from zero is the concerning case — it means people
-who respond more extremely also score systematically higher or lower on the
-scale itself, so ERS and the construct are statistically entangled rather
-than separable. Both patterns appear across IRW's Likert tables; this
-variability is itself the point — you cannot assume from a scale's category
-count or subject area alone whether style will be a nuisance or a confound in
-a given dataset.
+In @fig-sim-ushape the correlation-based screen reports
+`r sprintf("r = %.3f", sim_r)` — an $r^2$ of
+`r sprintf("%.3f", sim_r^2)`, i.e. the style index and the score share
+essentially none of their variance, apparently the cleanest possible bill of
+health. The binned $\eta^2$ for the same data is
+`r sprintf("%.2f", sim_eta2)`: the raw score determines almost all of the
+variance in ERS. Both numbers describe the same 3,000 points. Only one of
+them is right.
+
+The practical upshot is that a near-zero ERS-score correlation is not
+evidence of anything. It is the expected result when style and content are
+maximally confounded in the ordinary, symmetric way.
+
+### The same pattern in IRW data
+
+```{r}
+#| label: fig-r2-vs-eta2
+#| fig-cap: "For each IRW table: variance in person ERS explained by the raw score, measured linearly (r-squared, x-axis) and without a shape assumption (binned eta-squared, y-axis). The dashed line is equality. Points sit far above it -- a correlation-based screen sees a small fraction of the dependence that is actually there."
+#| fig-height: 5
+
+shape_df <- summary_df %>%
+  filter(!is.na(ers_score_cor), !is.na(ers_score_eta2)) %>%
+  mutate(
+    r2      = ers_score_cor^2,
+    tooltip = paste0(
+      "Table: ", table,
+      "<br>Pearson r: ", round(ers_score_cor, 3),
+      "<br>r²: ", round(r2, 3),
+      "<br>binned η²: ", round(ers_score_eta2, 3),
+      "<br>spline R²: ", round(ers_score_r2_spline, 3),
+      "<br>n_items: ", n_items, " | N: ", n_participants
+    )
+  )
+
+p <- ggplot(shape_df, aes(x = r2, y = ers_score_eta2, text = tooltip)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_point(colour = irw_red, alpha = 0.75, size = 2) +
+  coord_cartesian(xlim = c(0, 1), ylim = c(0, 1)) +
+  labs(x = expression("Linear only:"~r^2), y = expression("Any shape:"~eta^2))
+
+ggplotly(p, tooltip = "text") |>
+  layout(margin = list(t = 60))
+```
+
+```{r}
+#| label: shape-numbers
+#| echo: false
+
+med_r2   <- median(shape_df$r2, na.rm = TRUE)
+med_eta2 <- median(shape_df$ers_score_eta2, na.rm = TRUE)
+n_hidden <- sum(shape_df$r2 < 0.05 & shape_df$ers_score_eta2 > 0.25, na.rm = TRUE)
+n_shape  <- nrow(shape_df)
+```
+
+Across the `r n_shape` tables in @fig-r2-vs-eta2, the median $r^2$ is
+`r sprintf("%.3f", med_r2)` while the median $\eta^2$ is
+`r sprintf("%.3f", med_eta2)`. **`r n_hidden`** tables would pass a
+correlation screen outright ($r^2 < 0.05$) while the raw score in fact
+accounts for more than a quarter of the variance in their ERS index. Those
+are precisely the datasets where an analyst using the standard screen would
+conclude that response style is a harmless nuisance.
+
+```{r}
+#| label: fig-binned-curves
+#| fig-cap: "Binned ERS as a function of the raw score, one line per table, with each table's score rescaled onto [0, 1] within its own category range. Faceted by number of response categories, because the arithmetic lower bound (dashed red) is steeper and narrower on scales with more categories. Panel headers give the number of tables. The U is close to universal."
+#| fig-height: 6
+
+cat_lab <- summary_df %>%
+  count(n_categories, name = "n_tab") %>%
+  mutate(facet = paste0(n_categories, " categories (", n_tab, " tables)"))
+
+curves_df <- binned_df %>%
+  left_join(select(summary_df, table, n_categories), by = "table") %>%
+  left_join(select(cat_lab, n_categories, facet), by = "n_categories")
+
+# Exact bound in rescaled units: on a K-category scale, x = (m - c_min)/(K - 1),
+# so the arithmetically forced ERS is max(0, 1 - x(K-1), 1 - (1-x)(K-1)).
+bound_df_irw <- cat_lab %>%
+  rowwise() %>%
+  reframe(
+    facet = facet,
+    x     = seq(0, 1, length.out = 300),
+    bound = pmin(1, pmax(0, 1 - seq(0, 1, length.out = 300) * (n_categories - 1),
+                         1 - (1 - seq(0, 1, length.out = 300)) * (n_categories - 1)))
+  )
+
+ggplot(curves_df, aes(x = score_rel, y = ers_mean, group = table)) +
+  geom_line(alpha = 0.25, colour = irw_blue, linewidth = 0.4) +
+  geom_line(data = bound_df_irw, aes(x = x, y = bound, group = 1),
+            colour = irw_red, linewidth = 1, linetype = "dashed") +
+  facet_wrap(~facet) +
+  coord_cartesian(ylim = c(0, 1)) +
+  labs(x = "Raw score, rescaled within the table's own category range",
+       y = "Mean ERS in bin")
+```
+
+@fig-binned-curves shows the shape directly. Tables differ in how deep the
+trough is and how steep the walls are — that variation is real and is where
+any genuine, content-independent style variance would live — but essentially
+every table traces the same U, and the floor of that U is the dashed red
+line: what arithmetic alone requires. Note that the bound bites hardest on
+4-category scales, where a person cannot get their mean below 2 or above 3
+without using endpoints at all, and relaxes as categories are added.
+
+<details>
+<summary>Show three individual tables at person level</summary>
+
+```{r}
+#| label: fig-exemplars
+#| fig-cap: "Person-level ERS against raw score for the three tables with the largest gap between eta-squared and r-squared. Dashed red line: the arithmetic lower bound for that table's category range. Black line: loess fit."
+#| fig-height: 7
+
+top_gap <- shape_df %>%
+  mutate(gap = ers_score_eta2 - r2) %>%
+  slice_max(gap, n = 3) %>%
+  select(table, gap)
+
+ex_df <- persons_df %>%
+  filter(table %in% top_gap$table) %>%
+  left_join(select(summary_df, table, min_cat, max_cat), by = "table")
+
+ex_bounds <- ex_df %>%
+  distinct(table, min_cat, max_cat) %>%
+  purrr::pmap_dfr(function(table, min_cat, max_cat) {
+    m <- seq(min_cat, max_cat, length.out = 300)
+    tibble(table = table, m = m,
+           bound = ers_lower_bound(m, min_cat, max_cat))
+  })
+
+ggplot(ex_df, aes(person_mean, ers)) +
+  geom_point(alpha = 0.15, colour = irw_blue, size = 0.9) +
+  geom_line(data = ex_bounds, aes(m, bound),
+            linetype = "dashed", colour = irw_red, linewidth = 0.8) +
+  geom_smooth(method = "loess", formula = y ~ x, se = FALSE,
+              colour = "black", linewidth = 0.8) +
+  facet_wrap(~table, scales = "free_x", ncol = 1) +
+  coord_cartesian(ylim = c(0, 1)) +
+  labs(x = "Person mean response", y = "Person ERS") +
+  theme(strip.text = element_text(size = 9))
+```
+
+</details>
+
+### Midpoint responding
+
+MRS shows the mirror-image problem: an inverted U, peaking for people whose
+raw score sits near the scale midpoint, and a Pearson correlation that is
+near zero for the same symmetry reason.
+
+```{r}
+#| label: fig-mrs-curves
+#| fig-cap: "Binned MRS against the rescaled raw score, one line per table with a true midpoint (odd number of categories). The inverted U is the MRS analogue of the ERS trough."
+#| fig-height: 4.5
+
+mid_tables <- summary_df$table[summary_df$has_midpoint]
+
+binned_df %>%
+  filter(table %in% mid_tables, !is.na(mrs_mean)) %>%
+  ggplot(aes(x = score_rel, y = mrs_mean, group = table)) +
+  geom_line(alpha = 0.2, colour = irw_blue, linewidth = 0.4) +
+  coord_cartesian(ylim = c(0, 1)) +
+  labs(x = "Raw score, rescaled within the table's own category range",
+       y = "Mean MRS in bin")
+```
 
 <details>
 <summary>Show full MRS table (all tables with a true midpoint)</summary>
 
 ```{r}
 #| label: tbl-mrs
-#| tbl-cap: "Tables with an odd number of categories (a true midpoint) support an MRS index; even-category tables are recorded as NA and excluded from this MRS summary rather than assigned an arbitrary category."
+#| tbl-cap: "Tables with an odd number of categories (a true midpoint) support an MRS index; even-category tables are recorded as NA and excluded rather than assigned an arbitrary category. Compare the r-squared and eta-squared columns."
 
 summary_df %>%
   filter(has_midpoint) %>%
   transmute(
     Table = table, `N categories` = n_categories,
     `Mean MRS` = round(mean_mrs, 3), `SD MRS` = round(sd_mrs, 3),
-    `MRS-score r` = round(mrs_score_cor, 3)
+    `MRS-score r` = round(mrs_score_cor, 3),
+    `r²` = round(mrs_score_cor^2, 3),
+    `η²` = round(mrs_score_eta2, 3)
   ) %>%
   arrange(desc(`Mean MRS`)) %>%
   knitr::kable()
@@ -403,128 +580,189 @@ summary_df %>%
 
 </details>
 
-### Does controlling for style change the substantive conclusions?
+## Why person-mean-centering isn't the fix {#why-person-mean-centering-isnt-the-fix}
+
+A common response to all of this is **ipsatization**: subtract each person's
+own mean across items from each of their responses (applied researchers often
+also divide by the person's SD), then analyse the centered scores as if the
+style component had been removed — typically by fitting a single-factor CFA
+before and after and reading the change in standardized loadings as the
+footprint of response style. Two things are wrong with that.
+
+**First, it targets the wrong style.** Person-mean-centering removes
+differences in *overall response level* — which is acquiescence, or net
+agreement bias. It is not a control for ERS or MRS, which are about how much
+a person concentrates responses at the endpoints or the middle, not where
+their responses sit on average. @savalei2014recovering compare three
+approaches for acquiescence specifically — ipsatization following
+@chan1993ipsative, a CFA with an acquiescence factor carrying equal loadings,
+and an EFA with target rotation — and none of them is put forward as an
+ERS/MRS control. A person with high ERS and a high person-mean and a person
+with low ERS and the same person-mean are treated identically by
+ipsatization.
+
+**Second, the CFA that follows is not identified.** Ipsatized scores sum to
+zero within each person by construction, so the $p$ item columns are linearly
+dependent and their covariance matrix has rank $p-1$, with an exact zero
+eigenvalue. Fitting an ordinary $p$-item factor model to that matrix asks the
+estimator to fit a singular covariance structure. @chan1993ipsative give the
+proper treatment — drop one item and impose the corresponding constraints on
+the retained ones — and @savalei2014recovering implement it. Doing it the
+naive way produces numbers, but they are artifacts. Here is the failure, on
+clean simulated single-factor data:
 
 ```{r}
-#| label: fig-style-sensitivity-ranked
-#| fig-cap: "Style-sensitivity metric (mean absolute change in standardized loading, raw vs. ipsatized CFA) across tables where both fits converged cleanly. Hover over a bar to see which table it is."
-#| fig-height: 6
+#| label: ipsatization-failure
+#| eval: true
+#| echo: true
 
-sens_df <- summary_df %>%
-  filter(!is.na(style_sensitivity)) %>%
-  arrange(style_sensitivity) %>%
-  mutate(
-    rank    = row_number(),
-    tooltip = paste0(
-      "Table: ", table,
-      "<br>Style sensitivity: ", round(style_sensitivity, 3),
-      "<br>n_items: ", n_items,
-      "<br>N: ", n_participants
-    )
-  )
+library(lavaan)
 
-p <- ggplot(sens_df, aes(x = style_sensitivity, y = rank, text = tooltip)) +
-  geom_col(fill = irw_blue, width = 0.6, orientation = "y") +
-  labs(x = "Style sensitivity (mean |Δ standardized loading|)", y = NULL) +
-  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank())
+set.seed(1)
+n_ips <- 1500; p_ips <- 8
+theta_ips <- rnorm(n_ips)
+x_ips <- outer(theta_ips, rep(0.7, p_ips)) +
+  matrix(rnorm(n_ips * p_ips, 0, sqrt(1 - 0.49)), n_ips, p_ips)
+x_ips <- round(scale(x_ips) * 1.1 + 3)
+x_ips[x_ips < 1] <- 1; x_ips[x_ips > 5] <- 5
 
-ggplotly(p, tooltip = "text") |>
-  layout(margin = list(t = 60))
+ips <- x_ips - rowMeans(x_ips)          # the ipsatization step
+
+eig <- eigen(cov(ips), only.values = TRUE)$values
+mod_ips <- paste0("F =~ ", paste0("i", seq_len(p_ips), collapse = " + "))
+
+d_raw <- as.data.frame(x_ips); names(d_raw) <- paste0("i", seq_len(p_ips))
+d_ips <- as.data.frame(ips);   names(d_ips) <- paste0("i", seq_len(p_ips))
+
+fit_raw_ips <- cfa(mod_ips, data = d_raw, std.lv = TRUE)
+fit_ips_ips <- suppressWarnings(
+  try(cfa(mod_ips, data = d_ips, std.lv = TRUE), silent = TRUE)
+)
 ```
-
-We highlight the tables with the largest style-sensitivity metric — the
-biggest average shift in standardized loadings between the raw and
-ipsatized single-factor CFA — to make concrete what "controlling for style
-changes the answer" actually looks like at the item level.
 
 ```{r}
-#| label: fig-loading-examples
-#| fig-cap: "Standardized loadings before (raw) and after (person-mean-centered / ipsatized) a simple style control, for the tables with the largest style-sensitivity metric (restricted to tables with 15 or fewer items, so all three panels stay legible at a shared panel height). Ipsatization can flip loading signs, not just shrink them -- see the Limitations section."
-#| fig-height: 7
+#| label: tbl-ipsatization-failure
+#| eval: true
+#| echo: false
+#| tbl-cap: "Standardized loadings from a single-factor CFA on clean simulated data, raw versus naively ipsatized. The true loading is 0.7 for every item and there is no response-style process in the simulation at all."
 
-# Capped at <=15 items so three stacked facets (one panel height each) stay
-# readable; a table with many more items than the others would otherwise be
-# squeezed into the same vertical space and its item labels would overlap.
-top_tables <- summary_df %>%
-  filter(!is.na(style_sensitivity), n_items <= 15) %>%
-  slice_max(style_sensitivity, n = 3) %>%
-  pull(table)
+l_raw_ips <- standardizedSolution(fit_raw_ips) %>%
+  filter(op == "=~") %>% pull(est.std)
+l_ips_ips <- if (inherits(fit_ips_ips, "try-error")) rep(NA_real_, p_ips) else {
+  standardizedSolution(fit_ips_ips) %>% filter(op == "=~") %>% pull(est.std)
+}
 
-example_loadings <- loadings_df %>%
-  filter(table %in% top_tables) %>%
-  mutate(table = factor(table, levels = top_tables)) %>%
-  pivot_longer(cols = c(loading_raw, loading_ipsatized),
-               names_to = "model", values_to = "loading") %>%
-  mutate(model = recode(model, loading_raw = "Raw", loading_ipsatized = "Ipsatized"))
-
-ggplot(example_loadings, aes(x = loading, y = item, colour = model)) +
-  geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
-  geom_line(aes(group = item), colour = irw_grey) +
-  geom_point(size = 2.4) +
-  facet_wrap(~table, scales = "free_y", ncol = 1) +
-  scale_colour_manual(values = c(Raw = irw_grey, Ipsatized = irw_red), name = NULL) +
-  labs(x = "Standardized loading", y = NULL) +
-  theme(legend.position = "bottom", strip.text = element_text(size = 9))
+tibble(
+  Item        = paste0("i", seq_len(p_ips)),
+  Raw         = round(l_raw_ips, 3),
+  Ipsatized   = round(l_ips_ips, 3)
+) %>%
+  knitr::kable()
 ```
 
-@fig-loading-examples is where "style-sensitivity" stops being an abstract
-number and becomes a concrete analysis decision. Read each panel item by
-item: the grey dot is an item's loading from the raw responses, the red dot
-is the same item's loading after ipsatization, and the line between them is
-the size of the shift. In all three tables here the shift isn't confined to
-a couple of unstable items — nearly every item flips from a positive raw
-loading to a negative ipsatized one, or vice versa (`item_AD4` goes from
--0.53 to +0.78; `item_LOC_1` from -0.74 to +0.59; `item_Empathy1` from +0.71
-to -0.50, and almost every other item in each of these three tables does
-the same). That is the practical stakes of this vignette's third question:
-if you used the raw-score loadings to decide which items are the strongest
-measures of the construct — or even just to check that a scale's items all
-point the same direction — a style control would hand you the *opposite*
-answer for the same data, not because the construct changed, but because
-what looked like signal was substantially response style. Which set of
-loadings is "correct" isn't something this comparison settles (see the
-ipsatization caveat below); the point is that the choice is consequential,
-not cosmetic.
+```{r}
+#| label: ipsatization-diagnostics
+#| eval: true
+#| echo: false
+#| output: asis
+
+converged_ips <- !inherits(fit_ips_ips, "try-error") &&
+  isTRUE(lavInspect(fit_ips_ips, "converged"))
+
+cat(sprintf(
+  paste0("Smallest eigenvalue of the ipsatized covariance matrix: **%.2e** ",
+         "(the matrix has rank %d of %d). The ipsatized CFA reports ",
+         "`converged = %s`, and its standardized loadings %s.\n"),
+  min(eig), qr(cov(ips))$rank, p_ips, converged_ips,
+  if (any(abs(l_ips_ips) > 1, na.rm = TRUE))
+    "include out-of-bounds values above 1 in absolute terms"
+  else "are unstable across items"
+))
+```
+
+The true loading is 0.7 on every item, and the simulation contains no
+response style whatsoever. The raw-data CFA recovers that. The ipsatized fit
+returns sign flips and out-of-bounds standardized loadings. Read without the
+diagnostics, that pattern is easy to mistake for a dramatic substantive
+result — items whose apparent relationship to the construct reverses once
+style is "controlled." It is a rank-deficient covariance matrix.
+
+Estimating on data with missing values under FIML is what allows fits like
+this to report convergence at all: the missingness perturbs the exact linear
+dependency enough that the estimator can limp to a solution. That makes the
+artifact harder to notice, not less of an artifact — so convergence is not a
+safeguard here.
+
+## What would actually work
+
+Separating style from content requires a model in which both are latent
+variables estimated jointly from the full response pattern, rather than a
+transformation of the raw scores. @bolt2025review review this literature and
+organise it into three families:
+
+- **Multidimensional IRT**, including the multidimensional nominal response
+  model (MNRM), where each response style is a latent dimension whose
+  *scoring function* encodes which categories it favours — for ERS on a
+  7-category item, $\mathbf{s}_{\text{ERS}} = [1\ 0\ 0\ 0\ 0\ 0\ 1]$,
+  alongside the substantive dimension's $[0\ 1\ 2\ 3\ 4\ 5\ 6]$
+  [@falk2016flexible; @falk2020mnrm].
+- **Mixture IRT**, which represents style heterogeneity as discrete latent
+  classes of respondents with different item parameters.
+- **Multiple-process / IRTree models**, which decompose each response into a
+  sequence of sub-decisions — first whether to respond extremely, then in
+  which direction — and model each node separately [@bockenholt2012modeling].
+
+@falk2020mnrm is a tutorial for the MNRM route specifically, with code for
+`mirt` (scoring functions go in via the `gpcm_mats` argument), flexMIRT and
+Mplus; it is also the source of the nonlinearity argument above, and shows
+that response-pattern-based EAP estimates from the MNRM break the U-shape
+that sum scores cannot escape.
+
+Two cautions worth carrying into that work. @bolt2025review recommend
+matching the model to the goal — IRTrees when the interest is in the response
+*process*, MIRT or mixtures when style is a nuisance to be controlled — and
+argue for dataset-specific sensitivity analyses rather than universal
+conclusions about "how much response style matters." And @schoenmakers2024correcting
+show that the MNRM and IRTree parametrizations conceptualise ERS differently
+enough to reach different conclusions about group differences on the same
+data, so the choice of style model is itself a substantive assumption rather
+than a technicality.
+
+Fitting one of these across IRW's Likert holdings is a substantially heavier
+computation than anything on this page, and is planned as a follow-up pass
+rather than something this vignette delivers.
 
 ## Limitations
 
-**Ipsatization is a crude style control, not a validated one.**
-Person-mean-centering removes *all* between-person variance in mean response
-level — including genuine, construct-relevant differences in overall
-standing, not just style-driven ones. For a single-factor scale, that can
-push item covariances negative in a way raw scores never show, which is why
-@fig-loading-examples can show loadings that don't just shrink but flip
-sign entirely between the raw and ipsatized fits. That isn't a bug in the
-comparison; it's the classic, well-documented behavior of ipsative data
-(forcing a fixed row sum/mean induces artificial negative dependence among
-the remaining items). Treat the *direction and size of the shift* as
-evidence that style materially affects the loading structure for that
-table, not as evidence that the ipsatized loadings are the "corrected,"
-trustworthy ones.
+**This vignette diagnoses, it does not correct.** Everything above
+establishes that sum-score style indices cannot be separated from content
+by any transformation of those same sum scores, and that the standard
+correlation screen conceals the problem. It does not estimate how much
+genuine, content-independent style variance exists in any IRW table — that
+requires the models in the previous section.
 
-**A more principled alternative: IRTree models.** Tree-based IRT models
-(e.g. Böckenholt-style IRTree models) explicitly separate a response-style
-process (does this person tend to pick an extreme/midpoint category at all?)
-from a content process (given that, do they agree or disagree?), estimated
-jointly rather than removed by a blunt transformation of the raw scores.
-That's a heavier modeling commitment than this vignette makes — it requires
-specifying a tree structure per item type and fitting a multidimensional
-IRT model — and is flagged here as a natural extension rather than something
-implemented in this pass.
+**The raw score is an internal criterion.** ERS is compared against the
+person's own mean across the same items it is computed from, which is the
+right substantive score for a single-factor battery but guarantees some
+mechanical dependence. An external validity criterion, independent of the
+item set, would be a cleaner comparison and is not available for most IRW
+tables.
 
-**Other scope limitations.** The category-range consistency check drops any
-table where items don't share a single response format, which likely
-removes some legitimately mixed-format instruments along with genuinely
-miscoded ones — we can't distinguish the two from the data alone. The
-ERS/MRS-score correlation uses the person's own mean item response as the
-"score," which is appropriate for a single-factor instrument but conflates
-score and style more directly than an external criterion would; a validity
-correlate independent of the item set itself would be a stronger test of
-confounding, and is left for future work. Style-sensitivity is computed only
-where both CFA fits converge cleanly — tables where a single-factor model is
-a poor fit to begin with are silently excluded from that specific
-comparison (though they still contribute to the ERS/MRS distributions
-above).
+**The arithmetic bound is a floor, not an explanation.** It shows that *some*
+U-shape is unavoidable, and @fig-binned-curves shows observed curves sitting
+above it. The gap between the observed curve and the bound is where real
+style variance would show up, but attributing that gap to style rather than
+to the distribution of the trait requires, again, a model.
+
+**Item-count floor.** Five items per person is a low bar for a proportion.
+Tables near that floor have noisy person-level ERS/MRS, which attenuates
+$\eta^2$ and $R^2$ alike — so the dependence reported here is, if anything,
+understated for short instruments.
+
+**Other approaches not covered.** Factor-analytic treatments of response
+styles outside the three IRT families above — including work in the
+Lorenzo-Seva and Ferrando line — are not reviewed here and may be relevant
+to the same question.
 
 ## Reproducibility
 
@@ -547,6 +785,14 @@ To cite the datasets used, run:
 irw_save_bibtex(summary_df$table, output_file = "response_style_data/irw_references.bib")
 ```
 :::
+
+## Acknowledgements
+
+We are grateful to **Carl F. Falk** (McGill University) for a detailed review
+of this vignette — in particular for the points that a correlation cannot
+test style-content confounding when the relationship is non-monotone, and
+that ipsatization addresses acquiescence rather than ERS or MRS — and for
+directing us to the relevant literature. Any remaining errors are ours.
 
 ---
 
