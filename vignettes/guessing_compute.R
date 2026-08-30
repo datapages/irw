@@ -47,6 +47,8 @@ library(furrr)
 library(tibble)
 library(imv)
 
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
 set.seed(20260722)
 
 out_dir  <- "vignettes/guessingdata"
@@ -255,7 +257,14 @@ fit_one_table <- function(table_name, m, m_verified) {
     se_alpha = if (!is.null(fit_ag)) fit_ag$se_alpha else NA_real_,
     lr_stat = if (!is.null(fit_ag)) fit_ag$lr_stat else NA_real_,
     lr_p = if (!is.null(fit_ag)) fit_ag$lr_p else NA_real_,
-    frac_flagged = if (!is.null(fit_pur)) fit_pur$frac_flagged else NA_real_
+    frac_flagged = if (!is.null(fit_pur)) fit_pur$frac_flagged else NA_real_,
+    # estimated latent SDs: every model on the page now estimates the theta
+    # variance, matching mirt's itemtype = "Rasch" baseline (see
+    # guessing_helpers.R::.scale_quad for why this matters)
+    sd_rasch = if (converged$rasch) sqrt(coef(fit_rasch, simplify = TRUE)$cov[1, 1]) else NA_real_,
+    sd_mix = if (!is.null(fit_mix)) fit_mix$sd else NA_real_,
+    sd_ag  = if (!is.null(fit_ag)) fit_ag$sd else NA_real_,
+    sd_pur = if (!is.null(fit_pur)) fit_pur$sd else NA_real_
   )
 }
 
@@ -306,6 +315,8 @@ summarize_one <- function(r) {
     converged_ag = r$converged$ag, converged_mix = r$converged$mix,
     pi_hat = r$pi_hat, alpha_hat = r$alpha_hat, se_alpha = r$se_alpha,
     lr_stat = r$lr_stat, lr_p = r$lr_p, frac_flagged = r$frac_flagged,
+    sd_rasch = r$sd_rasch %||% NA_real_, sd_mix = r$sd_mix %||% NA_real_,
+    sd_ag = r$sd_ag %||% NA_real_, sd_pur = r$sd_pur %||% NA_real_,
     imv_1plg_mix   = imv_safe(r$preds$plg, r$preds$mix),
     imv_1plg_ag    = imv_safe(r$preds$plg, r$preds$ag),
     imv_rasch_purified = imv_safe(r$preds$rasch, r$preds$purified),

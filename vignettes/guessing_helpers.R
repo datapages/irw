@@ -52,7 +52,31 @@ build_quadrature <- function(n_nodes = 41, range = 6) {
   nodes <- seq(-range, range, length.out = n_nodes)
   w <- dnorm(nodes)
   w <- w / sum(w)
-  list(nodes = nodes, weights = w)
+  list(nodes = nodes, weights = w, z = nodes, sd = 1)
+}
+
+# Rescale a standard-normal z-grid to a N(0, sd^2) prior. The weights are the
+# standard-normal weights attached to the z nodes and do not change; only the
+# node locations move, so the grid always spans +/- `range` SDs of theta.
+#
+# Why this exists: mirt's itemtype = "Rasch" fixes all slopes at 1 and
+# ESTIMATES the latent variance, while the custom estimators below originally
+# pinned theta ~ N(0,1). That asymmetry gives the Rasch baseline a free
+# parameter the custom models did not have, so the two are not nested and the
+# Mixture cannot collapse onto Rasch as pi_hat -> 1 -- which is precisely the
+# safety-valve property the comparison is meant to test. With no guessing
+# present at all, that mismatch alone drives IMV(Rasch, Mixture) to about
+# -0.002 at sd(theta) = 1.6 (see guessing_vignette_checks.R, block 2).
+.scale_quad <- function(quad, sd) {
+  z <- if (!is.null(quad$z)) quad$z else quad$nodes
+  list(nodes = z * sd, weights = quad$weights, z = z, sd = sd)
+}
+
+# Latent SD from a fitted mirt model (slopes fixed at 1), for use as a
+# starting value or to put a mirt-based fit on its own estimated prior.
+.mirt_sd <- function(mod) {
+  v <- tryCatch(coef(mod, simplify = TRUE)$cov[1, 1], error = function(e) 1)
+  if (!is.finite(v) || v <= 0) 1 else sqrt(v)
 }
 
 # log-sum-exp over quadrature nodes, weighted, per row of `loglik` (N x K).
@@ -97,46 +121,54 @@ build_quadrature <- function(n_nodes = 41, range = 6) {
 # Y: N x J 0/1 matrix, NA for missing/held-out cells.
 # ------------------------------------------------------------------------------
 
-fit_1pl_ag <- function(Y, quad = build_quadrature(41), start_beta = NULL) {
+fit_1pl_ag <- function(Y, quad = build_quadrature(41), start_beta = NULL,
+                       free_var = TRUE) {
   N <- nrow(Y); J <- ncol(Y)
-  theta <- quad$nodes; w <- quad$weights; K <- length(theta)
+  z <- if (!is.null(quad$z)) quad$z else quad$nodes
+  w <- quad$weights; K <- length(z)
   M <- !is.na(Y); Mnum <- matrix(as.numeric(M), N, J); Ym <- Y; Ym[!M] <- 0
-  theta_row <- matrix(theta, J, K, byrow = TRUE)
+  z_row <- matrix(z, J, K, byrow = TRUE)
 
+  # Parameter layout, with the log latent SD always last:
+  #   1PL-G  : c(beta[1:J], gamma[1:J], [ls])
+  #   1PL-AG : c(beta[1:J], gamma[1:J], alpha, [ls])
+  # theta_k = z_k * sd, so freeing sd here matches the free latent variance
+  # that mirt's itemtype = "Rasch" baseline estimates (see .scale_quad).
   make_obj_grad <- function(with_alpha) {
-    obj <- function(par) {
-      beta <- par[1:J]; gamma <- par[(J + 1):(2 * J)]
-      alpha <- if (with_alpha) par[2 * J + 1] else 0
-      r <- t(outer(theta, beta,  function(th, b) plogis(th - b)))            # J x K
-      s <- t(outer(theta, gamma, function(th, g) plogis(alpha * th + g)))    # J x K
-      P <- pmin(pmax(r + (1 - r) * s, 1e-10), 1 - 1e-10)
-      logP <- log(P); log1mP <- log(1 - P)
-      loglik <- Ym %*% logP + (Mnum - Ym) %*% log1mP
-      np <- .node_posterior(loglik, w)
-      -sum(np$marg_ll)
+    np_par <- 2 * J + as.integer(with_alpha)
+    parts <- function(par) {
+      sd <- if (free_var) exp(par[np_par + 1]) else 1
+      list(beta = par[1:J], gamma = par[(J + 1):(2 * J)],
+           alpha = if (with_alpha) par[2 * J + 1] else 0,
+           sd = sd, theta = z * sd)
     }
-    grad <- function(par) {
-      beta <- par[1:J]; gamma <- par[(J + 1):(2 * J)]
-      alpha <- if (with_alpha) par[2 * J + 1] else 0
-      r <- t(outer(theta, beta,  function(th, b) plogis(th - b)))
-      s <- t(outer(theta, gamma, function(th, g) plogis(alpha * th + g)))
+    pieces <- function(pp) {
+      r <- t(outer(pp$theta, pp$beta,  function(th, b) plogis(th - b)))       # J x K
+      s <- t(outer(pp$theta, pp$gamma, function(th, g) plogis(pp$alpha * th + g)))
       P <- pmin(pmax(r + (1 - r) * s, 1e-10), 1 - 1e-10)
-      logP <- log(P); log1mP <- log(1 - P)
-      loglik <- Ym %*% logP + (Mnum - Ym) %*% log1mP
-      np <- .node_posterior(loglik, w)
-      post <- np$post
+      loglik <- Ym %*% log(P) + (Mnum - Ym) %*% log(1 - P)
+      list(r = r, s = s, P = P, np = .node_posterior(loglik, w))
+    }
+    obj <- function(par) -sum(pieces(parts(par))$np$marg_ll)
+    grad <- function(par) {
+      pp <- parts(par); pc <- pieces(pp)
+      r <- pc$r; s <- pc$s; P <- pc$P
+      post <- pc$np$post
       A  <- t(Ym) %*% post
       Bc <- t(Mnum) %*% post
       D  <- A - P * Bc                       # J x K: sum_i post_ik*(y_ij-P_jk)*M_ij
       denomP <- P * (1 - P)
       coef_beta  <- -r * (1 - r) * (1 - s) / denomP
       coef_gamma <-  (1 - r) * s * (1 - s) / denomP
-      grad_beta  <- rowSums(coef_beta  * D)
-      grad_gamma <- rowSums(coef_gamma * D)
-      g <- c(grad_beta, grad_gamma)
+      g <- c(rowSums(coef_beta * D), rowSums(coef_gamma * D))
+      theta_row <- matrix(pp$theta, J, K, byrow = TRUE)
       if (with_alpha) {
-        coef_alpha <- (1 - r) * s * (1 - s) * theta_row / denomP
-        g <- c(g, sum(coef_alpha * D))
+        g <- c(g, sum(((1 - r) * s * (1 - s) * theta_row / denomP) * D))
+      }
+      if (free_var) {
+        # dP/dtheta = r(1-r)(1-s) + (1-r)s(1-s)*alpha, and dtheta_k/dsd = z_k
+        dP_dtheta <- r * (1 - r) * (1 - s) + (1 - r) * s * (1 - s) * pp$alpha
+        g <- c(g, pp$sd * sum((dP_dtheta / denomP) * D * z_row))
       }
       -g
     }
@@ -149,13 +181,17 @@ fit_1pl_ag <- function(Y, quad = build_quadrature(41), start_beta = NULL) {
     start_beta <- -qlogis(p_j)
   }
   start_gamma <- rep(qlogis(0.2), J)
+  start_ls <- if (free_var) 0 else numeric(0)
 
   fg <- make_obj_grad(with_alpha = FALSE)
-  fit_g <- optim(c(start_beta, start_gamma), fg$obj, fg$grad,
+  fit_g <- optim(c(start_beta, start_gamma, start_ls), fg$obj, fg$grad,
                   method = "BFGS", control = list(maxit = 300, reltol = 1e-10))
 
+  # carry beta/gamma across, insert alpha = 0, keep ls last
+  start_ag <- c(fit_g$par[1:(2 * J)], 0,
+                if (free_var) fit_g$par[2 * J + 1] else numeric(0))
   fag <- make_obj_grad(with_alpha = TRUE)
-  fit_ag <- optim(c(fit_g$par, 0), fag$obj, fag$grad,
+  fit_ag <- optim(start_ag, fag$obj, fag$grad,
                    method = "BFGS", control = list(maxit = 300, reltol = 1e-10),
                    hessian = TRUE)
 
@@ -165,17 +201,19 @@ fit_1pl_ag <- function(Y, quad = build_quadrature(41), start_beta = NULL) {
     sqrt(v[2 * J + 1, 2 * J + 1])
   }, error = function(e) NA_real_)
 
+  sd_hat <- if (free_var) exp(fit_ag$par[2 * J + 2]) else 1
+
   lr_stat <- 2 * (fit_g$value - fit_ag$value)   # value = -loglik, so G - AG in loglik terms
   lr_stat <- max(lr_stat, 0)
   lr_p <- stats::pchisq(lr_stat, df = 1, lower.tail = FALSE)
 
   list(
     beta = fit_ag$par[1:J], gamma = fit_ag$par[(J + 1):(2 * J)], alpha = alpha_hat,
-    se_alpha = se_alpha, lr_stat = lr_stat, lr_p = lr_p,
+    se_alpha = se_alpha, lr_stat = lr_stat, lr_p = lr_p, sd = sd_hat,
     loglik_ag = -fit_ag$value, loglik_g = -fit_g$value,
     beta_g = fit_g$par[1:J], gamma_g = fit_g$par[(J + 1):(2 * J)],
     converged_ag = fit_ag$convergence == 0, converged_g = fit_g$convergence == 0,
-    quad = quad
+    free_var = free_var, quad = .scale_quad(quad, sd_hat)
   )
 }
 
@@ -206,53 +244,77 @@ predict_1pl_ag <- function(fit, Y_train) {
 # ------------------------------------------------------------------------------
 
 fit_mixture <- function(Y, g_fit, quad = build_quadrature(41),
-                         pi_starts = c(0.6, 0.75, 0.9, 0.97)) {
+                         pi_starts = c(0.6, 0.75, 0.9, 0.97),
+                         free_var = TRUE) {
   N <- nrow(Y); J <- ncol(Y)
-  theta <- quad$nodes; w <- quad$weights; K <- length(theta)
+  z <- if (!is.null(quad$z)) quad$z else quad$nodes
+  w <- quad$weights; K <- length(z)
   M <- !is.na(Y); Mnum <- matrix(as.numeric(M), N, J); Ym <- Y; Ym[!M] <- 0
+  S <- rowSums(Ym)                       # observed score per person, for d/dsd
+  zmat <- matrix(z, N, K, byrow = TRUE)
 
   logg <- log(g_fit); log1mg <- log(1 - g_fit)
   loglik0_i <- rowSums(Ym * logg + (Mnum - Ym) * log1mg)
 
-  obj <- function(par) {
-    b <- par[1:J]; eta <- par[J + 1]; pi_ <- plogis(eta)
-    r <- t(outer(theta, b, function(th, bb) plogis(th - bb)))
-    P <- pmin(pmax(r, 1e-10), 1 - 1e-10)
-    logP <- log(P); log1mP <- log(1 - P)
-    loglik1 <- Ym %*% logP + (Mnum - Ym) %*% log1mP
-    np <- .node_posterior(loglik1, w)
-    combined <- .logsumexp2(log(pi_) + np$marg_ll, log(1 - pi_) + loglik0_i)
-    -sum(combined)
+  # par = c(b[1:J], eta, ls); pi = expit(eta), sd(theta) = exp(ls).
+  # With free_var = FALSE, ls is absent and sd is pinned at 1 (the original
+  # behaviour, kept so the fixed-prior version can still be reproduced).
+  unpack <- function(par) {
+    sd <- if (free_var) exp(par[J + 2]) else 1
+    list(b = par[1:J], pi = plogis(par[J + 1]), sd = sd, theta = z * sd)
   }
-  grad <- function(par) {
-    b <- par[1:J]; eta <- par[J + 1]; pi_ <- plogis(eta)
-    r <- t(outer(theta, b, function(th, bb) plogis(th - bb)))
-    P <- pmin(pmax(r, 1e-10), 1 - 1e-10)
-    logP <- log(P); log1mP <- log(1 - P)
-    loglik1 <- Ym %*% logP + (Mnum - Ym) %*% log1mP
-    np <- .node_posterior(loglik1, w)                # posterior over theta WITHIN class 1
-    combined <- .logsumexp2(log(pi_) + np$marg_ll, log(1 - pi_) + loglik0_i)
-    post_z1 <- exp(log(pi_) + np$marg_ll - combined)  # posterior P(engaged | training data)
 
-    post1w <- np$post * post_z1                       # N x K, row-scaled
+  # Shared core: per-node Rasch probabilities, the within-class-1 posterior
+  # over theta, and the posterior probability of engagement.
+  core <- function(pp) {
+    r <- t(outer(pp$theta, pp$b, function(th, bb) plogis(th - bb)))
+    P <- pmin(pmax(r, 1e-10), 1 - 1e-10)
+    loglik1 <- Ym %*% log(P) + (Mnum - Ym) %*% log(1 - P)
+    np <- .node_posterior(loglik1, w)
+    combined <- .logsumexp2(log(pp$pi) + np$marg_ll, log(1 - pp$pi) + loglik0_i)
+    list(P = P, np = np, combined = combined,
+         post_z1 = exp(log(pp$pi) + np$marg_ll - combined))
+  }
+
+  obj <- function(par) -sum(core(unpack(par))$combined)
+
+  grad <- function(par) {
+    pp <- unpack(par); cc <- core(pp)
+    P <- cc$P; post_z1 <- cc$post_z1
+
+    post1w <- cc$np$post * post_z1                    # N x K, row-scaled
     A  <- t(Ym) %*% post1w
     Bc <- t(Mnum) %*% post1w
-    # dLL/db_j = sum_k post1w_ik*(P_jk-y_ij)*M_ij = -(rowSums(A - P*Bc)); d(obj)/db_j = -dLL/db_j
+    # dLL/db_j = -sum_k post1w_ik*(y_ij-P_jk)*M_ij; d(obj)/db_j flips the sign
     grad_b_obj <- rowSums(A - P * Bc)
-    # dLL/deta = sum(post_z1) - N*pi_ ; d(obj)/deta = -dLL/deta
-    grad_eta_obj <- -(sum(post_z1) - N * pi_)
-    c(grad_b_obj, grad_eta_obj)
+    # dLL/deta = sum(post_z1) - N*pi
+    grad_eta_obj <- -(sum(post_z1) - N * pp$pi)
+    g <- c(grad_b_obj, grad_eta_obj)
+
+    if (free_var) {
+      # theta_k = z_k*sd, and d/dtheta of the Rasch node loglik is (y - P), so
+      #   dLL/dsd = sum_ik post1w_ik * z_k * sum_j M_ij*(y_ij - P_jk).
+      resid <- S - Mnum %*% P                          # N x K
+      grad_sd <- sum(post1w * resid * zmat)
+      g <- c(g, -pp$sd * grad_sd)                      # chain rule for ls
+    }
+    g
   }
+
+  # Rasch starting values, fit once rather than once per pi start. mirt's
+  # estimated latent SD is the natural start for ls.
+  mod0 <- tryCatch(
+    mirt(as.data.frame(Y), 1, itemtype = "Rasch", verbose = FALSE,
+         technical = list(NCYCLES = 200)),
+    error = function(e) NULL
+  )
+  b0 <- if (is.null(mod0)) rep(0, J) else -coef(mod0, simplify = TRUE)$items[, "d"]
+  ls0 <- if (is.null(mod0)) 0 else log(.mirt_sd(mod0))
 
   best <- NULL
   for (pi0 in pi_starts) {
-    b0 <- tryCatch({
-      mod <- mirt(as.data.frame(Y), 1, itemtype = "Rasch", verbose = FALSE,
-                  technical = list(NCYCLES = 200))
-      cf <- coef(mod, simplify = TRUE)$items
-      -cf[, "d"]
-    }, error = function(e) rep(0, J))
     par0 <- c(b0, qlogis(pi0))
+    if (free_var) par0 <- c(par0, ls0)
     fit <- tryCatch(
       optim(par0, obj, grad, method = "BFGS",
             control = list(maxit = 300, reltol = 1e-10)),
@@ -261,9 +323,10 @@ fit_mixture <- function(Y, g_fit, quad = build_quadrature(41),
     if (!is.null(fit) && (is.null(best) || fit$value < best$value)) best <- fit
   }
 
-  b_hat <- best$par[1:J]; pi_hat <- plogis(best$par[J + 1])
-  list(b = b_hat, pi = pi_hat, loglik = -best$value,
-       converged = best$convergence == 0, g_fit = g_fit, quad = quad)
+  pp <- unpack(best$par)
+  list(b = pp$b, pi = pp$pi, sd = pp$sd, loglik = -best$value,
+       converged = best$convergence == 0, g_fit = g_fit, free_var = free_var,
+       quad = .scale_quad(quad, pp$sd))
 }
 
 predict_mixture <- function(fit, Y_train) {
@@ -299,8 +362,15 @@ purify_rasch <- function(Y, g_fit, quad = build_quadrature(41)) {
                technical = list(NCYCLES = 200))
   b0 <- -coef(mod0, simplify = TRUE)$items[, "d"]
 
-  rl <- .rasch_node_loglik(Y, b0, quad$nodes)
-  marg_ll_rasch <- .node_posterior(rl$loglik, quad$weights)$marg_ll
+  # mirt estimated the latent variance when it calibrated b0, so the flagging
+  # step has to score each person against that same prior: comparing a
+  # marginal Rasch likelihood computed under N(0,1) against item difficulties
+  # calibrated under N(0,sd0^2) puts the two on different scales. The purified
+  # refit below gets its own sd for the same reason.
+  quad0 <- .scale_quad(quad, .mirt_sd(mod0))
+
+  rl <- .rasch_node_loglik(Y, b0, quad0$nodes)
+  marg_ll_rasch <- .node_posterior(rl$loglik, quad0$weights)$marg_ll
 
   M <- !is.na(Y); Mnum <- matrix(as.numeric(M), nrow(Y), J)
   Ym <- Y; Ym[!M] <- 0
@@ -313,20 +383,24 @@ purify_rasch <- function(Y, g_fit, quad = build_quadrature(41)) {
   if (n_flag == 0 || n_flag == nrow(Y)) {
     return(list(b = b0, b_baseline = b0, flagged = flagged,
                 n_flagged = n_flag, frac_flagged = mean(flagged),
+                sd = quad0$sd, sd_baseline = quad0$sd, quad = quad0,
                 note = "no purification applied (0 or all flagged)"))
   }
 
   mod1 <- mirt(as.data.frame(Y[!flagged, , drop = FALSE]), 1, itemtype = "Rasch",
                verbose = FALSE, technical = list(NCYCLES = 200))
   b1 <- -coef(mod1, simplify = TRUE)$items[, "d"]
+  quad1 <- .scale_quad(quad, .mirt_sd(mod1))
 
   list(b = b1, b_baseline = b0, flagged = flagged,
-       n_flagged = n_flag, frac_flagged = mean(flagged), note = "purified")
+       n_flagged = n_flag, frac_flagged = mean(flagged),
+       sd = quad1$sd, sd_baseline = quad0$sd, quad = quad1, note = "purified")
 }
 
 predict_purified_rasch <- function(fit, Y_train, quad = build_quadrature(41)) {
-  b <- fit$b
-  rl <- .rasch_node_loglik(Y_train, b, quad$nodes)
-  np <- .node_posterior(rl$loglik, quad$weights)
+  # use the prior the purified refit was actually calibrated under
+  q <- if (!is.null(fit$quad)) fit$quad else quad
+  rl <- .rasch_node_loglik(Y_train, fit$b, q$nodes)
+  np <- .node_posterior(rl$loglik, q$weights)
   np$post %*% t(rl$P)   # N x J; caller subsets to held-out mask
 }
