@@ -74,6 +74,17 @@ build_quadrature <- function(n_nodes = 41, range = 6) {
 
 # Latent SD from a fitted mirt model (slopes fixed at 1), for use as a
 # starting value or to put a mirt-based fit on its own estimated prior.
+# The latent SD is bounded during estimation. Without a bound the 1PLg can
+# drive sd -> Inf when the assumed g is badly over-specified (observed at
+# g_fit = 0.5 on gilbert_meta_1: sd = 1e15, reported by optim as converged),
+# which yields a meaningless model with a perfectly finite-looking IMV. The
+# range below is far wider than any plausible latent SD, so it binds only on
+# degenerate fits; `sd_at_bound` in the return value flags when it does.
+LS_BOUNDS <- c(lower = log(0.1), upper = log(10))
+
+.at_bound <- function(ls) isTRUE(abs(ls - LS_BOUNDS[["lower"]]) < 1e-6 ||
+                                 abs(ls - LS_BOUNDS[["upper"]]) < 1e-6)
+
 .mirt_sd <- function(mod) {
   v <- tryCatch(coef(mod, simplify = TRUE)$cov[1, 1], error = function(e) 1)
   if (!is.finite(v) || v <= 0) 1 else sqrt(v)
@@ -183,22 +194,31 @@ fit_1pl_ag <- function(Y, quad = build_quadrature(41), start_beta = NULL,
   start_gamma <- rep(qlogis(0.2), J)
   start_ls <- if (free_var) 0 else numeric(0)
 
+  bounded <- function(par, fns) {
+    if (!free_var) {
+      return(optim(par, fns$obj, fns$grad, method = "BFGS",
+                   control = list(maxit = 300, reltol = 1e-10), hessian = TRUE))
+    }
+    n <- length(par)
+    optim(par, fns$obj, fns$grad, method = "L-BFGS-B",
+          lower = c(rep(-Inf, n - 1), LS_BOUNDS[["lower"]]),
+          upper = c(rep( Inf, n - 1), LS_BOUNDS[["upper"]]),
+          control = list(maxit = 300, factr = 1e2), hessian = TRUE)
+  }
+
   fg <- make_obj_grad(with_alpha = FALSE)
-  fit_g <- optim(c(start_beta, start_gamma, start_ls), fg$obj, fg$grad,
-                  method = "BFGS", control = list(maxit = 300, reltol = 1e-10))
+  fit_g <- bounded(c(start_beta, start_gamma, start_ls), fg)
 
   # carry beta/gamma across, insert alpha = 0, keep ls last
   start_ag <- c(fit_g$par[1:(2 * J)], 0,
                 if (free_var) fit_g$par[2 * J + 1] else numeric(0))
   fag <- make_obj_grad(with_alpha = TRUE)
-  fit_ag <- optim(start_ag, fag$obj, fag$grad,
-                   method = "BFGS", control = list(maxit = 300, reltol = 1e-10),
-                   hessian = TRUE)
+  fit_ag <- bounded(start_ag, fag)
 
   alpha_hat <- fit_ag$par[2 * J + 1]
   se_alpha <- tryCatch({
-    v <- solve(fit_ag$hessian)
-    sqrt(v[2 * J + 1, 2 * J + 1])
+    v <- solve(fit_ag$hessian)[2 * J + 1, 2 * J + 1]
+    if (is.finite(v) && v > 0) sqrt(v) else NA_real_
   }, error = function(e) NA_real_)
 
   sd_hat <- if (free_var) exp(fit_ag$par[2 * J + 2]) else 1
@@ -213,7 +233,8 @@ fit_1pl_ag <- function(Y, quad = build_quadrature(41), start_beta = NULL,
     loglik_ag = -fit_ag$value, loglik_g = -fit_g$value,
     beta_g = fit_g$par[1:J], gamma_g = fit_g$par[(J + 1):(2 * J)],
     converged_ag = fit_ag$convergence == 0, converged_g = fit_g$convergence == 0,
-    free_var = free_var, quad = .scale_quad(quad, sd_hat)
+    free_var = free_var, sd_at_bound = free_var && .at_bound(fit_ag$par[2 * J + 2]),
+    quad = .scale_quad(quad, sd_hat)
   )
 }
 
@@ -316,8 +337,15 @@ fit_mixture <- function(Y, g_fit, quad = build_quadrature(41),
     par0 <- c(b0, qlogis(pi0))
     if (free_var) par0 <- c(par0, ls0)
     fit <- tryCatch(
-      optim(par0, obj, grad, method = "BFGS",
-            control = list(maxit = 300, reltol = 1e-10)),
+      if (free_var) {
+        optim(par0, obj, grad, method = "L-BFGS-B",
+              lower = c(rep(-Inf, J + 1), LS_BOUNDS[["lower"]]),
+              upper = c(rep( Inf, J + 1), LS_BOUNDS[["upper"]]),
+              control = list(maxit = 300, factr = 1e2))
+      } else {
+        optim(par0, obj, grad, method = "BFGS",
+              control = list(maxit = 300, reltol = 1e-10))
+      },
       error = function(e) NULL
     )
     if (!is.null(fit) && (is.null(best) || fit$value < best$value)) best <- fit
@@ -326,6 +354,7 @@ fit_mixture <- function(Y, g_fit, quad = build_quadrature(41),
   pp <- unpack(best$par)
   list(b = pp$b, pi = pp$pi, sd = pp$sd, loglik = -best$value,
        converged = best$convergence == 0, g_fit = g_fit, free_var = free_var,
+       sd_at_bound = free_var && .at_bound(best$par[J + 2]),
        quad = .scale_quad(quad, pp$sd))
 }
 
@@ -403,4 +432,56 @@ predict_purified_rasch <- function(fit, Y_train, quad = build_quadrature(41)) {
   rl <- .rasch_node_loglik(Y_train, fit$b, q$nodes)
   np <- .node_posterior(rl$loglik, q$weights)
   np$post %*% t(rl$P)   # N x J; caller subsets to held-out mask
+}
+
+# ------------------------------------------------------------------------------
+# Holdout mask -- per-person cell holdout, always leaving >=1 response.
+# Same convention as asymmetric_irt_compute.R. Shared by guessing_compute.R,
+# guessing_sim_compute.R and guessing_gsweep_compute.R so all three evaluate
+# on the same holdout definition.
+# ------------------------------------------------------------------------------
+
+mask_holdout <- function(resp, frac = 0.2) {
+  resp_train <- resp
+  mat <- as.matrix(resp)
+  n_obs_per_person <- rowSums(!is.na(mat))
+  mask_list <- vector("list", nrow(mat))
+  for (i in seq_len(nrow(mat))) {
+    k <- n_obs_per_person[i]
+    if (k < 2) next
+    obs_cols <- which(!is.na(mat[i, ]))
+    n_mask_i <- min(floor(frac * k), k - 1)
+    if (n_mask_i < 1) next
+    mask_list[[i]] <- cbind(row = i, col = sample(obs_cols, n_mask_i))
+  }
+  mask_idx <- do.call(rbind, mask_list)
+  true_vals <- mat[mask_idx]
+  for (k in seq_len(nrow(mask_idx))) resp_train[mask_idx[k, 1], mask_idx[k, 2]] <- NA
+  list(train = resp_train, mask_idx = mask_idx, true_vals = true_vals)
+}
+
+# Held-out predicted P(response=1) for a fitted mirt model, via EAP theta
+# plug-in + extract.item()/probtrace() -- repo convention (asymmetric_irt).
+heldout_preds_mirt <- function(fit, mask_idx) {
+  theta_vec <- fscores(fit, method = "EAP")[, 1]
+  preds <- numeric(nrow(mask_idx))
+  for (j in unique(mask_idx[, 2])) {
+    rows <- which(mask_idx[, 2] == j)
+    persons <- mask_idx[rows, 1]
+    it <- extract.item(fit, j)
+    preds[rows] <- probtrace(it, matrix(theta_vec[persons], ncol = 1))[, "P.1"]
+  }
+  preds
+}
+
+# 1PLg via constrained 3PL: a1 fixed at 1, g fixed at 1/m, d free.
+fit_1plg <- function(train_df, m, em_cycles = EM_CYCLES) {
+  g_val <- 1 / m
+  base <- mirt(train_df, 1, itemtype = "3PL", pars = "values", verbose = FALSE)
+  base$value[base$name == "a1"] <- 1
+  base$est[base$name == "a1"]   <- FALSE
+  base$value[base$name == "g"]  <- g_val
+  base$est[base$name == "g"]    <- FALSE
+  mirt(train_df, 1, itemtype = "3PL", pars = base, verbose = FALSE,
+       technical = list(NCYCLES = em_cycles))
 }

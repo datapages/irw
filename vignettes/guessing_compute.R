@@ -86,54 +86,11 @@ TABLES <- tribble(
 )
 
 # ==============================================================================
-# 2. Holdout mask -- per-person cell holdout, always leaving >=1 response.
-#    Same convention as asymmetric_irt_compute.R.
+# 2. Holdout mask and mirt held-out predictions now live in
+#    guessing_helpers.R (mask_holdout(), heldout_preds_mirt()), so that
+#    guessing_sim_compute.R and guessing_gsweep_compute.R evaluate on exactly
+#    the same holdout convention this script uses.
 # ==============================================================================
-
-mask_holdout <- function(resp, frac = HOLDOUT_FRAC) {
-  resp_train <- resp
-  mat <- as.matrix(resp)
-  n_obs_per_person <- rowSums(!is.na(mat))
-  mask_list <- vector("list", nrow(mat))
-  for (i in seq_len(nrow(mat))) {
-    k <- n_obs_per_person[i]
-    if (k < 2) next
-    obs_cols <- which(!is.na(mat[i, ]))
-    n_mask_i <- min(floor(frac * k), k - 1)
-    if (n_mask_i < 1) next
-    mask_list[[i]] <- cbind(row = i, col = sample(obs_cols, n_mask_i))
-  }
-  mask_idx <- do.call(rbind, mask_list)
-  true_vals <- mat[mask_idx]
-  for (k in seq_len(nrow(mask_idx))) resp_train[mask_idx[k, 1], mask_idx[k, 2]] <- NA
-  list(train = resp_train, mask_idx = mask_idx, true_vals = true_vals)
-}
-
-# Held-out predicted P(response=1) for a fitted mirt model, via EAP theta
-# plug-in + extract.item()/probtrace() -- repo convention (asymmetric_irt).
-heldout_preds_mirt <- function(fit, mask_idx) {
-  theta_vec <- fscores(fit, method = "EAP")[, 1]
-  preds <- numeric(nrow(mask_idx))
-  for (j in unique(mask_idx[, 2])) {
-    rows <- which(mask_idx[, 2] == j)
-    persons <- mask_idx[rows, 1]
-    it <- extract.item(fit, j)
-    preds[rows] <- probtrace(it, matrix(theta_vec[persons], ncol = 1))[, "P.1"]
-  }
-  preds
-}
-
-# 1PLg via constrained 3PL: a1 fixed at 1, g fixed at 1/m, d free.
-fit_1plg <- function(train_df, m, em_cycles = EM_CYCLES) {
-  g_val <- 1 / m
-  base <- mirt(train_df, 1, itemtype = "3PL", pars = "values", verbose = FALSE)
-  base$value[base$name == "a1"] <- 1
-  base$est[base$name == "a1"]   <- FALSE
-  base$value[base$name == "g"]  <- g_val
-  base$est[base$name == "g"]    <- FALSE
-  mirt(train_df, 1, itemtype = "3PL", pars = base, verbose = FALSE,
-       technical = list(NCYCLES = em_cycles))
-}
 
 # ==============================================================================
 # 3. Fetch + prepare one table (wide 0/1 matrix, subsampled if large)

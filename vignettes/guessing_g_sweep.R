@@ -21,34 +21,65 @@ if (!exists(".node_posterior")) source("guessing_helpers.R")
   pmin(pmax(P, 1e-10), 1 - 1e-10)
 }
 
-fit_1plg_fixedq <- function(Y, g_fit, quad = build_quadrature(41), start_b = NULL) {
-  J <- ncol(Y); theta <- quad$nodes; w <- quad$weights
+# par = c(b[1:J], ls); sd(theta) = exp(ls), estimated like every other model
+# on the page (see guessing_helpers.R::.scale_quad). The original version of
+# this script pinned sd = 1 here so that the sweep could not be contaminated by
+# a variance effect; now that the Mixture estimates its own sd, pinning the
+# baseline would reintroduce exactly the mismatch it was guarding against, so
+# both sides free it instead.
+fit_1plg_fixedq <- function(Y, g_fit, quad = build_quadrature(41), start_b = NULL,
+                            free_var = TRUE) {
+  J <- ncol(Y)
+  z <- if (!is.null(quad$z)) quad$z else quad$nodes
+  w <- quad$weights; K <- length(z)
   M <- !is.na(Y); Mnum <- matrix(as.numeric(M), nrow(Y), J); Ym <- Y; Ym[!M] <- 0
+  z_row <- matrix(z, J, K, byrow = TRUE)
 
-  obj <- function(b) {
-    P <- .plg_nodes(b, theta, g_fit)
+  unpack <- function(par) {
+    sd <- if (free_var) exp(par[J + 1]) else 1
+    list(b = par[1:J], sd = sd, theta = z * sd)
+  }
+
+  obj <- function(par) {
+    pp <- unpack(par)
+    P <- .plg_nodes(pp$b, pp$theta, g_fit)
     ll <- Ym %*% log(P) + (Mnum - Ym) %*% log(1 - P)
     -sum(.node_posterior(ll, w)$marg_ll)
   }
-  grad <- function(b) {
-    P <- .plg_nodes(b, theta, g_fit)
+  grad <- function(par) {
+    pp <- unpack(par)
+    P <- .plg_nodes(pp$b, pp$theta, g_fit)
     ll <- Ym %*% log(P) + (Mnum - Ym) %*% log(1 - P)
     post <- .node_posterior(ll, w)$post
     A <- t(Ym) %*% post; Bc <- t(Mnum) %*% post
     D <- A - P * Bc                                   # J x K
-    r <- t(outer(theta, b, function(th, bb) plogis(th - bb)))
-    # dP/db = -(1-g)*r*(1-r)
-    rowSums(D * ((1 - g_fit) * r * (1 - r)) / (P * (1 - P)))
+    r <- t(outer(pp$theta, pp$b, function(th, bb) plogis(th - bb)))
+    # dP/db = -(1-g)*r*(1-r);  dP/dtheta = +(1-g)*r*(1-r), dtheta_k/dsd = z_k
+    coef_b <- ((1 - g_fit) * r * (1 - r)) / (P * (1 - P))
+    g <- rowSums(D * coef_b)
+    if (free_var) g <- c(g, -pp$sd * sum(D * coef_b * z_row))
+    g
   }
 
   if (is.null(start_b)) {
     p_j <- pmin(pmax(colMeans(Y, na.rm = TRUE), 0.02), 0.98)
     start_b <- -qlogis(p_j)
   }
-  fit <- optim(start_b, obj, grad, method = "BFGS",
-               control = list(maxit = 300, reltol = 1e-10))
-  list(b = fit$par, g_fit = g_fit, loglik = -fit$value,
-       converged = fit$convergence == 0, quad = quad)
+  par0 <- if (free_var) c(start_b, 0) else start_b
+  fit <- if (free_var) {
+    optim(par0, obj, grad, method = "L-BFGS-B",
+          lower = c(rep(-Inf, J), LS_BOUNDS[["lower"]]),
+          upper = c(rep( Inf, J), LS_BOUNDS[["upper"]]),
+          control = list(maxit = 300, factr = 1e2))
+  } else {
+    optim(par0, obj, grad, method = "BFGS",
+          control = list(maxit = 300, reltol = 1e-10))
+  }
+  pp <- unpack(fit$par)
+  list(b = pp$b, sd = pp$sd, g_fit = g_fit, loglik = -fit$value,
+       converged = fit$convergence == 0,
+       sd_at_bound = free_var && .at_bound(fit$par[J + 1]),
+       quad = .scale_quad(quad, pp$sd))
 }
 
 predict_1plg_fixedq <- function(fit, Y_train) {
@@ -77,7 +108,8 @@ g_sweep <- function(Y_train, mask_idx, true_vals,
     mix <- fit_mixture(Y_train, g_fit = g, quad = quad)
     p_mix <- predict_mixture(mix, Y_train)[mask_idx]
     if (verbose) cat(sprintf(" pi-hat = %.3f\n", mix$pi))
-    data.frame(g_fit = g, pi_hat = mix$pi,
+    data.frame(g_fit = g, pi_hat = mix$pi, sd_plg = plg$sd, sd_mix = mix$sd,
+               bound_1plg = isTRUE(plg$sd_at_bound), bound_mix = isTRUE(mix$sd_at_bound),
                imv_1plg = compute_imv(p_rasch, p_plg, true_vals),
                imv_mix  = compute_imv(p_rasch, p_mix, true_vals),
                conv_1plg = plg$converged, conv_mix = mix$converged)
