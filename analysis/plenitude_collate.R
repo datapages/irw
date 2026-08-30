@@ -2,9 +2,15 @@
 suppressPackageStartupMessages({ library(dplyr); library(purrr) })
 OUT <- "analysis/plenitude_data"; FITDIR <- file.path(OUT, "fits")
 
-fits <- list.files(FITDIR, pattern = "\\.rds$", full.names = TRUE) |>
-  map(readRDS) |> keep(~ identical(.x$status, "ok"))
-message("collating ", length(fits), " completed table x replicate fits")
+all_fits <- list.files(FITDIR, pattern = "\\.rds$", full.names = TRUE) |> map(readRDS)
+fits <- all_fits |> keep(~ identical(.x$status, "ok"))
+## Fits that ran but produced nothing analysable -- recorded so the vignette can
+## tell "still running" apart from "excluded for cause".
+excluded <- all_fits |> discard(~ identical(.x$status, "ok")) |>
+  map_dfr(~ data.frame(table = .x$table, replicate = .x$replicate, status = .x$status))
+message("collating ", length(fits), " completed fits; ",
+        nrow(excluded), " excluded (",
+        paste(unique(excluded$table), collapse = ", "), ")")
 
 key <- function(x) data.frame(table = x$table, replicate = x$replicate, seed = x$seed)
 
@@ -23,7 +29,10 @@ write.csv(so, file.path(OUT, "class_solutions.csv"), row.names = FALSE)
 write.csv(va, file.path(OUT, "validity_criteria.csv"), row.names = FALSE)
 write.csv(rk, file.path(OUT, "reverse_key.csv"), row.names = FALSE)
 
+if (nrow(excluded)) write.csv(excluded, file.path(OUT, "excluded_fits.csv"), row.names = FALSE)
+
 saveRDS(list(metafeatures = mf, predicted = pr, solutions = so,
-             validity = va, reverse_key = rk, n_fits = length(fits)),
+             validity = va, reverse_key = rk, n_fits = length(fits),
+             excluded = excluded, n_attempted = length(all_fits)),
         file.path(OUT, "plenitude_results.rds"))
 message("wrote 5 CSVs + plenitude_results.rds")

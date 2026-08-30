@@ -50,10 +50,14 @@ fmt <- function(x, d = 2) formatC(x, format = "f", digits = d)
 ```{r}
 #| label: run-status
 #| output: asis
-n_drawn <- nrow(corpus)
-cov <- mf |> count(table, name = "reps")
+n_drawn   <- nrow(corpus)
+cov       <- mf |> count(table, name = "reps")
 full_reps <- sum(cov$reps == 3)
-complete <- nrow(cov) >= n_drawn && all(cov$reps == 3)
+## A run is complete when every drawn table x replicate has been attempted --
+## whether it produced a usable matrix or was excluded for cause.
+n_excl    <- if (!is.null(res$excluded)) nrow(res$excluded) else 0
+attempted <- if (!is.null(res$n_attempted)) res$n_attempted else n_fits
+complete  <- attempted >= 3 * n_drawn && all(cov$reps == 3)
 if (!complete) {
   cat(sprintf(
 "::: {.callout-important}
@@ -181,6 +185,15 @@ we drew `r nrow(corpus)` tables stratified on response-category band and on the
 construct tag. Note that `r sum(corpus$affect_cog == "untagged")` of the drawn
 tables carry no construct tag at all, so any split by construct type runs on
 fewer tables than the total.
+
+One drawn table, `sd3ypl_klimczak_2019_sd3`, yields no analysable matrix and is
+absent from every result below, leaving `r n_tables` of `r nrow(corpus)`. It
+carries `density == 1` in the IRW metadata, but density counts whether a
+response *row* exists, not whether that row has a value: 1,460 of its 18,980
+responses are `NA`, concentrated in a handful of items, so every one of its 730
+respondents is missing at least one. Complete-case filtering — which is what
+their `grab_measurements()` does — correctly leaves nothing. The lesson for the
+eligibility filter is that `density == 1` does not imply non-missing responses.
 
 **Single tables only.** The merge path — stacking sibling tables that share a
 respondent sample — is not used. The scouting run found it produced the worst
@@ -721,6 +734,9 @@ bounds the error that introduces.
   their stated caveat.
 - `r sum(corpus$affect_cog == "untagged")` of `r nrow(corpus)` drawn tables lack a
   construct tag, so construct-type splits rest on a smaller base than the corpus.
+- `sd3ypl_klimczak_2019_sd3` was drawn but produced no analysable matrix (see
+  Corpus above), so results rest on `r n_tables` tables rather than
+  `r nrow(corpus)`.
 - Tables above 50,000 respondents were excluded from the sampling frame on
   download cost. This is a pragmatic restriction, not a statistical one.
 - Two 40-item tables (`hexaco_ashton_2014_c`, `hexaco_ashton_2014_h`) were
