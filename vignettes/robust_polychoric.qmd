@@ -1,0 +1,320 @@
+---
+title: "Does Robust Polychoric Correlation Disagree with Maximum Likelihood on IRW Data?"
+description: |
+  Polychoric correlation assumes every respondent's answers come from one
+  underlying bivariate normal. A robust estimator (Welz, Mair & Alfons, 2026)
+  relaxes that for a minority of observations and is asymptotically equivalent
+  to maximum likelihood when the assumption holds -- so a gap between the two
+  is a diagnostic, not a disagreement about which is right. We scan IRW's
+  ordinal tables for that gap.
+date: today
+bibliography: robust_polychoricdata/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(plotly)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+
+cache_path <- "robust_polychoricdata/robust_polychoric_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache      <- readRDS(cache_path)
+  summary_df  <- .cache$summary
+  pairs_df    <- .cache$pairs
+  failed_df   <- .cache$failed
+  date_run    <- .cache$date_run
+  tuning_c    <- .cache$tuning_c
+  max_cats    <- .cache$max_categories
+  items_cap   <- .cache$items_cap
+  n_cand      <- .cache$n_all_candidates
+  n_attempted <- length(.cache$candidate_tables)
+} else {
+  summary_df <- tibble(); pairs_df <- tibble(); failed_df <- tibble()
+  date_run <- Sys.Date(); tuning_c <- 0.6; max_cats <- 5; items_cap <- 15
+  n_cand <- 0L; n_attempted <- 0L
+}
+
+knitr::opts_chunk$set(eval = cache_ok)
+```
+
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (!cache_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Cache not found** — figures will not appear. Generate results with:\n\n",
+  "```bash\nPILOT=FALSE Rscript vignettes/robust_polychoric_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the analysis
+design, and the writing below — was produced largely by Claude (Anthropic),
+working from a task specification and with human review. Check the compute
+script (`robust_polychoric_compute.R`) directly if you're relying on the
+numbers here.
+:::
+
+## Motivation
+
+Polychoric correlation [@olsson1979maximum] is the workhorse for ordinal data
+in psychometrics: it estimates what the correlation between two items *would*
+be if the discrete responses were coarsenings of two continuous, jointly
+normal latent variables. Nearly every ordinal CFA, ordinal SEM, and
+factor-analytic scale evaluation in the field rests on it, usually without
+comment.
+
+The assumption is strong, and it is assumed to hold for **every respondent**.
+One bivariate normal is supposed to have generated the whole table. That is
+exactly the kind of assumption real survey data strains: careless responders,
+bots, people misreading a reverse-worded item, or an attentive but genuinely
+different subgroup all produce response patterns the single-normal model
+cannot fit.
+
+@welz2026robust propose a robust alternative — a "C-estimator" — designed for
+partial misspecification: the model is taken to hold for most observations but
+not necessarily all. The estimator automatically downweights cells of the
+contingency table whose observed frequencies the polychoric model cannot fit,
+governed by a tuning constant $c$ (default `r tuning_c`; $c = \infty$ recovers
+ordinary maximum likelihood).
+
+The property that makes this useful as a *diagnostic* rather than a
+replacement is this: **when the model is correctly specified for all
+observations, the robust estimator is asymptotically equivalent to maximum
+likelihood.** Agreement is therefore the null hypothesis. A gap between the
+two estimates is not a disagreement about which number is right — it is
+evidence that some observations are not described by the single-bivariate-normal
+model that ML assumes throughout.
+
+That reframes the question this vignette can ask of IRW. Not "which estimator
+should you use," but:
+
+1. **How often, and how much, do the two estimators diverge across real
+   ordinal IRW tables?**
+2. **Is the divergence one-directional?** If contamination attenuates ML,
+   the robust estimate should sit systematically *above* it, not scatter
+   symmetrically around it.
+3. **What does the divergence look like at the cell level** for the pair where
+   it is largest — which response combinations drive it?
+
+## Data and methods
+
+### Which tables, and why the category ceiling matters
+
+```{r}
+#| label: selection
+#| eval: false
+
+all_candidates <- irw_filter(
+  n_categories   = c(3, 5),
+  n_items        = c(6, Inf),
+  n_participants = c(1000, Inf)
+)
+```
+
+We take IRW tables with **3 to 5 response categories**, at least 6 items, and
+at least 1,000 respondents; `r n_cand` tables qualified as of
+`r format(date_run, "%B %Y")`, and this pass analyzes a random sample of
+`r n_attempted`. Two of those bounds are not the obvious ones and deserve
+explanation.
+
+**The upper category bound is a computational necessity, not a modelling
+choice.** The robust estimator's cost is driven overwhelmingly by the number
+of response categories, and the growth is a cliff rather than a slope. Timing
+a single item pair at 1,000 respondents:
+
+| Categories | Robust | ML (`psych::polychoric`) | Ratio |
+|---|---|---|---|
+| 3 | 0.18 s | 0.012 s | 15× |
+| 4 | 0.59 s | 0.014 s | 42× |
+| 5 | 1.11 s | 0.020 s | 56× |
+| 7 | 50.37 s | 0.040 s | 1259× |
+
+At 5 categories a 15-item table is a few minutes; at 7 it is most of a day.
+An earlier attempt at this vignette was abandoned as infeasible after
+benchmarking a 7-category table — the worst case in the range — and
+concluding the estimator was uniformly ~1000× too slow. It isn't; that
+conclusion was an artifact of the table chosen. **This does mean 6- and
+7-category instruments are out of scope here**, which is a real limitation:
+if divergence behaves differently on longer scales, this vignette cannot see
+it.
+
+**The respondent floor is high for the opposite of the usual reason.** Small
+samples are *more* expensive here, not less: at 5 categories the same pair took
+8.4 s at N=500 against ~1.3 s at N=1000, 2000 and 5000, because sparse cells
+make the estimator struggle to converge. So respondents are never subsampled —
+every table is analyzed at full N — and the 1,000 floor keeps the estimator
+out of the regime where it is both slowest and least stable.
+
+### Per-table computation
+
+Following the analysis pattern in the paper's own
+[replication material](https://github.com/mwelz/robust-polycor-replication),
+for each table we build a complete-case response matrix, sample at most
+`r items_cap` items (so at most `r choose(items_cap, 2)` pairs), recode
+categories to consecutive integers, and fit both estimators to the *same*
+matrix:
+
+```{r}
+#| label: fit-pattern
+#| eval: false
+
+fit_mle <- polycormat_mle(mat, variance = FALSE)              # maximum likelihood
+fit_rob <- polycormat(mat, c = 0.6, variance = FALSE,         # robust C-estimator
+                      parallel = FALSE)
+diff <- fit_rob$cormat - fit_mle$cormat                       # signed, per pair
+```
+
+Both estimators see identical data, so any difference is attributable to the
+estimator rather than to differing exclusions. The run is deliberately serial.
+
+## Results
+
+```{r}
+#| label: headline
+#| echo: false
+
+n_tab   <- nrow(summary_df)
+n_pairs <- nrow(pairs_df)
+med_abs <- if (n_pairs) median(pairs_df$abs_diff, na.rm = TRUE) else NA
+max_abs <- if (n_pairs) max(pairs_df$abs_diff, na.rm = TRUE) else NA
+pct_pos <- if (n_pairs) 100 * mean(pairs_df$diff > 0, na.rm = TRUE) else NA
+```
+
+`r n_tab` tables produced usable results, giving `r n_pairs` item pairs with
+both estimates.
+
+### How large is the gap?
+
+```{r}
+#| label: fig-diff-hist
+#| fig-cap: "Signed difference between the robust and ML polychoric estimate, one observation per item pair, pooled across tables. Zero (dashed) is what the null of a correctly specified model predicts."
+#| fig-height: 4
+
+ggplot(pairs_df, aes(x = diff)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_histogram(bins = 60, fill = irw_blue, colour = NA) +
+  labs(x = expression(rho[robust] - rho[ML]), y = "Item pairs")
+```
+
+The median absolute gap is `r sprintf("%.3f", med_abs)` and the largest is
+`r sprintf("%.3f", max_abs)`. For context, @welz2026robust report differences
+"as much as 0.3" in their own Big Five application.
+
+### Is the divergence one-directional?
+
+```{r}
+#| label: fig-scatter
+#| fig-cap: "Robust against ML estimate for every item pair. The diagonal is exact agreement. Systematic displacement to one side is the signature of contamination attenuating ML, rather than noise."
+#| fig-height: 5.2
+
+p <- ggplot(pairs_df, aes(x = rho_mle, y = rho_rob,
+                          text = paste0(table, "<br>", item_x, " / ", item_y,
+                                        "<br>ML: ", round(rho_mle, 3),
+                                        "<br>robust: ", round(rho_rob, 3)))) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_point(alpha = 0.35, colour = irw_blue, size = 1.4) +
+  labs(x = expression(rho[ML]), y = expression(rho[robust]))
+
+ggplotly(p, tooltip = "text")
+```
+
+`r sprintf("%.1f%%", pct_pos)` of pairs have a robust estimate *above* the ML
+estimate. Under a correctly specified model the split would be near 50/50, so
+a strong asymmetry is the informative result: it is what contamination looks
+like when it attenuates the ML estimate and downweighting restores it.
+
+### Which tables diverge most?
+
+```{r}
+#| label: tbl-ranking
+#| tbl-cap: "Tables ranked by the largest absolute robust-vs-ML gap among their sampled item pairs."
+
+summary_df %>%
+  arrange(desc(max_abs_diff)) %>%
+  transmute(
+    Table = table, Items = n_items, N = n_respondents, Pairs = n_pairs,
+    `Max |diff|`    = round(max_abs_diff, 3),
+    `Median |diff|` = round(median_abs_diff, 3),
+    `Mean signed`   = round(mean_diff, 3)
+  ) %>%
+  head(20) %>%
+  knitr::kable()
+```
+
+## Limitations
+
+**Scope is capped at 5 response categories** for the computational reasons
+given above. Six- and seven-point scales are extremely common in practice, and
+nothing here speaks to them.
+
+**Complete-case matrices.** Both estimators are fit to listwise-complete data,
+so tables with scattered missingness lose respondents and some are dropped
+entirely for falling under the floor. This selects toward completely-answered
+instruments, which may itself be related to careless responding — the very
+thing the robust estimator is meant to detect.
+
+**Divergence localizes assumption failure; it does not identify careless
+respondents.** The cell-level Pearson residuals are a property of an item
+pair's contingency table, not a per-person score. The paper's own replication
+code flags outlying *cells*; attributing those to particular respondents is an
+inference beyond what this analysis supports.
+
+**Both estimators can fail together.** @welz2026robust are explicit (their
+Section 8) that when the latent distribution is nonnormal for *all*
+observations rather than a contaminated minority, neither ML nor the robust
+estimator recovers the truth; the robust one helps mainly when nonnormality
+concentrates in the tails. Agreement between the two is therefore not proof
+that the model is right.
+
+**One tuning constant.** Everything here uses $c = `r tuning_c`$, the package
+default and the paper's recommendation. Divergence is a function of $c$, and
+no sensitivity analysis over it was run.
+
+## Reproducibility
+
+{{< include ../components/_source-links.qmd >}}
+
+Results computed `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```bash
+PILOT=FALSE Rscript vignettes/robust_polychoric_compute.R
+quarto render vignettes/robust_polychoric.qmd
+```
+
+## Acknowledgements
+
+We thank **Max Welz** (Erasmus University Rotterdam) for correspondence
+clarifying what the robust estimator is and is not designed to do — in
+particular that it functions as a sanity check on modelling assumptions rather
+than as a competitor to maximum likelihood, and that both estimators can fail
+together under global distributional misspecification. The analysis here
+follows the pattern in the paper's own replication material. He has not
+reviewed this page.
+
+## References
