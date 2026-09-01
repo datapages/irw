@@ -18,6 +18,8 @@ These data are structured as follows:
 
 - `instrument` This is the full, human-readable name or title for the instrument identified by the `table` column.
 
+- `language` This names the language in which the instrument was administered (e.g. `German`, `Spanish`), written plainly rather than as a language code. It is present when the administered language is not English.
+
 - `instructions` This contains the literal text of the instructions provided to the participant for the overall instrument.
 
 - `section_prompt` This contains the literal text of a shared prompt, such as a reading passage, that applies to all items within a given `section_id`.
@@ -31,6 +33,26 @@ These data are structured as follows:
 - `option_text` This is the literal text for a specific response option available for an item.
 
 - `resp` This is the response value assigned to a specific `option_text`. It should match the numeric, ordinal `resp` value found in the response-level IRW dataset.
+
+- `instructions_translated`, `section_prompt_translated`, `item_text_translated` and `option_text_translated` These hold the English translation of the correspondingly named field. They are present only for instruments administered in a language other than English.
+
+## Instruments administered in a language other than English
+
+Where a study was administered in a language other than English, the text fields
+(`instructions`, `section_prompt`, `item_text`, `option_text`) hold the wording that
+respondents actually read, verbatim, and `language` names that language. The English
+rendering is carried alongside in the parallel `_translated` fields, so the instrument
+is usable without reading the administered language. Where the study or its data
+deposit supplies its own English version, that is the translation we ship, and the
+source is recorded in the provenance for that table.
+
+`item` and `resp` are join keys into the response-level IRW dataset and are never
+translated. For instruments administered in English, `language` and the `_translated`
+fields are left empty.
+
+Where the administered wording cannot be recovered and only an English version of the
+instrument is available, the English is placed in the base text fields and the
+`_translated` fields are left empty.
 
 ## Some additional notes about the item text
 
