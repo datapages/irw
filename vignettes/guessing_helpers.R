@@ -132,8 +132,11 @@ LS_BOUNDS <- c(lower = log(0.1), upper = log(10))
 # Y: N x J 0/1 matrix, NA for missing/held-out cells.
 # ------------------------------------------------------------------------------
 
+# alpha_start exists so the identification check in
+# guessing_alpha_identification.R can restart the AG stage away from zero
+# without duplicating this estimator; it does not change the default fit.
 fit_1pl_ag <- function(Y, quad = build_quadrature(41), start_beta = NULL,
-                       free_var = TRUE) {
+                       free_var = TRUE, alpha_start = 0) {
   N <- nrow(Y); J <- ncol(Y)
   z <- if (!is.null(quad$z)) quad$z else quad$nodes
   w <- quad$weights; K <- length(z)
@@ -210,7 +213,7 @@ fit_1pl_ag <- function(Y, quad = build_quadrature(41), start_beta = NULL,
   fit_g <- bounded(c(start_beta, start_gamma, start_ls), fg)
 
   # carry beta/gamma across, insert alpha = 0, keep ls last
-  start_ag <- c(fit_g$par[1:(2 * J)], 0,
+  start_ag <- c(fit_g$par[1:(2 * J)], alpha_start,
                 if (free_var) fit_g$par[2 * J + 1] else numeric(0))
   fag <- make_obj_grad(with_alpha = TRUE)
   fit_ag <- bounded(start_ag, fag)
@@ -227,6 +230,25 @@ fit_1pl_ag <- function(Y, quad = build_quadrature(41), start_beta = NULL,
   lr_stat <- max(lr_stat, 0)
   lr_p <- stats::pchisq(lr_stat, df = 1, lower.tail = FALSE)
 
+  # Is alpha actually identified on this data?
+  #
+  # alpha enters the likelihood only through the guessing branch,
+  # dP/dalpha = (1-r)*s*(1-s)*theta with s = expit(alpha*theta + gamma). If the
+  # 1PL-G stage drives every gamma to -Inf -- i.e. the data prefer NO guessing
+  # floor at all -- then s ~ 0, that derivative vanishes, and the log-likelihood
+  # is exactly flat in alpha. The optimizer then returns whatever alpha it was
+  # started at (0, by construction above), with LR ~ 0 and p ~ 1.
+  #
+  # That is not "we tested for ability-dependent guessing and found none"; it is
+  # "the model found no guessing, so the alpha test has nothing to test." The two
+  # are indistinguishable in the reported numbers, so flag the second case here
+  # and let callers suppress alpha rather than print a spurious p = 1.000.
+  # Observed on the five ENEM 2013/2014 tables, where gamma_G lands near -30
+  # (s ~ 1e-14) and refits from alpha in {+-0.1, +-0.3} return the start to 1e-11
+  # with the log-likelihood unchanged to 1e-13 relative.
+  s_max <- max(stats::plogis(fit_g$par[(J + 1):(2 * J)]))
+  alpha_identified <- s_max > 1e-6
+
   list(
     beta = fit_ag$par[1:J], gamma = fit_ag$par[(J + 1):(2 * J)], alpha = alpha_hat,
     se_alpha = se_alpha, lr_stat = lr_stat, lr_p = lr_p, sd = sd_hat,
@@ -234,6 +256,7 @@ fit_1pl_ag <- function(Y, quad = build_quadrature(41), start_beta = NULL,
     beta_g = fit_g$par[1:J], gamma_g = fit_g$par[(J + 1):(2 * J)],
     converged_ag = fit_ag$convergence == 0, converged_g = fit_g$convergence == 0,
     free_var = free_var, sd_at_bound = free_var && .at_bound(fit_ag$par[2 * J + 2]),
+    alpha_identified = alpha_identified, max_guess_floor = s_max,
     quad = .scale_quad(quad, sd_hat)
   )
 }

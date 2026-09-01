@@ -478,9 +478,19 @@ means "costs something relative to just ignoring guessing entirely."
 ```{r}
 #| label: results-table
 if (cache_ok && nrow(summary_df) > 0) {
+  # Caches written before the identification check exist without this column;
+  # treat those as "unknown" rather than failing to render.
+  if (!"alpha_identified" %in% names(summary_df)) summary_df$alpha_identified <- NA
   summary_df |>
     mutate(
-      alpha_lbl = sprintf("%.3f (p=%.3f)", alpha_hat, lr_p),
+      # Where the 1PL-G stage found no guessing floor, the likelihood is flat
+      # in alpha and the fit returns its starting value with p ~ 1. Printing
+      # "0.000 (p=1.000)" there would read as a null result from a valid test,
+      # so print the reason instead. See the note under this table.
+      alpha_lbl = ifelse(
+        !is.na(alpha_identified) & !alpha_identified,
+        "not identified",
+        sprintf("%.3f (p=%.3f)", alpha_hat, lr_p)),
       pi_lbl    = sprintf("%.3f", pi_hat),
       frac_flagged = round(frac_flagged, 3)
     ) |>
@@ -506,14 +516,59 @@ if (cache_ok && nrow(summary_df) > 0) {
 #| label: imv-vs-rasch-table
 if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
   imv_vs_rasch_df |>
-    mutate(imv = round(imv, 4)) |>
     pivot_wider(names_from = model, values_from = imv) |>
     select(table, all_of(model_order)) |>
     knitr::kable(
       align = "lrrrrrr",
+      # digits must be passed to kable itself: rounding the column beforehand
+      # does nothing, because kable re-formats numeric columns with its own
+      # default (2 dp), which collapses every margin on this table to 0.00.
+      digits = 4,
       caption = paste0("IMV(Rasch, model) for every model, on held-out cells ",
                         "(single ", holdout_frac * 100, "% split per table)")
     )
+}
+```
+
+```{r}
+#| label: alpha-identification-note
+#| results: asis
+if (cache_ok && nrow(summary_df) > 0 &&
+    "alpha_identified" %in% names(summary_df) &&
+    any(!summary_df$alpha_identified, na.rm = TRUE)) {
+  ni_tables <- summary_df$table[which(!summary_df$alpha_identified)]
+  floor_max <- max(summary_df$max_guess_floor[which(!summary_df$alpha_identified)],
+                   na.rm = TRUE)
+  cat(sprintf(
+    paste0("**$\\hat\\alpha$ reads \"not identified\" on %d table%s (%s), and ",
+           "that is a stronger statement than a non-significant test.** On ",
+           "these tables the 1PL-G stage drives *every* item's guessing ",
+           "parameter $\\gamma_j$ to the no-guessing boundary -- the largest ",
+           "implied floor across all items and all %d tables is %.1e. Because ",
+           "$\\alpha$ enters the likelihood only through the guessing branch ",
+           "($\\partial P/\\partial\\alpha \\propto (1-r)s(1-s)\\theta$, with ",
+           "$s = \\mathrm{expit}(\\alpha\\theta+\\gamma)$), a vanishing $s$ ",
+           "makes the log-likelihood exactly flat in $\\alpha$: the optimizer ",
+           "returns whatever value it was started at, and the likelihood-ratio ",
+           "test returns $p \\approx 1$ no matter what. Refitting from ",
+           "$\\alpha \\in \\{\\pm 0.1, \\pm 0.3\\}$ returns the starting value ",
+           "to within $10^{-11}$ with the log-likelihood unchanged to $10^{-13}$ ",
+           "relative, which is what non-identification looks like -- not a ",
+           "stuck optimizer, and not evidence that guessing is ",
+           "ability-independent. **The 1PL-AG simply has nothing to say about ",
+           "these tables**, and its IMV there (within %.4f of Rasch) reflects a ",
+           "model that has collapsed onto the Rasch baseline. Note that this ",
+           "is the 1PL-AG's own verdict that these tables carry no guessing ",
+           "floor, which the 1PLg fits corroborate from the other side: forcing ",
+           "$g = 1/m$ on them is what makes that model fail to converge or ",
+           "score far below Rasch.\n\n"),
+    length(ni_tables), if (length(ni_tables) > 1) "s" else "",
+    paste0("`", ni_tables, "`", collapse = ", "),
+    length(ni_tables), floor_max,
+    max(abs(imv_vs_rasch_df$imv[imv_vs_rasch_df$model == "1PL-AG" &
+                                  imv_vs_rasch_df$table %in% ni_tables]),
+        na.rm = TRUE)
+  ))
 }
 ```
 
@@ -524,9 +579,12 @@ if (cache_ok && nrow(summary_df) > 0 && any(!summary_df$converged_1plg)) {
   na_tables <- summary_df$table[!summary_df$converged_1plg]
   em_cycles_used <- 2000  # matches EM_CYCLES in guessing_compute.R
   cat(sprintf(
-    "**1PLg is blank on %d table%s (%s):** its constrained-3PL fit (`a1` fixed at 1, `g` fixed at 1/m) did not converge within the %d-cycle EM budget used for every model on this page. Rather than report a point estimate from an unconverged fit, that cell is left blank instead of a misleading number.\n\n",
-    length(na_tables), if (length(na_tables) > 1) "s" else "",
-    paste0("`", na_tables, "`", collapse = ", "), em_cycles_used
+    "**1PLg is blank on %d of the %d tables (%s):** its constrained-3PL fit (`a1` fixed at 1, `g` fixed at 1/m) did not converge within the %d-cycle EM budget used for every model on this page. Rather than report a point estimate from an unconverged fit, that cell is left blank instead of a misleading number. The consequence is worth stating plainly: **in the table above, the fixed-floor-vs-safety-valve contrast rests on the %d table%s where 1PLg did converge**, not on all %d. (The $g$ sweep further down is not affected: it fits the fixed-floor model with its own standalone estimator, `fit_1plg_fixedq()`, rather than `mirt`, and converges on all %d.)\n\n",
+    length(na_tables), nrow(summary_df),
+    paste0("`", na_tables, "`", collapse = ", "), em_cycles_used,
+    nrow(summary_df) - length(na_tables),
+    if (nrow(summary_df) - length(na_tables) != 1) "s" else "",
+    nrow(summary_df), nrow(summary_df)
   ))
 }
 ```
@@ -558,19 +616,40 @@ if (cache_ok && nrow(summary_df) > 0 && nrow(imv_vs_rasch_df) > 0) {
   cat("::: {.callout-note}\n### Reading the table above\n\n")
 
   if (nrow(helps) > 0 && nrow(hurts) > 0) {
+    # Every quantifier below is computed, not asserted. An earlier version
+    # hard-coded "every correction is at or below zero" on the `hurts` group
+    # from the sign of the 3PL alone; the Mixture is in fact positive on two
+    # of those tables, so the sentence was false against its own table.
+    corr_cols <- c("3PL", "1PL-AG", "Mixture")
+    sign_str <- function(d) {
+      pos <- purrr::map_chr(corr_cols, function(cc) {
+        v <- d[[cc]]; k <- sum(!is.na(v) & v > 0)
+        if (k == 0) NA_character_
+        else sprintf("%s on %d (up to %+.4f)", cc, k, max(v, na.rm = TRUE))
+      })
+      paste(pos[!is.na(pos)], collapse = ", ")
+    }
+    hurts_pos <- sign_str(hurts)
+    helps_all_pos <- all(!is.na(unlist(helps[corr_cols])) &
+                         unlist(helps[corr_cols]) > 0)
     cat(sprintf(
       paste0("- **The tables split in two, and the split tracks the spread of ",
              "ability.** On %d of the %d tables (%s) the 3PL, 1PL-AG and ",
-             "Mixture are all positive against Rasch. On the other %d (%s) ",
-             "every guessing correction is at or below zero -- the 3PL by ",
-             "%.4f to %.4f, i.e. *worse* than simply ignoring guessing. ",
-             "Those are also the tables with the largest estimated latent ",
-             "spread (SD(theta) %.1f to %.1f, against %.1f to %.1f on the ",
-             "first group). Whatever is driving the difference, no ",
-             "correction on this page buys anything on the second group.\n"),
+             "Mixture are ", if (helps_all_pos) "all positive" else
+               "positive more often than not", " against Rasch. On the other %d (%s) ",
+             "the 3PL is negative throughout, by %.4f to %.4f -- *worse* than ",
+             "simply ignoring guessing. %s Those are also the tables with the ",
+             "largest estimated latent spread (SD(theta) %.1f to %.1f, against ",
+             "%.1f to %.1f on the first group).\n"),
       nrow(helps), nrow(w), paste0("`", helps$table, "`", collapse = ", "),
       nrow(hurts), paste0("`", hurts$table, "`", collapse = ", "),
       max(hurts$`3PL`), min(hurts$`3PL`),
+      if (nzchar(hurts_pos)) {
+        sprintf(paste0("The other two corrections are not uniformly negative ",
+                       "there, but the exceptions are marginal: %s."), hurts_pos)
+      } else {
+        "Neither of the other two corrections is positive on any of them."
+      },
       min(hurts$sd_rasch, na.rm = TRUE), max(hurts$sd_rasch, na.rm = TRUE),
       min(helps$sd_rasch, na.rm = TRUE), max(helps$sd_rasch, na.rm = TRUE)))
   }
@@ -966,6 +1045,33 @@ if (gsweep_ok && nrow(gsweep_spread) > 0) {
            "as good as the analyst's $g$, whereas the Mixture degrades ",
            "toward its Rasch baseline instead of past it.\n\n"),
     min(gsweep_spread$worst_1plg), min(gsweep_spread$worst_mix)))
+
+  # The two "worst" figures above fall on different tables, so their ratio is
+  # not a like-for-like comparison. Name the Mixture's worst table and give the
+  # ratio computed on that table alone, which is much less flattering than the
+  # median-to-median 116x -- and check it against the Mixture's own IMV ceiling
+  # from the main results table.
+  wm <- gsweep_spread[which.max(gsweep_spread$range_mix), ]
+  ratio_same_table <- wm$range_1plg / wm$range_mix
+  mix_ceiling <- max(abs(imv_vs_rasch_df$imv[imv_vs_rasch_df$model == "Mixture"]),
+                     na.rm = TRUE)
+  mix_here <- imv_vs_rasch_df$imv[imv_vs_rasch_df$model == "Mixture" &
+                                    imv_vs_rasch_df$table == wm$table]
+  cat(sprintf(
+    paste0("Those two worst-case figures come from different tables, though, ",
+           "so the gap between them overstates the asymmetry. The Mixture's ",
+           "worst table is `%s`, and *on that table* the 1PLg moves %.3f ",
+           "against the Mixture's %.3f -- a ratio of %.1f, not the %.0f the ",
+           "median-to-median comparison gives. That is the number to read: on ",
+           "`%s` the Mixture's sensitivity to the assumed $g$ (%.4f) is larger ",
+           "than the largest IMV the Mixture achieves against Rasch anywhere on ",
+           "this page (%.4f), and larger still than its own IMV on that table ",
+           "(%.4f). Where the valve matters most, it moves further with the ",
+           "analyst's assumption than its entire signal.\n\n"),
+    wm$table, wm$range_1plg, wm$range_mix, ratio_same_table,
+    median(gsweep_spread$range_1plg) / median(gsweep_spread$range_mix),
+    wm$table, wm$range_mix, mix_ceiling,
+    if (length(mix_here) == 1) mix_here else NA_real_))
 }
 ```
 
@@ -981,6 +1087,17 @@ if (gsweep_ok && nrow(gsweep_spread) > 0) {
   application, where some items had standard errors above 100. Point
   estimates of $\hat\alpha$ should be read alongside its LR test, not in
   isolation.
+- **$\alpha$ is not identified when the data carry no guessing floor, and the
+  LR test cannot detect this.** Where every $\hat\gamma_j$ goes to the
+  no-guessing boundary the likelihood is flat in $\alpha$, so the fit returns
+  its starting value and the test returns $p \approx 1$ -- numerically
+  indistinguishable from a genuine null. Those cells are labelled rather than
+  reported here, but the general lesson is that a non-significant $\alpha$ in
+  a 1PL-AG fit should never be read as evidence against ability-dependent
+  guessing without first checking that $\hat\gamma$ is interior. The
+  simulation validation on this page did not catch it because data generated
+  from the 1PL-AG always has a floor by construction; it takes real data that
+  rejects a floor to produce the failure.
 - **The recovery result is a simulation, on the Mixture's own DGM.** The
   two-scorecards section generates data from exactly the two-class mixture
   the Mixture model assumes. That is the right shape for isolating what

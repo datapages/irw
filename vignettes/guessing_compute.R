@@ -294,6 +294,11 @@ fit_one_table <- function(table_name, m, m_verified) {
     se_alpha = if (!is.null(fit_ag)) fit_ag$se_alpha else NA_real_,
     lr_stat = if (!is.null(fit_ag)) fit_ag$lr_stat else NA_real_,
     lr_p = if (!is.null(fit_ag)) fit_ag$lr_p else NA_real_,
+    # FALSE when the 1PL-G stage drove every gamma to the no-guessing boundary,
+    # which leaves the likelihood flat in alpha (see fit_1pl_ag). alpha_hat and
+    # lr_p are meaningless in that case and must not be reported as a test.
+    alpha_identified = if (!is.null(fit_ag)) fit_ag$alpha_identified else NA,
+    max_guess_floor = if (!is.null(fit_ag)) fit_ag$max_guess_floor else NA_real_,
     frac_flagged = if (!is.null(fit_pur)) fit_pur$frac_flagged else NA_real_,
     # estimated latent SDs: every model on the page now estimates the theta
     # variance, matching mirt's itemtype = "Rasch" baseline (see
@@ -368,7 +373,10 @@ summarize_one <- function(r) {
     converged_1plg = r$converged$plg, converged_3pl = r$converged$pl3,
     converged_ag = r$converged$ag, converged_mix = r$converged$mix,
     pi_hat = r$pi_hat, alpha_hat = r$alpha_hat, se_alpha = r$se_alpha,
-    lr_stat = r$lr_stat, lr_p = r$lr_p, frac_flagged = r$frac_flagged,
+    lr_stat = r$lr_stat, lr_p = r$lr_p,
+    alpha_identified = r$alpha_identified %||% NA,
+    max_guess_floor = r$max_guess_floor %||% NA_real_,
+    frac_flagged = r$frac_flagged,
     sd_rasch = r$sd_rasch %||% NA_real_, sd_mix = r$sd_mix %||% NA_real_,
     sd_ag = r$sd_ag %||% NA_real_, sd_pur = r$sd_pur %||% NA_real_,
     imv_1plg_mix   = imv_safe(r$preds$plg, r$preds$mix),
