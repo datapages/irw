@@ -4,599 +4,319 @@ title: "Item Text"
 
 {{< include _itemtext-disclaimer.qmd >}}
 
+```{r}
+#| label: issues-data
+#| include: false
+
+library(yaml)
+
+# The page below is generated from this list. To record a new issue, append an
+# entry -- `table` is the IRW table name, `issue` a one-paragraph description
+# (markdown is allowed). Keep the list alphabetised by nothing in particular;
+# the page sorts it.
+issues <- yaml.load(r"---(
+- table: singh_2025_identity_pba
+  issue: |-
+    Table has 6 items for affiliation but the codebook only has 5 items
+- table: paampsmartsud_saba_2023_ders
+  issue: |-
+    The paper described only 36-item, but the IRW table contains 37
+- table: namprb_siwiak_2024_ssub
+  issue: |-
+    IRW table doesn't match the number of items provided in the paper
+- table: sv-maia2_randelovic_2021_erq
+  issue: |-
+    IRW table uses a 1-5 scale (the paper's ERQ is normally 1-7); the itemtext anchor labels for the 1-5 version are inferred from the 1-7 wording, not sourced from the study's own materials
+- table: fivpei_perrig_2023_attdiff
+  issue: |-
+    Paper has 28 items, IRW contains only 21
+- table: oxfordcovid_xue_2024_at
+  issue: |-
+    IRW missing the item: media_tv
+- table: socialstereotype_hughes_2025_judgement
+  issue: |-
+    IRW has 6 items for affiliation but the codebook only has 5 items
+- table: gilbert_meta_51
+  issue: |-
+    `ch_anemic` is not an item in the code book
+- table: gilbert_meta_35
+  issue: |-
+    item text covers 8 of the 12 `values_*` items. The other four (`values_b`, `values_h`, `values_k`, `values_l`) are omitted: the study's replication do-file builds its democratic-values scale from only eight of the twelve, and no wording is published for the other four. The eight are mapped to their text using the source `.dta`'s variable labels, which name six of them outright; note that `values_e` and `values_j` are reverse-worded, so their response options run in the opposite direction to the other six
+- table: gilbert_meta_42
+  issue: |-
+    item text covers only 12 of the 20 items -- the 4 `life_satisfaction_*` and 4 `locus_of_control_*` items are omitted because no item text is available for them. The paper names the source instruments (a 4-item subset of Diener's Satisfaction With Life Scale, and 4 items from the Levenson Multidimensional Internal Locus of Control Scales, both adapted for the study context) but neither it nor its appendix gives which items were used or their adapted wording, and the openICPSR questionnaire is access-gated
+- table: gilbert_meta_38
+  issue: |-
+    survey does not contain `bought_ins`
+- table: florida_twins_friends
+  issue: |-
+    Items `friends20`/`friends21` are not documented in the Florida Twin Project's Wave 1 Child Survey Measures codebook; the other 19 items match exactly
+- table: addy_2021_sdq_ghana
+  issue: |-
+    `SDQ_7`'s response options run in reverse order in the source codebook (0=certainly true ... 2=not true) relative to the other 9 items; transcribed as given, so this item may need reverse-coding
+- table: aguirre_camacho_2021_shai
+  issue: |-
+    Item text is the English SHAI-18 original, but the study administered a Spanish translation whose wording the paper never quotes. The instrument has no item stems -- each item is a group of four statements -- so all text sits in `option_text` and `item_text` is empty. The 14/4 split between the two subscales is confirmed against the paper's subscale statistics, but item order *within* each subscale rests on `HAnx<N>` being the instrument's item *N*
+- table: aguirre_camacho_2021_champion
+  issue: |-
+    Item text is the administered Spanish wording, but the 1/5 scale anchors are recorded in English because the source labels only the endpoints and only in English; the middle three points are unlabeled
+- table: abdullah_2024_bsq_sevgen
+  issue: |-
+    The source papers state per-item scale ranges that do not match the data: items 3/4/6 are documented 1-5 but only reach 4, and item 7 is documented 1-7 but shows 1-4 plus 6-7. `SEVG2` is published in the instrument but absent from the table
+- table: ajaykumar_2023_nasa_tlx
+  issue: |-
+    Item text is the official NASA-TLX rating-scale definitions, not the study's own wording: the study administered a modified NASA-TLX on a 5-point scale and never published what participants saw, so the exact phrasing differs. The paper's own analyses use three of these six items
+- table: alexander_2017_dsi
+  issue: |-
+    Covers only the Differentiation of Self Inventory's Emotional Reactivity and Emotional Cutoff subscales (23 of the 43 items). The `dsi_1`..`dsi_23` to original-item mapping is reconstructed from the published appendix order rather than documented in the source, though it matches both the published subscale key and the response data
+- table: algner2022_cse
+  issue: |-
+    Item text is the English CSES original; the study administered a German translation whose exact wording could not be located
+- table: alcoholhealthwarninglabel_brennan_2022_awareness_harms_followup
+  issue: |-
+    `resp` (0/1) is a derived binary rather than the original response scale: the study collapsed a 7-point agree/disagree item into aware/not-aware, so `option_text` records that rule rather than a literal option label
+- table: dumas_organisciak_2022
+  issue: |-
+    The paper describes originality as coded on a 0-4 scale, but the IRW table (and `option_text`) is on 1-5. This is not a shift introduced here: the authors' own deposited file ([osf.io/qcmex](https://osf.io/qcmex/files/u3yv4)) already codes `rater1`-`rater4` as 1-5, and the processing script does no recoding, so the table reproduces the source faithfully. The discrepancy is between the paper's text and the authors' shared data; read the 1-5 values as the paper's 0-4 categories shifted by one
+- table: 16_personalityfactors
+  issue: |-
+    The source's own instructions describe the scale as "(1) disagree ... (5) agree" while its per-item codebook labels it "strongly disagree ... strongly agree"; `option_text` follows the codebook. Item `163` is the one column the codebook omits, so its text comes from the IPIP scale listing rather than the dataset's own documentation
+- table: algner2022_uwes
+  issue: |-
+    Both the UWES-9 instrument and this paper describe the response scale as 0-6 (Nie ... Immer), but the study's own data records the same seven categories as 1-7, so a response of 1 here corresponds to the instrument's 0 (Nie). Item text is Schaufeli & Bakker's official German UWES-9, while the paper cites a different German version (Sautier et al. 2015) whose wording was not obtainable
+- table: almuqbil_2022_epds
+  issue: |-
+    Participants completed the Arabic EPDS translation (Ghubash et al. 1997); the item text here is the English wording used to label the items in the study's own data file, so it is not what respondents read
+- table: alkouri_2025_icu_stressors
+  issue: |-
+    The source questionnaire changes the wording of its second response option partway through the scale -- items 01-14 offer "Barely" and items 15-29 offer "Rarely" for the same value 2 -- so option text varies by item; transcribed as the source gives it
+- table: alsuhibani_2022_loc
+  issue: |-
+    The paper's Methods describes this as a five-point scale, but the live data and the study's own SPSS file both show a genuine 6-point "Strongly disagree" ... "Strongly agree" scale; the data file was followed rather than the paper text
+- table: alves_2017_hamd17
+  issue: |-
+    Item text follows a canonical reproduction of Hamilton's original (1960) HDRS-17, which scores item 9 (Agitation) 0-2, but this study's data scores it 0-4 -- so `HamD9Baixa` responses of 3 and 4 have no option label. Item text is also a canonical reproduction rather than the study's own materials, and item-to-text alignment follows the instrument's standard order rather than an explicit map
+- table: altahla_2024_whoqol
+  issue: |-
+    Participants were Chinese adults who completed a Chinese-language version; the item text here is the English wording used to label the items in the study's own data file, so it is not what respondents read
+- table: altahla_2024_whoqol_bref
+  issue: |-
+    Participants were Chinese adults who completed a Chinese-language version; the item text here is the English wording used to label the items in the study's own data file, so it is not what respondents read. This table is also the spinal-cord-injury subsample of `altahla_2024_whoqol`, whose responses it duplicates
+- table: altahla_2024_swls
+  issue: |-
+    Participants were Chinese adults who completed a Chinese-language version; the item text here is the English wording used to label the items in the study's own data file, so it is not what respondents read
+- table: amarilla_2020_lawton_brody
+  issue: |-
+    `resp` (0/1) is the Lawton-Brody dependency score rather than the administered response: each domain offers 3-5 instrument levels that collapse to able/unable, so `option_text` names the scored category and lists the levels sharing it instead of a single literal option label. The study's data supplement also records only the total IADL score, so the item-to-domain mapping follows the standard Lawton & Brody (1969) ordering rather than an explicit map, and item text comes from the canonical instrument
+- table: american_multiracial_face
+  issue: |-
+    Each item is one photograph rated on one attribute, and the `item` codes are arbitrary integers assigned when the study's 19 separate rating files were stacked -- they carry no meaning and must not be read as an item order. `item_text` is therefore a constructed description of the stimulus rather than transcribed text; the verbatim rating question is the `section_prompt`. The AMFD PhotoID named in `item_text` is not stated in the source materials and was recovered by matching per-face rating means against the published norming table, and 9 faces (171 items) were never released in the AMFD and so carry no PhotoID. Only scale points 1 and 7 were labelled in the original survey, so `option_text` is blank for 2-6. Separately, the table has no Black-prototypicality ratings for the smiling photographs: the source repository provides them, but the IRW processing script does not read that file
+- table: an_2020_efl_self_regulated
+  issue: |-
+    The table name signals one instrument but the table pools three administered in the same survey: the TSELSS strategy items (Q1-Q26), an English-learning enjoyment/environment block (Q27-Q33), and a 16-item English language self-efficacy questionnaire (Q34-Q49). Item text is the original Chinese from the study's own data file. Only the two endpoints of the 7-point scale are labelled in that file, so `option_text` is blank for values 2-6
+- table: anjum_2022_gad7
+  issue: |-
+    The IRW table covers 6 of the GAD-7's 7 items: item 1 ("Feeling nervous, anxious, or on edge") is present in the study's data file but was not included in the IRW release. Two item wordings and the response anchors follow that file's own labels, which differ from canonical GAD-7 wording -- "not being able to sleep or control worrying" for "stop or control", "hart to sit still" for "hard", and "More than half of the days" for "More than half the days". The instructions are the canonical GAD-7 stem; the data file carries none
+- table: AOMT_BR_SF_EDPANAB_Geiger_2021_AOT
+  issue: |-
+    The table carries 14 item codes for a 10-item scale. AOT3_rev, AOT5_rev, AOT7_rev and AOT8_rev are reverse-coded duplicates of AOT3, AOT5, AOT7 and AOT8 rather than additional items -- the same statement, with the response options in reverse order -- so they carry their parent item's text and reversed `option_text`
+- table: AOMT_BR_SF_EDPANAB_Geiger_2021_BRS
+  issue: |-
+    The table name signals the Bullshit Receptivity Scale alone, but it combines that scale's 10 items (BSR\*) with the 10 motivational-quotation control statements (MOT\*) from the same study; both blocks were rated on the same "profoundness" scale
+- table: arnulf_2022_general_knowledge
+  issue: |-
+    The general-knowledge test was open-answer, so participants did not choose from the options shown here: `option_text` gives the Correct/Incorrect scoring labels the study's data file attaches to 0 and 1. Item text is verbatim from that file, including its "principle street for finance in New York" where the paper's prose reads "principal"
+- table: arora2025_blueq_synchronous
+  issue: |-
+    The study's data file records only numeric codes, so the response anchors and the section prompt are taken from the published BLUE-Q instrument. That instrument's prompt describes a "face-to-face component", while this study administered the synchronous sessions as online workshops -- the item text itself, which is verbatim from the study's own spreadsheet, refers to "face-to-face online workshops"
+- table: art
+  issue: |-
+    The Author Recognition Test presents a checklist of names with no printed response labels, so `option_text` ("Checked"/"Not checked") describes the check-box rather than quoting the instrument, and `item_text` repeats the author name shown on the checklist. Only the 50 real-author items are in the IRW table; the 50 foils were dropped upstream. The name "T.S. Elliot" is kept as the source data spells it (canonically "T. S. Eliot")
+- table: artistic_preferences
+  issue: |-
+    The table name describes only the first of three instruments administered in the same session: items 1-30 are the Artistic Preferences Scales, items 31-40 the Ten Item Personality Inventory, and items 41-56 a 16-word vocabulary check list. Items 1-30 have no text stem at all -- each is a pair of paintings, shown as images, that the respondent chooses between and rates the strength of the preference; the images are distributed with the source dataset. Only the two extreme points of that 1-5 scale carry anchors, so `option_text` is blank for 2-4
+- table: arzamoncunill_2023_epq_clinical
+  issue: |-
+    Ten of the 22 items here are not the wording respondents read. The study ran a 43-item pretest pool but published full item wording, in Spanish, only for the 26 items kept in its final questionnaire, while this table holds all 22 clinical-care items of the pretest pool. The 12 that survived carry their administered Spanish from Appendix S3; the other 10 have no published wording in any language, so they keep the short category descriptor the study's supplement gives for each item number ("Editable agenda", "Videoconference"), which names what the item is about rather than quoting it. Those 10 are identifiable by an empty `item_text_translated`. Two of the 12 English translations are the authors' own, printed in both languages in Appendix S1; the other 10 were produced by IRW rather than by the study. The 7-point anchors are published in English only ("very much disagree", "very much agree"), so `option_text` is English throughout. The study's own data file carries no variable or value labels; the item numbers are matched exactly, and the 12 Spanish items are tied to their codes through the supplement's number-to-descriptor map, cross-checked against the retained-item list in the study's factor analyses
+- table: audretsch_2021_entrepreneurial_ecosystems
+  issue: |-
+    Item text is the untruncated form of the study data file's variable labels, recovered from its Stata do-file because the `.dta` labels are cut off at Stata's 80-character cap. For the `ee_quality` item the paper's own section 4.2 quotes a different wording ("There is a strong focus on growth-oriented and productive entrepreneurship activity in my region (city)") from the data-file label that is shipped here ("There is a strong entrepreneurship ecosystem (EE) in my region (city)"). Several labels are ungrammatical or unclosed in the source and are transcribed as they stand. Only the endpoints of the 1-7 scale (1 = very weak, 7 = very strong) are documented, so the intermediate options are blank
+- table: autonomysupport_mokken
+  issue: |-
+    The item "Decide" is reverse-worded in the original questionnaire, but the responses in this table are the raw, unreversed scores, so the same anchors apply to it as to every other item. Item text is the English rendering the `mokken` package documents for a questionnaire administered in Dutch. Only the two extreme anchors are documented (1 = not at all/never, 5 = certainly/always)
+- table: avilesgonzalez2019_ces
+  issue: |-
+    Item text comes from the study's SPSS file, which stores the English Caring Efficacy Scale wording even though the respondents were Italian nurses, so it is not what they read. Several typographical errors in those labels are preserved here as the source has them -- one item is missing its opening "If", another reads "Ioften", and several begin with a lowercase "i"
+- table: baaziz_2023_sms2
+  issue: |-
+    The text shown for item 16 is probably not the item respondents answered, and should not be used as the wording of that item. The paper prints "So that others praise me for what I do" at position 16, which is external-regulation content, but in the data item 16 behaves as amotivation: it correlates 0.88-0.90 with items 17 and 18, the other two amotivation items, and essentially zero (0.02, 0.04, -0.03) with the three external-regulation items 13-15. Position 16 in the SMS-II is an amotivation item, so the paper's table appears to misprint its wording. The misprint is in both languages -- the Arabic printed at position 16 carries the same external-regulation content -- and both are shipped unchanged rather than substituted with a guess. `item_text` is the administered Arabic from the paper's Table 7, with the authors' own English back-translation in `item_text_translated`. The 7-point scale anchors are an exception: the paper gives them only in English ("Not at all true", "Very true"), so `option_text` holds English rather than what respondents read, and its `_translated` twin is empty. Only the endpoints are documented, so options 2-6 are blank
+- table: baka2023_bpnsf
+  issue: |-
+    The response anchors here are given in the OPPOSITE direction to the study data file's own value labels, which state 1 = Strongly agree through 7 = Strongly disagree. The data contradict that: scoring the file as labelled would make every need-satisfaction item correlate negatively with the same respondents' work engagement, measured on an unambiguous 0-6 Never..Always scale. Sorted by item content, all 12 satisfaction items correlate +0.28 to +0.40 with that engagement score and all 12 frustration items -0.03 to -0.22, which is only possible if the scale runs 1 = Strongly disagree to 7 = Strongly agree, as shipped. Item text is the administered Polish, with the source file's typos retained
+- table: baka2023_jcs
+  issue: |-
+    Item stems are in Polish as administered, but the response anchors carried by the study's data file are English glosses rather than the Polish wording participants saw
+- table: baka2023_olbi
+  issue: |-
+    Only 8 of the published OLBI's 16 items are present in the study's data file, and those 8 are what this table covers. Item stems are in Polish as administered, but the response anchors carried by the data file are English glosses rather than the Polish wording participants saw
+- table: baka2023_uwes
+  issue: |-
+    Item stems are in Polish as administered, but the response anchors carried by the study's data file are English glosses rather than the Polish wording participants saw
+- table: bakker_2020_rses
+  issue: |-
+    The item codes for this table must not be read as item content. Seven of the ten columns in the study's SPSS file carry a variable label that contradicts the column name, and the data show the labels are the reliable half: the column named `goodqualities303` is labelled "All in all, I am inclined to feel that I am a failure" and averages 1.47 on a 1-4 Strongly Disagree..Strongly Agree scale, while `nogood302` is labelled "I feel that I have a number of good qualities" and averages 3.27. Every negatively-worded label sits at the floor and every positively-worded one at the ceiling, which a positively-worded self-esteem item could not do in a general sample. Read in column order the labels reproduce a standard circulated administration order of the scale, so the names appear to have been assigned by numbering the columns in Rosenberg's original order without noticing the form was permuted. The text shipped here follows the labels; join on the item code and read the text, not the code. Responses are stored raw and unreversed. Note also that the paper's Methods states the scale ran 1 = strongly agree to 4 = strongly disagree, the reverse of the data file's own value labels; the data follow the file
+- table: bang_2023_self_esteem
+  issue: |-
+    The item order in this table was reconstructed, not read from any key, and the item text is not what respondents saw. Neither the study's data file (bare codes S1-S10) nor the paper ties any code to an item, so the shipped text is the canonical English Rosenberg Self-Esteem Scale wording placed in an order inferred from the reverse-keying pattern in the raw responses; the study administered the Korean version (Jon, 1974), whose wording is not reproduced anywhere. What the data establish is each item's polarity: S1, S2, S4, S6 and S7 intercorrelate positively (+0.31 to +0.73) and S3, S5, S9 and S10 form the opposing block, which rules out the scale's original item numbering, and S8 is identifiable by its distinctive near-zero correlation with the positive block. What they do not establish is the order within each polarity block, so a swap between two same-polarity items -- S1 and S2, say -- is not excluded
+- table: bartoli_2022_badge_notifications
+  issue: |-
+    This table records a single-click behavioural task rather than a questionnaire. Each participant saw one home screen of 15 app icons with a badge notification on one app and made a single click, so `resp` = 100 marks the one app that participant clicked first and 0 the other fourteen. The response-option text is descriptive; the task offered no labelled options. The item text gives each app's conventional name, with the Italian default-app labels left as administered
+- table: beck_2021_iesr
+  issue: |-
+    `resp` values 1-4 are category indices, not scores. The study used the German IES-R (Maercker & Schuetzwohl, 1998), whose four anchors are ueberhaupt nicht / selten / manchmal / oft and whose traditional scoring weights that version prints are 0, 1, 3 and 5 -- so summing `resp` gives a different scale from the published one. Item text is that German form verbatim, including its pre-1996 orthography
+- table: beck_2021_pss10
+  issue: |-
+    The PSS-10 was administered in German, but the study names no German translation, so the item text shown here is the original English wording rather than what respondents read. Items 4, 5, 7 and 8 are stored unreversed and must be reversed before scoring, and the response coding is the canonical 0-4 shifted by one (1 = Never ... 5 = Very often)
+- table: bitew_2020_lte
+  issue: |-
+    Item text is the study's own abbreviated SPSS variable labels ("self illness", "family death"), not the administered wording, which was in Amharic and was never published. Canonical Life Events Questionnaire wording was deliberately not substituted because this version departs from it: items 8-11 are reordered relative to the original sequence, and item 12 (intimate partner violence) is not an LTE-Q item at all
+- table: bitew_2020_osss3
+  issue: |-
+    Item wording is the canonical English OSSS-3 rather than the study's administered Amharic version. One caveat on the mapping: item 1's variable label in the source file reads "others worry for me", which does not obviously correspond to the canonical item-1 content about how many people you can count on. It is identified as item 1 by its response structure instead -- it is the only one of the three offering four categories rather than five, which is the instrument's own signature, and the file's total column equals the sum of the three items for every case
+- table: bitew_2020_phq9
+  issue: |-
+    Item wording is the canonical English PHQ-9; the study administered a locally validated Amharic translation whose exact wording is not published. The mapping to those canonical items is confirmed by the source file's own numbered symptom labels and by the paper's reported per-item means
+- table: bitew_2020_self_efficacy
+  issue: |-
+    This table holds 9 of the General Self-Efficacy Scale's 10 items, and **its item codes are offset by one**: `SEFFICAn` is GSE item n+1, so `SEFFICA1` is GSE item 2. The source file does contain GSE item 1, under a differently-named column, but it was not shipped to the IRW. The response anchors are the authors' own shorthand for the GSE's Not at all true...Exactly true scale
+- table: brederecke_2020_sis
+  issue: |-
+    Items 4 and 9 are stored reverse-coded in the source data, and the option text here follows that stored direction: for those two items `resp` = 1 is "strongly agree" and 5 is "strongly disagree", while the other nine run 1 = strongly disagree to 5 = strongly agree. This is stated by the study's own file, which names those two columns "SIS Item 4 recoded" and "SIS Item 9 recoded" -- they are the scale's two negatively-worded items. `item_text` is the administered German from the paper's Table 3, which is headed "Original item (German version)", with the paper's English in `item_text_translated`. The five-point anchors are an exception: neither the paper nor the study's data file gives them in German -- the file labels its values "1" to "5" with no anchor text -- so `option_text` holds the English wording quoted above rather than what respondents read, and its `_translated` twin is empty
+- table: broadband_inventories
+  issue: |-
+    The instructions, quoted verbatim from the test's own page, describe a five-point scale, but the items were administered on the seven-point Strongly disagree..Strongly agree scale that `resp` 1-7 encodes. The item wording is otherwise verbatim from the source codebook, including its typos (item 18 reads "when Im feeling badly")
+- table: buczel_2022_inoculation_belief
+  issue: |-
+    Each of these six items covers six different question wordings. The study counterbalanced six scenarios across participants, so the sentence any one participant read depends on which scenario they saw; `item_text` therefore names the item's condition and quotes one scenario's wording as an example rather than presenting one participant's version as the item. Note also that the response scale displayed to participants ran 0-10 while `resp` is stored as 1-11, so the option text carries the displayed number and is deliberately not equal to `resp`
+- table: bukurov_2022_sf36
+  issue: |-
+    Item and option wording is the public-domain English RAND 36-Item Health Survey. The study administered a Serbian-language SF-36, so this is canonical text rather than what participants read. The mapping to those canonical items is firm: the source file labels every column with its item, and the per-item response formats match the instrument's mixed structure exactly (5 levels for items 1, 2, 20, 22 and 32-36; 3 for items 3-12; 2 for 13-19; 6 for 21 and 23-31)
+- table: burkert_2019_whoqol_bref
+  issue: |-
+    Items LQ3 (pain), LQ4 (dependence on medical treatment) and LQ26 (negative feelings) are stored **already reverse-coded**, so for those three `resp` = 5 is the most favourable answer, and the option text here reflects that stored direction rather than the order printed on the questionnaire -- which the source file's own value labels still describe. The data settle it: those three items correlate positively (+0.18 to +0.46) with unambiguously positive-keyed items such as overall quality of life and mobility, and 52% of respondents sit at LQ3 = 5, which is only interpretable as "not at all hindered by pain" in a general-population sample
+- table: busch_2022_course_alleviate
+  issue: |-
+    These are the checkbox options of a single select-all-that-apply survey question, not independently administered items: `resp` = 1 means the respondent ticked that aspect and 0 means they did not, so a 0 records the absence of a tick rather than substantive disagreement. The question was shown only to the respondents who reported depression symptoms while taking online science courses
+- table: brederecke_2020_phq4
+  issue: |-
+    The item text is the study data file's own terse English variable labels ("little interest or pleasure in your activities"), which are neither the German wording the instrument was administered in nor the canonical PHQ-4 phrasing. The response options are that file's English labels too, and they likewise differ from the published PHQ-4 anchors -- "On single days" where the instrument reads "Several days". The `instructions` line is the canonical PHQ-4 stem, which the data file does not carry
+- table: burgess_2025_soas
+  issue: |-
+    The item codes are non-contiguous -- SOAS5, 7, 9, 10, 11 and 12 -- because they refer to positions in the 13-item version administered in this study, of which these six were retained in the final scale. The study's data file carries no variable or value labels, so the item text and that numbering come from the paper's own item table rather than from the data. In this study the items were read aloud to children who were shown a fixed object, so the published instrument's opening line asking the respondent to choose and write down an object did not apply and is not included here
+- table: brain_hemisphere
+  issue: |-
+    The `instructions` field describes the response scale rather than quoting an instruction shown to participants; the source dataset documents the scale but publishes no participant-facing instruction text. Only three of the five scale points were labelled (1 = Disagree, 3 = Neutral, 5 = Agree), so the option text is blank at 2 and 4. Note also that this 2015-16 dataset is the 20-item version of the scale; the version currently offered online has 24 items
+- table: busch_2023_stigma
+  issue: |-
+    Despite the table name, these items are not stigma ratings. They are the participants' own binary self-reports of concealable identities -- LGBQ+, depression, anxiety, low SES, first-generation status, academic struggle, disability, community-college transfer -- while the study's actual 4-point perceived-stigma measure is not in the IRW table at all. Six of the eight items share the identical stem "I most closely identify as", so the item content lives entirely in the response options. For two items the binary 0 collapses several source options (for example mid and upper income both map to 0), and the option text joins those source options verbatim; "Decline to state" responses are dropped rather than coded
+- table: butt_2022_cognitive_absorption
+  issue: |-
+    The study's data file contains four of the six Cognitive Absorption items -- CA3 and CA5 were dropped by the authors -- and it carries no variable labels for them, so the wording here comes from the appendix questionnaire, which lists the six items in order without codes. The alignment is therefore by position within that block
+- table: butt_2022_institutional_factors
+  issue: |-
+    Eleven of the appendix's thirteen Institutional Factors items are in the data; IF3 and IF11 are absent from the study's own file and are not shipped. The data file gives no variable labels for these columns, so the wording comes from the appendix questionnaire by position within the block. One source typo was corrected: the appendix prints "students 'questions" with a misplaced opening quote, shipped here as "students' questions"
+- table: butt_2022_actual_usage
+  issue: |-
+    This two-item scale does not use the questionnaire's 1-7 agreement scale: each item has its own response anchors -- a frequency scale for one and hours per week for the other -- so `instructions` is blank because the block's shared instruction does not apply
+- table: buzgova_2023_rses
+  issue: |-
+    The item numbering here is an assumption that could not be independently confirmed. The study's data file carries no variable or value labels of any kind and the paper reproduces no items, so the text is the canonical English Rosenberg Self-Esteem Scale mapped on the basis that RSES*n* is Rosenberg item *n*. That assumption is known to fail for this instrument: in `bakker_2020_rses` the columns were numbered in canonical order while the administered form was permuted. Here the responses are stored already reverse-scored -- every inter-item correlation is positive -- so the keying-polarity check that caught the other case cannot be run. One position does have positive support: RSES8 has both the lowest mean and the lowest item-rest correlation, the known signature of Rosenberg item 8 ("I wish I could have more respect for myself"). Positions 1-7, 9 and 10 rest on the numbering alone. The scale is also stored pre-reversed, so the same anchors apply to every item
+- table: buzgova_2023_soc
+  issue: |-
+    Item text is the canonical English SOC-13; the study was Czech and its translation is not published in the paper or the data file, which carries no labels of any kind. The responses are stored already reverse-scored, so the option text for the five reverse-worded items (1, 2, 3, 7 and 10) is **flipped relative to the printed instrument**. Note also a discrepancy with the paper: it reports Cronbach's alpha of 0.92 for this scale, while the released data give 0.765 with corrected item-total correlations of 0.29-0.53
+- table: buzgova_2023_gai
+  issue: |-
+    Item text is the canonical English Geriatric Anxiety Inventory; the study was Czech and its translation is not published, and the data file carries no labels of any kind. The mapping of code to item is supported but not settled: the instrument's published three-factor structure reproduces for 15 of the 20 items, with the three purely somatic items all behaving as expected, while five cognitive-versus-arousal items are ambiguous
+- table: buzgova_2023_gds
+  issue: |-
+    Item text is the canonical English GDS-15; the study was Czech and its translation is not published in the paper or the data file, which carries no labels of any kind. The responses are stored already scored rather than raw, so `resp` = 1 always marks the depression-consistent answer and the option text follows that stored direction rather than the yes/no order printed on the questionnaire
+- table: buzgova_2023_lsita
+  issue: |-
+    This table is the 12-item short form of the LSITA, and the item text is the canonical English wording -- the study was Czech and its translation is published nowhere accessible, the data file carries no labels, and the companion validation paper is paywalled. Items 2, 4, 5 and 6 are stored already reversed, so their option text is flipped relative to the printed instrument; the raw column sum reproduces the paper's published total exactly, which is what establishes that
+- table: cacciatore_2021_crisis_care_satisfaction
+  issue: |-
+    The `resp` values are not the survey's own choice numbering. The questionnaire numbered its options 1 = Extremely satisfied down to 6 = N/A, while the IRW values are the processing script's recoding into ascending satisfaction, and the "N/A" responses are dropped rather than kept as a level. Item text is the matrix row label and the shared stem is recorded once in `instructions`; respondents rated only the care providers they actually encountered, which is why the number of responses varies widely across items
+- table: chen_2022_sasc
+  issue: |-
+    Despite the table name, SASC here is the Smartphone Addiction Scale for College Students (SAS-C; Su et al., 2014), measuring problematic smartphone use -- **not** the Social Anxiety Scale for Children. The survey was administered in Chinese and the wording shown is the depositors' own English item labels from the SPSS file, as no Chinese original is published with the dataset
+- table: criticalperiod_syntax
+  issue: |-
+    Six of the 95 items (q1, q2, q3, q5, q6 and q7) are sentence-to-picture matching items whose two answer choices are pictures. The source publishes those pictures only as figures, never as text, so **the `option_text` on those twelve rows is a machine-generated description of each picture rather than source wording** -- every one is prefixed `[machine-generated image description]` to make that unmistakable, and it is the only text in this table not transcribed from the source. Which picture belongs to which response is not guessed: the study's supplement prints an answer key naming the correct panel for each of the six, and because these are two-alternative forced choices, `resp` = 1 means the respondent chose that panel and `resp` = 0 means they chose the other. The remaining 89 items are grammaticality judgments and carry no `option_text` at all -- there `resp` is scored accuracy on a "choose all that apply" question, so no single option was chosen and any label would be invented. Separately, Question 10's four response options are printed in the supplement under a duplicated "c." label (a, b, c, c, with no "d."), so item q10_4 is identified as the fourth printed option, "What old are you?", by its position and by the answer key's grammaticality value; "How old are you?" (option 3) is grammatical in every dialect and is not in the table
+- table: depression_anxiety_stress
+  issue: |-
+    This table pools three instruments administered in one openpsychometrics session, not the DASS alone: items 1-42 are the DASS-42, items 43-52 are the Ten Item Personality Inventory, and items 53-68 are a 16-word vocabulary checklist scored 0/1 (VCL6 "cuivocal", VCL9 "florted" and VCL12 "verdid" are not real words and were included as a validity check). The item codes are bare integers assigned by the processing script and carry no content of their own
+- table: ftna_kasper_2022
+  issue: |-
+    The "items" in this table are whole-subject examination grades (Mathematics, Kiswahili and so on), not individual exam questions. Note also that the three core subjects **reuse one item code across both waves**, even though wave 0 is the primary-school PSLE and wave 1 the secondary-school FTNA -- so the same code refers to a different examination in each wave
+- table: geography
+  issue: |-
+    Each item is a place on an outline map rather than a questionnaire item, and its `item_text` is the place name from the source archive's own lookup table **with the place type appended in parentheses -- an annotation added here, not part of the source name** -- because 46 place names are shared by two different places. The task presented no fixed answer options, so `option_text` labels the 0/1 correctness score rather than transcribing anything the learner saw
+- table: riasec
+  issue: |-
+    Only items 1-48 of this table are the RIASEC interest inventory the table is named for. Items 49-58 are the Ten Item Personality Inventory and items 59-74 a 16-word vocabulary checklist, administered in the same session, and the three use different response scales (1-5, 1-7 and 0/1 respectively)
+- table: sapa_personality
+  issue: |-
+    **17 of the 696 items ship the SAPA item dictionary's abbreviated shorthand -- bracketed or elided text -- rather than the full sentence the participant read**; the remaining 679 carry the full wording. Item text and the six response anchors both come from the SAPA-Project data release's own item dictionary (ItemInfo696) and code book
+)---")
+
+issues <- issues[order(vapply(issues, \(x) x$table, character(1)))]
+```
+
 ## Known issues
 
-The below are known issues affecting the match between item text and the IRW tables. 
-
-::: {.grid}
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## singh_2025_identity_pba
-Table has 6 items for affiliation but the codebook only has 5 items
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## paampsmartsud_saba_2023_ders
-The paper described only 36-item, but the IRW table contains 37
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## namprb_siwiak_2024_ssub
-IRW table doesn't match the number of items provided in the paper
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## sv-maia2_randelovic_2021_erq
-IRW table uses a 1-5 scale (the paper's ERQ is normally 1-7); the itemtext anchor labels for the 1-5 version are inferred from the 1-7 wording, not sourced from the study's own materials
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## fivpei_perrig_2023_attdiff
-Paper has 28 items, IRW contains only 21
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## oxfordcovid_xue_2024_at
-IRW missing the item: media_tv
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## socialstereotype_hughes_2025_judgement
-IRW has 6 items for affiliation but the codebook only has 5 items
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## gilbert_meta_51
-`ch_anemic` is not an item in the code book
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## gilbert_meta_35
-item text covers 8 of the 12 `values_*` items. The other four (`values_b`, `values_h`, `values_k`, `values_l`) are omitted: the study's replication do-file builds its democratic-values scale from only eight of the twelve, and no wording is published for the other four. The eight are mapped to their text using the source `.dta`'s variable labels, which name six of them outright; note that `values_e` and `values_j` are reverse-worded, so their response options run in the opposite direction to the other six
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## gilbert_meta_42
-item text covers only 12 of the 20 items -- the 4 `life_satisfaction_*` and 4 `locus_of_control_*` items are omitted because no item text is available for them. The paper names the source instruments (a 4-item subset of Diener's Satisfaction With Life Scale, and 4 items from the Levenson Multidimensional Internal Locus of Control Scales, both adapted for the study context) but neither it nor its appendix gives which items were used or their adapted wording, and the openICPSR questionnaire is access-gated
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## gilbert_meta_38
-survey does not contain `bought_ins`
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## florida_twins_friends
-Items `friends20`/`friends21` are not documented in the Florida Twin Project's Wave 1 Child Survey Measures codebook; the other 19 items match exactly
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## addy_2021_sdq_ghana
-`SDQ_7`'s response options run in reverse order in the source codebook (0=certainly true ... 2=not true) relative to the other 9 items; transcribed as given, so this item may need reverse-coding
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## aguirre_camacho_2021_shai
-Item text is the English SHAI-18 original, but the study administered a Spanish translation whose wording the paper never quotes. The instrument has no item stems -- each item is a group of four statements -- so all text sits in `option_text` and `item_text` is empty. The 14/4 split between the two subscales is confirmed against the paper's subscale statistics, but item order *within* each subscale rests on `HAnx<N>` being the instrument's item *N*
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## aguirre_camacho_2021_champion
-Item text is the administered Spanish wording, but the 1/5 scale anchors are recorded in English because the source labels only the endpoints and only in English; the middle three points are unlabeled
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## abdullah_2024_bsq_sevgen
-The source papers state per-item scale ranges that do not match the data: items 3/4/6 are documented 1-5 but only reach 4, and item 7 is documented 1-7 but shows 1-4 plus 6-7. `SEVG2` is published in the instrument but absent from the table
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## ajaykumar_2023_nasa_tlx
-Item text is the official NASA-TLX rating-scale definitions, not the study's own wording: the study administered a modified NASA-TLX on a 5-point scale and never published what participants saw, so the exact phrasing differs. The paper's own analyses use three of these six items
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## alexander_2017_dsi
-Covers only the Differentiation of Self Inventory's Emotional Reactivity and Emotional Cutoff subscales (23 of the 43 items). The `dsi_1`..`dsi_23` to original-item mapping is reconstructed from the published appendix order rather than documented in the source, though it matches both the published subscale key and the response data
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## algner2022_cse
-Item text is the English CSES original; the study administered a German translation whose exact wording could not be located
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## alcoholhealthwarninglabel_brennan_2022_awareness_harms_followup
-`resp` (0/1) is a derived binary rather than the original response scale: the study collapsed a 7-point agree/disagree item into aware/not-aware, so `option_text` records that rule rather than a literal option label
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## dumas_organisciak_2022
-The paper describes originality as coded on a 0-4 scale, but the IRW table (and `option_text`) is on 1-5. This is not a shift introduced here: the authors' own deposited file ([osf.io/qcmex](https://osf.io/qcmex/files/u3yv4)) already codes `rater1`-`rater4` as 1-5, and the processing script does no recoding, so the table reproduces the source faithfully. The discrepancy is between the paper's text and the authors' shared data; read the 1-5 values as the paper's 0-4 categories shifted by one
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## 16_personalityfactors
-The source's own instructions describe the scale as "(1) disagree ... (5) agree" while its per-item codebook labels it "strongly disagree ... strongly agree"; `option_text` follows the codebook. Item `163` is the one column the codebook omits, so its text comes from the IPIP scale listing rather than the dataset's own documentation
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## algner2022_uwes
-Both the UWES-9 instrument and this paper describe the response scale as 0-6 (Nie ... Immer), but the study's own data records the same seven categories as 1-7, so a response of 1 here corresponds to the instrument's 0 (Nie). Item text is Schaufeli & Bakker's official German UWES-9, while the paper cites a different German version (Sautier et al. 2015) whose wording was not obtainable
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## almuqbil_2022_epds
-Participants completed the Arabic EPDS translation (Ghubash et al. 1997); the item text here is the English wording used to label the items in the study's own data file, so it is not what respondents read
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## alkouri_2025_icu_stressors
-The source questionnaire changes the wording of its second response option partway through the scale -- items 01-14 offer "Barely" and items 15-29 offer "Rarely" for the same value 2 -- so option text varies by item; transcribed as the source gives it
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## alsuhibani_2022_loc
-The paper's Methods describes this as a five-point scale, but the live data and the study's own SPSS file both show a genuine 6-point "Strongly disagree" ... "Strongly agree" scale; the data file was followed rather than the paper text
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## alves_2017_hamd17
-Item text follows a canonical reproduction of Hamilton's original (1960) HDRS-17, which scores item 9 (Agitation) 0-2, but this study's data scores it 0-4 -- so `HamD9Baixa` responses of 3 and 4 have no option label. Item text is also a canonical reproduction rather than the study's own materials, and item-to-text alignment follows the instrument's standard order rather than an explicit map
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## altahla_2024_whoqol
-Participants were Chinese adults who completed a Chinese-language version; the item text here is the English wording used to label the items in the study's own data file, so it is not what respondents read
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## altahla_2024_whoqol_bref
-Participants were Chinese adults who completed a Chinese-language version; the item text here is the English wording used to label the items in the study's own data file, so it is not what respondents read. This table is also the spinal-cord-injury subsample of `altahla_2024_whoqol`, whose responses it duplicates
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## altahla_2024_swls
-Participants were Chinese adults who completed a Chinese-language version; the item text here is the English wording used to label the items in the study's own data file, so it is not what respondents read
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## amarilla_2020_lawton_brody
-`resp` (0/1) is the Lawton-Brody dependency score rather than the administered response: each domain offers 3-5 instrument levels that collapse to able/unable, so `option_text` names the scored category and lists the levels sharing it instead of a single literal option label. The study's data supplement also records only the total IADL score, so the item-to-domain mapping follows the standard Lawton & Brody (1969) ordering rather than an explicit map, and item text comes from the canonical instrument
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## american_multiracial_face
-Each item is one photograph rated on one attribute, and the `item` codes are arbitrary integers assigned when the study's 19 separate rating files were stacked -- they carry no meaning and must not be read as an item order. `item_text` is therefore a constructed description of the stimulus rather than transcribed text; the verbatim rating question is the `section_prompt`. The AMFD PhotoID named in `item_text` is not stated in the source materials and was recovered by matching per-face rating means against the published norming table, and 9 faces (171 items) were never released in the AMFD and so carry no PhotoID. Only scale points 1 and 7 were labelled in the original survey, so `option_text` is blank for 2-6. Separately, the table has no Black-prototypicality ratings for the smiling photographs: the source repository provides them, but the IRW processing script does not read that file
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## an_2020_efl_self_regulated
-The table name signals one instrument but the table pools three administered in the same survey: the TSELSS strategy items (Q1-Q26), an English-learning enjoyment/environment block (Q27-Q33), and a 16-item English language self-efficacy questionnaire (Q34-Q49). Item text is the original Chinese from the study's own data file. Only the two endpoints of the 7-point scale are labelled in that file, so `option_text` is blank for values 2-6
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## anjum_2022_gad7
-The IRW table covers 6 of the GAD-7's 7 items: item 1 ("Feeling nervous, anxious, or on edge") is present in the study's data file but was not included in the IRW release. Two item wordings and the response anchors follow that file's own labels, which differ from canonical GAD-7 wording -- "not being able to sleep or control worrying" for "stop or control", "hart to sit still" for "hard", and "More than half of the days" for "More than half the days". The instructions are the canonical GAD-7 stem; the data file carries none
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## AOMT_BR_SF_EDPANAB_Geiger_2021_AOT
-The table carries 14 item codes for a 10-item scale. AOT3_rev, AOT5_rev, AOT7_rev and AOT8_rev are reverse-coded duplicates of AOT3, AOT5, AOT7 and AOT8 rather than additional items -- the same statement, with the response options in reverse order -- so they carry their parent item's text and reversed `option_text`
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## AOMT_BR_SF_EDPANAB_Geiger_2021_BRS
-The table name signals the Bullshit Receptivity Scale alone, but it combines that scale's 10 items (BSR*) with the 10 motivational-quotation control statements (MOT*) from the same study; both blocks were rated on the same "profoundness" scale
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## arnulf_2022_general_knowledge
-The general-knowledge test was open-answer, so participants did not choose from the options shown here: `option_text` gives the Correct/Incorrect scoring labels the study's data file attaches to 0 and 1. Item text is verbatim from that file, including its "principle street for finance in New York" where the paper's prose reads "principal"
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## arora2025_blueq_synchronous
-The study's data file records only numeric codes, so the response anchors and the section prompt are taken from the published BLUE-Q instrument. That instrument's prompt describes a "face-to-face component", while this study administered the synchronous sessions as online workshops -- the item text itself, which is verbatim from the study's own spreadsheet, refers to "face-to-face online workshops"
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## art
-The Author Recognition Test presents a checklist of names with no printed response labels, so `option_text` ("Checked"/"Not checked") describes the check-box rather than quoting the instrument, and `item_text` repeats the author name shown on the checklist. Only the 50 real-author items are in the IRW table; the 50 foils were dropped upstream. The name "T.S. Elliot" is kept as the source data spells it (canonically "T. S. Eliot")
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## artistic_preferences
-The table name describes only the first of three instruments administered in the same session: items 1-30 are the Artistic Preferences Scales, items 31-40 the Ten Item Personality Inventory, and items 41-56 a 16-word vocabulary check list. Items 1-30 have no text stem at all -- each is a pair of paintings, shown as images, that the respondent chooses between and rates the strength of the preference; the images are distributed with the source dataset. Only the two extreme points of that 1-5 scale carry anchors, so `option_text` is blank for 2-4
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## arzamoncunill_2023_epq_clinical
-Ten of the 22 items here are not the wording respondents read. The study ran a 43-item pretest pool but published full item wording, in Spanish, only for the 26 items kept in its final questionnaire, while this table holds all 22 clinical-care items of the pretest pool. The 12 that survived carry their administered Spanish from Appendix S3; the other 10 have no published wording in any language, so they keep the short category descriptor the study's supplement gives for each item number ("Editable agenda", "Videoconference"), which names what the item is about rather than quoting it. Those 10 are identifiable by an empty `item_text_translated`. Two of the 12 English translations are the authors' own, printed in both languages in Appendix S1; the other 10 were produced by IRW rather than by the study. The 7-point anchors are published in English only ("very much disagree", "very much agree"), so `option_text` is English throughout. The study's own data file carries no variable or value labels; the item numbers are matched exactly, and the 12 Spanish items are tied to their codes through the supplement's number-to-descriptor map, cross-checked against the retained-item list in the study's factor analyses
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## audretsch_2021_entrepreneurial_ecosystems
-Item text is the untruncated form of the study data file's variable labels, recovered from its Stata do-file because the `.dta` labels are cut off at Stata's 80-character cap. For the `ee_quality` item the paper's own section 4.2 quotes a different wording ("There is a strong focus on growth-oriented and productive entrepreneurship activity in my region (city)") from the data-file label that is shipped here ("There is a strong entrepreneurship ecosystem (EE) in my region (city)"). Several labels are ungrammatical or unclosed in the source and are transcribed as they stand. Only the endpoints of the 1-7 scale (1 = very weak, 7 = very strong) are documented, so the intermediate options are blank
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## autonomysupport_mokken
-The item "Decide" is reverse-worded in the original questionnaire, but the responses in this table are the raw, unreversed scores, so the same anchors apply to it as to every other item. Item text is the English rendering the `mokken` package documents for a questionnaire administered in Dutch. Only the two extreme anchors are documented (1 = not at all/never, 5 = certainly/always)
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## avilesgonzalez2019_ces
-Item text comes from the study's SPSS file, which stores the English Caring Efficacy Scale wording even though the respondents were Italian nurses, so it is not what they read. Several typographical errors in those labels are preserved here as the source has them -- one item is missing its opening "If", another reads "Ioften", and several begin with a lowercase "i"
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## baaziz_2023_sms2
-The text shown for item 16 is probably not the item respondents answered, and should not be used as the wording of that item. The paper prints "So that others praise me for what I do" at position 16, which is external-regulation content, but in the data item 16 behaves as amotivation: it correlates 0.88-0.90 with items 17 and 18, the other two amotivation items, and essentially zero (0.02, 0.04, -0.03) with the three external-regulation items 13-15. Position 16 in the SMS-II is an amotivation item, so the paper's table appears to misprint its wording. The misprint is in both languages -- the Arabic printed at position 16 carries the same external-regulation content -- and both are shipped unchanged rather than substituted with a guess. `item_text` is the administered Arabic from the paper's Table 7, with the authors' own English back-translation in `item_text_translated`. The 7-point scale anchors are an exception: the paper gives them only in English ("Not at all true", "Very true"), so `option_text` holds English rather than what respondents read, and its `_translated` twin is empty. Only the endpoints are documented, so options 2-6 are blank
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## baka2023_bpnsf
-The response anchors here are given in the OPPOSITE direction to the study data file's own value labels, which state 1 = Strongly agree through 7 = Strongly disagree. The data contradict that: scoring the file as labelled would make every need-satisfaction item correlate negatively with the same respondents' work engagement, measured on an unambiguous 0-6 Never..Always scale. Sorted by item content, all 12 satisfaction items correlate +0.28 to +0.40 with that engagement score and all 12 frustration items -0.03 to -0.22, which is only possible if the scale runs 1 = Strongly disagree to 7 = Strongly agree, as shipped. Item text is the administered Polish, with the source file's typos retained
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## baka2023_jcs
-Item stems are in Polish as administered, but the response anchors carried by the study's data file are English glosses rather than the Polish wording participants saw
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## baka2023_olbi
-Only 8 of the published OLBI's 16 items are present in the study's data file, and those 8 are what this table covers. Item stems are in Polish as administered, but the response anchors carried by the data file are English glosses rather than the Polish wording participants saw
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## baka2023_uwes
-Item stems are in Polish as administered, but the response anchors carried by the study's data file are English glosses rather than the Polish wording participants saw
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## bakker_2020_rses
-The item codes for this table must not be read as item content. Seven of the ten columns in the study's SPSS file carry a variable label that contradicts the column name, and the data show the labels are the reliable half: the column named `goodqualities303` is labelled "All in all, I am inclined to feel that I am a failure" and averages 1.47 on a 1-4 Strongly Disagree..Strongly Agree scale, while `nogood302` is labelled "I feel that I have a number of good qualities" and averages 3.27. Every negatively-worded label sits at the floor and every positively-worded one at the ceiling, which a positively-worded self-esteem item could not do in a general sample. Read in column order the labels reproduce a standard circulated administration order of the scale, so the names appear to have been assigned by numbering the columns in Rosenberg's original order without noticing the form was permuted. The text shipped here follows the labels; join on the item code and read the text, not the code. Responses are stored raw and unreversed. Note also that the paper's Methods states the scale ran 1 = strongly agree to 4 = strongly disagree, the reverse of the data file's own value labels; the data follow the file
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## bang_2023_self_esteem
-The item order in this table was reconstructed, not read from any key, and the item text is not what respondents saw. Neither the study's data file (bare codes S1-S10) nor the paper ties any code to an item, so the shipped text is the canonical English Rosenberg Self-Esteem Scale wording placed in an order inferred from the reverse-keying pattern in the raw responses; the study administered the Korean version (Jon, 1974), whose wording is not reproduced anywhere. What the data establish is each item's polarity: S1, S2, S4, S6 and S7 intercorrelate positively (+0.31 to +0.73) and S3, S5, S9 and S10 form the opposing block, which rules out the scale's original item numbering, and S8 is identifiable by its distinctive near-zero correlation with the positive block. What they do not establish is the order within each polarity block, so a swap between two same-polarity items -- S1 and S2, say -- is not excluded
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## bartoli_2022_badge_notifications
-This table records a single-click behavioural task rather than a questionnaire. Each participant saw one home screen of 15 app icons with a badge notification on one app and made a single click, so `resp` = 100 marks the one app that participant clicked first and 0 the other fourteen. The response-option text is descriptive; the task offered no labelled options. The item text gives each app's conventional name, with the Italian default-app labels left as administered
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## beck_2021_iesr
-`resp` values 1-4 are category indices, not scores. The study used the German IES-R (Maercker & Schuetzwohl, 1998), whose four anchors are ueberhaupt nicht / selten / manchmal / oft and whose traditional scoring weights that version prints are 0, 1, 3 and 5 -- so summing `resp` gives a different scale from the published one. Item text is that German form verbatim, including its pre-1996 orthography
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## beck_2021_pss10
-The PSS-10 was administered in German, but the study names no German translation, so the item text shown here is the original English wording rather than what respondents read. Items 4, 5, 7 and 8 are stored unreversed and must be reversed before scoring, and the response coding is the canonical 0-4 shifted by one (1 = Never ... 5 = Very often)
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## bitew_2020_lte
-Item text is the study's own abbreviated SPSS variable labels ("self illness", "family death"), not the administered wording, which was in Amharic and was never published. Canonical Life Events Questionnaire wording was deliberately not substituted because this version departs from it: items 8-11 are reordered relative to the original sequence, and item 12 (intimate partner violence) is not an LTE-Q item at all
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## bitew_2020_osss3
-Item wording is the canonical English OSSS-3 rather than the study's administered Amharic version. One caveat on the mapping: item 1's variable label in the source file reads "others worry for me", which does not obviously correspond to the canonical item-1 content about how many people you can count on. It is identified as item 1 by its response structure instead -- it is the only one of the three offering four categories rather than five, which is the instrument's own signature, and the file's total column equals the sum of the three items for every case
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## bitew_2020_phq9
-Item wording is the canonical English PHQ-9; the study administered a locally validated Amharic translation whose exact wording is not published. The mapping to those canonical items is confirmed by the source file's own numbered symptom labels and by the paper's reported per-item means
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## bitew_2020_self_efficacy
-This table holds 9 of the General Self-Efficacy Scale's 10 items, and **its item codes are offset by one**: `SEFFICAn` is GSE item n+1, so `SEFFICA1` is GSE item 2. The source file does contain GSE item 1, under a differently-named column, but it was not shipped to the IRW. The response anchors are the authors' own shorthand for the GSE's Not at all true...Exactly true scale
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## brederecke_2020_sis
-Items 4 and 9 are stored reverse-coded in the source data, and the option text here follows that stored direction: for those two items `resp` = 1 is "strongly agree" and 5 is "strongly disagree", while the other nine run 1 = strongly disagree to 5 = strongly agree. This is stated by the study's own file, which names those two columns "SIS Item 4 recoded" and "SIS Item 9 recoded" -- they are the scale's two negatively-worded items. `item_text` is the administered German from the paper's Table 3, which is headed "Original item (German version)", with the paper's English in `item_text_translated`. The five-point anchors are an exception: neither the paper nor the study's data file gives them in German -- the file labels its values "1" to "5" with no anchor text -- so `option_text` holds the English wording quoted above rather than what respondents read, and its `_translated` twin is empty
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## broadband_inventories
-The instructions, quoted verbatim from the test's own page, describe a five-point scale, but the items were administered on the seven-point Strongly disagree..Strongly agree scale that `resp` 1-7 encodes. The item wording is otherwise verbatim from the source codebook, including its typos (item 18 reads "when Im feeling badly")
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## buczel_2022_inoculation_belief
-Each of these six items covers six different question wordings. The study counterbalanced six scenarios across participants, so the sentence any one participant read depends on which scenario they saw; `item_text` therefore names the item's condition and quotes one scenario's wording as an example rather than presenting one participant's version as the item. Note also that the response scale displayed to participants ran 0-10 while `resp` is stored as 1-11, so the option text carries the displayed number and is deliberately not equal to `resp`
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## bukurov_2022_sf36
-Item and option wording is the public-domain English RAND 36-Item Health Survey. The study administered a Serbian-language SF-36, so this is canonical text rather than what participants read. The mapping to those canonical items is firm: the source file labels every column with its item, and the per-item response formats match the instrument's mixed structure exactly (5 levels for items 1, 2, 20, 22 and 32-36; 3 for items 3-12; 2 for 13-19; 6 for 21 and 23-31)
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## burkert_2019_whoqol_bref
-Items LQ3 (pain), LQ4 (dependence on medical treatment) and LQ26 (negative feelings) are stored **already reverse-coded**, so for those three `resp` = 5 is the most favourable answer, and the option text here reflects that stored direction rather than the order printed on the questionnaire -- which the source file's own value labels still describe. The data settle it: those three items correlate positively (+0.18 to +0.46) with unambiguously positive-keyed items such as overall quality of life and mobility, and 52% of respondents sit at LQ3 = 5, which is only interpretable as "not at all hindered by pain" in a general-population sample
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## busch_2022_course_alleviate
-These are the checkbox options of a single select-all-that-apply survey question, not independently administered items: `resp` = 1 means the respondent ticked that aspect and 0 means they did not, so a 0 records the absence of a tick rather than substantive disagreement. The question was shown only to the respondents who reported depression symptoms while taking online science courses
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## brederecke_2020_phq4
-The item text is the study data file's own terse English variable labels ("little interest or pleasure in your activities"), which are neither the German wording the instrument was administered in nor the canonical PHQ-4 phrasing. The response options are that file's English labels too, and they likewise differ from the published PHQ-4 anchors -- "On single days" where the instrument reads "Several days". The `instructions` line is the canonical PHQ-4 stem, which the data file does not carry
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## burgess_2025_soas
-The item codes are non-contiguous -- SOAS5, 7, 9, 10, 11 and 12 -- because they refer to positions in the 13-item version administered in this study, of which these six were retained in the final scale. The study's data file carries no variable or value labels, so the item text and that numbering come from the paper's own item table rather than from the data. In this study the items were read aloud to children who were shown a fixed object, so the published instrument's opening line asking the respondent to choose and write down an object did not apply and is not included here
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## brain_hemisphere
-The `instructions` field describes the response scale rather than quoting an instruction shown to participants; the source dataset documents the scale but publishes no participant-facing instruction text. Only three of the five scale points were labelled (1 = Disagree, 3 = Neutral, 5 = Agree), so the option text is blank at 2 and 4. Note also that this 2015-16 dataset is the 20-item version of the scale; the version currently offered online has 24 items
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## busch_2023_stigma
-Despite the table name, these items are not stigma ratings. They are the participants' own binary self-reports of concealable identities -- LGBQ+, depression, anxiety, low SES, first-generation status, academic struggle, disability, community-college transfer -- while the study's actual 4-point perceived-stigma measure is not in the IRW table at all. Six of the eight items share the identical stem "I most closely identify as", so the item content lives entirely in the response options. For two items the binary 0 collapses several source options (for example mid and upper income both map to 0), and the option text joins those source options verbatim; "Decline to state" responses are dropped rather than coded
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## butt_2022_cognitive_absorption
-The study's data file contains four of the six Cognitive Absorption items -- CA3 and CA5 were dropped by the authors -- and it carries no variable labels for them, so the wording here comes from the appendix questionnaire, which lists the six items in order without codes. The alignment is therefore by position within that block
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## butt_2022_institutional_factors
-Eleven of the appendix's thirteen Institutional Factors items are in the data; IF3 and IF11 are absent from the study's own file and are not shipped. The data file gives no variable labels for these columns, so the wording comes from the appendix questionnaire by position within the block. One source typo was corrected: the appendix prints "students 'questions" with a misplaced opening quote, shipped here as "students' questions"
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## butt_2022_actual_usage
-This two-item scale does not use the questionnaire's 1-7 agreement scale: each item has its own response anchors -- a frequency scale for one and hours per week for the other -- so `instructions` is blank because the block's shared instruction does not apply
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## buzgova_2023_rses
-The item numbering here is an assumption that could not be independently confirmed. The study's data file carries no variable or value labels of any kind and the paper reproduces no items, so the text is the canonical English Rosenberg Self-Esteem Scale mapped on the basis that RSES*n* is Rosenberg item *n*. That assumption is known to fail for this instrument: in `bakker_2020_rses` the columns were numbered in canonical order while the administered form was permuted. Here the responses are stored already reverse-scored -- every inter-item correlation is positive -- so the keying-polarity check that caught the other case cannot be run. One position does have positive support: RSES8 has both the lowest mean and the lowest item-rest correlation, the known signature of Rosenberg item 8 ("I wish I could have more respect for myself"). Positions 1-7, 9 and 10 rest on the numbering alone. The scale is also stored pre-reversed, so the same anchors apply to every item
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## buzgova_2023_soc
-Item text is the canonical English SOC-13; the study was Czech and its translation is not published in the paper or the data file, which carries no labels of any kind. The responses are stored already reverse-scored, so the option text for the five reverse-worded items (1, 2, 3, 7 and 10) is **flipped relative to the printed instrument**. Note also a discrepancy with the paper: it reports Cronbach's alpha of 0.92 for this scale, while the released data give 0.765 with corrected item-total correlations of 0.29-0.53
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## buzgova_2023_gai
-Item text is the canonical English Geriatric Anxiety Inventory; the study was Czech and its translation is not published, and the data file carries no labels of any kind. The mapping of code to item is supported but not settled: the instrument's published three-factor structure reproduces for 15 of the 20 items, with the three purely somatic items all behaving as expected, while five cognitive-versus-arousal items are ambiguous
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## buzgova_2023_gds
-Item text is the canonical English GDS-15; the study was Czech and its translation is not published in the paper or the data file, which carries no labels of any kind. The responses are stored already scored rather than raw, so `resp` = 1 always marks the depression-consistent answer and the option text follows that stored direction rather than the yes/no order printed on the questionnaire
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## buzgova_2023_lsita
-This table is the 12-item short form of the LSITA, and the item text is the canonical English wording -- the study was Czech and its translation is published nowhere accessible, the data file carries no labels, and the companion validation paper is paywalled. Items 2, 4, 5 and 6 are stored already reversed, so their option text is flipped relative to the printed instrument; the raw column sum reproduces the paper's published total exactly, which is what establishes that
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## cacciatore_2021_crisis_care_satisfaction
-The `resp` values are not the survey's own choice numbering. The questionnaire numbered its options 1 = Extremely satisfied down to 6 = N/A, while the IRW values are the processing script's recoding into ascending satisfaction, and the "N/A" responses are dropped rather than kept as a level. Item text is the matrix row label and the shared stem is recorded once in `instructions`; respondents rated only the care providers they actually encountered, which is why the number of responses varies widely across items
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## chen_2022_sasc
-Despite the table name, SASC here is the Smartphone Addiction Scale for College Students (SAS-C; Su et al., 2014), measuring problematic smartphone use -- **not** the Social Anxiety Scale for Children. The survey was administered in Chinese and the wording shown is the depositors' own English item labels from the SPSS file, as no Chinese original is published with the dataset
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## criticalperiod_syntax
-Six of the 95 items (q1, q2, q3, q5, q6 and q7) are sentence-to-picture matching items whose two answer choices are pictures. The source publishes those pictures only as figures, never as text, so **the `option_text` on those twelve rows is a machine-generated description of each picture rather than source wording** -- every one is prefixed `[machine-generated image description]` to make that unmistakable, and it is the only text in this table not transcribed from the source. Which picture belongs to which response is not guessed: the study's supplement prints an answer key naming the correct panel for each of the six, and because these are two-alternative forced choices, `resp` = 1 means the respondent chose that panel and `resp` = 0 means they chose the other. The remaining 89 items are grammaticality judgments and carry no `option_text` at all -- there `resp` is scored accuracy on a "choose all that apply" question, so no single option was chosen and any label would be invented. Separately, Question 10's four response options are printed in the supplement under a duplicated "c." label (a, b, c, c, with no "d."), so item q10_4 is identified as the fourth printed option, "What old are you?", by its position and by the answer key's grammaticality value; "How old are you?" (option 3) is grammatical in every dialect and is not in the table
-:::
-:::
-
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## depression_anxiety_stress
-This table pools three instruments administered in one openpsychometrics session, not the DASS alone: items 1-42 are the DASS-42, items 43-52 are the Ten Item Personality Inventory, and items 53-68 are a 16-word vocabulary checklist scored 0/1 (VCL6 "cuivocal", VCL9 "florted" and VCL12 "verdid" are not real words and were included as a validity check). The item codes are bare integers assigned by the processing script and carry no content of their own
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## ftna_kasper_2022
-The "items" in this table are whole-subject examination grades (Mathematics, Kiswahili and so on), not individual exam questions. Note also that the three core subjects **reuse one item code across both waves**, even though wave 0 is the primary-school PSLE and wave 1 the secondary-school FTNA -- so the same code refers to a different examination in each wave
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## geography
-Each item is a place on an outline map rather than a questionnaire item, and its `item_text` is the place name from the source archive's own lookup table **with the place type appended in parentheses -- an annotation added here, not part of the source name** -- because 46 place names are shared by two different places. The task presented no fixed answer options, so `option_text` labels the 0/1 correctness score rather than transcribing anything the learner saw
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## riasec
-Only items 1-48 of this table are the RIASEC interest inventory the table is named for. Items 49-58 are the Ten Item Personality Inventory and items 59-74 a 16-word vocabulary checklist, administered in the same session, and the three use different response scales (1-5, 1-7 and 0/1 respectively)
-:::
-:::
-
-::: {.g-col-4 .dataset-item}
-::: {.callout-warning collapse='true'}
-## sapa_personality
-**17 of the 696 items ship the SAPA item dictionary's abbreviated shorthand -- bracketed or elided text -- rather than the full sentence the participant read**; the remaining 679 carry the full wording. Item text and the six response anchors both come from the SAPA-Project data release's own item dictionary (ItemInfo696) and code book
-:::
-:::
+The below are known issues affecting the match between item text and the IRW
+tables. `r length(issues)` tables are listed. Start typing to search across
+table names and issue descriptions.
+
+```{=html}
+<input type="text" id="issueSearch" placeholder="Search known issues..." oninput="filterIssues()" style="width: 100%; padding: 10px; margin-bottom: 10px; font-size: 16px;">
+<p id="issue-count" style="color: #888; margin-bottom: 20px;"></p>
+
+<style>
+#issues-table table { width: 100%; table-layout: fixed; }
+#issues-table th, #issues-table td { vertical-align: top; padding: 8px; }
+#issues-table th:nth-child(1), #issues-table td:nth-child(1) { width: 28%; word-break: break-word; }
+#issues-table th:nth-child(2), #issues-table td:nth-child(2) { width: 72%; }
+</style>
+
+<script>
+function filterIssues() {
+  const filter = document.getElementById('issueSearch').value.toLowerCase().trim();
+  const rows = document.querySelectorAll('#issues-table tbody tr');
+  let shown = 0;
+  rows.forEach(r => {
+    const hit = filter === '' || (r.textContent || '').toLowerCase().includes(filter);
+    r.style.display = hit ? '' : 'none';
+    if (hit) shown++;
+  });
+  const count = document.getElementById('issue-count');
+  count.textContent = filter === '' ? '' :
+    shown + (shown === 1 ? ' table matches "' : ' tables match "') + filter + '"';
+}
+</script>
+```
+
+::: {#issues-table}
+
+```{r}
+#| label: issues-table
+#| results: asis
+
+cat("| Dataset | Issue |\n", "|---|---|\n", sep = "")
+cat(sprintf("| `%s` | %s |", vapply(issues, \(x) x$table, character(1)),
+            vapply(issues, \(x) gsub("\n", " ", x$issue), character(1))),
+    sep = "\n")
+cat("\n")
+```
 
 :::
