@@ -312,25 +312,9 @@ a real design decision here too, not just an aside:
   paper made, for the same reason: it's the only way to compare IRW's
   breakdown directly against their headline percentages, and it also
   matches how ordinal network data is typically handled in current
-  empirical practice, not just this paper's method. `package = "BGGM"` has
-  to be forced explicitly and paired with `type = "continuous"`: the
-  installed `easybgm` (0.4.0) silently redirects back to `bgms` whenever
-  `type = "binary"` is passed, even if `package = "BGGM"` was requested,
-  which would otherwise quietly defeat this whole comparison. Since this
-  call always passes `type = "continuous"`, the redirect never actually
-  fired for Option A here regardless. **Update:** Huth has since fixed the
-  redirect bug upstream ([easybgm on
-  GitHub](https://github.com/KarolineHuth/easybgm), commit `d5a3da0a50`),
-  and the full batch was re-run against the patched package to verify that
-  claim rather than take it on faith. Restricted to the 514 tables that
-  drew an identical respondent subsample in both runs (same sample and
-  item count — IRW gained roughly 300 new candidate tables in the time
-  between the two runs, so a straight full-sample comparison isn't
-  apples-to-apples), 501/507 give bit-identical `strength_a_cor` and the
-  Bayesian evidence-category proportions differ by 0.001-0.005 on average
-  — the size of ordinary Monte Carlo noise in `BGGM`'s own sampler, not a
-  systematic shift. Confirms the redirect bug had no effect on any result
-  reported here, patched or not; `renv.lock` now pins the patched commit.
+  empirical practice, not just this paper's method. `package = "BGGM"` is
+  forced explicitly and paired with `type = "continuous"`, so every table
+  is fit by the same estimator regardless of its response format.
 - **Option B (secondary, small subset only):** fit the ordinal Markov
   random field via `bgms` instead — the model the paper itself calls more
   appropriate for this data type. Piloting this on real IRW tables found
@@ -704,7 +688,7 @@ ggplotly(p, tooltip = "text") |> layout(margin = list(t = 40))
 
 ```{r}
 #| label: fig-cor-vs-weighted-density
-#| fig-cap: "Strength-discrimination correlation against each table's weighted network density -- mean absolute partial correlation over all possible edges, counting absent edges as zero, so higher values mean a denser and/or more strongly-connected network. Unlike a plotting-only axis, this one carries real meaning: a theory that predicts a densely, uniformly connected network under a strong single factor also predicts higher weighted density should go with better strength-discrimination agreement. One point per table with a usable comparison. Hover for table details."
+#| fig-cap: "Strength-discrimination correlation against each table's weighted network density -- mean absolute edge weight over all possible edges, counting absent edges as zero, so higher values mean a denser and/or more strongly-connected network. Unlike a plotting-only axis, this one carries real meaning: a theory that predicts a densely, uniformly connected network under a strong single factor also predicts higher weighted density should go with better strength-discrimination agreement. The two estimators are shown separately and on their own x scales because their edge weights are not in the same units -- EBICglasso weights are partial correlations, bounded by 1, while IsingFit weights are log-odds and unbounded, so pooling them onto one axis would compare quantities that are not comparable. One IsingFit table (eurpar2_mudfold, weighted density 14.1, more than ten times the next-largest value) is off-scale and omitted from the panel; the correlation reported for IsingFit excludes it. One point per table with a usable comparison. Hover for table details."
 #| fig-height: 5
 
 density_df <- summary_df %>%
@@ -721,11 +705,19 @@ density_df <- summary_df %>%
     "<br>n_items: ", n_items
   ))
 
-p <- ggplot(density_df, aes(x = weighted_density, y = strength_a_cor, text = tooltip)) +
+# Edge weights are not on a common scale across the two estimators (partial
+# correlations vs. log-odds), so each is plotted on its own x axis. One
+# IsingFit table sits an order of magnitude beyond the rest and is dropped
+# from the panel so the bulk of the distribution is legible.
+DENSITY_PLOT_CUTOFF <- 10
+density_plot_df <- filter(density_df, weighted_density <= DENSITY_PLOT_CUTOFF)
+
+p <- ggplot(density_plot_df, aes(x = weighted_density, y = strength_a_cor, text = tooltip)) +
   geom_point(colour = irw_blue, size = 1.6, alpha = 0.7) +
   geom_smooth(method = "loess", se = FALSE, colour = irw_red, linewidth = 0.8) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = irw_grey) +
-  labs(x = "Weighted network density (mean |partial correlation| over all possible edges)",
+  facet_wrap(~ network_method, scales = "free_x") +
+  labs(x = "Weighted network density (mean |edge weight| over all possible edges)",
        y = "Strength-discrimination correlation")
 
 ggplotly(p, tooltip = "text") |> layout(margin = list(t = 60))
@@ -739,8 +731,21 @@ med_cor <- median(summary_df$strength_a_cor, na.rm = TRUE)
 prop_strong <- mean(summary_df$strength_a_cor > 0.7, na.rm = TRUE)
 n_na_cor <- sum(is.na(summary_df$strength_a_cor))
 EMPTY_TABLES <- summary_df$table[is.na(summary_df$strength_a_cor) & summary_df$network_density == 0]
-cor_density <- cor(density_df$weighted_density, density_df$strength_a_cor)
-cor_density_test <- cor.test(density_df$weighted_density, density_df$strength_a_cor)
+# Correlations are computed within estimator, for the same reason the figure
+# facets: a pooled correlation mixes partial correlations with log-odds.
+# The IsingFit correlation is computed on the same points the panel shows,
+# i.e. excluding the one off-scale table.
+density_by_method <- density_plot_df %>%
+  group_by(network_method) %>%
+  summarise(
+    n = n(),
+    r = cor(weighted_density, strength_a_cor),
+    p = cor.test(weighted_density, strength_a_cor)$p.value,
+    .groups = "drop"
+  )
+fmt_p <- function(p) if (p < 0.001) "p < 0.001" else paste0("p = ", round(p, 3))
+dens_ggm  <- filter(density_by_method, network_method == "EBICglasso")
+dens_ising <- filter(density_by_method, network_method == "IsingFit")
 ```
 
 The median strength-discrimination correlation across `r sum(!is.na(summary_df$strength_a_cor))`
@@ -748,14 +753,19 @@ tables with a usable comparison is `r round(med_cor, 2)`, and
 `r scales::percent(prop_strong, accuracy = 1)` of tables exceed 0.7.
 `r if (n_na_cor > 0) paste0(n_na_cor, " table(s) are excluded here because their regularized network had no edges at all -- an empty network, not a low correlation.") else ""`
 The relationship is real and often strong, but — as the two comparisons
-below make concrete — it is not universal. It also isn't independent of
-how densely and strongly connected the network is to begin with: weighted
-density correlates with the strength-discrimination correlation at
-r = `r round(cor_density, 2)`
-(`r if (cor_density_test$p.value < 0.001) "p < 0.001" else paste0("p = ", round(cor_density_test$p.value, 3))`)
-— tables whose networks lean more heavily on a few strong, uniform edges
-tend to show better agreement with IRT discrimination, consistent with
-Epskamp et al.'s prediction that a strong single factor produces both.
+below make concrete — it is not universal. The density half of Epskamp
+et al.'s prediction — that a strong single factor should produce a densely,
+uniformly connected network *and* good agreement with discrimination, so the
+two should move together — gets only weak support. Among the
+`r dens_ggm$n` tables fit with EBICglasso, where edge weights are partial
+correlations, weighted density correlates with the strength-discrimination
+correlation at r = `r sprintf("%.2f", dens_ggm$r)` (`r fmt_p(dens_ggm$p)`): in the
+predicted direction, but small enough that density explains barely more than
+one percent of the variation in agreement. Among the `r dens_ising$n`
+IsingFit tables it is r = `r sprintf("%.2f", dens_ising$r)`
+(`r fmt_p(dens_ising$p)`) — no reliable relationship at all. The two
+estimators are kept apart here because their edge weights aren't in the same
+units: pooling them yields a single number that describes neither.
 
 ### Why are 7 networks empty? A closer look
 
@@ -1630,6 +1640,15 @@ more carefully, not a settled prescription.
   Data and methods), but an exact ordinal-MRF network fit (rather than a
   Gaussian approximation on polychoric correlations) is still not
   implemented here.
+- **Weighted density is not comparable across the two estimators.**
+  EBICglasso edge weights are partial correlations (bounded by 1);
+  IsingFit weights are log-odds and unbounded, so the same nominal
+  "weighted density" means different things in the two halves of the
+  sample. The density figure and the correlations reported with it are
+  therefore split by estimator rather than pooled, and one IsingFit table
+  (`eurpar2_mudfold`, weighted density 14.1, over ten times the
+  next-largest value) is excluded from the IsingFit panel and its
+  correlation as an outlier on that unbounded scale.
 - **Network estimation is more sample- and tuning-sensitive** than fitting
   a single IRT model. Small tables in this sample should be read
   cautiously; an empty regularized network (no edges survive
@@ -1666,21 +1685,6 @@ more carefully, not a settled prescription.
   scale, and the three SD values used (0.1/0.25/0.5) were chosen as a
   reasonable spread rather than independently confirmed against Huth et
   al.'s own three values.
-- **The `easybgm` redirect-bug re-run (see Data and methods) compared old
-  vs. patched results on the table subset that drew an identical
-  respondent subsample in both runs, not the full candidate pool as a
-  whole** — needed because IRW gained new candidate tables in the time
-  between the two runs, which shifts the random-seed sequence `furrr`
-  assigns per table and changes which respondents get downsampled for any
-  large table, independent of anything about `easybgm`. Un-downsampled
-  tables (`n_participants` under the 10,000 cap) were unaffected by that
-  confound and are bit-identical for 501/507 on `strength_a_cor`; the
-  Bayesian evidence proportions, which are actually downstream of
-  `easybgm`, differ by 0.001-0.005 on average — ordinary Monte Carlo noise
-  in `BGGM`'s sampler, confirmed by re-running rather than assumed. The
-  ~300 large/downsampled tables weren't independently checked against this
-  confound beyond noting it's the expected explanation for their larger
-  observed differences.
 - **The stochastic-block-model check (see "A network-native
   multidimensionality check" above) ran on the 20-table Option B subset,
   and lost 6 of those 20 to data/convergence issues** (1 unsupported data
@@ -1769,18 +1773,7 @@ Rscript vignettes/network_psych_empty_audit.R          # "Why are 7 networks emp
 Rscript vignettes/network_psych_prior_sensitivity.R     # "How sensitive is the evidence classification to the prior?"
 Rscript vignettes/network_psych_sbm_check.R             # "A network-native multidimensionality check"
 
-# 4. Optional: verify the easybgm redirect-bug fix has no effect (see Data
-#    and methods) -- pins a patched fork first, then re-runs the full batch
-#    into an isolated directory. Not needed to reproduce the numbers above,
-#    which already reflect this verification; see
-#    network_psych_patched_easybgm_rerun_NOTES.md for the full writeup.
-# renv::install("KarolineHuth/easybgm@d5a3da0a50"); # then hand-edit renv.lock's
-#                                                    # easybgm entry -- see NOTES.md,
-#                                                    # renv::snapshot() rewrites unrelated
-#                                                    # package metadata across the file
-# RERUN_AGAINST_PATCHED_EASYBGM=TRUE Rscript vignettes/network_psych_compute.R
-
-# 5. Re-render this page
+# 4. Re-render this page
 quarto render vignettes/network_psych.qmd
 ```
 
@@ -1799,11 +1792,6 @@ last of these was her suggested alternative to what this page did before, and
 is a cleaner test of the same question. She also corrected our framing of why
 the ordinal Markov random field was not used, and caught a claim that both
 model options shared the matrix-F prior when only one does.
-
-The re-run behind the current numbers depends on her upstream fix to
-`easybgm`'s `type = "binary"` redirect ([commit
-`d5a3da0a50`](https://github.com/KarolineHuth/easybgm)), which is pinned in
-this project's `renv.lock`.
 
 This revised version incorporates her notes but was not itself reviewed by
 her; the analytic choices, interpretations and any remaining errors are ours
