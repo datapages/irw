@@ -48,11 +48,39 @@ source is recorded in the provenance for that table.
 
 `item` and `resp` are join keys into the response-level IRW dataset and are never
 translated. For instruments administered in English, `language` and the `_translated`
-fields are left empty.
+fields are omitted entirely rather than carried empty.
 
-Where the administered wording cannot be recovered and only an English version of the
-instrument is available, the English is placed in the base text fields and the
-`_translated` fields are left empty.
+### When only an English version survives
+
+Some studies administered an instrument in another language but published only an
+English rendering of it — sometimes the authors' own translation in a supplementary
+file, sometimes English variable labels in the deposited data file, sometimes nothing
+but the canonical English instrument the study cites. Where the administered wording
+cannot be recovered from the data deposit or the paper's own supplements, the English
+is placed in the base text fields, the `_translated` fields are left empty, and the
+table's provenance records `text_source = translated_substitute`.
+
+**`language` still names the language the study was administered in.** It describes the
+study, not the contents of `item_text`, so a table in this situation reads
+`language = Chinese` while `item_text` is English. That combination is deliberate and
+it is the flag to read:
+
+| `language` | `item_text_translated` | what `item_text` holds |
+|---|---|---|
+| empty | empty | the administered wording; the study was in English |
+| populated | populated | the administered wording, verbatim |
+| populated | **empty** | **English — not the wording respondents read** |
+
+Any table in the third row also gets an entry on the
+[item text issues](itemtext_issues.qmd) page saying so in plain words. If you are
+analysing item wording rather than joining on `item`, treat those tables with the same
+care you would give any translation: the response data is unaffected, but the text is a
+rendering of the instrument rather than a transcript of what was administered.
+
+Item text extracted before this schema was introduced (2026-09-01) predates the
+`language` and `_translated` columns, so a non-English administration from that period
+may carry English text with no `language` value. Those tables are being revisited; the
+issues page is the reliable record in the meantime.
 
 ## Some additional notes about the item text
 
