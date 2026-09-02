@@ -295,6 +295,7 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 <li><p><code>section_id</code> This is an identifier for a group of items that share a common context. It is conceptually equivalent to the <code>item_family</code> element in the IRW standard and is used to annotate information about, for example, testlets (i.e., items grouped under a single reading passage).</p></li>
 <li><p><code>item</code> This is a persistent identifier for <em>the probe being used to measure</em>, matching the <code>item</code> field in the core IRW dataset.</p></li>
 <li><p><code>instrument</code> This is the full, human-readable name or title for the instrument identified by the <code>table</code> column.</p></li>
+<li><p><code>language</code> This names the language in which the instrument was administered (e.g.&nbsp;<code>German</code>, <code>Spanish</code>), written plainly rather than as a language code. It is present when the administered language is not English.</p></li>
 <li><p><code>instructions</code> This contains the literal text of the instructions provided to the participant for the overall instrument.</p></li>
 <li><p><code>section_prompt</code> This contains the literal text of a shared prompt, such as a reading passage, that applies to all items within a given <code>section_id</code>.</p></li>
 <li><p><code>instructions</code> and <code>section_prompt</code> are scoped differently: <code>instructions</code> applies to the entire table regardless of <code>section_id</code>; <code>section_prompt</code> applies only to the items sharing one or more specific <code>section_id</code> values. The same span of source text should never be recorded in both fields. If framing or task-level text applies across the whole table, record it once in <code>instructions</code>. If it is specific to a subset of items sharing a <code>section_id</code> (e.g.&nbsp;a passage or context given before a testlet), record it in <code>section_prompt</code> only, even if it superficially resembles instructional language.</p></li>
@@ -302,7 +303,51 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 <li><p><code>correct_response</code> This is the scoring key for a given <code>item</code>. This field is left blank for items that do not have a correct response. For items with multiple correct answers, values are separated by a semicolon.</p></li>
 <li><p><code>option_text</code> This is the literal text for a specific response option available for an item.</p></li>
 <li><p><code>resp</code> This is the response value assigned to a specific <code>option_text</code>. It should match the numeric, ordinal <code>resp</code> value found in the response-level IRW dataset.</p></li>
+<li><p><code>instructions_translated</code>, <code>section_prompt_translated</code>, <code>item_text_translated</code> and <code>option_text_translated</code> These hold the English translation of the correspondingly named field. They are present only for instruments administered in a language other than English.</p></li>
 </ul>
+</section>
+<section id="instruments-administered-in-a-language-other-than-english" class="level2">
+<h2 class="anchored" data-anchor-id="instruments-administered-in-a-language-other-than-english">Instruments administered in a language other than English</h2>
+<p>Where a study was administered in a language other than English, the text fields (<code>instructions</code>, <code>section_prompt</code>, <code>item_text</code>, <code>option_text</code>) hold the wording that respondents actually read, verbatim, and <code>language</code> names that language. The English rendering is carried alongside in the parallel <code>_translated</code> fields, so the instrument is usable without reading the administered language. Where the study or its data deposit supplies its own English version, that is the translation we ship, and the source is recorded in the provenance for that table.</p>
+<p><code>item</code> and <code>resp</code> are join keys into the response-level IRW dataset and are never translated. For instruments administered in English, <code>language</code> and the <code>_translated</code> fields are omitted entirely rather than carried empty.</p>
+<section id="when-only-an-english-version-survives" class="level3">
+<h3 class="anchored" data-anchor-id="when-only-an-english-version-survives">When only an English version survives</h3>
+<p>Some studies administered an instrument in another language but published only an English rendering of it — sometimes the authors’ own translation in a supplementary file, sometimes English variable labels in the deposited data file, sometimes nothing but the canonical English instrument the study cites. Where the administered wording cannot be recovered from the data deposit or the paper’s own supplements, the English is placed in the base text fields, the <code>_translated</code> fields are left empty, and the table’s provenance records <code>text_source = translated_substitute</code>.</p>
+<p><strong><code>language</code> still names the language the study was administered in.</strong> It describes the study, not the contents of <code>item_text</code>, so a table in this situation reads <code>language = Chinese</code> while <code>item_text</code> is English. That combination is deliberate and it is the flag to read:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th><code>language</code></th>
+<th><code>item_text_translated</code></th>
+<th>what <code>item_text</code> holds</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>empty</td>
+<td>empty</td>
+<td>the administered wording; the study was in English</td>
+</tr>
+<tr class="even">
+<td>populated</td>
+<td>populated</td>
+<td>the administered wording, verbatim</td>
+</tr>
+<tr class="odd">
+<td>populated</td>
+<td><strong>empty</strong></td>
+<td><strong>English — not the wording respondents read</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Any table in the third row also gets an entry on the <a href="./itemtext_issues.html">item text issues</a> page saying so in plain words. If you are analysing item wording rather than joining on <code>item</code>, treat those tables with the same care you would give any translation: the response data is unaffected, but the text is a rendering of the instrument rather than a transcript of what was administered.</p>
+<p>Item text extracted before this schema was introduced (2026-09-01) predates the <code>language</code> and <code>_translated</code> columns, so a non-English administration from that period may carry English text with no <code>language</code> value. Those tables are being revisited; the issues page is the reliable record in the meantime.</p>
+</section>
 </section>
 <section id="some-additional-notes-about-the-item-text" class="level2">
 <h2 class="anchored" data-anchor-id="some-additional-notes-about-the-item-text">Some additional notes about the item text</h2>
