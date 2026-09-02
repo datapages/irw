@@ -40,9 +40,15 @@ Data is fetched live from **Redivis** using `REDIVIS_API_TOKEN` (required env va
 ### Data pipeline: R + OJS dual-layer
 Data pages combine two languages:
 - **R** — fetches metadata from Redivis (`_load-data.qmd`) and does preprocessing; results are passed to OJS via `ojs_define()`
-- **OJS (Observable JavaScript)** — drives all interactive UI: `_tbl-*.qmd` (filterable tables with live Redivis API calls), `_viz-*.qmd` (Observable Plot charts), and inline filter components
+- **OJS (Observable JavaScript)** — drives all interactive UI: the filterable dataset table, the Observable Plot charts, and the filter components
 
-When editing data-explorer pages, changes to filter logic or table display are almost always in the `_tbl-*.qmd` or `_viz-*.qmd` OJS partials, not in R code.
+The data explorer is `data.qmd`. Its OJS lives inline in that file — the filter
+inputs, the `Inputs.table` call, the plots, and the info/code-snippet callouts are
+all chunks in `data.qmd` itself, not in separate partials. The only includes are
+`_load-data-explore.qmd` (the R side: Redivis fetch, tag preprocessing,
+`ojs_define()`) and the reusable widgets under `components/` (`_interval.qmd`,
+`_hist.qmd`, `_tol.qmd`, `_style.qmd`). So changes to filter logic or table display
+go in `data.qmd`; changes to what data reaches OJS go in `_load-data-explore.qmd`.
 
 ### Vignette compute pattern
 Heavy statistical computations are offloaded to a companion `*_compute.R` script that writes `.rds` cache files (e.g., `vignettes/2pldata/2pl_across_datasets_results.rds`). The vignette `.qmd` then loads the cache with `readRDS(...)` instead of re-running the model. When adding a new computation-heavy vignette, follow this pattern: create `vignettes/<name>_compute.R`, run it locally to produce the cache, commit both the script and the `.rds`, then reference the cache in the `.qmd`.
