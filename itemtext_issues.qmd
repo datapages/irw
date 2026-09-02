@@ -267,6 +267,18 @@ issues <- yaml.load(r"---(
 - table: sapa_personality
   issue: |-
     **17 of the 696 items ship the SAPA item dictionary's abbreviated shorthand -- bracketed or elided text -- rather than the full sentence the participant read**; the remaining 679 carry the full wording. Item text and the six response anchors both come from the SAPA-Project data release's own item dictionary (ItemInfo696) and code book
+- table: emidy2024_fevs
+  issue: |-
+    The `.dta` this table is built from carries Stata variable labels truncated at 80 characters, so **the item wording shipped here is OPM's own published 2022 FEVS instrument text (Appendix B of the 2022 FEVS Technical Report), not the data file's labels**; each of the 93 truncated labels was checked to be a prefix of the report wording for the same q-number, and the labels were used only to confirm the code-to-item tie. The instrument's non-substantive options (Do Not Know / No Basis to Judge / Not Applicable) are unlabelled sentinels dropped by the processing script and so are deliberately absent from `option_text`. Note that `q12` and `q34` are negatively worded and already reverse-coded in the source file, so their anchors run 1 = Strongly Agree to 5 = Strongly Disagree while the other agreement items run the other way
+- table: mohammed_2021_job_satisfaction
+  issue: |-
+    Item text and response anchors are transcribed exactly as the study's SPSS file stores them -- all lowercase, no terminal punctuation, and one item reads "am proud to work at this hospital" with no leading "I". The wording has deliberately not been tidied. The source study never reproduces these five items and never names the instrument: **its identification as the Safety Attitudes Questionnaire job-satisfaction domain is inferred from the wording, not stated by the study**, and the 1 = strongly disagree to 5 = strongly agree direction rests on the SPSS value labels alone, which nothing else in the study could corroborate
+- table: himmelstein-impossible_question-2025
+  issue: |-
+    **18 of the 90 items (the `IQ_*` codes) are deliberately unanswerable** -- they ask about invented battles, shapes and places, and the correct response is to select "Opt-out". So `resp` = 1 means the respondent either picked the keyed answer or correctly opted out, and `resp` = 0 covers both a wrong answer and opting out of a question that did have one; note that opting out of an answerable item is scored incorrect even though the instructions told participants it would not be scored. `option_text` is empty by design: each trial offered two alternatives plus "Opt-out", but `resp` is a 0/1 correctness score rather than which option was chosen, so the option texts cannot be mapped onto it -- the correct option is given in `correct_response` instead
+- table: abukhalaf_2025_disaster_prep
+  issue: |-
+    **`resp` is a proportion, not an ordinal level**: the source study measured its rising-scale answers and then converted them to percentages, so the 11 values run 0 to 1 in 0.1 steps and mean 0% to 100% likelihood rather than 1st through 11th response option. `option_text` is empty for every row by design -- the source labels no individual point on the slider
 )---")
 
 issues <- issues[order(vapply(issues, \(x) x$table, character(1)))]
