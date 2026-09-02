@@ -73,6 +73,6 @@ All code runs with `echo: false`, `message: false`, `warning: false`, `error: fa
 
 ## TODOs
 
-- [ ] Do more with `construct_name` (measure description) from the tags sheet — currently excluded from `tag_vals` in `_load-data-explore.qmd:96` so it never appears in filters or the table. Options: (1) add it to the info callout box in `index.qmd` (~line 378), (2) add a free-text search filter for it, (3) show it as a column in the dataset table
+- [ ] Do more with `construct_name` (measure description) from the tags sheet — it is dropped by the `select(-construct_name)` in `_load-data-explore.qmd`'s `tag_vals` pipeline, so it never appears in filters or the table. Options: (1) add it to the `info` object behind the "Information on selected dataset" callout in `data.qmd`, (2) add a free-text search filter for it, (3) show it as a column in the dataset table
 
 Vignette-branch status, merge history, and the survey-vignette harmonization scaffold/checklist are tracked in Claude's memory, not here — see `project_vignette_harmonization_2026_07_21.md` and `project_vignette_branches_status.md`.
