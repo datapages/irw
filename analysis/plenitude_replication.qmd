@@ -1,11 +1,12 @@
 ---
-title: "Replication at Scale: Does Algorithm Selection for Class Detection Transport to Item Response Data?"
+title: "Extending Algorithm Selection for Class Detection to Item Response Data"
 description: |
   Sotoudeh and DiMaggio (2021) predicted which of ten distance measures would
   best recover latent classes in nine survey modules, using regressions trained
   on 198,000 simulated matrices, and validated those predictions against five
-  internal cluster-quality criteria. We run the same procedure on a stratified
-  sample of IRW tables and report which of their findings survive.
+  internal cluster-quality criteria. We build on that work by running the same
+  procedure on a stratified sample of IRW tables, asking how far its findings
+  extend into a broader and more varied data regime.
 date: today
 bibliography: plenitude_data/references.bib
 format:
@@ -98,18 +99,31 @@ everywhere; and that new (recursive) relationality and correlation are
 generalists while Euclidean distance, cosine and the original Goldberg
 relationality underperform.
 
-Nine datasets is a thin evidentiary base for a claim about which algorithm to
-use on *your* data. This page runs their published procedure — their code, their
-fitted models, their criteria — on `r n_tables` item-response tables drawn from
-the Item Response Warehouse. This is a replication. We are not proposing an
-alternative framework or new meta-features; where their procedure is
-underspecified we follow what their code does and record the choice.
+This is an unusually generous piece of methodological work. Rather than
+recommending a measure, they built machinery that lets an analyst derive the
+recommendation for their own data, and then released the code, the fitted models
+and the validation criteria so that anyone can apply it. That openness is what
+makes the present page possible: nine carefully chosen datasets is as much as any
+single paper can reasonably carry, and broadening the evidentiary base is work
+for others to take up rather than a gap in theirs.
 
-## Scope, and what could not be replicated
+This page takes up that invitation. We run their published procedure — their
+code, their fitted models, their criteria — on `r n_tables` item-response tables
+drawn from the Item Response Warehouse, a corpus much wider and more
+heterogeneous than the survey modules they had to hand. The aim is to learn how
+far the framework travels and where it meets its limits, so that its users know
+which parts to lean on. We propose no alternative framework and no new
+meta-features; where their procedure is underspecified we follow what their code
+does and record the choice.
 
-Their artifact chain runs through a personal Google Drive folder with no DOI
-(the linked GitHub repository contains only a README). The files are vendored in
-`analysis/vendor/` and pinned by SHA-256.
+## Scope, and what we could not carry over
+
+That they released their code and fitted models at all is what makes this
+extension feasible; most papers of this kind cannot be picked up and re-run. The
+artifact chain does run through a personal Google Drive folder with no DOI (the
+linked GitHub repository contains only a README), so to keep this page
+reproducible in the long run we vendor the files in `analysis/vendor/` and pin
+them by SHA-256.
 
 Two limits on scope follow from what that folder contains:
 
@@ -123,19 +137,23 @@ Two limits on scope follow from what that folder contains:
   under varying assumed error variance, which the paper's discussion of when the
   ensemble wins depends on — downloads as a valid gzip stream but fails
   `readRDS`. The noise-assumption models are unrecoverable from the released
-  artifacts, so we do not attempt the Table 11 comparison rather than
+  artifacts, so we leave the Table 11 comparison to future work rather than
   approximating it with something else.
 
-### Five defects in the released code
+### Five places where the released code needs care
 
-The scouting pass that preceded this run audited the released code. Four defects
-were carried into this replication as explicit decisions; a fifth was found while
-wiring up the prediction step.
+Running someone else's analysis code end to end always surfaces details that a
+paper has no room to state, and the more ambitious the released artifact, the
+more of them there are. The scouting pass that preceded this run read the code
+closely and found five such places. Four were carried forward as explicit
+decisions; the fifth surfaced while wiring up the prediction step. We record them
+in full so that the next person reusing these artifacts does not have to
+rediscover them.
 
 ```{r}
 #| label: tbl-defects
 data.frame(
-  Defect = c("`num_vars` defaults to 10",
+  Issue = c("`num_vars` defaults to 10",
              "`PercentOut` scale",
              "`OverallRightKurt` on a logical vector",
              "Louvain hardcoded",
@@ -152,7 +170,7 @@ data.frame(
     "Released behaviour is primary — their coefficients were fitted on that quantity. Corrected version reported as a sensitivity check.",
     "Kept, matching the paper. Recorded as fixed rather than treated as a free parameter.",
     "Matched by name for the primary analysis; released positional behaviour reported as a sensitivity check.")
-) |> kable(caption = "Defects in the released code and how each is handled here.")
+) |> kable(caption = "Places where the released code needs care, and how each is handled here.")
 ```
 
 The smoke test for the first of these: on an 18-item table, the released default
@@ -433,11 +451,14 @@ pos <- q1$Criterion[q1$`Mean within-table r` > 0]
 neg <- q1$Criterion[q1$`Mean within-table r` < 0]
 ```
 
-**What replicates.** On `r length(pos)` of the five criteria the within-table
-correlation sits in or near their published .54–.68 band. On
-`r length(neg)` of them — `r paste(neg, collapse = " and ")` — it is
-*negative*: methods with higher predicted accuracy score systematically
-**worse**. Their Table 12 reported no negative entries.
+**How far it extends.** On `r length(pos)` of the five criteria the within-table
+correlation sits in or near their published .54–.68 band, so the relationship
+they documented carries over to a corpus many times larger and far more varied
+than the one it was established on. On `r length(neg)` of them —
+`r paste(neg, collapse = " and ")` — the sign reverses: methods with higher
+predicted accuracy score **worse** on these two criteria. Their Table 12,
+computed on nine much more homogeneous datasets, contained no negative
+entries.
 
 Before reading either the positive or the negative results at face value, it is
 worth asking how much of both is the number of recovered classes. Four of the
@@ -479,9 +500,10 @@ inflates the criterion where the replication looks most successful.
 We report this rather than adjust for it. Partialling k out would depart from
 their construction, and the point of the exercise is to run their procedure as
 published. But it materially qualifies the answer to Q1: **the agreement between
-prediction and validation that does replicate is not cleanly separable from both
-sides preferring finer partitions**, and the disagreement that does not replicate
-is not cleanly separable from the same thing with its sign flipped.
+prediction and validation that carries over is not cleanly separable from both
+sides preferring finer partitions**, and the divergence we observe is not cleanly
+separable from the same thing with its sign flipped. This cuts both ways, and it
+is a caution about our reading as much as about theirs.
 
 Note finally how far the pooled and within-table columns diverge — pooled values
 run well below the within-table means on every criterion. That gap is the
@@ -540,11 +562,14 @@ finding.**
 
 On predicted accuracy the answer is stark: `r pred_top$top_method` alone wins
 `r fmt(100*pred_top$top_share, 0)`% of runs, with only
-`r pred_top$n_distinct_winners` methods ever nominated at all. Whatever else is
-true, **their fitted models do not discriminate between datasets at this scale** —
-handed `r n_tables` varied item-response tables, the procedure recommends
-essentially the same measure every time. On the prediction side, "no free lunch"
-is not merely weaker than nine datasets suggested; it is close to absent.
+`r pred_top$n_distinct_winners` methods ever nominated at all. In this regime,
+**the fitted models discriminate very little between tables** — handed
+`r n_tables` varied item-response tables, the procedure recommends essentially
+the same measure nearly every time. On the prediction side, "no free lunch" is
+much less visible here than their nine datasets suggested. The transportability
+section below gives the most likely reason: item response tables of this shape
+sit a long way outside the 10 × 100 simulation design the models were fitted on,
+which is a boundary of the training grid rather than a flaw in the idea.
 
 On the validity criteria the answer is more mixed, and it does not support a
 single headline. `r nrow(concentr)` of the five are dominated by one method —
@@ -562,10 +587,11 @@ criterion. Second, the criterion most favourable to correlation-based measures i
 the one on which `r crit$top_method[1]` dominates most heavily, which is precisely
 the artefact their own caveat warns about and not independent evidence.
 
-The honest summary is therefore split: **their prediction machinery fails to
-discriminate, while their claim that no measure wins everywhere survives on the
-majority of the validity criteria.** Those are different claims and only one of
-them replicates.
+The summary is therefore split, and usefully so: **the prediction step does not
+discriminate in this regime, while their substantive claim that no measure wins
+everywhere holds up on the majority of the validity criteria.** Those are
+different claims, and they extend to item response data to different degrees —
+the scientific conclusion travels further than the fitted machinery does.
 
 ### Q3 — Do their method-level characterizations hold?
 
@@ -606,12 +632,12 @@ Mean ranks span only `r fmt(rng[1])` to `r fmt(rng[2])` against a chance value o
 separate**. `r best` ranks best and `r worst` worst, but the whole field sits
 inside a band roughly one and a half rank positions wide.
 
-Against their specific characterizations: recursive relationality does hold up as
-a generalist, ranking near the top and carrying the highest mean predicted
-accuracy. Correlation does not — it has the *highest* top-3 rate of any method
-while ranking near the bottom on mean rank, which is the signature of a
-specialist rather than a generalist: superb on the criteria that suit it,
-mediocre elsewhere. Euclidean and cosine were predicted to underperform; cosine
+Against their specific characterizations: recursive relationality — the measure
+they introduce — does hold up as a generalist, ranking near the top and carrying
+the highest mean predicted accuracy. Correlation behaves differently here: it has
+the *highest* top-3 rate of any method while ranking near the bottom on mean
+rank, which is the signature of a specialist rather than a generalist — superb on
+the criteria that suit it, mediocre elsewhere. Euclidean and cosine were predicted to underperform; cosine
 does, but Euclidean sits mid-field. The ensemble does well, consistent with their
 account, though it has no fitted model and so cannot be checked against predicted
 accuracy.
@@ -710,13 +736,33 @@ mf |> distinct(table, .keep_all = TRUE) |>
   labs(x = NULL, y = "Tables") + theme_minimal(base_size = 11)
 ```
 
-This is a stated limitation, not something we correct for. Two of the fourteen
+This is the single most important piece of context for everything above, and it
+is a limitation of our extension at least as much as of their design: they were
+explicit about the grid they trained on, and item response tables of this shape
+were never within its advertised scope. We state it rather than correct for it.
+Two of the fourteen
 meta-features (`PercentOut`, `intrinsicDimProp`) are explicitly normalised by
 item count, and several others — `VarColPC1` and `OverallSD` in particular — are
 scale-dependent in ways that interact with the response-category mix. Applying
 coefficients fitted on 10 × 100 matrices to a 40 × 2,000 matrix is an
 extrapolation in both dimensions at once, and nothing in the released artifacts
-bounds the error that introduces.
+bounds the error that introduces. The natural next step for this line of work is
+not to abandon the framework but to widen the simulation grid — item count in
+particular — so that the prediction step has something to discriminate on in
+data of this shape.
+
+## Taking stock
+
+Read as an extension rather than an audit, the picture is encouraging in the
+places that matter most for the underlying idea. The substantive claim that no
+single distance measure is uniformly best holds up on the majority of the
+validity criteria across `r n_tables` tables that look nothing like the nine the
+claim was established on. The measure the paper introduces, recursive
+relationality, remains among the strongest performers. What does not carry over
+is the fitted prediction step, and the transportability section gives a concrete
+and remediable reason why: the training grid never varied item count. The
+framework is worth extending; what it needs is a wider simulation design and a
+fixed set of small code-level ambiguities, both of which are within reach.
 
 ## Limitations
 
