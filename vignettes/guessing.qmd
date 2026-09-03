@@ -401,6 +401,67 @@ if (cache_ok) {
 }
 ```
 
+### Screening scored absences
+
+One further screen runs before any model is fit, and it turned out to matter
+more than any modelling choice on this page.
+
+On a $J$-item, $m$-option test, a candidate who guesses every item scores
+about $J/m$ -- roughly 9 of 45 at $m = 5$. Scoring *zero* on 45 answered
+items has probability around $4\times10^{-5}$. So a block of candidates at
+or near zero is not the lower tail of ability, and it is certainly not
+guessing: it is absence recorded as a wrong answer. Five of the eight ENEM
+tables carry exactly such a block, at roughly 45% of the drawn sample, with
+almost nobody between 1 and 3 correct -- a spike at zero and then a
+normal-looking distribution starting above the chance floor. The other three
+ENEM tables have none.
+
+This is the same coding artifact as the elective-block problem described in
+`guessing_compute.R`'s item-level screen -- a section the candidate did not
+sit, scored 0 rather than left missing -- but at the candidate level rather
+than the item level, so an item-level check cannot see it.
+
+Every candidate is therefore tested against the lower tail of
+$\mathrm{Binomial}(J_i, 1/m)$, where $J_i$ counts the items that candidate
+actually answered, and dropped when
+$P(\text{score} \le \text{observed}) < 10^{-3}$. The cut is stated as a
+tail probability rather than a raw-score threshold so that it adapts to
+tables with different $J$, different $m$, and different per-candidate
+missingness. It is deliberately strict: on the three uncontaminated ENEM
+tables it removes 0.0-0.3% of candidates.
+
+```{r}
+#| label: screen-table
+if (cache_ok && "n_persons_screened" %in% names(summary_df)) {
+  summary_df |>
+    mutate(pct = sprintf("%.1f%%", 100 * frac_persons_screened)) |>
+    select(table, n_participants, n_persons_screened, pct) |>
+    knitr::kable(
+      align = "lrrr",
+      col.names = c("Table", "N analysed", "N screened out", "% screened"),
+      caption = paste0("Candidates removed by the scored-absence screen. ",
+                       "N analysed is the count after screening, which is ",
+                       "the sample every model on this page is fit to."))
+}
+```
+
+Leaving these candidates in does not degrade the fits gently; it changes what
+the models say. On the five affected tables the estimated latent SD ran 2.2
+to 2.9 before screening and 0.4 to 0.7 after, and *every* item's guessing
+parameter was driven to the no-guessing boundary -- a floor model cannot fit
+observed zeros where it predicts $\mathrm{expit}(\gamma)$, so it sends
+$\gamma$ to $-\infty$. After screening, the implied floors return to
+roughly $1/m$, which is what a multiple-choice floor should look like. An
+earlier version of this page reported the unscreened fits and read the
+inflated spread and the vanishing floor as two separate findings about
+guessing; they were one artifact seen twice.
+
+Because the screen removes a large, non-random block from five tables, the
+surviving samples are range-restricted relative to the full candidate pool,
+and the latent SDs below are not comparable to what the same tables would
+give if the absent candidates had been recorded as missing rather than
+wrong. See [Limitations](#limitations).
+
 ### Models fit
 
 Seven specifications per table:
@@ -491,21 +552,38 @@ if (cache_ok && nrow(summary_df) > 0) {
         !is.na(alpha_identified) & !alpha_identified,
         "not identified",
         sprintf("%.3f (p=%.3f)", alpha_hat, lr_p)),
+      # Print the guessing floor the 1PL-G stage actually found, next to the
+      # alpha it feeds. Where alpha reads "not identified" this column is the
+      # reason and shows it directly: alpha enters the likelihood only through
+      # the guessing branch, so a largest-floor of 1e-13 means there is no
+      # branch left for it to act on. Without it a reader has to take the
+      # "not identified" label on trust.
+      floor_lbl = if ("max_guess_floor" %in% names(summary_df)) {
+        ifelse(is.na(max_guess_floor), NA_character_,
+               ifelse(max_guess_floor < 1e-4, sprintf("%.0e", max_guess_floor),
+                      sprintf("%.3f", max_guess_floor)))
+      } else NA_character_,
       pi_lbl    = sprintf("%.3f", pi_hat),
       frac_flagged = round(frac_flagged, 3)
     ) |>
     mutate(sd_lbl = if ("sd_rasch" %in% names(summary_df)) sprintf("%.2f", sd_rasch) else NA_character_) |>
     select(table, m, n_participants, n_items, n_heldout,
-           sd_lbl, pi_lbl, alpha_lbl, frac_flagged) |>
+           sd_lbl, pi_lbl, floor_lbl, alpha_lbl, frac_flagged) |>
     knitr::kable(
-      align = "lrrrrrrrl",
+      align = "lrrrrrrrrl",
       col.names = c("Table", "m", "N", "J", "N held-out", "SD(θ)",
-                    "π̂ (Mixture)", "α̂ (1PL-AG, p)", "Frac. flagged (Purified)"),
+                    "π̂ (Mixture)", "max expit(γ̂) (1PL-G)",
+                    "α̂ (1PL-AG, p)", "Frac. flagged (Purified)"),
       caption = paste0("Per-table model-internal diagnostics. SD(θ) is the ",
                        "estimated latent standard deviation from the Rasch ",
                        "baseline; every model on the page estimates it, so ",
                        "none of these comparisons is confounded by a prior ",
-                       "held fixed at 1.")
+                       "held fixed at 1. max expit(γ̂) is the largest implied ",
+                       "guessing floor over all items from the 1PL-G stage: ",
+                       "on a well-behaved m-option table it should sit near ",
+                       "1/m, and a value at machine zero means the stage ",
+                       "found no floor anywhere, which is what leaves α ",
+                       "unidentified.")
     )
 } else {
   cat("Results not yet computed -- run vignettes/guessing_compute.R.")
@@ -557,11 +635,18 @@ if (cache_ok && nrow(summary_df) > 0 &&
            "stuck optimizer, and not evidence that guessing is ",
            "ability-independent. **The 1PL-AG simply has nothing to say about ",
            "these tables**, and its IMV there (within %.4f of Rasch) reflects a ",
-           "model that has collapsed onto the Rasch baseline. Note that this ",
-           "is the 1PL-AG's own verdict that these tables carry no guessing ",
-           "floor, which the 1PLg fits corroborate from the other side: forcing ",
-           "$g = 1/m$ on them is what makes that model fail to converge or ",
-           "score far below Rasch.\n\n"),
+           "model that has collapsed onto the Rasch baseline. Read this as a ",
+           "statement about the fit, not about the examinees: a flat floor is ",
+           "what the likelihood reports whenever the data contain observed ",
+           "zeros the model cannot otherwise accommodate, and on an earlier ",
+           "version of this page the cause was contamination rather than ",
+           "guessing behaviour -- candidates scored zero for a section they ",
+           "never sat, which the scored-absence screen now removes (see ",
+           "[Screening scored absences](#screening-scored-absences)). Where ",
+           "$\\hat\\alpha$ still reads \"not identified\" after that screen, ",
+           "the max expit($\\hat\\gamma$) column above is the place to look ",
+           "first, and any remaining data-coding explanation should be ruled ",
+           "out before this is read as evidence about how examinees guess.\n\n"),
     length(ni_tables), if (length(ni_tables) > 1) "s" else "",
     paste0("`", ni_tables, "`", collapse = ", "),
     length(ni_tables), floor_max,
@@ -633,14 +718,21 @@ if (cache_ok && nrow(summary_df) > 0 && nrow(imv_vs_rasch_df) > 0) {
     helps_all_pos <- all(!is.na(unlist(helps[corr_cols])) &
                          unlist(helps[corr_cols]) > 0)
     cat(sprintf(
-      paste0("- **The tables split in two, and the split tracks the spread of ",
-             "ability.** On %d of the %d tables (%s) the 3PL, 1PL-AG and ",
-             "Mixture are ", if (helps_all_pos) "all positive" else
+      paste0("- **The tables still split on whether a guessing floor pays ",
+             "off out of sample.** On %d of the %d tables (%s) the 3PL, ",
+             "1PL-AG and Mixture are ", if (helps_all_pos) "all positive" else
                "positive more often than not", " against Rasch. On the other %d (%s) ",
              "the 3PL is negative throughout, by %.4f to %.4f -- *worse* than ",
-             "simply ignoring guessing. %s Those are also the tables with the ",
-             "largest estimated latent spread (SD(theta) %.1f to %.1f, against ",
-             "%.1f to %.1f on the first group).\n"),
+             "simply ignoring guessing. %s The estimated latent spread differs ",
+             "between the groups (SD(theta) %.1f to %.1f, against %.1f to %.1f ",
+             "on the first group), but that association should be read as ",
+             "description rather than mechanism: before the scored-absence ",
+             "screen an earlier version of this page found the same split, ",
+             "attributed it to latent spread, and was wrong -- the split then ",
+             "coincided exactly with the five tables carrying a block of ",
+             "candidates scored zero for a section they never sat, and both ",
+             "the spread and the split were downstream of that (see ",
+             "[Screening scored absences](#screening-scored-absences)).\n"),
       nrow(helps), nrow(w), paste0("`", helps$table, "`", collapse = ", "),
       nrow(hurts), paste0("`", hurts$table, "`", collapse = ", "),
       max(hurts$`3PL`), min(hurts$`3PL`),
@@ -652,22 +744,47 @@ if (cache_ok && nrow(summary_df) > 0 && nrow(imv_vs_rasch_df) > 0) {
       },
       min(hurts$sd_rasch, na.rm = TRUE), max(hurts$sd_rasch, na.rm = TRUE),
       min(helps$sd_rasch, na.rm = TRUE), max(helps$sd_rasch, na.rm = TRUE)))
+  } else if (nrow(hurts) == 0 && nrow(helps) > 0) {
+    # The interesting case, and the one that holds after the scored-absence
+    # screen: no table is left where modelling guessing costs you.
+    cat(sprintf(
+      paste0("- **Modelling guessing beats ignoring it on every table.** The ",
+             "3PL is positive against Rasch on all %d, from %.4f to %.4f, and ",
+             "the 1PL-AG on %d of them. There is no group here where a ",
+             "guessing correction costs you out of sample. That is a change ",
+             "from an earlier version of this page, which reported the ",
+             "tables splitting in two -- corrections helping on some and ",
+             "actively hurting on others -- and read the split as tracking ",
+             "the spread of ability. The tables where corrections appeared ",
+             "to hurt were the five carrying a block of candidates scored ",
+             "zero for a section they never sat; with those candidates ",
+             "screened out (see [Screening scored ",
+             "absences](#screening-scored-absences)) the split disappears ",
+             "entirely.\n"),
+      nrow(helps), min(helps$`3PL`), max(helps$`3PL`),
+      sum(w$`1PL-AG` > 0, na.rm = TRUE)))
   }
 
   if (any(!is.na(w$imv23))) {
     pos23 <- w |> filter(!is.na(imv23), imv23 > 0)
     cat(sprintf(
-      paste0("- **Where the 3PL does win, it is mostly discrimination, not ",
-             "guessing.** `IMV(2PL, 3PL)` -- what the guessing floor adds ",
-             "*on top of* the free slopes the 2PL already has -- runs from ",
-             "%.4f to %.4f across the tables, and is positive on only %d of ",
-             "%d. And because the Mixture is Rasch-engaged (its engaged ",
-             "class has slope fixed at 1), comparing it against the 3PL, the ",
-             "1PL-AG or the 2PL folds two questions -- does letting ",
-             "discrimination vary help, and does modeling guessing help -- ",
-             "into one number.\n"),
+      paste0("- **The floor adds something beyond free slopes, but not much.** ",
+             "`IMV(2PL, 3PL)` -- what the guessing floor buys *on top of* the ",
+             "free slopes the 2PL already has -- runs from %.4f to %.4f and is ",
+             "positive on %d of %d tables. So the 3PL's advantage over Rasch ",
+             "is not purely the slopes: the floor earns its own keep ",
+             "everywhere here, at %.0f-%.0f%% of the total 3PL-over-Rasch ",
+             "margin. And because the Mixture is Rasch-engaged ",
+             "(its engaged class has slope fixed at 1), comparing it against ",
+             "the 3PL, the 1PL-AG or the 2PL folds two questions -- does ",
+             "letting discrimination vary help, and does modeling guessing ",
+             "help -- into one number.\n"),
       min(w$imv23, na.rm = TRUE), max(w$imv23, na.rm = TRUE),
-      nrow(pos23), sum(!is.na(w$imv23))))
+      nrow(pos23), sum(!is.na(w$imv23)),
+      # share of the 3PL's margin over Rasch that survives conditioning on
+      # the 2PL, i.e. how much of it is floor rather than slopes
+      100 * min(w$imv23 / w$`3PL`, na.rm = TRUE),
+      100 * max(w$imv23 / w$`3PL`, na.rm = TRUE)))
   }
 
   cat(sprintf(
@@ -1081,6 +1198,26 @@ if (gsweep_ok && nrow(gsweep_spread) > 0) {
   text for these tables; the value comes from documented exam structure, not
   from counting options in the data itself. If that assumption is wrong for
   any particular year/subject, every ENEM result here inherits the error.
+- **The scored-absence screen removes a large, non-random block, and the
+  surviving samples are range-restricted.** On five of the eleven tables the
+  screen drops roughly 45% of drawn candidates (see [Screening scored
+  absences](#screening-scored-absences)). Those candidates are not a random
+  subset -- they are whoever did not sit the section -- so the screened
+  sample is not a clean random draw from the original population, and the
+  post-screen latent SDs (0.4-0.7 on those tables) are a different estimand
+  from what the same tables would yield if absence had been coded missing
+  rather than wrong. The screen makes the guessing models estimable; it does
+  not reconstruct the data the exam would have produced. A cleaner fix lives
+  upstream, in how these tables encode a section a candidate never took.
+- **`enem_2019_1mil_lc` has a separate anomaly the screen does not
+  address.** It carries no zero block (0.0% of candidates score zero), yet
+  its median raw score is 8 against a chance floor of 10, and about a third
+  of candidates fall below that floor -- scores compressed *below* what
+  guessing alone would produce, without the absence signature. Its estimated
+  latent SD is correspondingly tiny. Whether that reflects the elective
+  language blocks, some other coding issue, or a genuinely unusual test form
+  is unresolved, and results for that table should be read with that
+  question open.
 - **1PL-AG's $\gamma$ (and, to a lesser extent, $\alpha$) can be noisy.**
   Simulation validation recovered $\beta$ well but $\gamma$ poorly at
   moderate sample sizes -- consistent with @sanmartin2006's own real-data

@@ -71,6 +71,11 @@ sweep_one <- function(i) {
   }
   if (is.null(resp)) return(NULL)
 
+  # Same scored-absence and zero-variance screens the main run applies, in the
+  # same order, so the sweep is fit to exactly the sample the results table is.
+  resp <- screen_scored_absences(resp, m)$resp
+  if (nrow(resp) < 200) return(NULL)
+
   # Same zero-variance screen the main run applies, for the same reason.
   item_p <- colMeans(resp, na.rm = TRUE)
   degenerate <- is.na(item_p) | item_p %in% c(0, 1)

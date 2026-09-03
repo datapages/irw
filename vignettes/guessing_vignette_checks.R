@@ -167,3 +167,55 @@ cat(sprintf("(b) mean(b_pur) - mean(b_base) = %+.4f; refit prior mu=%+.3f sd=%.3
 cat(sprintf("    IMV vs Rasch: as-is %+.5f, relinked %+.5f\n",
             compute_imv(p_plugin, predict_purified_rasch(pur, Ytr, quad = QUAD)[ho$mask_idx], y),
             compute_imv(p_plugin, pred_with_prior(pur$b, Ytr, o$par[1], exp(o$par[2]))[ho$mask_idx], y)))
+
+
+# --- 5. scored absence: the artifact every check above is blind to ----------
+# Sections 1-4 simulate response data and ask whether the estimators recover
+# what was simulated. They all pass, and they cannot see the defect that
+# actually drove this page's original conclusions, because a simulator never
+# produces it: a block of candidates who did not sit the section and were
+# scored 0 on every item rather than left missing.
+#
+# What it does to the fits is not subtle, and it is misleading in two
+# directions at once -- the latent SD inflates, and every guessing floor
+# collapses to zero, because a floor model cannot fit observed zeros where it
+# predicts expit(gamma). Read separately those look like two findings about
+# guessing. They are one data-coding artifact.
+#
+# The screen in guessing_compute.R cuts candidates below the Binomial(J, 1/m)
+# lower tail. The last row below is the same contaminated data after that cut.
+
+cat("\n== scored absence, and what the screen recovers ==\n")
+N <- 3000; J <- 45; G <- 0.2
+b_true <- seq(-2, 2, length.out = J)
+set.seed(20260722)
+
+# clean data with a real guessing floor at 1/m
+clean <- sim_table(N, J, b_true, pi_eng = 1, sd_theta = 1)
+clean[] <- lapply(clean, function(col) {
+  guessed <- runif(length(col)) < G
+  ifelse(col == 1 | guessed, 1, 0)
+})
+
+absent <- clean
+n_abs <- round(0.45 * N)                       # matches the ENEM 2013/2014 rate
+absent[seq_len(n_abs), ] <- 0                  # sat out, scored wrong
+
+row_line <- function(lbl, Y) {
+  Ym <- as.matrix(Y)
+  fR <- mirt(as.data.frame(Ym), 1, itemtype = "Rasch", verbose = FALSE,
+             technical = list(NCYCLES = 2000))
+  ag <- fit_1pl_ag(Ym, quad = QUAD)
+  cat(sprintf(" %-22s N=%4d  sd_rasch=%.2f  max expit(gamma)=%.2e  alpha_id=%s\n",
+              lbl, nrow(Ym), sqrt(coef(fR, simplify = TRUE)$cov[1, 1]),
+              ag$max_guess_floor, ag$alpha_identified))
+}
+
+row_line("clean", clean)
+row_line("45% scored absent", absent)
+
+n_ans <- rowSums(!is.na(absent)); sc <- rowSums(absent, na.rm = TRUE)
+keep <- !(n_ans > 0 & pbinom(sc, n_ans, G) < 1e-3)
+row_line("screened", absent[keep, , drop = FALSE])
+cat(sprintf(" (screen removed %d of %d candidates; %d were planted)\n",
+            sum(!keep), N, n_abs))

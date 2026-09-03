@@ -183,6 +183,37 @@ fit_one_table <- function(table_name, m, m_verified) {
   }
   if (is.null(resp)) return(NULL)
 
+  # Drop candidates whose score is impossible under pure guessing. On a
+  # J-item, m-option test, a candidate who guesses every item scores about
+  # J/m; scoring 0 on 45 answered items when m = 5 has probability ~4e-5, so
+  # a block of such candidates is not a lower tail of ability, it is absence
+  # recorded as a wrong answer. On the five ENEM 2013/2014 tables roughly 45%
+  # of the 3,000-person draw scores exactly 0 with every item non-missing,
+  # against ~0% on the 2019 and 2024 tables.
+  #
+  # This is the same coding artifact as the elective-block screen below --
+  # a sat-out section scored 0 rather than left missing -- but at the
+  # candidate level rather than the item level. Left in, it inflates the
+  # estimated latent SD to 2.2-2.9 and drives every item's guessing parameter
+  # to the no-guessing boundary, because a floor model cannot fit observed
+  # zeros where it predicts expit(gamma). Screened out, SD(theta) falls to
+  # 0.4-0.7 and the implied floors return to ~1/m, which is what a
+  # multiple-choice floor should look like.
+  #
+  # The cut is the exact lower tail rather than a raw-score threshold, so it
+  # adapts to tables with different J, m, and per-candidate missingness.
+  scr <- screen_scored_absences(resp, m)
+  n_persons_screened <- scr$n_screened
+  if (n_persons_screened > 0) {
+    message("    screening ", n_persons_screened, " candidate(s) below the ",
+            "guessing lower tail (", round(100 * scr$frac_screened, 1), "%)")
+    resp <- scr$resp
+  }
+  if (nrow(resp) < 200) {
+    message("    fewer than 200 candidates after screening; skipping table")
+    return(NULL)
+  }
+
   # Drop items with no observed variance. mirt cannot estimate a difficulty
   # for an item everyone gets right or everyone gets wrong, so a single such
   # item fails the Rasch fit and takes the whole table with it.
@@ -286,6 +317,8 @@ fit_one_table <- function(table_name, m, m_verified) {
     table = table_name, m = m, m_verified = m_verified,
     n_items = ni, n_participants = np, n_heldout = nrow(ho$mask_idx),
     n_items_dropped = n_dropped,
+    n_persons_screened = n_persons_screened,
+    frac_persons_screened = n_persons_screened / (n_persons_screened + nrow(resp)),
     true_vals = ho$true_vals,
     preds = preds,
     converged = converged,
@@ -369,6 +402,8 @@ summarize_one <- function(r) {
     table = r$table, m = r$m, m_verified = r$m_verified,
     n_items = r$n_items, n_participants = r$n_participants, n_heldout = r$n_heldout,
     n_items_dropped = r$n_items_dropped %||% 0L,
+    n_persons_screened = r$n_persons_screened %||% 0L,
+    frac_persons_screened = r$frac_persons_screened %||% NA_real_,
     converged_rasch = r$converged$rasch, converged_2pl = r$converged$pl2,
     converged_1plg = r$converged$plg, converged_3pl = r$converged$pl3,
     converged_ag = r$converged$ag, converged_mix = r$converged$mix,

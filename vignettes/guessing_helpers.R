@@ -508,3 +508,32 @@ fit_1plg <- function(train_df, m, em_cycles = EM_CYCLES) {
   mirt(train_df, 1, itemtype = "3PL", pars = base, verbose = FALSE,
        technical = list(NCYCLES = em_cycles))
 }
+
+
+# Scored-absence screen -------------------------------------------------------
+# On a J-item, m-option test a candidate who guesses everything scores about
+# J/m; scoring 0 on 45 answered items at m = 5 has probability ~4e-5. A block
+# of candidates at or below that level is absence recorded as a wrong answer,
+# not a lower tail of ability -- the candidate-level twin of the elective-block
+# artifact the item-level zero-variance screen catches.
+#
+# Left in, such a block inflates the estimated latent SD and forces every
+# guessing floor to zero (a floor model cannot fit observed zeros where it
+# predicts expit(gamma)), which reads as two separate findings about guessing
+# when it is one coding artifact. See the "Screening scored absences" section
+# of guessing.qmd.
+#
+# The cut is a tail probability rather than a raw-score threshold so it adapts
+# to differing J, m, and per-candidate missingness. Shared by
+# guessing_compute.R and guessing_gsweep_compute.R so the two cannot drift.
+ABSENCE_TAIL_P <- 1e-3
+
+screen_scored_absences <- function(resp, m, tail_p = ABSENCE_TAIL_P) {
+  mat <- as.matrix(resp)
+  n_answered <- rowSums(!is.na(mat))
+  raw_score  <- rowSums(mat, na.rm = TRUE)
+  below <- n_answered > 0 & pbinom(raw_score, n_answered, 1 / m) < tail_p
+  list(resp = resp[!below, , drop = FALSE],
+       n_screened = sum(below),
+       frac_screened = mean(below))
+}
