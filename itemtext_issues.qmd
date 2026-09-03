@@ -663,6 +663,12 @@ issues <- yaml.load(r"---(
 - table: abukhalaf_2025_disaster_prep
   issue: |-
     **`resp` is a proportion, not an ordinal level**: the source study measured its rising-scale answers and then converted them to percentages, so the 11 values run 0 to 1 in 0.1 steps and mean 0% to 100% likelihood rather than 1st through 11th response option. `option_text` is empty for every row by design -- the source labels no individual point on the slider
+- table: mgkt
+  issue: |-
+    The correct answers were not published with this dataset: the codebook gives each question's text and its ten alternatives but never states which five are correct. The key shipped in correct_response was derived by this project from the response data, not taken from the source. Each MGKT question showed 10 alternatives of which exactly 5 were correct, and respondents checked as many as they knew; the IRW resp is therefore not a chosen option but a per-item score, the number of correct alternatives checked minus the number of incorrect ones (-5 to 5), which is why option_text is blank. correct_response lists the five correct alternatives for each question as text, not as resp values. Note that the administered instructions shipped here state a -1.25 penalty per wrong answer (the feedback scoring on the test page), while the score stored in the IRW table applies a penalty of exactly 1 per wrong answer; this was confirmed against the released raw data for all 32 items. The five incorrect decoy alternatives per question are not shipped here but are listed in the source codebook.
+- table: psychoneurotic_inventory
+  issue: |-
+    The instructions shipped with this table are the study site's own wording and state that the inventory has 112 yes/no questions; the deposit and the response data both contain 116 items (1-116).
 )---")
 
 issues <- issues[order(vapply(issues, \(x) x$table, character(1)))]
