@@ -2,10 +2,32 @@
 title: "Data"
 ---
 
-This page has two tools:
+{{< include components/_dataset_jsonld.qmd >}}
+
+```{r}
+#| label: pilot-table-pages
+#| echo: false
+#| message: false
+# Which tables have a landing page under /tables/ (ben-domingue/irw#1706).
+# Read from the emitter's own list so the two cannot drift: when the pilot grows,
+# this grows with it, and neither the prose count below nor the OJS link logic
+# needs touching. The emitter runs post-render and cannot tell this chunk
+# anything, so the shared file is the contract.
+pilot_tables_chr <- local({
+  f <- file.path("landing", "pilot_tables.txt")
+  if (!file.exists(f)) return(character(0))
+  ln <- trimws(sub("#.*$", "", readLines(f, warn = FALSE)))
+  sort(unique(tolower(ln[nzchar(ln)])))
+})
+n_pilot <- length(pilot_tables_chr)
+ojs_define(pilot_tables = pilot_tables_chr)
+```
+
+This page has two tools, and individual tables have their own pages:
 
 - [**Explore all datasets**](#explore-all-datasets) — filter and browse across all IRW datasets by size, response type, and other properties. As you filter, this tool builds a ready-to-run R code snippet that reproduces your selection with the `irw` package.
 - [**Look up a single dataset**](#look-up-a-single-dataset) — search for one dataset by name and generate its citation (reference and BibTeX) for use in your own work.
+- [**Browse table pages**](/tables/) — every table has its own page, giving a description of what it measures and where it came from, its size and shape (responses, respondents, items and response categories), the tags that classify it, item text statistics where they exist, the columns it contains, and ready-to-run R and Python code to fetch it. Each page names the IRW version it describes, so it can be cited. **This is a pilot: only `r n_pilot` tables have a page so far**, chosen to test the page generator against awkward cases rather than because they are the most useful tables. Use *Explore all datasets* above to search the whole warehouse.
 
 ---
 
@@ -403,6 +425,19 @@ viewof row = Inputs.table(dsf, {
 ## {{< bi info-circle class=header-icon >}}Information on selected dataset
 
 ```{ojs}
+// Tables that have a landing page. ojs_define collapses a length-1 list to a
+// bare string and gives an empty vector as undefined, so both are normalised.
+has_page = new Set(
+  (typeof pilot_tables === "undefined" || pilot_tables === null
+     ? []
+     : (Array.isArray(pilot_tables) ? pilot_tables : [pilot_tables])
+  ).map(s => String(s).toLowerCase())
+)
+
+table_page_href = (name) => `/tables/${String(name).toLowerCase()}/`
+```
+
+```{ojs}
 // specify which variables to show in info box
 info = ({
   "table":       { label: "Dataset"        },
@@ -421,6 +456,9 @@ pullout = (head, text) => html.fragment`<p><b>${head}</b>: ${/Link/.test(head) ?
 placeholder = "No table selected"
 row ? html`<div class="pullout">
   ${Object.entries(info).map(([field, properties]) => pullout(properties.label, row[field]))}
+  ${has_page.has(String(row.table).toLowerCase())
+      ? html.fragment`<p><b>Citable page</b>: <a href="${table_page_href(row.table)}">${table_page_href(row.table)}</a> &mdash; a permanent page for this table, naming the IRW version it describes.</p>`
+      : html.fragment``}
 </div>` : html`<div class="pullout"><em>${placeholder}</em></div>`
 ```
 :::
@@ -611,6 +649,8 @@ viewof license_vals = tag_checkbox("license")
 {{< include _load-data.qmd >}}
 
 Below we show metadata for the entire IRW, an example dataset, and illustrations of how to access the data programmatically. You can also explore the data [here](https://redivis.com/datasets/as2e-cv7jb41fd/tables).
+
+Individual tables also have their own citable pages, listed at [IRW table pages](/tables/) and linked from the panel above where one exists.
 
 ### Metadata
 
