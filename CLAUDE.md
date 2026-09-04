@@ -29,6 +29,27 @@ renv::restore()   # Install all pinned packages from renv.lock
 
 Data is fetched live from **Redivis** using `REDIVIS_API_TOKEN` (required env var for data pages). Pages without Redivis calls render without it.
 
+Some vignettes execute **Python**, not just R. `quarto render` of the whole site
+will fail on `vignettes/irt_python.qmd` with `ModuleNotFoundError: No module
+named 'mirt'` unless the Python that Quarto resolves has them installed:
+
+```bash
+pip install mirt girth scipy matplotlib pandas jupyter
+pip install "git+https://github.com/itemresponsewarehouse/Python-pkg.git"
+```
+
+That is the same list `.github/workflows/quarto_publish.yaml` installs, so CI
+always has it and a fresh maintainer machine usually does not. **A full local
+render is therefore not a reliable pre-flight check for CI** — it can fail for a
+reason CI does not have, and a local pass is no guarantee either. Rendering a
+single page (`quarto render data.qmd`) is unaffected and is usually what you
+want while iterating.
+
+Note also that `_quarto.yml` declares a `post-render` step
+(`landing/emit_landing_pages.R`, which generates the per-table pages under
+`_site/tables/`). Post-render runs only after a **successful** render, so a
+broken vignette silently means no landing pages are emitted.
+
 ## Architecture
 
 ### Content
