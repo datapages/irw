@@ -2,9 +2,17 @@ project:
   type: website
   preview:
     port: 4200
+  # Per-table landing pages (ben-domingue/irw#1706, pilot). Runs after Quarto has
+  # written _site/, and emits into _site/tables/. Skips itself with exit 0 when
+  # REDIVIS_API_TOKEN is unset, so a credential-free local preview still renders.
+  post-render:
+    - Rscript landing/emit_landing_pages.R
 
 website:
   title: "Item Response Warehouse"
+  # Required for Quarto to emit _site/sitemap.xml at all. The landing-page
+  # emitter appends its URLs to that same file rather than publishing a second one.
+  site-url: https://itemresponsewarehouse.org
   google-analytics: G-NM0Y0TP4RY
   navbar:
     search: true
