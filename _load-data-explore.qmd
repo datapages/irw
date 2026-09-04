@@ -12,8 +12,13 @@ library(glue)
 library(jsonlite)
 library(redivis)
 
+## Tables are addressed by NAME, never as `name:referenceId`. A reference id
+## belongs to one version's table, and the release cut on 2026-09-04 minted a
+## new id for all thirteen tables in irw_meta at once -- every pinned id in
+## this repo stopped resolving that morning. Names survive a release; they
+## break only on a rename, which is the rarer event.
 irw_meta <- redivis$user("datapages")$dataset("irw_meta:bdxt")
-metadata_table <- irw_meta$table("metadata:h5gs")$to_tibble()
+metadata_table <- irw_meta$table("metadata")$to_tibble()
 
 metadata <- metadata_table |>
   mutate(table = str_to_lower(table)) |>
@@ -40,14 +45,14 @@ var_vals <- metadata |>
 itemtext_meta <- irw_meta$table("itemtext_metadata")$to_tibble()
 itemtext_tables <- itemtext_meta |> pull(table) |> str_to_lower() |> unique()
 
-biblio <- irw_meta$table("biblio:qahg")$to_tibble()
+biblio <- irw_meta$table("biblio")$to_tibble()
 bib_data <- biblio |>
   mutate(table = str_to_lower(table)) |>
   # select(table, license = `Derived_License`)
   select(table, license = `Derived_License`, data_url = URL__for_data_,
          description = Description, reference = Reference_x, doi = DOI__for_paper_)
 
-tag_table <- irw_meta$table("tags:7nkh")$to_tibble()
+tag_table <- irw_meta$table("tags")$to_tibble()
 
 na_vals <- c("no access to the osf page", "non-verbal task",
              "I can't find the description of this dataset",
@@ -130,7 +135,7 @@ urls <- ds |>
 # collections are derived from metadata.csv, so they are meaningful even when
 # qualitative filtering is off. That is why the facet below lives in the
 # always-active variables panel rather than the qualitative one.
-collection_members <- irw_meta$table("collection_members:qses")$to_tibble()
+collection_members <- irw_meta$table("collection_members")$to_tibble()
 collections_by_table <- collection_members |>
   mutate(table = str_to_lower(table)) |>
   group_by(table) |>
@@ -145,7 +150,7 @@ add_collections <- function(df) {
 # Options for the multiselect, commonest first, each labelled with its size and
 # -- where it matters -- the fact that it is not exhaustive. This is the only
 # place a site user meets the coverage caveat.
-collections_reg <- irw_meta$table("collections:7ae4")$to_tibble()
+collections_reg <- irw_meta$table("collections")$to_tibble()
 collection_opts <- collections_reg |>
   arrange(desc(n_tables)) |>
   mutate(opt = paste0(collection, "  (", n_tables,
