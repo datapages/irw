@@ -80,7 +80,15 @@ TABLES <- tribble(
   "enem_2013_1mil_cn",   5, FALSE,
   "enem_2014_1mil_ch",   5, FALSE,
   "enem_2019_1mil_ch",   5, FALSE,
-  "enem_2019_1mil_lc",   5, FALSE,
+  # enem_2019_1mil_lc is deliberately absent. It fails two model-free
+  # answer-key checks badly enough that no guessing model can be evaluated on
+  # it: one of its two elective language blocks is scored 0 for all ~1,500
+  # candidates who sat it (0 correct of 7,520 responses), and of the items
+  # that survive the zero-variance screen, 73% correlate below 0.05 with the
+  # total of the others, against a median item-rest correlation of 0.09-0.49
+  # on every other table here. It stays in guessing_key_diagnostics.R, which
+  # is where the evidence for excluding it lives -- dropping it from the
+  # diagnostics too would erase the reason it is gone.
   "enem_2024_1mil_ch",   5, FALSE,
   "gilbert_meta_1",      4, TRUE,
   "gilbert_meta_102",    5, TRUE,
@@ -331,7 +339,20 @@ fit_one_table <- function(table_name, m, m_verified) {
     # which leaves the likelihood flat in alpha (see fit_1pl_ag). alpha_hat and
     # lr_p are meaningless in that case and must not be reported as a test.
     alpha_identified = if (!is.null(fit_ag)) fit_ag$alpha_identified else NA,
+    # The implied floor is reported as a median over items, not a maximum: the
+    # maximum is an order statistic over J items and runs high, by a factor of
+    # 3 at the latent spreads these tables show after screening. The full
+    # vector is kept so the page can show the profile. max_guess_floor stays
+    # because the identification check is about whether ANY floor survives.
+    guess_floor = if (!is.null(fit_ag)) fit_ag$guess_floor else NULL,
+    med_guess_floor = if (!is.null(fit_ag)) fit_ag$med_guess_floor else NA_real_,
+    q1_guess_floor = if (!is.null(fit_ag)) fit_ag$q1_guess_floor else NA_real_,
+    q3_guess_floor = if (!is.null(fit_ag)) fit_ag$q3_guess_floor else NA_real_,
     max_guess_floor = if (!is.null(fit_ag)) fit_ag$max_guess_floor else NA_real_,
+    # optim()'s raw convergence code for the two 1PL-AG stages, so the page can
+    # say whether a FALSE in `converged` means "hit maxit" or something worse.
+    conv_code_ag = if (!is.null(fit_ag)) fit_ag$conv_code_ag else NA_integer_,
+    conv_code_g = if (!is.null(fit_ag)) fit_ag$conv_code_g else NA_integer_,
     frac_flagged = if (!is.null(fit_pur)) fit_pur$frac_flagged else NA_real_,
     # estimated latent SDs: every model on the page now estimates the theta
     # variance, matching mirt's itemtype = "Rasch" baseline (see
@@ -410,7 +431,12 @@ summarize_one <- function(r) {
     pi_hat = r$pi_hat, alpha_hat = r$alpha_hat, se_alpha = r$se_alpha,
     lr_stat = r$lr_stat, lr_p = r$lr_p,
     alpha_identified = r$alpha_identified %||% NA,
+    med_guess_floor = r$med_guess_floor %||% NA_real_,
+    q1_guess_floor = r$q1_guess_floor %||% NA_real_,
+    q3_guess_floor = r$q3_guess_floor %||% NA_real_,
     max_guess_floor = r$max_guess_floor %||% NA_real_,
+    conv_code_ag = r$conv_code_ag %||% NA_integer_,
+    conv_code_g = r$conv_code_g %||% NA_integer_,
     frac_flagged = r$frac_flagged,
     sd_rasch = r$sd_rasch %||% NA_real_, sd_mix = r$sd_mix %||% NA_real_,
     sd_ag = r$sd_ag %||% NA_real_, sd_pur = r$sd_pur %||% NA_real_,

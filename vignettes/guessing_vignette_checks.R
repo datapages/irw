@@ -206,9 +206,10 @@ row_line <- function(lbl, Y) {
   fR <- mirt(as.data.frame(Ym), 1, itemtype = "Rasch", verbose = FALSE,
              technical = list(NCYCLES = 2000))
   ag <- fit_1pl_ag(Ym, quad = QUAD)
-  cat(sprintf(" %-22s N=%4d  sd_rasch=%.2f  max expit(gamma)=%.2e  alpha_id=%s\n",
+  cat(sprintf(paste0(" %-22s N=%4d  sd_rasch=%.2f  median expit(gamma)=%.2e",
+                     "  max expit(gamma)=%.2e  alpha_id=%s\n"),
               lbl, nrow(Ym), sqrt(coef(fR, simplify = TRUE)$cov[1, 1]),
-              ag$max_guess_floor, ag$alpha_identified))
+              ag$med_guess_floor, ag$max_guess_floor, ag$alpha_identified))
 }
 
 row_line("clean", clean)

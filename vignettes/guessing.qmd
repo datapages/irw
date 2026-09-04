@@ -127,15 +127,29 @@ if (cache_ok) {
 #                            simulated data with b_true known.
 # guessing_gsweep_compute.R -- sensitivity of the 1PLg and the Mixture to the
 #                            assumed guessing level g.
+# guessing_key_diagnostics.R -- item difficulty against the chance floor and
+#                            item-total point-biserials, per table.
+# guessing_floor_calibration_compute.R -- what an estimated guessing floor of
+#                            1/m looks like at these N, J and latent spreads.
 sim_path    <- "guessingdata/guessing_sim_results.rds"
 gsweep_path <- "guessingdata/guessing_gsweep_results.rds"
+keydiag_path <- "guessingdata/guessing_key_diagnostics.rds"
+floorcal_path <- "guessingdata/guessing_floor_calibration.rds"
 sim_ok    <- file.exists(sim_path)
 gsweep_ok <- file.exists(gsweep_path)
+keydiag_ok <- file.exists(keydiag_path)
+floorcal_ok <- file.exists(floorcal_path)
 if (sim_ok) {
   .sim <- readRDS(sim_path); sim_summary <- .sim$summary; sim_settings <- .sim$settings
 }
 if (gsweep_ok) {
   .gsw <- readRDS(gsweep_path); gsweep_df <- .gsw$sweeps; gsweep_spread <- .gsw$spread
+}
+if (keydiag_ok) {
+  .kd <- readRDS(keydiag_path); keydiag_df <- .kd$diagnostics
+}
+if (floorcal_ok) {
+  .fc <- readRDS(floorcal_path); floorcal_df <- .fc$summary
 }
 ```
 
@@ -372,10 +386,14 @@ university-admissions exam) carries no item text in IRW, so its response
 options can't be verified from IRW data directly -- but ENEM's format is
 externally documented as a stable 5-option (A-E) multiple choice test across
 subjects and years. We use that documented value ($m=5$) for 8 ENEM
-tables spanning 2013, 2014, 2019, and 2024 and all four subject areas
-(`mt`=math, `lc`=languages, `ch`=human sciences, `cn`=natural sciences),
-restricted to the density=1 table/years (every respondent answered the
-identical fixed item set, no rotated-booklet missingness). Each ENEM table
+candidate tables spanning 2013, 2014, 2019, and 2024 and all four subject
+areas (`mt`=math, `lc`=languages, `ch`=human sciences, `cn`=natural
+sciences), restricted to the density=1 table/years (every respondent
+answered the identical fixed item set, no rotated-booklet missingness). One
+of the eight, `enem_2019_1mil_lc`, is excluded further down on
+answer-key grounds, leaving 7. Note that density=1 does not mean no
+missingness at all: both `lc` tables carry the elective English/Spanish
+block, which every candidate answers exactly half of. Each ENEM table
 has roughly a million respondents; we work with a fixed-seed random
 subsample of `r subsample_n` per table for compute tractability. **This is
 an assumed, not IRW-verified, value of $m$** -- flagged explicitly rather
@@ -450,17 +468,177 @@ the models say. On the five affected tables the estimated latent SD ran 2.2
 to 2.9 before screening and 0.4 to 0.7 after, and *every* item's guessing
 parameter was driven to the no-guessing boundary -- a floor model cannot fit
 observed zeros where it predicts $\mathrm{expit}(\gamma)$, so it sends
-$\gamma$ to $-\infty$. After screening, the implied floors return to
-roughly $1/m$, which is what a multiple-choice floor should look like. An
-earlier version of this page reported the unscreened fits and read the
-inflated spread and the vanishing floor as two separate findings about
-guessing; they were one artifact seen twice.
+$\gamma$ to $-\infty$. After screening, the floors are interior again on
+every table, so $\alpha$ is estimable everywhere. How *close to $1/m$* they
+are is a question the fits cannot answer on their own, and the section
+[below](#what-an-estimated-floor-of-1m-looks-like) says why. An earlier
+version of this page reported the unscreened fits and read the inflated
+spread and the vanishing floor as two separate findings about guessing; they
+were one artifact seen twice.
 
 Because the screen removes a large, non-random block from five tables, the
 surviving samples are range-restricted relative to the full candidate pool,
 and the latent SDs below are not comparable to what the same tables would
 give if the absent candidates had been recorded as missing rather than
 wrong. See [Limitations](#limitations).
+
+### Screening the answer key
+
+The scored-absence screen removes candidates. It cannot tell you whether the
+responses that remain were scored against the right key, and one of the
+candidate tables fails that prior question badly enough that it is excluded
+from the model comparisons below. This section is where that decision is
+made, and the table it rests on covers every candidate table, including the
+excluded one.
+
+Two statistics say so, neither of them a model fit. The first is item
+difficulty against the chance floor: on an $m$-option item scored correctly,
+$p_j < 1/m$ should be uncommon, because a candidate who knows nothing still
+guesses right $1/m$ of the time. The second, and the sharper one, is the
+item-total point-biserial — each item's correlation with the total of the
+*other* items. A correctly keyed item correlates positively with the rest of
+the test whatever its difficulty; an item keyed to the wrong option
+correlates with it near zero.
+
+```{r}
+#| label: key-diagnostics-table
+if (keydiag_ok) {
+  keydiag_df |>
+    mutate(
+      p_lbl = sprintf("%.2f", p_med),
+      below_lbl = sprintf("%.0f%%", 100 * frac_p_below_chance),
+      rpb_lbl = sprintf("%.3f", rpb_med),
+      dead_lbl = sprintf("%.0f%%", 100 * frac_rpb_below_05)
+    ) |>
+    select(table, m, n_items_analysed, p_lbl, below_lbl, rpb_lbl, dead_lbl) |>
+    knitr::kable(
+      align = "lrrrrrr",
+      col.names = c("Table", "m", "J analysed", "median p", "% items p < 1/m",
+                    "median item-rest r", "% items r < 0.05"),
+      caption = paste0("Answer-key diagnostics, on the post-screen analysis ",
+                       "sample. Neither column involves fitting a model. ",
+                       "Items with no observed variance are excluded from ",
+                       "both, since they carry no correlation at all."))
+}
+```
+
+```{r}
+#| label: key-diagnostics-note
+#| results: asis
+if (keydiag_ok && nrow(keydiag_df) > 1) {
+  worst <- keydiag_df |> slice_min(rpb_med, n = 1)
+  rest  <- keydiag_df |> filter(table != worst$table)
+  cat(sprintf(
+    paste0("`%s` is the outlier on both, and the gap is not a matter of ",
+           "degree. Its median item-rest correlation is %.3f, against %.2f ",
+           "to %.2f on the other %d tables, and %.0f%% of its items ",
+           "correlate below 0.05 with the rest of the test, against at most ",
+           "%.0f%% anywhere else. %.0f%% of its items sit below the chance ",
+           "floor of 1/%d.\n\nThe elective blocks are part of the story and ",
+           "not all of it. ENEM's language paper offers English or Spanish, ",
+           "five items each, and IRW carries the block a candidate did not ",
+           "choose as missing -- correctly, and every candidate in the draw ",
+           "has exactly five missing responses among those ten items. But ",
+           "one of the two blocks came back scored *zero for every one of ",
+           "the %s candidates who sat it*: %d items with no observed ",
+           "variance at all, which the item screen drops before any model is ",
+           "fit. That is a scoring failure, not %s people getting five items ",
+           "wrong. The surviving block runs easy (p = %.2f to %.2f) against ",
+           "a median of %.2f on the common items, ",
+           "which is the opposite direction, and the %d items left after the ",
+           "drop still show the correlation collapse above. So the broken ",
+           "block is visible, removable, and not sufficient: something is ",
+           "wrong with this table's scoring beyond it.\n\n**`%s` is ",
+           "therefore excluded from every model comparison on this page.** A ",
+           "test whose items do not correlate with each other is not a test ",
+           "on which a guessing correction can be evaluated, and a number ",
+           "computed on it would carry the scoring failure rather than any ",
+           "fact about guessing. It stays in the table above, which is the ",
+           "evidence for excluding it -- dropping it from the diagnostics as ",
+           "well would leave a reader unable to see why the model results ",
+           "cover one table fewer than the candidate set.\n\n"),
+    worst$table, worst$rpb_med, min(rest$rpb_med), max(rest$rpb_med),
+    nrow(rest), 100 * worst$frac_rpb_below_05,
+    100 * max(rest$frac_rpb_below_05), 100 * worst$frac_p_below_chance,
+    worst$m,
+    format(worst$n_sat_degenerate_elective, big.mark = ","),
+    worst$n_items_degenerate,
+    format(worst$n_sat_degenerate_elective, big.mark = ","),
+    worst$elective_ok_p_min, worst$elective_ok_p_max,
+    worst$p_med, worst$n_items_analysed,
+    worst$table))
+}
+```
+
+### What an estimated floor of $1/m$ looks like
+
+The results table below reports the guessing floor the 1PL-G stage recovers,
+$\mathrm{expit}(\hat\gamma_j)$, summarised over items. Reading that column
+requires knowing what a *correct* floor of $1/m$ looks like once it has been
+estimated, and the answer is: not much like $1/m$.
+
+Two things push it around. The summary over items matters — the maximum over
+$J$ items is an extreme order statistic and is biased upward by
+construction, which is why this page reports the median. And the floor is
+entangled with the latent variance: a guessing floor and a small ability
+spread both flatten the lower end of the item response function, so the two
+parameters lean on each other, and the narrower the spread the harder they
+are to separate. The post-screen ENEM tables sit at
+$\mathrm{SD}(\theta) = 0.4$ to $0.7$, which is the worst part of that range.
+
+`guessing_floor_calibration_compute.R` generates from the 1PL-G with a floor
+of exactly $1/m = 0.20$ on *every* item, at the $N$ and $J$ of these tables,
+and fits it with the same estimator the page uses:
+
+```{r}
+#| label: floor-calibration-table
+if (floorcal_ok) {
+  floorcal_df |>
+    mutate(
+      med_lbl = sprintf("%.3f (%.3f-%.3f)", floor_med, floor_med_lo, floor_med_hi),
+      max_lbl = sprintf("%.3f (%.3f-%.3f)", floor_max, floor_max_lo, floor_max_hi),
+      sd_lbl = sprintf("%.2f", sd_hat)
+    ) |>
+    select(sd_theta, true_floor, med_lbl, max_lbl, sd_lbl) |>
+    knitr::kable(
+      align = "rrrrr",
+      col.names = c("True SD(θ)", "True floor", "Recovered median floor",
+                    "Recovered max floor", "Recovered SD(θ)"),
+      caption = sprintf(paste0("Recovery of a known guessing floor of 1/m = ",
+                               "%.2f on every item, N = %d, J = %d, %d ",
+                               "replications per row (range across ",
+                               "replications in parentheses)."),
+                        .fc$true_floor, .fc$n_sim, .fc$j_sim, .fc$n_reps))
+}
+```
+
+```{r}
+#| label: floor-calibration-note
+#| results: asis
+if (floorcal_ok && cache_ok && "med_guess_floor" %in% names(summary_df)) {
+  narrow <- floorcal_df |> slice_min(sd_theta, n = 1)
+  wide   <- floorcal_df |> slice_max(sd_theta, n = 1)
+  cat(sprintf(
+    paste0("At a true spread of %.1f a true floor of %.2f comes back with a ",
+           "median of %.2f and a maximum of %.2f, and the estimated spread ",
+           "itself runs high (%.2f against %.1f) -- the floor and the ",
+           "variance absorb each other's bias. By %.1f the median is %.2f ",
+           "and the maximum %.2f. Two consequences for the column below. ",
+           "First, the maximum is not evidence about the level of the floor ",
+           "in this regime, only about whether *any* floor survives, which ",
+           "is the question the identification check needs it for. Second, ",
+           "the observed medians (%.2f to %.2f across the tables here) are ",
+           "consistent with a true floor at 1/m, but they cannot establish ",
+           "it: at these spreads the estimator would return numbers in that ",
+           "range from a floor of exactly 1/m, and the page claims no ",
+           "more than that.\n\n"),
+    narrow$sd_theta, narrow$true_floor, narrow$floor_med, narrow$floor_max,
+    narrow$sd_hat, narrow$sd_theta,
+    wide$sd_theta, wide$floor_med, wide$floor_max,
+    min(summary_df$med_guess_floor, na.rm = TRUE),
+    max(summary_df$med_guess_floor, na.rm = TRUE)))
+}
+```
 
 ### Models fit
 
@@ -555,10 +733,21 @@ if (cache_ok && nrow(summary_df) > 0) {
       # Print the guessing floor the 1PL-G stage actually found, next to the
       # alpha it feeds. Where alpha reads "not identified" this column is the
       # reason and shows it directly: alpha enters the likelihood only through
-      # the guessing branch, so a largest-floor of 1e-13 means there is no
+      # the guessing branch, so a floor at machine zero means there is no
       # branch left for it to act on. Without it a reader has to take the
       # "not identified" label on trust.
-      floor_lbl = if ("max_guess_floor" %in% names(summary_df)) {
+      #
+      # The median over items, not the maximum an earlier version printed: the
+      # maximum is an extreme order statistic over J items and runs high by a
+      # factor of 2-3 at these latent spreads (see the calibration above), so
+      # it cannot carry a claim about the level of the floor. The IQR comes
+      # with it because the item-to-item spread is itself large.
+      floor_lbl = if ("med_guess_floor" %in% names(summary_df)) {
+        ifelse(is.na(med_guess_floor), NA_character_,
+               ifelse(med_guess_floor < 1e-4, sprintf("%.0e", med_guess_floor),
+                      sprintf("%.2f (%.2f-%.2f)", med_guess_floor,
+                              q1_guess_floor, q3_guess_floor)))
+      } else if ("max_guess_floor" %in% names(summary_df)) {
         ifelse(is.na(max_guess_floor), NA_character_,
                ifelse(max_guess_floor < 1e-4, sprintf("%.0e", max_guess_floor),
                       sprintf("%.3f", max_guess_floor)))
@@ -572,18 +761,21 @@ if (cache_ok && nrow(summary_df) > 0) {
     knitr::kable(
       align = "lrrrrrrrrl",
       col.names = c("Table", "m", "N", "J", "N held-out", "SD(θ)",
-                    "π̂ (Mixture)", "max expit(γ̂) (1PL-G)",
+                    "π̂ (Mixture)", "median expit(γ̂) (1PL-G), IQR",
                     "α̂ (1PL-AG, p)", "Frac. flagged (Purified)"),
       caption = paste0("Per-table model-internal diagnostics. SD(θ) is the ",
                        "estimated latent standard deviation from the Rasch ",
                        "baseline; every model on the page estimates it, so ",
                        "none of these comparisons is confounded by a prior ",
-                       "held fixed at 1. max expit(γ̂) is the largest implied ",
-                       "guessing floor over all items from the 1PL-G stage: ",
-                       "on a well-behaved m-option table it should sit near ",
-                       "1/m, and a value at machine zero means the stage ",
-                       "found no floor anywhere, which is what leaves α ",
-                       "unidentified.")
+                       "held fixed at 1. expit(γ̂) is the implied guessing ",
+                       "floor from the 1PL-G stage, summarised as the median ",
+                       "over items with the interquartile range beside it. ",
+                       "It is not directly comparable to 1/m: at these ",
+                       "sample sizes and latent spreads a true floor of 1/m ",
+                       "is recovered high, by an amount the calibration ",
+                       "above quantifies. A value at machine zero means the ",
+                       "stage found no floor anywhere, which is what leaves ",
+                       "α unidentified.")
     )
 } else {
   cat("Results not yet computed -- run vignettes/guessing_compute.R.")
@@ -644,9 +836,13 @@ if (cache_ok && nrow(summary_df) > 0 &&
            "never sat, which the scored-absence screen now removes (see ",
            "[Screening scored absences](#screening-scored-absences)). Where ",
            "$\\hat\\alpha$ still reads \"not identified\" after that screen, ",
-           "the max expit($\\hat\\gamma$) column above is the place to look ",
+           "the expit($\\hat\\gamma$) column above is the place to look ",
            "first, and any remaining data-coding explanation should be ruled ",
-           "out before this is read as evidence about how examinees guess.\n\n"),
+           "out before this is read as evidence about how examinees guess. ",
+           "Note that the statistic quoted here is the largest floor over ",
+           "items, not the median that column reports: this question is ",
+           "whether any guessing branch survives anywhere, and for that an ",
+           "extreme is the right summary.\n\n"),
     length(ni_tables), if (length(ni_tables) > 1) "s" else "",
     paste0("`", ni_tables, "`", collapse = ", "),
     length(ni_tables), floor_max,
@@ -999,6 +1195,99 @@ if (cache_ok && nrow(summary_df) > 0) {
 }
 ```
 
+### Does the safety valve hold?
+
+The Mixture's central claim is not that it wins. It is that it costs nothing
+when there is nothing to correct: as $\hat\pi \to 1$ the guessing class
+empties out, the model collapses onto the Rasch baseline, and the analyst who
+fitted it anyway is no worse off. Every model on this page estimates the
+latent variance precisely so that this collapse is available to it (see
+[Models fit](#models-fit)) -- with the Rasch baseline estimating a variance
+the Mixture did not, the two would not be nested and the collapse could not
+happen however far $\hat\pi$ went.
+
+An earlier version of this page made that argument on simulated data and on
+`enem_2014_1mil_ch`, whose apparent collapse turned out to be the zero block.
+Here it is on the tables as they stand after the scored-absence screen.
+
+```{r}
+#| label: safety-valve-plot
+#| fig-height: 3.6
+#| fig-width: 7
+if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
+  sv <- imv_vs_rasch_df |>
+    filter(model == "Mixture") |>
+    left_join(summary_df |> select(table, pi_hat), by = "table") |>
+    filter(!is.na(imv), !is.na(pi_hat))
+
+  ggplot(sv, aes(pi_hat, imv)) +
+    geom_hline(yintercept = 0, linewidth = 0.4, color = "grey45") +
+    geom_smooth(method = "lm", se = FALSE, linewidth = 0.5,
+                color = model_colors[["Mixture"]], alpha = 0.6) +
+    geom_point(size = 2.4, color = model_colors[["Mixture"]]) +
+    # geom_text rather than ggrepel: the render environment is pinned by
+    # renv.lock and ggrepel is not in it.
+    geom_text(aes(label = table), size = 2.6, color = "grey30",
+              hjust = 0, nudge_x = 0.006, check_overlap = TRUE) +
+    scale_x_continuous(limits = c(NA, 1.03)) +
+    labs(x = expression(hat(pi) ~ "(engaged share, Mixture)"),
+         y = "IMV(Rasch, Mixture)",
+         caption = paste0("Each point is one table. The safety-valve claim ",
+                          "is that this trends to zero, from above, as the ",
+                          "engaged share approaches 1."))
+}
+```
+
+```{r}
+#| label: safety-valve-note
+#| results: asis
+if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
+  sv <- imv_vs_rasch_df |>
+    filter(model == "Mixture") |>
+    left_join(summary_df |> select(table, pi_hat), by = "table") |>
+    filter(!is.na(imv), !is.na(pi_hat))
+  hi <- sv |> slice_max(pi_hat, n = 1)
+  best <- sv |> slice_max(imv, n = 1)
+  lo <- sv |> slice_min(pi_hat, n = 1)
+  worst <- sv |> slice_min(imv, n = 1)
+  n_neg <- sum(sv$imv < 0)
+  cat(sprintf(
+    paste0("It holds, as far as %d tables and a single split can show ",
+           "it, though as a tendency rather than a clean law. The Mixture's ",
+           "gain over Rasch falls as the engaged share grows (r = %.2f ",
+           "across tables): its largest gain, %+.4f, is on `%s`, where the ",
+           "guessing class is fullest at $\\hat\\pi$ = %.2f, while at the ",
+           "other end `%s` sits at %+.4f with $\\hat\\pi$ = %.2f. The ",
+           "scatter around that is real -- `%s` has the emptiest guessing ",
+           "class of all at $\\hat\\pi$ = %.2f and still gains only %+.4f, ",
+           "so no single table carries the pattern. It is ",
+           "positive on %d of the %d, and %s.\n\nWhat this does *not* show ",
+           "is a table at $\\hat\\pi$ close to 1. The largest engaged share ",
+           "here is %.2f, so the collapse is visible as a trend rather than ",
+           "at its endpoint, and the simulation is still what carries the ",
+           "endpoint. Nor does it show the valve is free in general: these ",
+           "are single-split margins, small enough that the sign on any one ",
+           "table should not be read as settled (see Limitations). The ",
+           "claim it supports is the modest one -- across this range, ",
+           "fitting the Mixture where the data do not want it costs ",
+           "essentially nothing, which is the property the fixed-floor 1PLg ",
+           "conspicuously lacks (see [How much does the assumed g ",
+           "matter?](#how-much-does-the-assumed-g-matter)).\n\n"),
+    nrow(sv), cor(sv$pi_hat, sv$imv),
+    best$imv, best$table, best$pi_hat,
+    hi$table, hi$imv, hi$pi_hat,
+    lo$table, lo$pi_hat, lo$imv,
+    sum(sv$imv > 0), nrow(sv),
+    if (n_neg == 0) {
+      "negative on none"
+    } else {
+      sprintf("the %d negative value%s is at worst %.4f on `%s` -- within rounding of no effect",
+              n_neg, if (n_neg > 1) "s are" else "", worst$imv, worst$table)
+    },
+    max(sv$pi_hat)))
+}
+```
+
 ## Two scorecards for Method A
 
 Purified Rasch is negative in the table above on every table. Read as a
@@ -1199,7 +1488,7 @@ if (gsweep_ok && nrow(gsweep_spread) > 0) {
   from counting options in the data itself. If that assumption is wrong for
   any particular year/subject, every ENEM result here inherits the error.
 - **The scored-absence screen removes a large, non-random block, and the
-  surviving samples are range-restricted.** On five of the eleven tables the
+  surviving samples are range-restricted.** On five of the tables the
   screen drops roughly 45% of drawn candidates (see [Screening scored
   absences](#screening-scored-absences)). Those candidates are not a random
   subset -- they are whoever did not sit the section -- so the screened
@@ -1208,16 +1497,33 @@ if (gsweep_ok && nrow(gsweep_spread) > 0) {
   from what the same tables would yield if absence had been coded missing
   rather than wrong. The screen makes the guessing models estimable; it does
   not reconstruct the data the exam would have produced. A cleaner fix lives
-  upstream, in how these tables encode a section a candidate never took.
-- **`enem_2019_1mil_lc` has a separate anomaly the screen does not
-  address.** It carries no zero block (0.0% of candidates score zero), yet
-  its median raw score is 8 against a chance floor of 10, and about a third
-  of candidates fall below that floor -- scores compressed *below* what
-  guessing alone would produce, without the absence signature. Its estimated
-  latent SD is correspondingly tiny. Whether that reflects the elective
-  language blocks, some other coding issue, or a genuinely unusual test form
-  is unresolved, and results for that table should be read with that
-  question open.
+  upstream, in how these tables encode a section a candidate never took:
+  everyone who pulls these five tables from IRW gets the same 45%, and a
+  screen that lives in one vignette's compute script does not help them.
+- **The *level* of the recovered guessing floor is not pinned down.** At the
+  sample sizes and latent spreads of these tables, a floor of exactly $1/m$
+  is recovered high and with wide item-to-item scatter, and the estimated
+  latent SD is biased in the same direction at the same time (see [What an
+  estimated floor of $1/m$ looks like](#what-an-estimated-floor-of-1m-looks-like)).
+  The floor column supports "there is a floor here, and it is of a plausible
+  size"; it does not support a comparison between a table's floor and $1/m$,
+  or between one table's floor and another's at different spreads.
+- **One candidate table, `enem_2019_1mil_lc`, was excluded as mis-scored.**
+  It carries no zero block at the candidate level, so the scored-absence
+  screen leaves it alone, but two model-free checks single it out (see
+  [Screening the answer key](#screening-the-answer-key)). One of its two
+  elective language blocks is scored zero for every candidate who sat it --
+  five items with no observed variance. And of the items that remain, the
+  majority correlate below 0.05 with the total of the others: nearly three
+  times the share of any other table here, and the smallest median item-rest
+  correlation by a wide margin. The exclusion is a judgement about scoring,
+  not about results we did not like, and the diagnostics that support it are
+  on the page. What it cost is one table's worth of evidence; what it would
+  have cost to keep is every count on this page silently including a table
+  whose items do not measure a common trait. `enem_2013_1mil_cn` is the next
+  weakest on the same statistic, by a wide margin from
+  `enem_2019_1mil_lc` and a narrow one from the rest; it is retained, and
+  deserves the same suspicion at much lower confidence.
 - **1PL-AG's $\gamma$ (and, to a lesser extent, $\alpha$) can be noisy.**
   Simulation validation recovered $\beta$ well but $\gamma$ poorly at
   moderate sample sizes -- consistent with @sanmartin2006's own real-data
@@ -1234,7 +1540,19 @@ if (gsweep_ok && nrow(gsweep_spread) > 0) {
   guessing without first checking that $\hat\gamma$ is interior. The
   simulation validation on this page did not catch it because data generated
   from the 1PL-AG always has a floor by construction; it takes real data that
-  rejects a floor to produce the failure.
+  rejects a floor to produce the failure. The argument for it here is the
+  derivative above and the refits that accompany it, not a published result:
+  the identification literature for this family runs the other way.
+  @sanmartin2013 identify the 1PL-G's item parameters and scale by *fixing*
+  one item's guessing parameter at zero — a restriction imposed to buy
+  identification, not a boundary the data arrive at on their own, and the
+  simultaneous collapse of every $\gamma_j$ is not a case they treat.
+  @park2015 carry the 1PL-G identification result over to the 1PL-AG and
+  leave explicitly open whether it implies any practical limitation for that
+  model; they report neither a flat likelihood nor a vanishing floor.
+  @farina2019 is the nearest treatment of the 1PL-G collapsing onto its
+  nested Rasch model. Read those as evidence that this model class is
+  fragile, and this particular failure as sitting outside what they cover.
 - **The recovery result is a simulation, on the Mixture's own DGM.** The
   two-scorecards section generates data from exactly the two-class mixture
   the Mixture model assumes. That is the right shape for isolating what
@@ -1268,14 +1586,24 @@ source("vignettes/guessing_sim_compute.R")
 # 3. Sensitivity of the fixed-g models to the assumed guessing level
 source("vignettes/guessing_gsweep_compute.R")
 
-# 4. Re-render this page
+# 4. Answer-key diagnostics: item difficulty against the chance floor and
+#    item-total point-biserials (seconds; reads the cached response matrices)
+source("vignettes/guessing_key_diagnostics.R")
+
+# 5. What an estimated guessing floor of 1/m looks like at these N, J and
+#    latent spreads (simulation; no Redivis access needed)
+source("vignettes/guessing_floor_calibration_compute.R")
+
+# 6. Re-render this page
 quarto::quarto_render("vignettes/guessing.qmd")
 ```
 
-Steps 2 and 3 write their own caches
+Steps 2-5 write their own caches
 (`guessingdata/guessing_sim_results.rds`,
-`guessingdata/guessing_gsweep_results.rds`); the page renders without them,
-with those sections showing a placeholder instead. The estimators themselves,
+`guessingdata/guessing_gsweep_results.rds`,
+`guessingdata/guessing_key_diagnostics.rds`,
+`guessingdata/guessing_floor_calibration.rds`); the page renders without
+them, with those sections showing a placeholder instead. The estimators themselves,
 and the checks behind the variance and gradient claims in Data and methods,
 are in `vignettes/guessing_helpers.R` and
 `vignettes/guessing_vignette_checks.R`.

@@ -197,16 +197,25 @@ fit_1pl_ag <- function(Y, quad = build_quadrature(41), start_beta = NULL,
   start_gamma <- rep(qlogis(0.2), J)
   start_ls <- if (free_var) 0 else numeric(0)
 
+  # maxit is 3000, not the 300 used through 2026-09-03. At 300 optim() returned
+  # convergence == 1 (iteration limit) on 10 of the 11 tables then on the page,
+  # which is a disclosure problem even though it was not an estimation one:
+  # refitting two tables at 3000 reached convergence == 0 and moved alpha_hat by
+  # ~1% of itself, the median implied floor by less than 1e-4, and the
+  # log-likelihood by 0.67 and 0.04. factr = 1e2 asks for a tolerance far
+  # tighter than these estimates need, so the cap bound long after the fit had
+  # stopped moving. Costs roughly 3x the fitting time.
+  AG_MAXIT <- 3000
   bounded <- function(par, fns) {
     if (!free_var) {
       return(optim(par, fns$obj, fns$grad, method = "BFGS",
-                   control = list(maxit = 300, reltol = 1e-10), hessian = TRUE))
+                   control = list(maxit = AG_MAXIT, reltol = 1e-10), hessian = TRUE))
     }
     n <- length(par)
     optim(par, fns$obj, fns$grad, method = "L-BFGS-B",
           lower = c(rep(-Inf, n - 1), LS_BOUNDS[["lower"]]),
           upper = c(rep( Inf, n - 1), LS_BOUNDS[["upper"]]),
-          control = list(maxit = 300, factr = 1e2), hessian = TRUE)
+          control = list(maxit = AG_MAXIT, factr = 1e2), hessian = TRUE)
   }
 
   fg <- make_obj_grad(with_alpha = FALSE)
@@ -246,7 +255,31 @@ fit_1pl_ag <- function(Y, quad = build_quadrature(41), start_beta = NULL,
   # Observed on the five ENEM 2013/2014 tables, where gamma_G lands near -30
   # (s ~ 1e-14) and refits from alpha in {+-0.1, +-0.3} return the start to 1e-11
   # with the log-likelihood unchanged to 1e-13 relative.
-  s_max <- max(stats::plogis(fit_g$par[(J + 1):(2 * J)]))
+  #
+  # The two lines above are the whole argument; no published result covers this
+  # case, and it should not be dressed up as one. The identification literature
+  # for this model family is San Martin, Rolin & Castro (2013), on the 1PL-G,
+  # and it runs the other way: fixing ONE item's guessing parameter at zero is
+  # the restriction they IMPOSE to identify the item parameters and the scale.
+  # Here nothing is imposed -- the data drive every gamma to the boundary at
+  # once, which is a different situation and not one they treat. Park et al.
+  # (2015) restate the 1PL-G identification result for the 1PL-AG and leave
+  # whether it carries a practical limitation for that model explicitly open;
+  # they report no flat likelihood and no vanishing floor. Farina, Gonzalez &
+  # San Martin (2019) is the closest thing to the collapse seen here, on the
+  # 1PL-G and its nested Rasch model. Cite 2013 for the fragility of the model
+  # class, not for this boundary case.
+  # The whole implied-floor vector, not just its maximum. The maximum is an
+  # extreme order statistic over J items and is biased upward as an estimate of
+  # a common floor -- badly so when the latent spread is narrow, which is
+  # exactly the post-screen ENEM regime. In simulation with a true floor of 1/m
+  # = 0.20 on every item, N = 1650, J = 45, the maximum comes back 0.56-0.73 at
+  # SD(theta) = 0.4 and 0.32 at SD 1.4, while the median stays much closer to
+  # truth (0.33 and 0.19 respectively). Report the median; keep the maximum
+  # only for the identification check below, which is a question about whether
+  # ANY floor survives, and for which an extreme is the right statistic.
+  guess_floor <- stats::plogis(fit_g$par[(J + 1):(2 * J)])
+  s_max <- max(guess_floor)
   alpha_identified <- s_max > 1e-6
 
   list(
@@ -255,8 +288,18 @@ fit_1pl_ag <- function(Y, quad = build_quadrature(41), start_beta = NULL,
     loglik_ag = -fit_ag$value, loglik_g = -fit_g$value,
     beta_g = fit_g$par[1:J], gamma_g = fit_g$par[(J + 1):(2 * J)],
     converged_ag = fit_ag$convergence == 0, converged_g = fit_g$convergence == 0,
+    # optim()'s raw code, kept alongside the logical: 1 means the iteration
+    # limit was hit, 51/52 are L-BFGS-B warnings/errors, and the three are
+    # worth different amounts of worry. The logical alone cannot distinguish
+    # them, and this fit reaches maxit routinely.
+    conv_code_ag = fit_ag$convergence, conv_code_g = fit_g$convergence,
     free_var = free_var, sd_at_bound = free_var && .at_bound(fit_ag$par[2 * J + 2]),
-    alpha_identified = alpha_identified, max_guess_floor = s_max,
+    alpha_identified = alpha_identified,
+    guess_floor = guess_floor,
+    med_guess_floor = stats::median(guess_floor),
+    q1_guess_floor = unname(stats::quantile(guess_floor, 0.25)),
+    q3_guess_floor = unname(stats::quantile(guess_floor, 0.75)),
+    max_guess_floor = s_max,
     quad = .scale_quad(quad, sd_hat)
   )
 }

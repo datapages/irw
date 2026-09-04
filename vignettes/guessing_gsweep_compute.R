@@ -55,7 +55,14 @@ sweep_one <- function(i) {
   # furrr gives each worker its own stream there, so this is not the identical
   # mask. Points on a sweep are therefore comparable to each other, but the
   # value at g = 1/m need not reproduce the main table's Mixture column exactly.
-  set.seed(20260830 + i)
+  # Seeded from the table's NAME, not its position in TABLES. With `i` the
+  # seed of every table after an inserted or removed one shifted silently --
+  # which happened when enem_2019_1mil_lc was dropped on answer-key grounds.
+  # The sweeps cached before 2026-09-04 were drawn under the positional seed,
+  # so regenerating a deleted cache now gives a different holdout draw (and
+  # so slightly different IMVs) than the committed one. No conclusion here
+  # rests on a single draw, but the numbers will not match to the digit.
+  set.seed(20260830 + sum(utf8ToInt(table_name)))
 
   # Reuse the subsampled matrix guessing_compute.R already wrote. Refetching
   # would pull ~45M long-format rows per ENEM table to keep 3,000 people (see
