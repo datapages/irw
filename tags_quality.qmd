@@ -95,7 +95,8 @@ coverage <- tibble(
 The IRW annotates every table with eight qualitative tags --- who was measured,
 what was measured, and how. This page says what those tags are worth: how much
 of each column is filled, how accurate it has been measured to be, who or what
-wrote it, and what the evidence behind those numbers does not cover.
+wrote it, how it compares against the human annotations, and what the evidence
+behind those numbers does not cover.
 
 If you are about to filter on a tag, the section you need is
 [Coverage, per column](#coverage-per-column) and then
@@ -286,6 +287,60 @@ its 33 misses are supersets rather than wrong answers. Score this column one
 facet at a time, on the tables where the sheet answered that facet.
 :::
 
+## When the two disagree, which one is wrong?
+
+Everything above scores the tagger against the human-annotated set as though
+that set were correct. It is worth being explicit that **it is not a gold
+standard**, because the direct comparisons run so far have found errors on both
+sides --- and the human ones are the more systematic.
+
+### `age range`: the data usually sided with the machine
+
+A seeded sample of 70 human-tagged tables carrying a `cov_age` column was
+checked against the ages recorded in each table's own data. Of the 64 that could
+be checked, **33 disagreed with the table's own respondents.**
+
+The disagreement is concentrated almost entirely in one label. Of 29 sampled
+`Mixed` tags, **25 are contradicted by the data, and every one of those 25 has
+zero respondents under 18**. `Adult (18+)` held up far better: 6 of 30.
+
+This is why the column moved to derivation, and why a derived `age range` is the
+one value allowed to outrank a human tag. It also revises a number that looked
+like a tagger failure: the tagger first scored 73.0% on this column, and 86.5%
+against the corrected labels --- the same predictions, re-marked. **The tagger
+had been right more often than the key said.**
+
+### `construct type`: humans tag the study, the tagger tags the table
+
+36 of the 96 study families with six or more tagged tables give every one of
+their tables an identical `construct type` --- 738 tables in total. For some
+families that is correct: an exam programme really is `Cognitive/educational`
+all the way down.
+
+For others it is a blanket. All 72 `c19prc_*` tables carry
+`Affective/mental health, Opinion/attitude`, including
+`c19prc_uk_mcbride_2021_wordsum` --- a vocabulary test, which is
+`Cognitive/educational` by any reading and is tagged as neither. The pair
+describes the *study*, a COVID-era psychology survey, and was applied to all 72
+of its tables regardless of what each one measures.
+
+The rule now states that a tag describes **what this table measures**, never
+what the study was about. Those rows have not been rewritten, so a filter on
+`construct type` will still return them as they are.
+
+### What this does not mean
+
+It does not mean the machine tags are better. Where both answered on the
+published columns they mostly agree, and the tagger's characteristic failure ---
+naming too few facets rather than inventing one --- is visible in the accuracy
+table above. A human row still wins on conflict everywhere except derived
+`age range`, because a human can weigh things a source does not state outright.
+
+And the comparison has a floor nobody has measured: **no two human annotators
+have ever been scored against each other here.** Some share of that 33-in-64 is
+legitimate judgment rather than error, and there is no measurement saying how
+much.
+
 ## What happens when the same pipeline runs twice
 
 Accuracy is not the only question worth asking. On 2026-09-04, 60 already-tagged
@@ -354,10 +409,10 @@ This section is the point of the page, not a disclaimer at the end of it.
    runs from 6 to 38. These are directional, not tight estimates. One model
    only; a stronger one would likely differ, and the gap is unmeasured.
 
-2. **The labelled set is known to be wrong for `age range`.** Of 29 gold
-   `Mixed` labels checkable against the table's own `cov_age`, 25 --- 86% ---
-   are contradicted by it. That is why this column is now derived rather than
-   tagged, and why its accuracy is scored against the derivation instead.
+2. **The labelled set the tagger is scored against carries its own errors**,
+   measured for `age range` and unmeasured elsewhere --- see
+   [when the two disagree](#when-the-two-disagree-which-one-is-wrong). Accuracy
+   against a standard is only as good as the standard.
 
 3. **No ceiling is known.** The human-annotated set is itself human work of
    unmeasured consistency. Nobody has measured how often two annotators
