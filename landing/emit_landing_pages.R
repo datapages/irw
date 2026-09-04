@@ -299,7 +299,13 @@ PAGE_CSS <- paste0(
 "footer{margin-top:2.5rem;padding-top:1rem;border-top:1px solid #e3e3e3;",
 "font-size:.82rem;color:#777}",
 ".pill{display:inline-block;background:#f2f2f4;border-radius:3px;padding:.1rem .45rem;",
-"margin:0 .3rem .3rem 0;font-size:.82rem}")
+"margin:0 .3rem .3rem 0;font-size:.82rem}",
+".pilot{background:#fff6e5;border:1px solid #f0c987;border-left:5px solid #d98b1f;",
+"border-radius:5px;padding:.85rem 1rem;margin:1.2rem 0 1.6rem}",
+".pilot p{margin:.35rem 0}",
+".pilot .tag{display:inline-block;background:#d98b1f;color:#fff;font-weight:700;",
+"font-size:.72rem;letter-spacing:.09em;padding:.12rem .5rem;border-radius:3px;",
+"margin-bottom:.45rem}")
 
 build_page <- function(x) {
   jsonld <- toJSON(build_jsonld(x), auto_unbox = TRUE, pretty = TRUE, null = "null")
@@ -393,7 +399,7 @@ esc(x$shard_version), ".</footer>\n",
 
 # ------------------------------------------------------------------ index page
 
-build_index <- function(rows, irw_version) {
+build_index <- function(rows, irw_version, n_total) {
   items <- paste0(vapply(rows, function(r) paste0(
     "<tr><td><a href=\"", esc(r$slug), "/\">", esc(r$table), "</a></td>",
     "<td>", esc(num_fmt(r$n_responses)), "</td>",
@@ -401,20 +407,28 @@ build_index <- function(rows, irw_version) {
   paste0(
 "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n",
 "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n",
-"<title>IRW table pages &mdash; Item Response Warehouse</title>\n",
+"<title>IRW table pages (pilot) &mdash; Item Response Warehouse</title>\n",
 "<link rel=\"canonical\" href=\"", SITE_URL, "/tables/\">\n",
-"<meta name=\"description\" content=\"Individual landing pages for tables in the ",
-"Item Response Warehouse, each with schema.org and Croissant metadata.\">\n",
+"<meta name=\"description\" content=\"A pilot set of ", length(rows), " individual ",
+"table pages for the Item Response Warehouse, each with schema.org and Croissant ",
+"metadata. Most IRW tables do not yet have a page.\">\n",
 "<style>", PAGE_CSS, "</style>\n</head>\n<body>\n",
 "<nav class=\"crumb\"><a href=\"", SITE_URL, "/\">Item Response Warehouse</a> / Tables</nav>\n",
-"<h1>IRW table pages</h1>\n",
+"<h1>IRW table pages <span class=\"tag\">PILOT</span></h1>\n",
 "<p class=\"sub\">A page per table, each naming the IRW version it describes ",
 "and carrying schema.org/Dataset and Croissant metadata.</p>\n",
-"<p><strong>This is a pilot.</strong> ", length(rows), " of the warehouse's ",
-"tables have pages so far, chosen to test the generator against the corpus' ",
-"awkward cases. The full set is tracked in ",
-"<a href=\"https://github.com/ben-domingue/irw/issues/1706\">irw#1706</a>. ",
-"To browse the whole warehouse, use <a href=\"", SITE_URL, "/data.html\">Browse the IRW Data</a>.</p>\n",
+"<div class=\"pilot\">\n",
+"<span class=\"tag\">Pilot &mdash; not the full warehouse</span>\n",
+"<p><strong>Only ", length(rows), " of the IRW's ", format(n_total, big.mark = ","),
+" tables have a page.</strong> These ", length(rows), " were chosen to test the ",
+"page generator against the corpus' awkward cases &mdash; the largest and ",
+"smallest tables, tables with and without item text, tagged and untagged, and ",
+"names that break naive URL handling. They are not the most important tables, ",
+"and the selection is not a recommendation.</p>\n",
+"<p>To search the whole warehouse, use <a href=\"", SITE_URL,
+"/data.html\">Browse the IRW Data</a>. Whether this expands to every table is ",
+"being decided in <a href=\"https://github.com/ben-domingue/irw/issues/1706\">irw#1706</a>.</p>\n",
+"</div>\n",
 "<table class=\"kv\"><tr><th>Table</th><th>Responses</th><th>Redivis dataset</th></tr>\n",
 items, "\n</table>\n",
 "<footer>Item Response Warehouse, IRW v", esc(irw_version), ".</footer>\n",
@@ -600,7 +614,7 @@ main <- function() {
   }
 
   rows <- rows[order(vapply(rows, function(r) tolower(r$table), character(1)))]
-  writeLines(build_index(rows, irw_version), file.path(OUT_DIR, "index.html"))
+  writeLines(build_index(rows, irw_version, nrow(md)), file.path(OUT_DIR, "index.html"))
   urls <- c(urls, paste0(SITE_URL, "/tables/"))
   merge_sitemap(unique(urls))
 
