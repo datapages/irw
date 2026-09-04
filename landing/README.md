@@ -17,6 +17,33 @@ at all. It deliberately excludes all 182 tables named in irw#1842 / irw#1779 --
 a superset of the 153 that irw#1856 is repairing -- so the pilot does not
 publish data already known to be wrong.
 
+## URLs
+
+Pages live at `/tables/<slug>/`, served from `<slug>/index.html`, with the
+Croissant file beside it at `<slug>/croissant.jsonld`. The slug is the table name
+lowercased -- 308 of the corpus' names are not lowercase, and a case-sensitive
+host would otherwise serve `Foo` and `foo` as two pages while a case-insensitive
+one would collide them. The page displays the true name; only the path is folded,
+and `.assert_no_slug_collisions()` fails the build if two names ever collapse.
+
+Directory form rather than `<slug>.html` is deliberate: these URLs are meant to
+be cited, and to be what a release DOI resolves to if irw#1870 lands. GitHub
+Pages does not reliably serve an extensionless path for a `.html` file, and an
+extension inside a citable identifier ages badly. Same file count either way.
+
+## Known limitation: Croissant validates but does not load
+
+The Croissant `contentUrl` points at the Redivis *table page*, not at a data
+file. Verified 2026-09-03: the Redivis API returns `401 "No credentials were
+provided"` even for a public table, so there is no unauthenticated URL a loader
+could read. `mlcroissant` therefore parses all 25 files successfully and would
+then read zero records.
+
+So sub-action 4.3 is **partly** delivered: the descriptions are valid and a
+NeurIPS submission can point at one, but programmatic loading via `mlcroissant`
+or TFDS needs a direct download URL that does not yet exist. Do not describe
+Hugging Face / Kaggle / OpenML support as delivered.
+
 ## How it runs
 
 `_quarto.yml` declares it as a project `post-render` step, so pages regenerate

@@ -3,8 +3,15 @@
 # Per-table landing pages for the IRW -- PILOT (ben-domingue/irw#1706).
 #
 # Emits, into _site/tables/, for each table named in landing/pilot_tables.txt:
-#   <slug>.html    a landing page carrying schema.org/Dataset JSON-LD
-#   <slug>.jsonld  a Croissant (MLCommons) description
+#   <slug>/index.html       a landing page carrying schema.org/Dataset JSON-LD
+#   <slug>/croissant.jsonld a Croissant (MLCommons) description
+#
+# The directory form is deliberate: the public URL is /tables/<slug>/ with no
+# file extension. These URLs are meant to be cited, and to be what a release DOI
+# resolves to if #1870 lands -- an extension in a citable identifier ages badly,
+# and GitHub Pages does not reliably serve /tables/<slug> for a <slug>.html file.
+# Same file count either way; only the path shape differs. Changing it after the
+# pages are indexed and cited is the expensive move, so it is made up front.
 # plus _site/tables/index.html and sitemap entries appended to _site/sitemap.xml.
 #
 # Run as a Quarto post-render step. Skips itself (with a message, exit 0) when
@@ -185,6 +192,12 @@ build_jsonld <- function(x) {
     d$variableMeasured <- lapply(x$variables, function(v)
       list("@type" = "PropertyValue", name = v))
   }
+  # NOTE (verified 2026-09-03): contentUrl is the Redivis *table page*, not a
+  # data file. The Redivis API returns 401 "No credentials were provided" even
+  # for a public table, so there is no unauthenticated URL a Croissant loader
+  # could read. The files therefore VALIDATE but do not LOAD -- see the caveat
+  # comment on ben-domingue/irw#1706. Do not describe Croissant support as
+  # delivered until a direct download URL exists.
   d$distribution <- list(
     list("@type" = "DataDownload", name = paste0(x$table, " on Redivis"),
          encodingFormat = "text/csv", contentUrl = x$redivis_url),
@@ -340,7 +353,7 @@ build_page <- function(x) {
 "import irw\ndf = irw.fetch(\"", esc(x$table), "\")</pre>\n",
 "<p>Browse or download it directly on <a href=\"", esc(x$redivis_url),
 "\">Redivis</a>, or take the ",
-"<a href=\"", esc(basename(x$croissant_url)), "\">Croissant description</a> ",
+"<a href=\"croissant.jsonld\">Croissant description</a> ",
 "of this table for use with Hugging Face, Kaggle or OpenML.</p>\n")
 
   prov <- kv_rows(list(
@@ -356,8 +369,7 @@ build_page <- function(x) {
 "<title>", esc(x$table), " &mdash; Item Response Warehouse</title>\n",
 "<link rel=\"canonical\" href=\"", esc(x$page_url), "\">\n",
 "<meta name=\"description\" content=\"", esc(substr(x$meta_description, 1, 300)), "\">\n",
-"<link rel=\"alternate\" type=\"application/ld+json\" href=\"",
-   esc(basename(x$croissant_url)), "\" title=\"Croissant\">\n",
+"<link rel=\"alternate\" type=\"application/ld+json\" href=\"croissant.jsonld\" title=\"Croissant\">\n",
 "<style>", PAGE_CSS, "</style>\n",
 "<script type=\"application/ld+json\">\n", jsonld, "\n</script>\n",
 "</head>\n<body>\n",
@@ -383,7 +395,7 @@ esc(x$shard_version), ".</footer>\n",
 
 build_index <- function(rows, irw_version) {
   items <- paste0(vapply(rows, function(r) paste0(
-    "<tr><td><a href=\"", esc(r$slug), ".html\">", esc(r$table), "</a></td>",
+    "<tr><td><a href=\"", esc(r$slug), "/\">", esc(r$table), "</a></td>",
     "<td>", esc(num_fmt(r$n_responses)), "</td>",
     "<td>", esc(r$shard), "</td></tr>"), character(1)), collapse = "\n")
   paste0(
@@ -524,7 +536,7 @@ main <- function() {
     }
 
     slug <- slug_of(tb)
-    page_url <- paste0(SITE_URL, "/tables/", slug, ".html")
+    page_url <- paste0(SITE_URL, "/tables/", slug, "/")
     doi <- if (nrow(brow)) chr(brow[1, "DOI__for_paper_"]) else ""
     doi_url <- if (nzchar(doi)) {
       if (grepl("^https?://", doi)) doi else paste0("https://doi.org/", sub("^doi:\\s*", "", doi))
@@ -552,7 +564,7 @@ main <- function() {
       doi = doi, doi_url = doi_url,
       keywords = unname(unlist(tags)),
       page_url = page_url,
-      croissant_url = paste0(SITE_URL, "/tables/", slug, ".jsonld"),
+      croissant_url = paste0(SITE_URL, "/tables/", slug, "/croissant.jsonld"),
       redivis_url = table_url(shard, chr(mrow$table), si$url)
     )
     # Google Dataset Search wants a description of at least 50 characters, and the
@@ -575,9 +587,11 @@ main <- function() {
       collapse = " "))
     x$meta_description <- x$long_description
 
-    writeLines(build_page(x), file.path(OUT_DIR, paste0(slug, ".html")))
+    page_dir <- file.path(OUT_DIR, slug)
+    dir.create(page_dir, recursive = TRUE, showWarnings = FALSE)
+    writeLines(build_page(x), file.path(page_dir, "index.html"))
     writeLines(toJSON(build_croissant(x), auto_unbox = TRUE, pretty = TRUE, null = "null"),
-               file.path(OUT_DIR, paste0(slug, ".jsonld")))
+               file.path(page_dir, "croissant.jsonld"))
     # Only HTML pages go in the sitemap. Each page points at its own Croissant
     # file with <link rel="alternate">, which is how crawlers are meant to find it.
     urls <- c(urls, page_url)

@@ -404,6 +404,35 @@ viewof row = Inputs.table(dsf, {
 
 ## {{< bi info-circle class=header-icon >}}Information on selected dataset
 
+```{r}
+#| label: pilot-table-pages
+#| echo: false
+#| message: false
+# Which tables have a landing page under /tables/ (ben-domingue/irw#1706).
+# Read from the emitter's own list so the two cannot drift: when the pilot grows,
+# this grows with it and no OJS changes. The emitter runs post-render and cannot
+# tell this chunk anything, so the shared file is the contract.
+ojs_define(pilot_tables = local({
+  f <- file.path("landing", "pilot_tables.txt")
+  if (!file.exists(f)) return(character(0))
+  ln <- trimws(sub("#.*$", "", readLines(f, warn = FALSE)))
+  sort(unique(tolower(ln[nzchar(ln)])))
+}))
+```
+
+```{ojs}
+// Tables that have a landing page. ojs_define collapses a length-1 list to a
+// bare string and gives an empty vector as undefined, so both are normalised.
+has_page = new Set(
+  (typeof pilot_tables === "undefined" || pilot_tables === null
+     ? []
+     : (Array.isArray(pilot_tables) ? pilot_tables : [pilot_tables])
+  ).map(s => String(s).toLowerCase())
+)
+
+table_page_href = (name) => `/tables/${String(name).toLowerCase()}/`
+```
+
 ```{ojs}
 // specify which variables to show in info box
 info = ({
@@ -423,6 +452,9 @@ pullout = (head, text) => html.fragment`<p><b>${head}</b>: ${/Link/.test(head) ?
 placeholder = "No table selected"
 row ? html`<div class="pullout">
   ${Object.entries(info).map(([field, properties]) => pullout(properties.label, row[field]))}
+  ${has_page.has(String(row.table).toLowerCase())
+      ? html.fragment`<p><b>Citable page</b>: <a href="${table_page_href(row.table)}">${table_page_href(row.table)}</a> &mdash; a permanent page for this table, naming the IRW version it describes.</p>`
+      : html.fragment``}
 </div>` : html`<div class="pullout"><em>${placeholder}</em></div>`
 ```
 :::
