@@ -1,0 +1,110 @@
+```{r}
+#| label: corpus-dataset-jsonld
+#| echo: false
+#| results: asis
+#| message: false
+#| warning: false
+
+# schema.org/Dataset markup describing the IRW corpus as a whole.
+# ben-domingue/irw#1706, minimal pilot -- see that issue's 2026-09-03 comments.
+#
+# WHY THIS EXISTS: the IRW has no presence in Google Dataset Search, which
+# indexes pages carrying schema.org/Dataset JSON-LD. Nothing on this site carried
+# any. This is the smallest thing that tests whether the IRW can be indexed at
+# all: one block, no new URLs, no per-table pages. To undo it, delete the
+# {{< include >}} line in data.qmd -- nothing else references it.
+#
+# IT IS DELIBERATELY NOT A CATALOG. Strictly the IRW is a DataCatalog of many
+# Datasets, but Dataset Search indexes Dataset and ignores DataCatalog, so the
+# corpus is described as one Dataset that names the catalog it belongs to. The
+# per-table pages proposed in #1706 use the same shape, so the two agree if
+# those ever ship.
+#
+# NO DATE IS COMPUTED HERE. datePublished comes from the version manifest, never
+# from Sys.Date(): a date that moves on every render is not a fact about the data.
+
+local({
+  # Loaded here rather than relying on another include: this block sits near the
+  # top of data.qmd, before _load-data.qmd has run.
+  suppressMessages({ library(redivis); library(jsonlite) })
+  if (!nzchar(Sys.getenv("REDIVIS_API_TOKEN"))) return(invisible(NULL))
+
+  info <- tryCatch({
+    # The manifest is authoritative for the corpus version (ARCHITECTURE.md rule 1);
+    # this reads it rather than restating anything from it.
+    con <- url(paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
+                      "metadata/version_manifest.tsv"))
+    on.exit(try(close(con), silent = TRUE), add = TRUE)
+    m <- utils::read.delim(con, stringsAsFactors = FALSE, colClasses = "character")
+    m$irw_version <- as.integer(m$irw_version)
+    v <- max(m$irw_version)
+    # numRows off the table's properties: a metadata read, not an export, so it
+    # costs nothing against the Redivis export quota.
+    #
+    # This is the DOCUMENTED corpus -- nrow(metadata), the same denominator
+    # 11_status.R uses for n_tables. It trails the live table count by up to a
+    # week by construction, because metadata.csv only moves when the weekly
+    # pipeline runs (4,134 documented against 4,221 live on 2026-09-03; see the
+    # 2026-09-03 block on ben-domingue/irw#1702). Describing the documented
+    # corpus is the honest choice: those are the tables the metadata can
+    # actually describe.
+    n <- redivis$user("datapages")$dataset("irw_meta:bdxt")$
+           table("metadata:h5gs")$get()$properties$numRows
+    list(version = v,
+         released = substr(m$irw_released_at[m$irw_version == v][1], 1, 10),
+         n_tables = as.integer(n))
+  }, error = function(e) NULL)
+
+  if (is.null(info)) return(invisible(NULL))
+
+  site <- "https://itemresponsewarehouse.org"
+  d <- list(
+    "@context"      = "https://schema.org/",
+    "@type"         = "Dataset",
+    name            = "Item Response Warehouse",
+    alternateName   = "IRW",
+    description     = paste0(
+      "The Item Response Warehouse (IRW) is a harmonised collection of ",
+      format(info$n_tables, big.mark = ","), " item response datasets, ",
+      "reformatted to a single standard so that item-level response data from ",
+      "education, psychology and health research can be analysed together. ",
+      "Every table gives one row per person-item response, with consistent ",
+      "identifier, item and response columns, plus covariates where available. ",
+      "The corpus supports psychometric and item response theory research, ",
+      "measurement invariance work, and methodological studies that need many ",
+      "datasets rather than one. Access is free, via a browser, an R package ",
+      "or a Python package. This description is of IRW v", info$version, "."),
+    url             = paste0(site, "/data.html"),
+    identifier      = paste0(site, "/data.html"),
+    version         = paste0("IRW v", info$version),
+    datePublished   = info$released,
+    isAccessibleForFree = TRUE,
+    license         = paste0(
+      "Licences are recorded per table and vary by source; see each table's ",
+      "record in the IRW metadata."),
+    citation        = paste0(
+      "Domingue, B. W., et al. (2025). An introduction to the Item Response ",
+      "Warehouse (IRW): A resource for enhancing data usage in psychometrics. ",
+      "Behavior Research Methods. https://doi.org/10.3758/s13428-025-02796-y"),
+    keywords        = c("item response theory", "psychometrics",
+                        "educational measurement", "item response data",
+                        "test data", "survey data", "measurement",
+                        "assessment", "latent variable models"),
+    creator         = list("@type" = "Organization",
+                           name = "Item Response Warehouse", url = site),
+    publisher       = list("@type" = "Organization",
+                           name = "Redivis", url = "https://redivis.com"),
+    includedInDataCatalog = list("@type" = "DataCatalog",
+                                 name = "Item Response Warehouse", url = site),
+    distribution    = list(list(
+      "@type" = "DataDownload",
+      name = "IRW datasets on Redivis",
+      encodingFormat = "text/csv",
+      contentUrl = "https://redivis.com/datasets/as2e-cv7jb41fd/tables"))
+  )
+
+  cat("<script type=\"application/ld+json\">\n",
+      jsonlite::toJSON(d, auto_unbox = TRUE, pretty = TRUE), "\n</script>\n",
+      sep = "")
+})
+```
