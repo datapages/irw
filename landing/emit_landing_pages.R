@@ -487,12 +487,17 @@ main <- function() {
   # the only date any emitted file carries -- see rule 1 at the top.
   irw_released_date <- substr(chr(pins$irw_released_at[1]), 1, 10)
 
+  # Tables are addressed by NAME, never as `name:referenceId`. A reference id
+  # belongs to one version's table: `red_up` replaces a table by deleting and
+  # recreating it (Redivis uploads append, so that is the only true replace),
+  # and the v20.0 cut on 2026-09-04 minted a new id for all thirteen tables at
+  # once. Every pinned id in this repo stopped resolving that morning.
   meta_ds  <- redivis$user("datapages")$dataset("irw_meta:bdxt")
   meta_ver <- meta_ds$get()$properties$version$tag
-  md    <- as_df(meta_ds$table("metadata:h5gs"))
-  bib   <- as_df(meta_ds$table("biblio:qahg"))
-  tg    <- as_df(meta_ds$table("tags:7nkh"))
-  itm   <- as_df(meta_ds$table("itemtext_metadata:drat"))
+  md    <- as_df(meta_ds$table("metadata"))
+  bib   <- as_df(meta_ds$table("biblio"))
+  tg    <- as_df(meta_ds$table("tags"))
+  itm   <- as_df(meta_ds$table("itemtext_metadata"))
   message("[landing] read irw_meta ", meta_ver, ": ", nrow(md), " metadata rows")
 
   key <- function(df) tolower(trimws(as.character(df[[1]])))
