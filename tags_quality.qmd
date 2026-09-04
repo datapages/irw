@@ -1,0 +1,392 @@
+---
+title: "Tag Quality"
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+library(dplyr)
+library(stringr)
+library(glue)
+library(knitr)
+library(redivis)
+
+## Tables are addressed by NAME here, not by the `name:referenceId` form the
+## other data pages use. Those reference ids rotate when the metadata pipeline
+## rebuilds the dataset, and every one of them currently fails to resolve.
+irw_meta <- redivis$user("datapages")$dataset("irw_meta:bdxt:latest")
+metadata <- irw_meta$table("metadata")$to_tibble()
+tag_table <- irw_meta$table("tags")$to_tibble()
+
+## The version this page is describing, named on the page itself: coverage is
+## whatever the released tags table holds at build time, and a reader comparing
+## it against a download needs to know which release that was.
+tag_version <- irw_meta$get()$properties$version$tag
+
+## Every join between the tag sheet and the metadata is case-insensitive on
+## purpose. Several hundred tag rows differ from their metadata row only by
+## case, and a case-sensitive join silently drops all of them -- which is how
+## tag coverage once read 53% instead of 62%.
+key <- function(x) str_to_lower(str_trim(as.character(x)))
+
+## Sentinels a rater typed instead of leaving a cell empty. They are not tags,
+## and counting them as filled would overstate every column they appear in.
+## Same list as `_load-data-explore.qmd`; keep the two in step.
+NOT_A_TAG <- str_to_lower(c(
+  "NA", "N/A", "no access to the osf page", "non-verbal task",
+  "I can't find the description of this dataset", "missing description",
+  "need help", "no link or info", "Missing (NA)"
+))
+
+filled <- function(x) {
+  v <- str_trim(as.character(x))
+  !is.na(v) & v != "" & !(str_to_lower(v) %in% NOT_A_TAG)
+}
+
+## The published tag table carries the eight columns in the order
+## `metadata/03_tags.R` selects them, and that selection is POSITIONAL. So the
+## labels below are matched to position and guarded: a schema change should
+## break this page loudly rather than relabel a column silently.
+tag_cols <- names(tag_table)[-1]
+expect <- c("age", "child", "sample", "construct_type",
+            "measurement", "item_format", "lang", "construct_name")
+stopifnot(
+  length(tag_cols) == 8,
+  all(str_detect(str_to_lower(tag_cols), expect))
+)
+
+labels <- c("age range", "child age", "sample", "construct type",
+            "measurement tool", "item format", "primary language(s)",
+            "construct name")
+classes <- c("Derived", "Derived", "Definitional", "Definitional",
+             "Tagger", "Tagger", "Tagger", "Description")
+
+live <- key(metadata$table)
+n_tables <- length(live)
+rows <- tag_table[key(tag_table$table) %in% live, , drop = FALSE]
+n_rows <- nrow(rows)
+
+n_filled <- vapply(tag_cols, function(c) sum(filled(rows[[c]])), integer(1))
+
+## `child age` is only ever filled for tables whose sample includes children.
+## Against all tables it reads ~17% and looks like the worst column on the site;
+## against the tables eligible for a value it is the second-best covered. The
+## denominator has to match the claim.
+age_col <- tag_cols[1]
+eligible_child <- sum(str_detect(as.character(rows[[age_col]]),
+                                 fixed("Child (<18y)")) |
+                      str_detect(as.character(rows[[age_col]]),
+                                 fixed("Mixed")), na.rm = TRUE)
+
+pct <- function(k, d = n_tables) sprintf("%.1f%%", 100 * k / d)
+comma <- function(k) format(k, big.mark = ",")
+
+coverage <- tibble(
+  Column   = paste0("`", labels, "`"),
+  `Produced by` = classes,
+  Filled   = comma(n_filled),
+  Coverage = ifelse(labels == "child age",
+                    paste0(pct(n_filled, eligible_child), " *"),
+                    pct(n_filled))
+)
+```
+
+The IRW annotates every table with eight qualitative tags --- who was measured,
+what was measured, and how. This page says what those tags are worth: how much
+of each column is filled, how accurate it has been measured to be, who or what
+wrote it, and what the evidence behind those numbers does not cover.
+
+If you are about to filter on a tag, the section you need is
+[Coverage, per column](#coverage-per-column) and then
+[What the accuracy numbers do not cover](#what-the-accuracy-numbers-do-not-cover).
+
+::: {.callout-important appearance="simple"}
+## The row figure is not a coverage number
+
+```{r}
+#| label: headline
+#| echo: false
+#| results: asis
+cat(glue(
+  "**{comma(n_rows)} of the {comma(n_tables)} tables ({pct(n_rows)}) carry a tag row.** ",
+  "A row is not an answer. Some columns in it are usually filled and some are ",
+  "usually empty, so the row figure tells you almost nothing about the column ",
+  "you intend to filter on. Read that column's own number below.\n"
+))
+```
+:::
+
+## Coverage, per column
+
+```{r}
+#| label: coverage-table
+#| echo: false
+kable(coverage, align = c("l", "l", "r", "r"))
+```
+
+```{r}
+#| label: coverage-notes
+#| echo: false
+#| results: asis
+cat(glue(
+  "Computed at page build from **tags {tag_version}**, the released version you ",
+  "can download today, against the {comma(n_tables)} tables in the IRW. ",
+  "Values a rater typed to mean ",
+  '"I could not find this" --- `need help`, `missing description` --- are ',
+  "counted as empty rather than as tags.\n\n",
+  "`*` **`child age` is shown against a different denominator**, and has to be: ",
+  "it is only ever filled when the sample includes children. Its ",
+  "{comma(n_filled[2])} values are counted against the ",
+  "{comma(eligible_child)} tables whose `age range` is `Child (<18y)` or ",
+  "`Mixed`. Against all {comma(n_tables)} tables it reads ",
+  "{pct(n_filled[2])}, which would make it look like the worst-covered column ",
+  "in the project. Blank is the correct value everywhere else.\n"
+))
+```
+
+Two columns sit far below the rest, and they are not backlog --- see
+[what is published and what is withheld](#what-is-published-and-what-is-withheld).
+`construct name` is also not a coverage target in the way the others are: it is
+free text naming an instrument, with most values used exactly once, so there is
+no right answer being missed.
+
+## Four kinds of column
+
+A coverage figure only means something once you know what produced the value.
+Each column belongs to exactly one of these classes, and each is held to its own
+standard.
+
+**Derived** --- `age range`, `child age`. Computed from the table's own
+`cov_age` column rather than judged by anyone. `cov_age` is usable only when it
+parses as numeric, has at least 30 non-missing values, lies within [0, 120] and
+is not a banded code; a 2% floor stops three 17-year-olds in a 46,000-person
+adult survey from making a table `Mixed`. This is the one place where a computed
+value **outranks a human tag**.
+
+**Tagger** --- `primary language(s)`, `item format`, `measurement tool`.
+Answered from the study's source document against a fixed vocabulary, by a human
+working the annotation sheet or by an automated tagger reading the same rules.
+
+**Definitional** --- `sample`, `construct type`. The vocabulary is enforced, but
+the boundaries between its values had to be written down before anyone, human or
+machine, could apply them consistently. Writing `sample`'s rules and then
+amending them moved its frame facet from 26.9% to 45.5% to 54.5% exact match
+**with no change to the tagger at all**.
+
+**Description** --- `construct name`. Free text: "Ages and Stages Questionnaire
+(ASQ-3)", "International Math Olympiad problems". No enumeration, so no
+precision to measure.
+
+## Who wrote these tags
+
+Every tag was written either by a human annotator working a spreadsheet or by an
+automated tagger that reads the study's source document. **The published table
+does not distinguish them**, so if provenance matters for your use, that
+distinction lives in `tags/tags_auto.csv` in the
+[processing repository](https://github.com/ben-domingue/irw), where every
+machine-written row is stamped `Rater = claude-auto`. As of 2026-09-04 that
+file holds 1,847 tagged tables, carrying:
+
+| Column | Values written by the tagger |
+|---|---:|
+| `measurement tool` | 1,837 |
+| `item format` | 1,725 |
+| `primary language(s)` | 1,711 |
+| `sample` (setting facet only) | 1,494 |
+
+: A snapshot of the staging file, not of any published version. Staged values
+reach a release only once that release is published, and a human row overrides
+one wherever the two disagree.
+
+Three rules govern the mix:
+
+- **A human row wins.** The annotation sheet is authoritative for anything a
+  person touched, and machine output is unioned underneath it.
+- **A derived `age range` beats both.** It is computed from the responses
+  themselves, which is better evidence than either rater had.
+- **Nothing is permanent.** No published version of the tags is authoritative
+  over a later, better one. A tag that can be *shown* wrong --- against the
+  source, not merely against a different rater's judgment --- gets fixed. Every
+  Redivis version is immutable and citable, so a correction produces a new
+  version rather than editing the one you cited. Pin a version for stability;
+  take the latest for correctness.
+
+## What is published and what is withheld
+
+The automated tagger fills every field it can support. A staging step then
+decides what is allowed out, and blanks the rest before anything is written.
+**Publishing is a decision made at assembly, not by the tagger**, and the bar is
+90% per-atom precision against the human-annotated set.
+
+| Machine-written column | | Why |
+|---|---|---|
+| `primary language(s)` | published | 100% per-atom precision against gold (n=33) |
+| `item format` | published | 90.9% accurate when it commits |
+| `measurement tool` | published | 86.8--93.3% accurate across runs |
+| `sample` --- setting facet | published | 93.3% per-atom precision |
+| `sample` --- frame facet | **withheld** | 59.1% precision; below the bar |
+| `construct type` | **withheld** | 50.0--66.7% per-atom precision |
+| `age range`, `child age` | **withheld** | the `cov_age` derivation owns these |
+| `construct name` | **withheld** | free text; never scored |
+
+This is why `construct type` sits near 55% while `measurement tool` sits near
+99%. The tagger has an answer for `construct type` on most tables. It is not
+good enough to publish, so it is held back rather than shipped with a caveat.
+
+::: {.callout-warning appearance="simple"}
+## One column carries two facets, and only one of them publishes
+
+`sample` answers two questions at once: *where* the study happened --- the
+**setting**: `Educational`, `Clinical`, `Workplace`, `Internet-based`,
+`Program-based`, `Non-human` --- and *how broad* the sampling was --- the
+**frame**: `Representative`, `Targeted/specific`, `General/non-specific`.
+
+Only the setting facet publishes from the tagger. A machine-written
+`Workplace, Targeted/specific` is staged as `Workplace` alone. So **a missing
+frame value on a machine-tagged table means withheld, not unknown**. Human-tagged
+rows carry both facets.
+:::
+
+## Measured accuracy
+
+Scored blind against the human-annotated set: predictions were made without
+access to the annotation sheet, by a tagger running the same vocabulary the
+rules describe. Blanks count as abstentions rather than errors, because the
+vocabulary asks the tagger to leave a field empty rather than guess --- so
+*exact* means right when it commits.
+
+| Column | Exact | Precision | Recall | n | How it fails |
+|---|---:|---:|---:|---:|---|
+| `primary language(s)` | 90.9% | 100.0% | 91.7% | 33 | never names a language that is not there; misses secondary ones |
+| `item format` | 90.9% | --- | --- | 38 | abstains on 42% of tables rather than guess |
+| `measurement tool` | 86.8% | --- | --- | 38 | commits on every table |
+| `sample` --- setting | 87.5% | 93.3% | 87.5% | 16 | improved at every revision of the rules |
+| `sample` --- frame | 54.5% | 59.1% | 56.5% | 22 | the weakest column; over-commits to `Representative` |
+| `construct type` | 64.9% | 80.0% | 69.6% | 37 | under-tags: right when it names a facet, misses 30% of the facets gold holds |
+| `age range` | 91.7% | --- | --- | 12 | scored against the `cov_age` derivation, not against the sheet |
+| `child age` | --- | --- | --- | 6 | too few labelled rows to score |
+
+: Measured 2026-09-01, on one 60-table sample. {tbl-colwidths="[20,9,10,9,6,46]"}
+
+Precision and recall are per atom, because these columns are multi-select:
+naming two facets of three should not score the same as naming something
+unrelated. They are reported alongside exact match, never instead of it --- a
+bar set on partial credit alone would pass a tagger that reliably names one
+facet of three.
+
+::: {.callout-caution appearance="simple"}
+## Do not use whole-cell match on `sample`
+
+Compared cell-for-cell, `sample` scores 14.7%, and that figure measures the
+annotation sheet's blanks rather than the tagger. The tagger answers the frame
+facet on 34 of 34 tables while the sheet answers it on 22 of 34, so whole-cell
+matching penalises the tagger for filling a facet the key leaves empty --- 15 of
+its 33 misses are supersets rather than wrong answers. Score this column one
+facet at a time, on the tables where the sheet answered that facet.
+:::
+
+## What happens when the same pipeline runs twice
+
+Accuracy is not the only question worth asking. On 2026-09-04, 60 already-tagged
+tables were re-tagged blind, end to end, with cleared caches --- the same
+pipeline, a second time. Separately, 369 tables that carried a language and
+nothing else were re-tagged by agents who were not shown the existing value,
+making that column an independent second opinion at six times the size.
+
+| Column | Both runs answered | Identical | Second opinion at scale |
+|---|---:|---:|---|
+| `item format` | 49 | 100.0% | --- |
+| `measurement tool` | 52 | 100.0% | --- |
+| `primary language(s)` | 49 | 93.9% | 91.1% identical on 359 further tables |
+| `sample` | 41 | 82.9% | --- |
+
+: Run-to-run agreement, 2026-09-04.
+
+**Stability is not correctness.** None of those re-tagged tables has a human
+label to be right or wrong against. Two runs agreeing means the pipeline is
+reproducible, not that it is right.
+
+**A disagreement is sometimes a defect, and finding it is the point.** Of the 32
+language disagreements in the 369-table comparison, ten were the same language
+spelled two ways under ISO 639-2 --- `fra` against `fre`, `cze` against `ces`
+--- since collapsed on export. The other 22 are substantive and have not been
+adjudicated. One earlier disagreement was a plain error: a Brazilian validation
+study recorded as Persian, found only because the same table was tagged twice.
+
+**The two runs commit at different rates and nobody knows why.** Where one run
+answered and the other left a blank, the second run was the one committing 11
+times on `sample`, 8 on `item format` and 7 on `measurement tool`, against 0, 1
+and 1 in the other direction. The asymmetry is real in this sample of 60; its
+cause is not established.
+
+## One column may be inferred, another may never be
+
+The tagging rules are not just lists of permitted values, and two of them point
+in deliberately opposite directions.
+
+**`age range` may not be inferred.** With no usable `cov_age`, it is tagged only
+from explicit age information in the source: a stated numeric inclusion
+criterion, a reported minimum or maximum, a school grade that cannot include
+18-year-olds. Never from a country, a survey programme's name, the word
+"undergraduates" (which routinely includes 17-year-olds), or the construct.
+A wrong value here silently mis-filters a sample, and a blank is cheaper to fix
+than a wrong tag.
+
+**`primary language(s)` may be inferred, and should be.** Where a source does
+not state the language of administration, it is inferred from the country, the
+population, a forward-backward translation, or the language of the instrument's
+cited version. The corpus is majority non-English, and every missing value makes
+it read as more English than it is --- so erring toward naming a non-English
+language is the intended failure direction.
+
+Two inferences stay off-limits even there, because neither is about the
+respondents: a repository record's own language field describes the *record*
+(Zenodo stamps "English" on deposits from Finnish universities), and the
+language a paper is written in is not the language its questionnaire went out
+in. What is recorded is what the respondents read.
+
+## What the accuracy numbers do not cover
+
+This section is the point of the page, not a disclaimer at the end of it.
+
+1. **The evidence is one 60-table sample, scored three times.** Per-column n
+   runs from 6 to 38. These are directional, not tight estimates. One model
+   only; a stronger one would likely differ, and the gap is unmeasured.
+
+2. **The labelled set is known to be wrong for `age range`.** Of 29 gold
+   `Mixed` labels checkable against the table's own `cov_age`, 25 --- 86% ---
+   are contradicted by it. That is why this column is now derived rather than
+   tagged, and why its accuracy is scored against the derivation instead.
+
+3. **No ceiling is known.** The human-annotated set is itself human work of
+   unmeasured consistency. Nobody has measured how often two annotators
+   disagree, so every figure above is scored against a standard whose own
+   quality is unknown.
+
+4. **Whole-cell `sample` match is a dead statistic** --- see the warning above.
+
+5. **Coverage is not reach.** Between 8% and 37% of sampled tables produced
+   nothing at all across runs: failed fetches, paywalls, deposit records with no
+   usable description. Difficulty tracks the *shape of the source* rather than
+   the warehouse a table sits in --- a national assessment programme published
+   through a data portal is harder than a single-instrument psychometrics paper.
+
+6. **Some subjectivity is irreducible.** The re-run found roughly five tables in
+   twelve where a second rater could reasonably land somewhere else. Those are
+   not errors, and rewriting them would be churn rather than repair.
+
+## Where these numbers come from
+
+Coverage on this page is computed at build time from the published tag table, so
+it describes the version you can download today. The accuracy and reliability
+figures are dated snapshots of specific scoring runs and are reproducible from
+the scripts in
+[`tags/scoring/`](https://github.com/ben-domingue/irw/tree/main/tags/scoring) in
+the processing repository, alongside the predictions they scored. The rules
+themselves live in that repository's tagging vocabulary, and the reasoning
+behind each one --- the case as it was put, and what was decided --- in
+`tags/decisions/`.
+
+Corrections are welcome; open an issue on
+[ben-domingue/irw](https://github.com/ben-domingue/irw/issues).
