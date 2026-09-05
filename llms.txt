@@ -26,6 +26,12 @@ genuine result before any account, download or quota enters the picture.
     install.packages("pak")
     pak::pak("itemresponsewarehouse/Rpkg")
 
+    # Needed by every call that touches the warehouse, though not by this
+    # section. redivis is a Suggests and is not on CRAN, so installing irw does
+    # not pull it in; without it the first warehouse call stops with "This
+    # function needs the redivis package".
+    pak::pak("redivis/redivis-r")
+
     library(irw)
     data(swmd_mokken, package = "irw")
 
@@ -388,11 +394,29 @@ tell the researcher which one you think it is.
     irw.list_tables(); irw.filter(var="rt"); df = irw.fetch("4thgrade_math_sirt")
 
 R is the fuller surface. In Python there is no `metadata()`, no `tags()`, and no
-version pinning — so an analysis that must be reproducible by version number
-should be written in R. Also note `source="main"` in Python where R uses
+version pinning — `version()` reports what the corpus is at, but cannot pin an
+analysis to it, so anything that must be reproducible by version number should
+be written in R. Also note `source="main"` in Python where R uses
 `source="core"`, and no `irw_` prefix on function names.
 
-Everything in sections 1-3 and 6-8 applies identically in both languages.
+The concepts in sections 1-3 and 6-8 apply in both languages, but several of
+the remedies named there are R-only. In Python:
+
+  - The nominal schema in §1 is not reachable at all: Python's `source` accepts
+    "main", "sim" and "comp" but not "nom", and `long2resp()` has no `resp_col`
+    argument to reshape `text` in place of `resp`. Use R for those tables.
+  - There is no `covariates()`, so the aligned covariate reattachment in
+    pitfall 2 of §2 has no Python equivalent. Merge on `id` against the wide
+    frame's index yourself — never positionally, which is the exact error that
+    pitfall warns about.
+  - There is no `table_sets()`, so the quota-free route in §3 does not exist:
+    in Python the `n_responses=[0, 1e6]` guard is the only protection, and
+    finding out what items or response values a large table holds means
+    downloading it.
+  - There is no `check_resp()` for a pre-fit sanity check on response values.
+
+Also R-only: `merge()`, `recode()`, `decode()`, `imv()`, `predict()`,
+`resp2long()`, `simdata()` and `simu_diff()`.
 
 --------------------------------------------------------------------------
 ## 10. Citing
