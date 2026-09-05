@@ -1,0 +1,65 @@
+---
+title: "Using an AI Assistant with the IRW"
+---
+
+If you want to use an AI assistant — Claude, ChatGPT, Gemini — to help you
+analyze IRW data, the problem is not that it doesn't know psychometrics. It
+does. The problem is that it doesn't know *this* warehouse: which defaults are
+already filtering your data, which reshaping step quietly drops people, which
+tables are large enough to matter. Those mistakes don't throw errors. They give
+you numbers that look fine and aren't.
+
+So we wrote the assistant a briefing. Paste this at the start of your
+conversation, followed by whatever you actually want to do:
+
+``` text
+You are helping me with psychometric modeling using the Item Response
+Warehouse. Before writing any code, fetch and follow
+https://itemresponsewarehouse.org/llms.txt — it documents the data standard,
+the R/Python API, and several defaults that produce wrong results if you guess.
+
+Then help me with: <your question>
+```
+
+That's it. The assistant fetches the current briefing, so you don't have to keep
+a copy up to date.
+
+## What it covers
+
+The briefing opens with an analysis that runs with **no Redivis account and no
+download at all** — the `irw` package ships a real warehouse table, so you can
+confirm your setup works and see a genuine result before setting anything up.
+
+From there it covers the data standard, how to find tables worth your time, the
+handful of defaults that silently change your results, how to avoid downloading
+far more data than you need, realistic sample-size floors and per-table compute
+costs, and how to tell a model that doesn't fit from code that's broken.
+
+## If your assistant can't browse the web
+
+Some tools can't fetch a URL. In that case, copy the text below into the
+conversation instead.
+
+::: {.callout-note collapse="true"}
+## Full text of the briefing
+
+```{r}
+#| echo: false
+#| results: asis
+cat("``` text\n")
+cat(readLines("llms.txt"), sep = "\n")
+cat("\n```\n")
+```
+:::
+
+## A caution
+
+An assistant that has read the briefing writes considerably better IRW code than
+one that hasn't. It still isn't a substitute for knowing your data. Check what
+it gives you — especially that the table it picked measures what you think it
+measures, and that the model it chose suits your response type.
+
+For worked analyses written by people, see the
+[vignettes](./vignettes/index.qmd). For the underlying documentation, see
+[Getting Started](getstarted.qmd) and the
+[data standard](standard.qmd).
