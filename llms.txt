@@ -1,0 +1,411 @@
+# Item Response Warehouse (IRW) — guide for AI assistants
+
+You are helping a researcher do psychometric modeling with IRW data. This file
+tells you what you cannot guess. Read it before writing code.
+
+The researcher runs the code; you write it. Assume they have R (preferred) or
+Python and can install packages. Assume they have NOT yet set up a Redivis
+account unless they say so.
+
+Home: https://itemresponsewarehouse.org
+R package: https://itemresponsewarehouse.github.io/Rpkg/
+Python package: https://github.com/itemresponsewarehouse/Python-pkg
+
+The IRW is a corpus of ~4,200 harmonized item-response tables — cognitive tests,
+personality inventories, RCT outcome measures, psycholinguistic tasks — all
+reshaped to one schema so the same code runs across all of them.
+
+--------------------------------------------------------------------------
+## 0. START HERE — a real analysis with no account and no download
+--------------------------------------------------------------------------
+
+The `irw` R package ships real warehouse data. If the researcher has not used
+IRW before, give them THIS first. It proves the install works and produces a
+genuine result before any account, download or quota enters the picture.
+
+    install.packages("pak")
+    pak::pak("itemresponsewarehouse/Rpkg")
+
+    library(irw)
+    data(swmd_mokken, package = "irw")
+
+    # 4,557 rows: 30 persons x 7 items, each rated by 651 raters, resp 1-5.
+    # Long format, like every IRW table.
+    str(swmd_mokken)
+
+    # Long -> wide. agg_method="mode" matters here: the default "mean" makes
+    # fractional scores that psych and mokken will not accept as ordinal.
+    # id_density_threshold=NULL keeps all 30 people (the default drops anyone
+    # answering under 10% of items).
+    wide <- irw_long2resp(swmd_mokken, agg_method = "mode",
+                          id_density_threshold = NULL)
+    resp <- as.matrix(wide[, setdiff(names(wide), "id"), drop = FALSE])
+    rownames(resp) <- wide$id
+
+    psych::alpha(resp)$total$raw_alpha          # 0.79
+    mokken::coefH(as.data.frame(resp))          # Scale H = 0.616
+
+Verified to run offline. Two more zero-network paths:
+
+  - `data(diff_long)` — 6,143 real item difficulty estimates with standard
+    errors, from 145 IRW datasets. Feeds `irw_simu_diff()` for simulation with
+    realistic (not normal-by-assumption) difficulties.
+  - `irw_simdata()` — simulate a table with IRW structure. The package's own
+    articles use this whenever the doc build has no credentials.
+
+Only after that works should the researcher connect to Redivis: create an
+account at https://redivis.com/?createAccount, then the first call that touches
+the warehouse opens a browser prompt to authorize. Once per session.
+
+--------------------------------------------------------------------------
+## 1. The data standard — what every table looks like
+--------------------------------------------------------------------------
+
+Every IRW table is LONG: one row per person-item observation. Never assume wide.
+
+REQUIRED, in every table:
+  id     the focal unit measured. Usually a person, sometimes not (a word, a
+         team). Unique per unit, NOT per row.
+  item   the item/probe identifier. String.
+  resp   the response. Numeric.
+
+RESERVED optional columns (exact names — do not invent variants):
+  rt            response time, SECONDS (never ms)
+  date          seconds; Unix time or seconds since collection start
+  wave          longitudinal wave; larger = later
+  timepoint     alternative occasion marker
+  treat         1 = treatment, 0 = control
+  rater         external observer, distinct from id
+  item_family   testlet / clone grouping (only ~2 tables have it)
+  qmatrix1..N   Q-matrix attributes for cognitive diagnostic models
+  cov_*         person-level covariates (constant within id)
+  itemcov_*     item-level covariates (constant within item)
+  trial_*       trial features, when `item` itself is uninformative
+
+Two sibling schemas are NOT id/item/resp. Do not apply the above to them:
+  - Competitions (`source="comp"`): agent_a, agent_b, score_a, score_b, winner,
+    homefield, date. Paired comparisons, e.g. `collegefb_2021and2022`.
+  - Nominal (`source="nom"`): `text` replaces `resp`. Reshape with
+    `irw_long2resp(df, resp_col = "text")`. e.g. `preference_inventory`.
+
+Item text lives in a separate dataset: `irw_itemtext(table)`,
+`irw_list_itemtext_tables()`. IMPORTANT: item-text licensing is separate from
+response-data licensing. A table's open license does NOT grant reuse of the
+instrument's wording.
+
+--------------------------------------------------------------------------
+## 2. THE FIVE THINGS THAT SILENTLY PRODUCE WRONG ANSWERS
+--------------------------------------------------------------------------
+
+If you remember nothing else, remember these. Each one runs without error and
+gives you numbers that are wrong.
+
+**(1) `irw_filter()` is already filtering before you ask it to.**
+Its default is `density = c(0.5, 1)`, so sparse matrices are silently excluded.
+It also drops NAs on any argument you name. If you mean "everything", say so:
+
+    irw_filter(n_categories = 2, density = NULL)
+
+**(2) Reshaping drops people and covariates.**
+`irw_long2resp()` drops every `cov_*` column, AND drops ids answering under 10%
+of items. So reattaching a covariate positionally can give you a vector of the
+right length in the WRONG ORDER — a silent misassignment of people to groups.
+Always:
+
+    wide <- irw_long2resp(df)
+    cov  <- irw_covariates(df, align = wide)   # aligned to wide$id for you
+
+Never `df$cov_gender[!duplicated(df$id)]`.
+
+**(3) Metadata `n_categories` is not the truth about the fitted matrix.**
+Tables have passed `irw_filter(n_categories = 2)` and still died in mirt with
+"Item 1 requires exactly 2 unique categories". `n_categories` also counts NA as
+a level. Recompute from the pivoted matrix, then branch:
+
+    resp <- resp[, sapply(resp, function(x) length(unique(na.omit(x))) > 1),
+                 drop = FALSE]                       # drop zero-variance items
+    k <- length(unique(na.omit(unlist(resp))))
+    # k == 2      -> 2PL / Rasch / IsingFit / tetrachoric
+    # k in 3..7   -> graded or gpcm / EBICglasso / polychoric
+    # otherwise   -> skip this table, do not fall through
+
+**(4) Response direction is NOT harmonized.**
+Reverse-scored items are deliberately left as collected. Higher `resp` means a
+consistent change WITHIN an item, but direction can vary ACROSS items in the
+same table. Sum scores and unidimensional fits need you to reverse them first.
+Relatedly: `resp` is not guaranteed 0/1 coded. mirt recodes internally;
+`imv.binary()` does not, so canonicalize when a function demands literal 0/1.
+
+There is no flag marking reverse-keyed items. The practical detector is a
+one-factor fit: items with NEGATIVE discrimination are almost always
+reverse-keyed rather than broken. Check before concluding an item misbehaves,
+and tell the researcher which items you flipped.
+
+**(5) Repeated rows can be the data, not a defect.**
+Duplicate id-item pairs are legal by design. `number_pattern_game` has every
+pair exactly 30 times — 30 trials. `dedup = TRUE` there destroys 94% of the
+data. Before deduping, check for `wave`/`timepoint`/`date`/`rater`, and collapse
+to one occasion deliberately rather than letting a default choose — either
+`irw_long2resp(df, wave = 1)`, or subset first (`df <- df[df$wave == 1, ]`).
+Left alone, `irw_long2resp()` picks the MOST FREQUENT wave and only says so in
+a message that is easy to miss.
+
+--------------------------------------------------------------------------
+## 3. Download size — the one number that matters
+--------------------------------------------------------------------------
+
+Redivis caps how many bytes YOUR account can export in a rolling 30-day
+window (you download under your own Redivis login, so this budget is yours).
+`irw_fetch()` downloads every row and has NO size guard of its own.
+
+The good news, and you should reassure the researcher about this: the corpus is
+mostly small. Median table is ~8,200 responses. 96% of tables are under 1M rows
+(roughly 50 MB). You could fetch every one of those 4,050 tables and use a small
+fraction of a monthly allowance.
+
+The risk is concentrated in ~82 tables at 10M+ rows — 2% of tables but ~88% of
+the bytes. The largest, `criticalperiod_syntax`, is 107M rows (~3.3 GB). A block
+of 52 ENEM tables sit at 45M rows each.
+
+So the guard is one argument:
+
+    tables <- irw_filter(construct_type = "Cognitive/educational",
+                         n_categories = 2,
+                         n_responses = c(0, 1e6))     # <- keeps you safe
+
+When you only need to know what items or response values a table contains, do
+not download it. `irw_table_sets()` answers server-side, returns in seconds on a
+68M-row table, and does not count against the export quota at all:
+
+    s <- irw_table_sets("condon_2024_sapa_personality")
+    s$n_rows; s$items; s$resp
+    irw_table_sets(name, per_item = TRUE)$per_item   # n, min, max per item
+
+Note the ergonomics point the wrong way: `irw_fetch()` accepts a vector of
+names, `irw_table_sets()` takes ONE name. For a corpus sweep you must lapply
+over it yourself. Do that anyway — it is the difference between a sweep that
+costs nothing and one that costs a month of allowance.
+
+If a fetch fails with a quota error, that is a limit on bytes exported, not a
+missing or deleted table. It is reported as such — don't go hunting for the
+table.
+
+--------------------------------------------------------------------------
+## 4. Good tables to start with
+--------------------------------------------------------------------------
+
+Recommend one of these before a corpus sweep. They are used throughout the IRW
+site and package docs, so their behavior is known. All are small.
+
+  4thgrade_math_sirt      dichotomous cognitive; THE default example (20k resp)
+  psychtools_bfi          25 items, 5 traits; known-multidimensional reference
+  5personalityfactors     polytomous; CFA and graded-response examples
+  gilbert_meta_2          RCT outcome measure; the IMV 1PL-vs-2PL example
+  swmd_mokken             bundled, offline; rater-structured polytomous
+  chess_lnirt             person covariate (ELO) + response times
+  frac20                  Q-matrix / DINA, 8 skills
+  lsat                    classic 5-item binary, N=1000
+  andrich_mudfold         non-monotone (unfolding) counterexample; small
+  collegefb_2021and2022   source="comp" paired comparisons
+  preference_inventory    source="nom" nominal responses
+
+For a known-multidimensional vs known-unidimensional contrast, the site pairs
+`psychtools_bfi` against `4thgrade_math_sirt`.
+
+--------------------------------------------------------------------------
+## 5. Finding tables
+--------------------------------------------------------------------------
+
+    irw_filter(...)             by metadata and tags; returns table NAMES
+    irw_metadata()              the full metadata frame (~4,200 rows — see §7)
+    irw_info("table")           one table's summary
+    irw_tags(tables)            qualitative tags
+    irw_tag_options(col)        allowed values for a tag column
+    irw_license_options()       available licenses
+    irw_collections()           LIST the curated collections
+    irw_collection("name")      the table names IN one collection
+    irw_collection_members(...) which collections a table belongs to
+
+And to get data, once you have a name:
+
+    irw_fetch(name)             the table, as a LONG data frame (id/item/resp/...)
+                                accepts a vector of names -> named list
+    irw_table_sets(name)        items and response values, server-side, free (§3)
+    irw_long2resp(df, wave = NULL, id_density_threshold = 0.1,
+                  agg_method = NULL, resp_col = "resp")   long -> wide
+    irw_covariates(df, cols = NULL, align = NULL)
+                                one row per id, columns id + the cov_* columns.
+                                With align = wide, rows follow wide$id exactly.
+
+All of the above take `source = "core"` (the default), or "comp" / "nom" for the
+sibling schemas in §1.
+
+To find tables that HAVE a covariate at all, filter on the column name — `var`
+accepts an exact name or a prefix:
+
+    irw_filter(var = "rt")                     # has response times
+    irw_filter(var = "cov_")                   # has any person covariate
+    union(irw_filter(var = "cov_gender"), irw_filter(var = "cov_sex"))
+
+Numeric filter arguments (each takes c(lo, hi)): n_responses, n_participants,
+n_items, n_categories, responses_per_participant, responses_per_item, density.
+Use these to NARROW a candidate set — then verify on the actual matrix. In
+particular `n_categories` here is metadata and can disagree with what you fit;
+see §2(3).
+
+Tag arguments: age_range, child_age__for_child_focused_studies_, construct_type,
+construct_name, sample, measurement_tool, item_format, primary_language_s_.
+Also: var (a column name, e.g. var="rt"), license, collection, longitudinal.
+
+Caveats on selection metadata, all real:
+  - Tags cover roughly 2/3 of tables and are thinner among recent additions.
+    Filtering on a tag silently restricts you to the tagged subset.
+  - Sentinel strings typed by human raters ("NA", "need help", "no link or
+    info") appear as values. They are not tags.
+  - `cov_age` contains sentinels (999, 1999, negative day offsets) in some
+    tables, and `irw_filter()` treats every value there as an age.
+  - `collection = c("rct", "response_time")` is a UNION, not an intersection.
+    For "both", use:
+        intersect(irw_collection("rct"), irw_collection("response_time"))
+  - Collection membership is rule-based pattern matching, not table-by-table
+    verified. Read it as "the ones we know of".
+
+Do not treat any of these as ground truth about a construct. They are a way to
+narrow 4,200 tables to a workable candidate set, which you then check.
+
+--------------------------------------------------------------------------
+## 6. Fitting models — thresholds and costs that hold up
+--------------------------------------------------------------------------
+
+These floors come from the analyses published on the IRW site, where they were
+chosen because lower values misbehaved. Use them unless you have a reason.
+
+  minimum items          5
+  maximum items          30-60, depending on estimator (Q3 matrices and
+                         regularized networks scale quadratically or worse)
+  minimum participants   200-500 for most IRT/CFA work
+                         2,000 for asymmetric IRT (shape recovery was still
+                         noisy at 1,000)
+                         ~50 is a hard floor for anything
+  downsample             cap at ~10,000 respondents; sample IDs and subset
+                         BEFORE reshaping, never sample rows
+
+Per-table compute, measured:
+  2PL (mirt)                seconds; 66 tables took ~32 min end to end, and
+                            most of that was download, not fitting
+  Regularized network       1-10 s (Gaussian) but 138-192 s (ordinal MRF)
+  LSIRM / MCMC              30-60 minutes per table
+
+Size a batch honestly before proposing it. "Fit this across the corpus" is a
+reasonable request for a 2PL and an unreasonable one for LSIRM — at 30-60
+min/table, 100 tables is multiple days. Say so, and propose a sample instead.
+
+**Parameters from separate tables are not on a common scale.** Each table is
+calibrated on its own sample, so a 2PL difficulty of 0.5 in one table and 0.5 in
+another do not mean the same thing. Without anchor items or an explicit linking
+step there is nothing to link them through — IRW tables rarely share items.
+
+So a cross-table sweep supports DISTRIBUTIONAL comparisons — spread, skew, how
+wide a difficulty range an instrument covers, how discrimination varies — and
+not statements like "item X is harder than item Y" across tables. Say which one
+you are doing. If the researcher wants a genuinely common metric, that is a
+linking study and needs shared items or a common-person design.
+
+Other things the published analyses do consistently:
+  - Wrap `irw_fetch()` in a retry (3 attempts, backoff). It fails transiently.
+  - Save each table's fit to its own .rds keyed by table name, and skip it if
+    the file exists. Then a crash resumes instead of restarting.
+  - In lavaan, declare binary items `ordered` (switches to DWLS/probit), and
+    read the `.scaled` fit measures — the unscaled pvalue comes back NA.
+  - Pin the version for anything publishable: `irw_use_version(n)`. The IRW
+    version number names one exact state of every underlying dataset at once
+    (the response shards plus the metadata and item-text datasets).
+    CITE THE NUMBER, NOT THE DATE — dates before 2026-07-21 resolve only
+    approximately.
+
+--------------------------------------------------------------------------
+## 7. Working well inside a chat window
+--------------------------------------------------------------------------
+
+You are in a conversation with a limited context and the researcher may have a
+limited message quota. Both are easy to waste.
+
+DO NOT ask the researcher to paste back the output of `irw_list_tables()` or
+`irw_metadata()`. That is thousands of rows; it will flood the conversation and
+degrade everything after it. If you need to know what is available, have them
+run a filter and report `length()`, or a `head()`.
+
+Ask for compact diagnostics, and say exactly which:
+    dim(df); names(df); table(df$resp, useNA="ifany"); head(df, 5)
+
+Prefer handing over ONE complete, runnable script over a back-and-forth of
+fragments. Every round trip of "that errored / here's a fix" costs the
+researcher a message and you a chunk of context. Write the script so that it
+prints a short, deliberate summary — that way if something does go wrong, what
+they paste back is small.
+
+Have scripts cache what they download:
+
+    if (file.exists("cache/tbl.rds")) {
+      df <- readRDS("cache/tbl.rds")
+    } else {
+      df <- irw_fetch("table_name")
+      dir.create("cache", showWarnings = FALSE); saveRDS(df, "cache/tbl.rds")
+    }
+
+This is the pattern the IRW site itself uses for every heavy analysis. It means
+an interrupted session resumes rather than re-downloading.
+
+--------------------------------------------------------------------------
+## 8. When a null result is the right answer
+--------------------------------------------------------------------------
+
+Some failures are real findings, not bugs. Do not send the researcher debugging
+these:
+
+  - An empty regularized network. Of 610 tables analyzed on the IRW site, 7 came
+    back with zero edges — and on inspection they were genuine: mean absolute
+    correlations of 0.05-0.16, plus extreme item endorsement or heavy
+    missingness. EBIC/LASSO is designed to drop exactly those edges.
+  - Ipsative / compositional tables, where each person's responses sum to a
+    constant (an allocation task summing to 100). These violate the conditional
+    independence assumption every IRT model makes. Exclude, don't model.
+  - MCMC chains that diverge on a substantial share of post-warmup samples.
+  - Tables under ~50 respondents. A clean result from very few comparisons is
+    weak evidence, not a strong finding — say so rather than reporting it.
+  - Items with near-zero variance, or items every person passed. Drop and
+    re-check the item count before fitting.
+
+Distinguish "this model does not fit this data" from "this code is broken", and
+tell the researcher which one you think it is.
+
+--------------------------------------------------------------------------
+## 9. Python
+--------------------------------------------------------------------------
+
+    pip install "git+https://github.com/itemresponsewarehouse/Python-pkg.git"
+    import irw
+    irw.list_tables(); irw.filter(var="rt"); df = irw.fetch("4thgrade_math_sirt")
+
+R is the fuller surface. In Python there is no `metadata()`, no `tags()`, and no
+version pinning — so an analysis that must be reproducible by version number
+should be written in R. Also note `source="main"` in Python where R uses
+`source="core"`, and no `irw_` prefix on function names.
+
+Everything in sections 1-3 and 6-8 applies identically in both languages.
+
+--------------------------------------------------------------------------
+## 10. Citing
+--------------------------------------------------------------------------
+
+Each table has its own source and license. Get them with:
+
+    irw_info("table_name")
+    irw_save_bibtex(c("table_a", "table_b"), output_file = "refs.bib")
+
+Cite the original data producers, not just the IRW. Check the per-table license
+before redistribution, and remember that item text carries separate rights from
+response data.
+
+Full documentation: https://itemresponsewarehouse.org
+Worked analyses: https://itemresponsewarehouse.org/vignettes/

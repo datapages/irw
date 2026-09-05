@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>The Nominal Data Standard – Item Response Warehouse</title>
+<title>Using an AI Assistant with the IRW – Item Response Warehouse</title>
 <style>
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -25,41 +25,6 @@ ul.task-list li input[type="checkbox"] {
   width: 0.8em;
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
-}
-/* CSS for syntax highlighting */
-html { -webkit-text-size-adjust: 100%; }
-pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
-pre > code.sourceCode > span:empty { height: 1.2em; }
-.sourceCode { overflow: visible; }
-code.sourceCode > span { color: inherit; text-decoration: inherit; }
-div.sourceCode { margin: 1em 0; }
-pre.sourceCode { margin: 0; }
-@media screen {
-div.sourceCode { overflow: auto; }
-}
-@media print {
-pre > code.sourceCode { white-space: pre-wrap; }
-pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
-}
-pre.numberSource code
-  { counter-reset: source-line 0; }
-pre.numberSource code > span
-  { position: relative; left: -4em; counter-increment: source-line; }
-pre.numberSource code > span > a:first-child::before
-  { content: counter(source-line);
-    position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; display: inline-block;
-    -webkit-touch-callout: none; -webkit-user-select: none;
-    -khtml-user-select: none; -moz-user-select: none;
-    -ms-user-select: none; user-select: none;
-    padding: 0 4px; width: 4em;
-  }
-pre.numberSource { margin-left: 3em;  padding-left: 4px; }
-div.sourceCode
-  {   }
-@media screen {
-pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
 }
 </style>
 
@@ -298,7 +263,7 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">The Nominal Data Standard</h1>
+<h1 class="title">Using an AI Assistant with the IRW</h1>
 </div>
 
 
@@ -315,61 +280,455 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 </header>
 
 
-<p>Note: This is an experimental feature.</p>
-<section id="the-data-standard" class="level2">
-<h2 class="anchored" data-anchor-id="the-data-standard">The data standard</h2>
-<p>The IRW nominal data standard is meant to describe data wherein responses are nominal and not ordinal. There are two distinct types of such data. The first type involves responses in a necessarily finite (but nominal) set of mutually exclusive categories; a typical example here might be the specific option from a multiple choice item that is selected. The second type involves responses that are potentially infinite; examples here would be constructed responses like essays.</p>
-<ul>
-<li><code>text</code>: This is the nominal version of <code>resp</code>.</li>
-</ul>
+<p>If you want to use an AI assistant — Claude, ChatGPT, Gemini — to help you analyze IRW data, the problem is not that it doesn’t know psychometrics. It does. The problem is that it doesn’t know <em>this</em> warehouse: which defaults are already filtering your data, which reshaping step quietly drops people, which tables are large enough to matter. Those mistakes don’t throw errors. They give you numbers that look fine and aren’t.</p>
+<p>So we wrote the assistant a briefing. Paste this at the start of your conversation, followed by whatever you actually want to do:</p>
+<pre class="text"><code>You are helping me with psychometric modeling using the Item Response
+Warehouse. Before writing any code, fetch and follow
+https://itemresponsewarehouse.org/llms.txt — it documents the data standard,
+the R/Python API, and several defaults that produce wrong results if you guess.
+
+Then help me with: &lt;your question&gt;</code></pre>
+<p>That’s it. The assistant fetches the current briefing, so you don’t have to keep a copy up to date.</p>
+<section id="what-it-covers" class="level2">
+<h2 class="anchored" data-anchor-id="what-it-covers">What it covers</h2>
+<p>The briefing opens with an analysis that runs with <strong>no Redivis account and no download at all</strong> — the <code>irw</code> package ships a real warehouse table, so you can confirm your setup works and see a genuine result before setting anything up.</p>
+<p>From there it covers the data standard, how to find tables worth your time, the handful of defaults that silently change your results, how to avoid downloading far more data than you need, realistic sample-size floors and per-table compute costs, and how to tell a model that doesn’t fit from code that’s broken.</p>
 </section>
-<section id="accessing-the-nominal-data" class="level2">
-<h2 class="anchored" data-anchor-id="accessing-the-nominal-data">Accessing the nominal data</h2>
-<p>Documentation related to the tables can be found <a href="https://docs.google.com/spreadsheets/d/12tM4vADKcUm5LGOGRwQ5_HKkdYa3mZUaKbFUqgs2U_w/edit?gid=0#gid=0">here</a>.</p>
+<section id="if-your-assistant-cant-browse-the-web" class="level2">
+<h2 class="anchored" data-anchor-id="if-your-assistant-cant-browse-the-web">If your assistant can’t browse the web</h2>
+<p>Some tools can’t fetch a URL. In that case, copy the text below into the conversation instead.</p>
+<div class="callout callout-style-default callout-note no-icon callout-titled">
+<div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-1-contents" aria-controls="callout-1" aria-expanded="false" aria-label="Toggle callout">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Full text of the briefing
+</div>
+<div class="callout-btn-toggle d-inline-block border-0 py-1 ps-1 pe-0 float-end"><i class="callout-toggle"></i></div>
+</div>
+<div id="callout-1" class="callout-1-contents callout-collapse collapse">
+<div class="callout-body-container callout-body">
+<pre class="text"><code># Item Response Warehouse (IRW) — guide for AI assistants
+
+You are helping a researcher do psychometric modeling with IRW data. This file
+tells you what you cannot guess. Read it before writing code.
+
+The researcher runs the code; you write it. Assume they have R (preferred) or
+Python and can install packages. Assume they have NOT yet set up a Redivis
+account unless they say so.
+
+Home: https://itemresponsewarehouse.org
+R package: https://itemresponsewarehouse.github.io/Rpkg/
+Python package: https://github.com/itemresponsewarehouse/Python-pkg
+
+The IRW is a corpus of ~4,200 harmonized item-response tables — cognitive tests,
+personality inventories, RCT outcome measures, psycholinguistic tasks — all
+reshaped to one schema so the same code runs across all of them.
+
+--------------------------------------------------------------------------
+## 0. START HERE — a real analysis with no account and no download
+--------------------------------------------------------------------------
+
+The `irw` R package ships real warehouse data. If the researcher has not used
+IRW before, give them THIS first. It proves the install works and produces a
+genuine result before any account, download or quota enters the picture.
+
+    install.packages("pak")
+    pak::pak("itemresponsewarehouse/Rpkg")
+
+    library(irw)
+    data(swmd_mokken, package = "irw")
+
+    # 4,557 rows: 30 persons x 7 items, each rated by 651 raters, resp 1-5.
+    # Long format, like every IRW table.
+    str(swmd_mokken)
+
+    # Long -&gt; wide. agg_method="mode" matters here: the default "mean" makes
+    # fractional scores that psych and mokken will not accept as ordinal.
+    # id_density_threshold=NULL keeps all 30 people (the default drops anyone
+    # answering under 10% of items).
+    wide &lt;- irw_long2resp(swmd_mokken, agg_method = "mode",
+                          id_density_threshold = NULL)
+    resp &lt;- as.matrix(wide[, setdiff(names(wide), "id"), drop = FALSE])
+    rownames(resp) &lt;- wide$id
+
+    psych::alpha(resp)$total$raw_alpha          # 0.79
+    mokken::coefH(as.data.frame(resp))          # Scale H = 0.616
+
+Verified to run offline. Two more zero-network paths:
+
+  - `data(diff_long)` — 6,143 real item difficulty estimates with standard
+    errors, from 145 IRW datasets. Feeds `irw_simu_diff()` for simulation with
+    realistic (not normal-by-assumption) difficulties.
+  - `irw_simdata()` — simulate a table with IRW structure. The package's own
+    articles use this whenever the doc build has no credentials.
+
+Only after that works should the researcher connect to Redivis: create an
+account at https://redivis.com/?createAccount, then the first call that touches
+the warehouse opens a browser prompt to authorize. Once per session.
+
+--------------------------------------------------------------------------
+## 1. The data standard — what every table looks like
+--------------------------------------------------------------------------
+
+Every IRW table is LONG: one row per person-item observation. Never assume wide.
+
+REQUIRED, in every table:
+  id     the focal unit measured. Usually a person, sometimes not (a word, a
+         team). Unique per unit, NOT per row.
+  item   the item/probe identifier. String.
+  resp   the response. Numeric.
+
+RESERVED optional columns (exact names — do not invent variants):
+  rt            response time, SECONDS (never ms)
+  date          seconds; Unix time or seconds since collection start
+  wave          longitudinal wave; larger = later
+  timepoint     alternative occasion marker
+  treat         1 = treatment, 0 = control
+  rater         external observer, distinct from id
+  item_family   testlet / clone grouping (only ~2 tables have it)
+  qmatrix1..N   Q-matrix attributes for cognitive diagnostic models
+  cov_*         person-level covariates (constant within id)
+  itemcov_*     item-level covariates (constant within item)
+  trial_*       trial features, when `item` itself is uninformative
+
+Two sibling schemas are NOT id/item/resp. Do not apply the above to them:
+  - Competitions (`source="comp"`): agent_a, agent_b, score_a, score_b, winner,
+    homefield, date. Paired comparisons, e.g. `collegefb_2021and2022`.
+  - Nominal (`source="nom"`): `text` replaces `resp`. Reshape with
+    `irw_long2resp(df, resp_col = "text")`. e.g. `preference_inventory`.
+
+Item text lives in a separate dataset: `irw_itemtext(table)`,
+`irw_list_itemtext_tables()`. IMPORTANT: item-text licensing is separate from
+response-data licensing. A table's open license does NOT grant reuse of the
+instrument's wording.
+
+--------------------------------------------------------------------------
+## 2. THE FIVE THINGS THAT SILENTLY PRODUCE WRONG ANSWERS
+--------------------------------------------------------------------------
+
+If you remember nothing else, remember these. Each one runs without error and
+gives you numbers that are wrong.
+
+**(1) `irw_filter()` is already filtering before you ask it to.**
+Its default is `density = c(0.5, 1)`, so sparse matrices are silently excluded.
+It also drops NAs on any argument you name. If you mean "everything", say so:
+
+    irw_filter(n_categories = 2, density = NULL)
+
+**(2) Reshaping drops people and covariates.**
+`irw_long2resp()` drops every `cov_*` column, AND drops ids answering under 10%
+of items. So reattaching a covariate positionally can give you a vector of the
+right length in the WRONG ORDER — a silent misassignment of people to groups.
+Always:
+
+    wide &lt;- irw_long2resp(df)
+    cov  &lt;- irw_covariates(df, align = wide)   # aligned to wide$id for you
+
+Never `df$cov_gender[!duplicated(df$id)]`.
+
+**(3) Metadata `n_categories` is not the truth about the fitted matrix.**
+Tables have passed `irw_filter(n_categories = 2)` and still died in mirt with
+"Item 1 requires exactly 2 unique categories". `n_categories` also counts NA as
+a level. Recompute from the pivoted matrix, then branch:
+
+    resp &lt;- resp[, sapply(resp, function(x) length(unique(na.omit(x))) &gt; 1),
+                 drop = FALSE]                       # drop zero-variance items
+    k &lt;- length(unique(na.omit(unlist(resp))))
+    # k == 2      -&gt; 2PL / Rasch / IsingFit / tetrachoric
+    # k in 3..7   -&gt; graded or gpcm / EBICglasso / polychoric
+    # otherwise   -&gt; skip this table, do not fall through
+
+**(4) Response direction is NOT harmonized.**
+Reverse-scored items are deliberately left as collected. Higher `resp` means a
+consistent change WITHIN an item, but direction can vary ACROSS items in the
+same table. Sum scores and unidimensional fits need you to reverse them first.
+Relatedly: `resp` is not guaranteed 0/1 coded. mirt recodes internally;
+`imv.binary()` does not, so canonicalize when a function demands literal 0/1.
+
+There is no flag marking reverse-keyed items. The practical detector is a
+one-factor fit: items with NEGATIVE discrimination are almost always
+reverse-keyed rather than broken. Check before concluding an item misbehaves,
+and tell the researcher which items you flipped.
+
+**(5) Repeated rows can be the data, not a defect.**
+Duplicate id-item pairs are legal by design. `number_pattern_game` has every
+pair exactly 30 times — 30 trials. `dedup = TRUE` there destroys 94% of the
+data. Before deduping, check for `wave`/`timepoint`/`date`/`rater`, and collapse
+to one occasion deliberately rather than letting a default choose — either
+`irw_long2resp(df, wave = 1)`, or subset first (`df &lt;- df[df$wave == 1, ]`).
+Left alone, `irw_long2resp()` picks the MOST FREQUENT wave and only says so in
+a message that is easy to miss.
+
+--------------------------------------------------------------------------
+## 3. Download size — the one number that matters
+--------------------------------------------------------------------------
+
+Redivis caps how many bytes YOUR account can export in a rolling 30-day
+window (you download under your own Redivis login, so this budget is yours).
+`irw_fetch()` downloads every row and has NO size guard of its own.
+
+The good news, and you should reassure the researcher about this: the corpus is
+mostly small. Median table is ~8,200 responses. 96% of tables are under 1M rows
+(roughly 50 MB). You could fetch every one of those 4,050 tables and use a small
+fraction of a monthly allowance.
+
+The risk is concentrated in ~82 tables at 10M+ rows — 2% of tables but ~88% of
+the bytes. The largest, `criticalperiod_syntax`, is 107M rows (~3.3 GB). A block
+of 52 ENEM tables sit at 45M rows each.
+
+So the guard is one argument:
+
+    tables &lt;- irw_filter(construct_type = "Cognitive/educational",
+                         n_categories = 2,
+                         n_responses = c(0, 1e6))     # &lt;- keeps you safe
+
+When you only need to know what items or response values a table contains, do
+not download it. `irw_table_sets()` answers server-side, returns in seconds on a
+68M-row table, and does not count against the export quota at all:
+
+    s &lt;- irw_table_sets("condon_2024_sapa_personality")
+    s$n_rows; s$items; s$resp
+    irw_table_sets(name, per_item = TRUE)$per_item   # n, min, max per item
+
+Note the ergonomics point the wrong way: `irw_fetch()` accepts a vector of
+names, `irw_table_sets()` takes ONE name. For a corpus sweep you must lapply
+over it yourself. Do that anyway — it is the difference between a sweep that
+costs nothing and one that costs a month of allowance.
+
+If a fetch fails with a quota error, that is a limit on bytes exported, not a
+missing or deleted table. It is reported as such — don't go hunting for the
+table.
+
+--------------------------------------------------------------------------
+## 4. Good tables to start with
+--------------------------------------------------------------------------
+
+Recommend one of these before a corpus sweep. They are used throughout the IRW
+site and package docs, so their behavior is known. All are small.
+
+  4thgrade_math_sirt      dichotomous cognitive; THE default example (20k resp)
+  psychtools_bfi          25 items, 5 traits; known-multidimensional reference
+  5personalityfactors     polytomous; CFA and graded-response examples
+  gilbert_meta_2          RCT outcome measure; the IMV 1PL-vs-2PL example
+  swmd_mokken             bundled, offline; rater-structured polytomous
+  chess_lnirt             person covariate (ELO) + response times
+  frac20                  Q-matrix / DINA, 8 skills
+  lsat                    classic 5-item binary, N=1000
+  andrich_mudfold         non-monotone (unfolding) counterexample; small
+  collegefb_2021and2022   source="comp" paired comparisons
+  preference_inventory    source="nom" nominal responses
+
+For a known-multidimensional vs known-unidimensional contrast, the site pairs
+`psychtools_bfi` against `4thgrade_math_sirt`.
+
+--------------------------------------------------------------------------
+## 5. Finding tables
+--------------------------------------------------------------------------
+
+    irw_filter(...)             by metadata and tags; returns table NAMES
+    irw_metadata()              the full metadata frame (~4,200 rows — see §7)
+    irw_info("table")           one table's summary
+    irw_tags(tables)            qualitative tags
+    irw_tag_options(col)        allowed values for a tag column
+    irw_license_options()       available licenses
+    irw_collections()           LIST the curated collections
+    irw_collection("name")      the table names IN one collection
+    irw_collection_members(...) which collections a table belongs to
+
+And to get data, once you have a name:
+
+    irw_fetch(name)             the table, as a LONG data frame (id/item/resp/...)
+                                accepts a vector of names -&gt; named list
+    irw_table_sets(name)        items and response values, server-side, free (§3)
+    irw_long2resp(df, wave = NULL, id_density_threshold = 0.1,
+                  agg_method = NULL, resp_col = "resp")   long -&gt; wide
+    irw_covariates(df, cols = NULL, align = NULL)
+                                one row per id, columns id + the cov_* columns.
+                                With align = wide, rows follow wide$id exactly.
+
+All of the above take `source = "core"` (the default), or "comp" / "nom" for the
+sibling schemas in §1.
+
+To find tables that HAVE a covariate at all, filter on the column name — `var`
+accepts an exact name or a prefix:
+
+    irw_filter(var = "rt")                     # has response times
+    irw_filter(var = "cov_")                   # has any person covariate
+    union(irw_filter(var = "cov_gender"), irw_filter(var = "cov_sex"))
+
+Numeric filter arguments (each takes c(lo, hi)): n_responses, n_participants,
+n_items, n_categories, responses_per_participant, responses_per_item, density.
+Use these to NARROW a candidate set — then verify on the actual matrix. In
+particular `n_categories` here is metadata and can disagree with what you fit;
+see §2(3).
+
+Tag arguments: age_range, child_age__for_child_focused_studies_, construct_type,
+construct_name, sample, measurement_tool, item_format, primary_language_s_.
+Also: var (a column name, e.g. var="rt"), license, collection, longitudinal.
+
+Caveats on selection metadata, all real:
+  - Tags cover roughly 2/3 of tables and are thinner among recent additions.
+    Filtering on a tag silently restricts you to the tagged subset.
+  - Sentinel strings typed by human raters ("NA", "need help", "no link or
+    info") appear as values. They are not tags.
+  - `cov_age` contains sentinels (999, 1999, negative day offsets) in some
+    tables, and `irw_filter()` treats every value there as an age.
+  - `collection = c("rct", "response_time")` is a UNION, not an intersection.
+    For "both", use:
+        intersect(irw_collection("rct"), irw_collection("response_time"))
+  - Collection membership is rule-based pattern matching, not table-by-table
+    verified. Read it as "the ones we know of".
+
+Do not treat any of these as ground truth about a construct. They are a way to
+narrow 4,200 tables to a workable candidate set, which you then check.
+
+--------------------------------------------------------------------------
+## 6. Fitting models — thresholds and costs that hold up
+--------------------------------------------------------------------------
+
+These floors come from the analyses published on the IRW site, where they were
+chosen because lower values misbehaved. Use them unless you have a reason.
+
+  minimum items          5
+  maximum items          30-60, depending on estimator (Q3 matrices and
+                         regularized networks scale quadratically or worse)
+  minimum participants   200-500 for most IRT/CFA work
+                         2,000 for asymmetric IRT (shape recovery was still
+                         noisy at 1,000)
+                         ~50 is a hard floor for anything
+  downsample             cap at ~10,000 respondents; sample IDs and subset
+                         BEFORE reshaping, never sample rows
+
+Per-table compute, measured:
+  2PL (mirt)                seconds; 66 tables took ~32 min end to end, and
+                            most of that was download, not fitting
+  Regularized network       1-10 s (Gaussian) but 138-192 s (ordinal MRF)
+  LSIRM / MCMC              30-60 minutes per table
+
+Size a batch honestly before proposing it. "Fit this across the corpus" is a
+reasonable request for a 2PL and an unreasonable one for LSIRM — at 30-60
+min/table, 100 tables is multiple days. Say so, and propose a sample instead.
+
+**Parameters from separate tables are not on a common scale.** Each table is
+calibrated on its own sample, so a 2PL difficulty of 0.5 in one table and 0.5 in
+another do not mean the same thing. Without anchor items or an explicit linking
+step there is nothing to link them through — IRW tables rarely share items.
+
+So a cross-table sweep supports DISTRIBUTIONAL comparisons — spread, skew, how
+wide a difficulty range an instrument covers, how discrimination varies — and
+not statements like "item X is harder than item Y" across tables. Say which one
+you are doing. If the researcher wants a genuinely common metric, that is a
+linking study and needs shared items or a common-person design.
+
+Other things the published analyses do consistently:
+  - Wrap `irw_fetch()` in a retry (3 attempts, backoff). It fails transiently.
+  - Save each table's fit to its own .rds keyed by table name, and skip it if
+    the file exists. Then a crash resumes instead of restarting.
+  - In lavaan, declare binary items `ordered` (switches to DWLS/probit), and
+    read the `.scaled` fit measures — the unscaled pvalue comes back NA.
+  - Pin the version for anything publishable: `irw_use_version(n)`. The IRW
+    version number names one exact state of every underlying dataset at once
+    (the response shards plus the metadata and item-text datasets).
+    CITE THE NUMBER, NOT THE DATE — dates before 2026-07-21 resolve only
+    approximately.
+
+--------------------------------------------------------------------------
+## 7. Working well inside a chat window
+--------------------------------------------------------------------------
+
+You are in a conversation with a limited context and the researcher may have a
+limited message quota. Both are easy to waste.
+
+DO NOT ask the researcher to paste back the output of `irw_list_tables()` or
+`irw_metadata()`. That is thousands of rows; it will flood the conversation and
+degrade everything after it. If you need to know what is available, have them
+run a filter and report `length()`, or a `head()`.
+
+Ask for compact diagnostics, and say exactly which:
+    dim(df); names(df); table(df$resp, useNA="ifany"); head(df, 5)
+
+Prefer handing over ONE complete, runnable script over a back-and-forth of
+fragments. Every round trip of "that errored / here's a fix" costs the
+researcher a message and you a chunk of context. Write the script so that it
+prints a short, deliberate summary — that way if something does go wrong, what
+they paste back is small.
+
+Have scripts cache what they download:
+
+    if (file.exists("cache/tbl.rds")) {
+      df &lt;- readRDS("cache/tbl.rds")
+    } else {
+      df &lt;- irw_fetch("table_name")
+      dir.create("cache", showWarnings = FALSE); saveRDS(df, "cache/tbl.rds")
+    }
+
+This is the pattern the IRW site itself uses for every heavy analysis. It means
+an interrupted session resumes rather than re-downloading.
+
+--------------------------------------------------------------------------
+## 8. When a null result is the right answer
+--------------------------------------------------------------------------
+
+Some failures are real findings, not bugs. Do not send the researcher debugging
+these:
+
+  - An empty regularized network. Of 610 tables analyzed on the IRW site, 7 came
+    back with zero edges — and on inspection they were genuine: mean absolute
+    correlations of 0.05-0.16, plus extreme item endorsement or heavy
+    missingness. EBIC/LASSO is designed to drop exactly those edges.
+  - Ipsative / compositional tables, where each person's responses sum to a
+    constant (an allocation task summing to 100). These violate the conditional
+    independence assumption every IRT model makes. Exclude, don't model.
+  - MCMC chains that diverge on a substantial share of post-warmup samples.
+  - Tables under ~50 respondents. A clean result from very few comparisons is
+    weak evidence, not a strong finding — say so rather than reporting it.
+  - Items with near-zero variance, or items every person passed. Drop and
+    re-check the item count before fitting.
+
+Distinguish "this model does not fit this data" from "this code is broken", and
+tell the researcher which one you think it is.
+
+--------------------------------------------------------------------------
+## 9. Python
+--------------------------------------------------------------------------
+
+    pip install "git+https://github.com/itemresponsewarehouse/Python-pkg.git"
+    import irw
+    irw.list_tables(); irw.filter(var="rt"); df = irw.fetch("4thgrade_math_sirt")
+
+R is the fuller surface. In Python there is no `metadata()`, no `tags()`, and no
+version pinning — so an analysis that must be reproducible by version number
+should be written in R. Also note `source="main"` in Python where R uses
+`source="core"`, and no `irw_` prefix on function names.
+
+Everything in sections 1-3 and 6-8 applies identically in both languages.
+
+--------------------------------------------------------------------------
+## 10. Citing
+--------------------------------------------------------------------------
+
+Each table has its own source and license. Get them with:
+
+    irw_info("table_name")
+    irw_save_bibtex(c("table_a", "table_b"), output_file = "refs.bib")
+
+Cite the original data producers, not just the IRW. Check the per-table license
+before redistribution, and remember that item text carries separate rights from
+response data.
+
+Full documentation: https://itemresponsewarehouse.org
+Worked analyses: https://itemresponsewarehouse.org/vignettes/
+</code></pre>
+</div>
+</div>
+</div>
 </section>
-<section id="an-example" class="level2">
-<h2 class="anchored" data-anchor-id="an-example">An example</h2>
-<p>Let’s look at an example of how we can fit the nominal response model to a table (<code>preference_inventory</code>) from the nominal branch of the IRW and generated category response functions for all items.</p>
-<div class="tabset-margin-container"></div><div class="panel-tabset">
-<ul class="nav nav-tabs" role="tablist"><li class="nav-item" role="presentation"><a class="nav-link active" id="tabset-1-1-tab" data-bs-toggle="tab" data-bs-target="#tabset-1-1" role="tab" aria-controls="tabset-1-1" aria-selected="true" href="">R</a></li></ul>
-<div class="tab-content">
-<div id="tabset-1-1" class="tab-pane active" role="tabpanel" aria-labelledby="tabset-1-1-tab">
-<div class="cell">
-<details class="code-fold">
-<summary>Code</summary>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>df<span class="ot">&lt;-</span>irw<span class="sc">::</span><span class="fu">irw_fetch</span>(<span class="st">"preference_inventory"</span>,<span class="at">source=</span><span class="st">'nom'</span>)</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>resp<span class="ot">&lt;-</span>irw<span class="sc">::</span><span class="fu">irw_long2resp</span>(df,<span class="at">resp_col=</span><span class="st">'text'</span>)</span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>resp<span class="sc">$</span>id<span class="ot">&lt;-</span><span class="cn">NULL</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(mirt)</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>m<span class="ot">&lt;-</span><span class="fu">mirt</span>(resp,<span class="dv">1</span>,<span class="st">'nominal'</span>)</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>f<span class="ot">&lt;-</span><span class="cf">function</span>(mod,n) {</span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    extr <span class="ot">&lt;-</span> <span class="fu">extract.item</span>(mod,n)</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    Theta <span class="ot">&lt;-</span> <span class="fu">matrix</span>(<span class="fu">seq</span>(<span class="sc">-</span><span class="dv">6</span>,<span class="dv">6</span>, <span class="at">length.out=</span><span class="dv">2000</span>))</span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    pr <span class="ot">&lt;-</span> <span class="fu">probtrace</span>(extr, Theta)</span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">list</span>(Theta,pr)</span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>}</span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>out<span class="ot">&lt;-</span><span class="fu">list</span>()</span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (n <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">ncol</span>(resp)) out[[n]]<span class="ot">&lt;-</span><span class="fu">f</span>(m,n)</span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="do">##</span></span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="fu">par</span>(<span class="at">mfrow=</span><span class="fu">c</span>(<span class="dv">4</span>,<span class="dv">3</span>),<span class="at">mgp=</span><span class="fu">c</span>(<span class="dv">2</span>,<span class="dv">1</span>,<span class="dv">0</span>),<span class="at">mar=</span><span class="fu">c</span>(<span class="dv">3</span>,<span class="dv">3</span>,<span class="dv">1</span>,<span class="dv">1</span>))</span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>cols<span class="ot">&lt;-</span><span class="fu">c</span>(<span class="st">"black"</span>,<span class="st">"red"</span>,<span class="st">"blue"</span>,<span class="st">"green"</span>)</span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (i <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="fu">length</span>(out)) {</span>
-<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">plot</span>(<span class="cn">NULL</span>,<span class="at">xlim=</span><span class="fu">c</span>(<span class="sc">-</span><span class="dv">5</span>,<span class="dv">5</span>),<span class="at">ylim=</span><span class="dv">0</span><span class="sc">:</span><span class="dv">1</span>,<span class="at">xlab=</span><span class="st">'theta'</span>,<span class="at">ylab=</span><span class="st">'Pr'</span>)</span>
-<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>    z<span class="ot">&lt;-</span>out[[i]]</span>
-<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> (j <span class="cf">in</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">4</span>) <span class="fu">lines</span>(z[[<span class="dv">1</span>]],z[[<span class="dv">2</span>]][,j],<span class="at">col=</span>cols[j])</span>
-<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</details>
-<div class="cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="nominal_standard_files/figure-html/unnamed-chunk-1-1.png" class="img-fluid figure-img" width="672"></p>
-</figure>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
+<section id="a-caution" class="level2">
+<h2 class="anchored" data-anchor-id="a-caution">A caution</h2>
+<p>An assistant that has read the briefing writes considerably better IRW code than one that hasn’t. It still isn’t a substitute for knowing your data. Check what it gives you — especially that the table it picked measures what you think it measures, and that the model it chose suits your response type.</p>
+<p>For worked analyses written by people, see the <a href="./vignettes/index.html">vignettes</a>. For the underlying documentation, see <a href="./getstarted.html">Getting Started</a> and the <a href="./standard.html">data standard</a>.</p>
 
 
 </section>
