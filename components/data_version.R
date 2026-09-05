@@ -84,8 +84,11 @@ irw_data_version <- function(stem = NULL) {
     cat("\nThis page fetches IRW data when the site is built, so it reflects ",
         "**IRW v", got$version, "**",
         if (got$stale) {
-          paste0(" (the newest version recorded in the manifest; the live ",
-                 "manifest could not be read at build time)")
+          # Not the newest IRW version -- the newest this site has resolved
+          # anything against. Say which, rather than implying it is current.
+          paste0(" or later (the live manifest could not be read at build ",
+                 "time, so this is the newest version any page on this site ",
+                 "has been resolved against, not necessarily the current one)")
         } else {
           ", the newest version at render time"
         },

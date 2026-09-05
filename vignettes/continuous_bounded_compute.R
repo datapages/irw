@@ -269,6 +269,9 @@ if (!file.exists(out_rds)) {
                    n_usable_round2 = 5,
                    note = "See vet_candidates.R/vet_results.csv (round 1) and vet_candidates2.R/vet_results2.csv (round 2, corrects the wave/rater oversight). Still excluded after round 2: tears (crossed rater x stimulus x phase design), emoji_scheffler_2024 (unclear rater/id structure), opentsstvr_linnig_2025_vas (duplicates persist even within one wave), double_marking_steele_2022 and thomeczek2025_les (too few observations per rater once split), klippel_irw (item-varying ranges), ehealth_rioux_2025_* (mixed 0-100/1-7 formats), mclaughlin_samuel_2025_auditory_session_1 (1 item). westhoff2023_{stopd,pbat} and gilbert_meta_95 passed the structural (wave) check but hit an unresolved Beta IRT (and, for pbat, Samejima CRM) scoring failure even at K=6 bins -- left out of this pass, not counted as excluded or included.")
   )
+  # Stamp the run date so the vignette's version can be resolved from a record
+  # rather than from a git commit date. See vignettes/vignette_versions_compute.R.
+  results$date_run <- Sys.Date()
   saveRDS(results, out_rds)
   message("Saved results to ", out_rds)
 } else {
@@ -382,7 +385,8 @@ if (!file.exists(grid_out_rds)) {
                                recovery_cor = r$recovery_cor)
   }))
 
-  saveRDS(list(grid = grid, scores = grid_scores), grid_out_rds)
+  saveRDS(list(grid = grid, scores = grid_scores, date_run = Sys.Date()),
+          grid_out_rds)
   message("Saved grid results to ", grid_out_rds)
 } else {
   message(grid_out_rds, " already exists -- skipping (delete it to force a rerun)")

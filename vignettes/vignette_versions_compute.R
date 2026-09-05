@@ -149,8 +149,13 @@ CACHES <- list(
   "rt_imv"                 = "rtimvdata/rt_imv_results.rds"
 )
 
-# Vignettes whose caches predate the date_run convention. Dated from git until
-# their compute scripts are next run, at which point date_run takes over.
+# Vignettes whose caches predate the date_run convention, dated from git instead.
+#
+# Their compute scripts now stamp date_run, but the existing caches do not carry
+# one and are not being regenerated. After either script is next run, move its
+# entry into CACHES above -- the switch is manual, not automatic. gender_dif
+# writes one .rds per dataset rather than a single results file, so its CACHES
+# entry will need the newest date_run across gender_dif_data/*.rds.
 GIT_DATED <- list(
   "continuous_bounded" = "continuous_bounded_data",
   "gender_dif"         = "gender_dif_data"
@@ -158,6 +163,11 @@ GIT_DATED <- list(
 
 # Vignettes that fetch from Redivis at render time and so have no fixed version;
 # components/data_version.R reports the live version for these instead.
+#
+# irt_python is listed for completeness but does NOT use the include: it is a
+# Python-only page on Quarto's jupyter engine, and an R chunk would flip it to
+# knitr and pull in reticulate, which is not in renv.lock. Its version sentence
+# is written out by hand in the .qmd, exactly as its source link already is.
 LIVE <- c("cfa", "imv", "irt_python")
 
 # Neither: diffsim is pure simulation and touches no IRW table.
@@ -210,6 +220,13 @@ git_cache_date <- function(dir_rel) {
 # ---------------------------------------------------------------------- assemble
 
 main <- function() {
+  # Paths below are relative to the repository root (the compute scripts and the
+  # site render both assume a fixed working directory, so this one does too).
+  # Say so plainly rather than failing later inside file().
+  if (!dir.exists(VIGNETTE_DIR)) {
+    stop("Run this from the repository root: no ", VIGNETTE_DIR, "/ directory ",
+         "found in ", getwd(), call. = FALSE)
+  }
   manifest <- read_manifest()
   rows <- list()
 

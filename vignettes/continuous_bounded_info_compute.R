@@ -216,7 +216,7 @@ if (!file.exists(out_rds)) {
 
   info_curves <- do.call(rbind, rows)
   results <- list(table = res$real$table, N = N, J = J, items = orig_items,
-                   info_curves = info_curves)
+                   info_curves = info_curves, date_run = Sys.Date())
   saveRDS(results, out_rds)
   message("Saved empirical information curves to ", out_rds)
 } else {
