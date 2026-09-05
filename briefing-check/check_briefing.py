@@ -18,6 +18,7 @@ meant to return the same tables for the same filter, and that comparison needs n
 from __future__ import annotations
 
 import argparse
+import datetime
 import inspect
 import json
 import sys
@@ -164,8 +165,12 @@ def main(json_path: str | None = "counts_python.json") -> int:
         record("FAIL", "pitfall 2 toy check", f"raised {type(e).__name__}: {str(e)[:160]}")
 
     if json_path:
+        # n_tables and written_at are for compare.py: the first lets it refuse a comparison across
+        # two different corpus versions, the second says how old each side is.
+        stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         with open(json_path, "w") as f:
-            json.dump({"package": "python", "irw_version": version, "filters": counts,
+            json.dump({"package": "python", "irw_version": version, "written_at": stamp,
+                       "n_tables": total, "filters": counts,
                        "quota_guard_pass": guard_n}, f, indent=2)
         print(f"counts written to {json_path}")
 
