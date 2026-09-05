@@ -17,6 +17,12 @@ holds them against each other. That comparison needs no expected values, which i
 survive corpus versions: it fails on divergence, whichever side is wrong. On 2026-09-05 it would have
 printed `n_categories=2: python 4229, r 451`.
 
+Two things keep that comparison honest about *which* run it is reading. Each counts file carries the
+catalogue size it saw, and `compare.py` refuses outright when the two disagree, rather than reporting
+the corpus having moved as a disagreement between the packages. And a run with no `REDIVIS_API_TOKEN`
+still writes its counts file, carrying no counts: otherwise the previous run's file stays on disk and
+`compare.py` holds today's numbers against last month's and reports that all is well.
+
 Nothing here downloads a response table, so it spends no Redivis quota.
 
 ## When to run
@@ -31,7 +37,7 @@ inside the project the check would be reading the site's library rather than the
 |---|---|
 | `check_briefing.py` | Python side. Writes `counts_python.json` (or `--json PATH`, empty to skip) |
 | `check_briefing.R` | R side, including section 0 offline. Writes `counts_r.json` |
-| `compare.py` | Holds the two JSONs against each other; exits 1 on any difference |
+| `compare.py` | Holds the two JSONs against each other; exits 1 on any difference, or if the two runs saw different catalogues |
 | `examples/` | The three local runs of 2026-09-05 and their JSONs, as reference output |
 
 ## Run
@@ -52,21 +58,25 @@ Then:
 
 ## Measured on 2026-09-05, irw_meta at v21.0
 
-- A fresh install pinned to the last commit before the fix (`a5eb750`, the 0.0.2 everyone had):
+- A fresh install pinned to the last commit before the fix (`a5eb750`, the 0.0.2 everyone had — it
+  self-reports `0.0.1`, since the package carries no tags and `__version__` lagged behind what people
+  called the install, so `examples/counts_python_0.0.2.json` disagrees with its own filename):
   exit 1, 9 of 21 checks failing. `include_metadata=True` carries one column, all six filters return
   4,229 of 4,230 tables, the six counts are identical, and `info()` raises `NotFoundError`.
   `compare.py` against the R counts: 0 agree, 3 differ, exit 1.
 - The same script against 0.1.0: exit 0, 23 of 23. Filters give 451, 667, 290, 86, 2,713 and 71.
 - The R script (irw 1.1.2): exit 0, 30 of 30, with 451 / 667 / 290 and 3,205 through the quota guard.
-  `compare.py` against the 0.1.0 counts: 4 agree, 0 differ, exit 0.
+  `compare.py` against the 0.1.0 counts: 4 agree, 0 differ, exit 0. That run, and the transcript in
+  `examples/r_1.1.2_pass.txt`, predate the second filter assertion added since, so a rerun reports
+  one more check than the transcript does.
 - One thing the R run surfaces: in an `Rscript` run, redivis' *"No reference id was provided for the
   table"* warning still prints once. That is the client objecting to bare-name addressing, which is
   the behaviour wanted here.
 
 One detail that matters for the bar: the no-op did not return the whole catalogue, it returned 4,229
-of 4,230 (a duplicate name dropped), so "strictly fewer than the catalogue" would have passed. The
-Python script requires at most 98% of the catalogue per filter, and every documented filter sits far
-below that.
+of 4,230 (a duplicate name dropped), so "strictly fewer than the catalogue" would have passed. Both
+scripts require at most 98% of the catalogue per filter, and every documented filter sits far below
+that.
 
 ## Origin
 

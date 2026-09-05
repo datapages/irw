@@ -82,8 +82,16 @@ if (inherits(cv, "error")) {
 }
 
 # 3. The warehouse: filters must filter, and the quota guard must guard.
+stamp <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
 if (!nzchar(Sys.getenv("REDIVIS_API_TOKEN"))) {
   record("WARN", "warehouse checks skipped", "REDIVIS_API_TOKEN not set")
+  # Write the counts file even so, carrying no counts. Leaving the previous run's file in place
+  # would let compare.py hold today's Python numbers against last month's R numbers and report
+  # agreement; with an empty filters object it says "nothing to compare" and exits 1.
+  writeLines(sprintf(paste0('{"package": "r", "irw_version": "%s", "written_at": "%s", ',
+                            '"n_tables": null, "filters": {}, "quota_guard_pass": null}'),
+                     as.character(packageVersion("irw")), stamp), "counts_r.json")
+  cat("counts_r.json written with no counts (warehouse checks skipped)\n")
 } else {
   md <- irw_metadata()
   total <- nrow(md)
@@ -92,10 +100,15 @@ if (!nzchar(Sys.getenv("REDIVIS_API_TOKEN"))) {
   f1 <- suppressMessages(irw_filter(n_categories = 2))
   f2 <- suppressMessages(irw_filter(n_categories = 2, density = NULL))
   f3 <- suppressMessages(irw_filter(n_responses = c(0, 1000)))
-  check(length(f1) < total, "irw_filter(n_categories = 2) filters", paste(length(f1), "of", total))
+  # The bar is at most 98% of the catalogue, as on the Python side: the 0.0.2 no-op returned 4,229
+  # of 4,230 (a duplicate name dropped), so "strictly fewer than the catalogue" would have passed it.
+  noop_bar <- 0.98 * total
+  check(length(f1) <= noop_bar, "irw_filter(n_categories = 2) filters", paste(length(f1), "of", total))
+  check(length(f2) <= noop_bar, "irw_filter(n_categories = 2, density = NULL) filters",
+        paste(length(f2), "of", total))
   check(length(f2) >= length(f1), "dropping the default density filter never removes tables",
         paste(length(f1), "->", length(f2)))
-  check(length(f3) < total && length(f3) != length(f1), "irw_filter(n_responses = c(0, 1000)) filters",
+  check(length(f3) <= noop_bar && length(f3) != length(f1), "irw_filter(n_responses = c(0, 1000)) filters",
         paste(length(f3), "of", total))
   guarded <- suppressMessages(irw_filter(n_responses = c(0, 1e6)))
   big <- md$table[!is.na(md$n_responses) & md$n_responses >= 1e6]
@@ -113,9 +126,12 @@ if (!nzchar(Sys.getenv("REDIVIS_API_TOKEN"))) {
   v <- irw_version()
   check(!is.null(v), "irw_version() returns")
   # The counts, for compare.py. Same keys as the Python side; no jsonlite needed.
-  json <- sprintf(paste0('{"package": "r", "irw_version": "%s", "filters": {"n_categories=2": %d, ',
+  # n_tables goes in so compare.py can refuse a comparison across two different corpus versions.
+  json <- sprintf(paste0('{"package": "r", "irw_version": "%s", "written_at": "%s", "n_tables": %d, ',
+                         '"filters": {"n_categories=2": %d, ',
                          '"n_categories=2, density=None": %d, "n_responses=[0, 1000]": %d}, "quota_guard_pass": %d}'),
-                  as.character(packageVersion("irw")), length(f1), length(f2), length(f3), length(guarded))
+                  as.character(packageVersion("irw")), stamp, total,
+                  length(f1), length(f2), length(f3), length(guarded))
   writeLines(json, "counts_r.json")
   cat("counts written to counts_r.json\n")
 }
