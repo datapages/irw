@@ -136,12 +136,19 @@ same table. Sum scores and unidimensional fits need you to reverse them first.
 Relatedly: `resp` is not guaranteed 0/1 coded. mirt recodes internally;
 `imv.binary()` does not, so canonicalize when a function demands literal 0/1.
 
+There is no flag marking reverse-keyed items. The practical detector is a
+one-factor fit: items with NEGATIVE discrimination are almost always
+reverse-keyed rather than broken. Check before concluding an item misbehaves,
+and tell the researcher which items you flipped.
+
 **(5) Repeated rows can be the data, not a defect.**
 Duplicate id-item pairs are legal by design. `number_pattern_game` has every
 pair exactly 30 times — 30 trials. `dedup = TRUE` there destroys 94% of the
 data. Before deduping, check for `wave`/`timepoint`/`date`/`rater`, and collapse
-to one occasion deliberately rather than letting a default choose. Note
-`irw_long2resp()` silently defaults to the MOST FREQUENT wave.
+to one occasion deliberately rather than letting a default choose — either
+`irw_long2resp(df, wave = 1)`, or subset first (`df <- df[df$wave == 1, ]`).
+Left alone, `irw_long2resp()` picks the MOST FREQUENT wave and only says so in
+a message that is easy to miss.
 
 --------------------------------------------------------------------------
 ## 3. Download size — the one number that matters
@@ -209,16 +216,42 @@ For a known-multidimensional vs known-unidimensional contrast, the site pairs
 ## 5. Finding tables
 --------------------------------------------------------------------------
 
-    irw_filter(...)        by metadata and tags; returns table names
-    irw_metadata()         the full metadata frame (~4,200 rows — see §7)
-    irw_info("table")      one table's summary
-    irw_tags(tables)       qualitative tags
-    irw_tag_options(col)   allowed values for a tag column
-    irw_license_options()  available licenses
-    irw_collections()      curated groupings
+    irw_filter(...)             by metadata and tags; returns table NAMES
+    irw_metadata()              the full metadata frame (~4,200 rows — see §7)
+    irw_info("table")           one table's summary
+    irw_tags(tables)            qualitative tags
+    irw_tag_options(col)        allowed values for a tag column
+    irw_license_options()       available licenses
+    irw_collections()           LIST the curated collections
+    irw_collection("name")      the table names IN one collection
+    irw_collection_members(...) which collections a table belongs to
+
+And to get data, once you have a name:
+
+    irw_fetch(name)             the table, as a LONG data frame (id/item/resp/...)
+                                accepts a vector of names -> named list
+    irw_table_sets(name)        items and response values, server-side, free (§3)
+    irw_long2resp(df, wave = NULL, id_density_threshold = 0.1,
+                  agg_method = NULL, resp_col = "resp")   long -> wide
+    irw_covariates(df, cols = NULL, align = NULL)
+                                one row per id, columns id + the cov_* columns.
+                                With align = wide, rows follow wide$id exactly.
+
+All of the above take `source = "core"` (the default), or "comp" / "nom" for the
+sibling schemas in §1.
+
+To find tables that HAVE a covariate at all, filter on the column name — `var`
+accepts an exact name or a prefix:
+
+    irw_filter(var = "rt")                     # has response times
+    irw_filter(var = "cov_")                   # has any person covariate
+    union(irw_filter(var = "cov_gender"), irw_filter(var = "cov_sex"))
 
 Numeric filter arguments (each takes c(lo, hi)): n_responses, n_participants,
 n_items, n_categories, responses_per_participant, responses_per_item, density.
+Use these to NARROW a candidate set — then verify on the actual matrix. In
+particular `n_categories` here is metadata and can disagree with what you fit;
+see §2(3).
 
 Tag arguments: age_range, child_age__for_child_focused_studies_, construct_type,
 construct_name, sample, measurement_tool, item_format, primary_language_s_.
@@ -267,6 +300,17 @@ Size a batch honestly before proposing it. "Fit this across the corpus" is a
 reasonable request for a 2PL and an unreasonable one for LSIRM — at 30-60
 min/table, 100 tables is multiple days. Say so, and propose a sample instead.
 
+**Parameters from separate tables are not on a common scale.** Each table is
+calibrated on its own sample, so a 2PL difficulty of 0.5 in one table and 0.5 in
+another do not mean the same thing. Without anchor items or an explicit linking
+step there is nothing to link them through — IRW tables rarely share items.
+
+So a cross-table sweep supports DISTRIBUTIONAL comparisons — spread, skew, how
+wide a difficulty range an instrument covers, how discrimination varies — and
+not statements like "item X is harder than item Y" across tables. Say which one
+you are doing. If the researcher wants a genuinely common metric, that is a
+linking study and needs shared items or a common-person design.
+
 Other things the published analyses do consistently:
   - Wrap `irw_fetch()` in a retry (3 attempts, backoff). It fails transiently.
   - Save each table's fit to its own .rds keyed by table name, and skip it if
@@ -274,7 +318,8 @@ Other things the published analyses do consistently:
   - In lavaan, declare binary items `ordered` (switches to DWLS/probit), and
     read the `.scaled` fit measures — the unscaled pvalue comes back NA.
   - Pin the version for anything publishable: `irw_use_version(n)`. The IRW
-    version number names one exact state of all eleven underlying datasets.
+    version number names one exact state of every underlying dataset at once
+    (the response shards plus the metadata and item-text datasets).
     CITE THE NUMBER, NOT THE DATE — dates before 2026-07-21 resolve only
     approximately.
 
