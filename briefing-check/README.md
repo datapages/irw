@@ -44,7 +44,7 @@ inside the project the check would be reading the site's library rather than the
 
 Python, with the documented install line:
 
-    python3 -m venv venv && ./venv/bin/pip install "git+https://github.com/itemresponsewarehouse/Python-pkg.git"
+    python3 -m venv venv && ./venv/bin/pip install irw
     REDIVIS_API_TOKEN=... ./venv/bin/python check_briefing.py
 
 R, with the documented install lines (it installs `irw`, `psych` and `mokken` itself if missing; the

@@ -9,7 +9,7 @@ Needs Python 3.9+ (the package's own floor), the package installed with the docu
 REDIVIS_API_TOKEN in the environment. Downloads no response tables: it only touches the catalogue and
 the metadata tables, so it spends no Redivis quota.
 
-    python3 -m venv venv && ./venv/bin/pip install "git+https://github.com/itemresponsewarehouse/Python-pkg.git"
+    python3 -m venv venv && ./venv/bin/pip install irw
     REDIVIS_API_TOKEN=... ./venv/bin/python check_briefing.py [--json counts_python.json]
 
 The counts go to a small JSON so compare.py can hold them against the R side: the two packages are

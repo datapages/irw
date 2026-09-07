@@ -35,11 +35,18 @@ named 'mirt'` unless the Python that Quarto resolves has them installed:
 
 ```bash
 pip install mirt girth scipy matplotlib pandas jupyter
-pip install "git+https://github.com/itemresponsewarehouse/Python-pkg.git"
+pip install irw
 ```
 
 That is the same list `.github/workflows/quarto_publish.yaml` installs, so CI
-always has it and a fresh maintainer machine usually does not. **A full local
+always has it and a fresh maintainer machine usually does not.
+
+`irw` comes from PyPI now rather than from `git+`, which is a change in kind
+worth knowing: **a render installs the last released version, not whatever is on
+Python-pkg's `main`.** So a fix that has been merged but not tagged will not
+reach the site. That is the more honest default — the site should show what
+`pip install irw` actually gives a reader — but it means shipping a Python-pkg
+fix to the site now takes a release, not a merge. **A full local
 render is therefore not a reliable pre-flight check for CI** — it can fail for a
 reason CI does not have, and a local pass is no guarantee either. Rendering a
 single page (`quarto render data.qmd`) is unaffected and is usually what you

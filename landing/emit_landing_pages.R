@@ -355,7 +355,7 @@ build_page <- function(x) {
   access <- paste0(
 "<pre># R\ninstall.packages(\"remotes\")\nremotes::install_github(\"itemresponsewarehouse/Rpkg\")\n",
 "library(irw)\ndf &lt;- irw_fetch(\"", esc(x$table), "\")</pre>\n",
-"<pre># Python\npip install git+https://github.com/itemresponsewarehouse/Python-pkg.git\n\n",
+"<pre># Python\npip install irw\n\n",
 "import irw\ndf = irw.fetch(\"", esc(x$table), "\")</pre>\n",
 "<p>Browse or download it directly on <a href=\"", esc(x$redivis_url),
 "\">Redivis</a>, or take the ",
