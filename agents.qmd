@@ -9,8 +9,24 @@ already filtering your data, which reshaping step quietly drops people, which
 tables are large enough to matter. Those mistakes don't throw errors. They give
 you numbers that look fine and aren't.
 
-So we wrote the assistant a briefing. Paste this at the start of your
-conversation, followed by whatever you actually want to do:
+There are two ways to fix that, and they solve different halves of the problem.
+
+|  | [The briefing](#the-briefing) | [The IRW server](#the-irw-server) |
+|---|---|---|
+| **What it does** | Teaches the assistant how to write correct IRW code | Lets the assistant look things up in the warehouse itself |
+| **Setup** | None — paste one paragraph | Install a package, edit a config file, once |
+| **Works with** | Any assistant | Assistants that support MCP |
+| **Best for** | "Help me fit a model to this table" | "What's in the IRW that suits my question?" |
+
+They are complementary, and using both is reasonable: the briefing is what
+stops the assistant writing subtly wrong code, and the server is what stops it
+recommending the wrong table in the first place. If you only do one, start with
+the briefing — it costs nothing.
+
+## The briefing {#the-briefing}
+
+Paste this at the start of your conversation, followed by whatever you actually
+want to do:
 
 ``` text
 You are helping me with psychometric modeling using the Item Response
@@ -24,7 +40,7 @@ Then help me with: <your question>
 That's it. The assistant fetches the current briefing, so you don't have to keep
 a copy up to date.
 
-## What it covers
+### What it covers
 
 The briefing opens with an analysis that runs with **no Redivis account and no
 download at all** — the `irw` package ships a real warehouse table, so you can
@@ -35,7 +51,7 @@ handful of defaults that silently change your results, how to avoid downloading
 far more data than you need, realistic sample-size floors and per-table compute
 costs, and how to tell a model that doesn't fit from code that's broken.
 
-## If your assistant can't browse the web
+### If your assistant can't browse the web
 
 Some tools can't fetch a URL. In that case, copy the text below into the
 conversation instead.
@@ -52,12 +68,152 @@ cat("\n```\n")
 ```
 :::
 
+## The IRW server {#the-irw-server}
+
+The briefing tells an assistant how the IRW works. It does not let the assistant
+*look at* the IRW — it still has to guess which tables exist, and it will guess
+plausibly and wrongly.
+
+The IRW server closes that gap. It's a small program that runs on your own
+computer and gives your assistant read-only access to the warehouse, so it can
+search the catalogue, read a table's metadata, and check how a table was built
+before it recommends anything. You ask a question in ordinary English; the
+assistant does the looking.
+
+### Why this matters more than it sounds
+
+The single most useful thing the server does is read our **processing notes**.
+
+Every IRW table was built by a script, and the top of that script is where the
+person who built it wrote down what they had to decide. Whether `id` really
+identifies a person or had to fall back to a row number. What a `cov_` column
+actually contains. Which columns from the source were deliberately excluded, and
+why. These are the facts that determine whether a table can answer your
+question, and none of them are in the metadata — they're prose in a Python file
+on GitHub that almost nobody reads.
+
+An assistant working from metadata alone will confidently recommend a table that
+scores perfectly on every number and cannot do what you need. An assistant with
+the server can go and read why.
+
+### Setting it up
+
+You need Python 3.10 or newer, a [Redivis](https://redivis.com) account (free),
+and an assistant that supports MCP — Claude Desktop and Claude Code both do.
+
+**1. Install the package with the server included:**
+
+``` bash
+pip install "irw[mcp]"
+```
+
+**2. Sign in to Redivis once**, so your credentials are cached:
+
+``` bash
+python -c "import irw; irw.list_tables()"
+```
+
+This opens a browser login the first time. Do it in a normal terminal — the
+server cannot complete an interactive login, and will tell you so rather than
+hang. (Alternatively, set a `REDIVIS_API_TOKEN` environment variable.)
+
+**3. Tell your assistant about it.**
+
+For **Claude Code**, one command:
+
+``` bash
+claude mcp add irw -- irw-mcp
+```
+
+For **Claude Desktop**, add this to your configuration file
+(`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS,
+`%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+
+``` json
+{
+  "mcpServers": {
+    "irw": {
+      "command": "irw-mcp"
+    }
+  }
+}
+```
+
+If your assistant reports that it can't find `irw-mcp`, give it the full path —
+`python -c "import shutil; print(shutil.which('irw-mcp'))"` will print it.
+
+**4. Restart the application.** The server is loaded at startup, so a running
+assistant won't see it until you do.
+
+### What a session looks like
+
+You type a research question in plain English. Nothing IRW-specific, no
+commands:
+
+> *I need repeated measures of depression in adolescents, where treatment
+> assignment is also recorded.*
+
+The assistant then does several things you don't see: searches the catalogue,
+pulls full metadata on the plausible candidates, reads the processing notes for
+the ones that survive, and may pull a few rows to check the shape. It comes back
+with prose — a handful of tables, what each actually contains, and why it ruled
+others out.
+
+From there you push back the way you would with a colleague. *Does the second
+one actually link people across waves? What's the item wording? How do I cite
+it?* Each of those is another lookup you don't have to do yourself.
+
+You end up with a table name, a real sense of whether it fits, item text if it
+exists, and a citation. **Then you go to R or Python and pull the data
+properly.** The server is for the part before the analysis — deciding what to
+analyze. It doesn't hand over datasets and it doesn't run models.
+
+### What it can do
+
+- Search the catalogue by text or by any filter the `irw` package supports, and
+  explain what a filter's values mean
+- Return a table's full metadata and statistics
+- **Read the processing notes** for how a table was built
+- Fetch a bounded sample of rows so you can see the actual data
+- Return item text, together with its licence and any known problems with it
+- Return a BibTeX citation for the original data producers
+- List the IRW's collections
+
+Everything is read-only. Nothing you do through the assistant can change the
+warehouse.
+
+### What it costs
+
+It runs on your machine under your own Redivis credentials, and downloads only
+what you asked for rather than whole tables. A discovery conversation costs very
+little on either side — some tokens in your assistant, a negligible slice of
+your Redivis allowance. There is no IRW-held key and nothing is billed to us.
+
+::: {.callout-note appearance="simple"}
+The server is per-person: each user installs it themselves. There is no link we
+can host that gives an assistant access on your behalf.
+:::
+
 ## A caution
 
 An assistant that has read the briefing writes considerably better IRW code than
-one that hasn't. It still isn't a substitute for knowing your data. Check what
-it gives you — especially that the table it picked measures what you think it
-measures, and that the model it chose suits your response type.
+one that hasn't. An assistant with the server picks considerably better tables.
+Neither is a substitute for knowing your data.
+
+Two things in particular are worth checking yourself, because they are exactly
+where a confident answer can be wrong:
+
+**"The IRW doesn't have that."** Our tags are added by hand and are incomplete —
+several hundred tables carry no tags at all. A search that comes back empty means
+*nothing matched what has been labelled*, which is not the same as nothing
+existing. The server says so in every response, but whether your assistant
+passes that on to you is up to your assistant. If a result seems too thin, ask
+it to search again by name or by variable rather than by tag.
+
+**"This table fits your design."** Check that claim against the table's own
+processing notes and its documentation. Ask the assistant directly: *how do you
+know `id` identifies the same person across waves here?* A good answer cites the
+processing notes. A vague one is a signal to look yourself.
 
 For worked analyses written by people, see the
 [vignettes](./vignettes/index.qmd). For the underlying documentation, see
