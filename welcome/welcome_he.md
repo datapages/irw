@@ -234,7 +234,7 @@ df <- irw_fetch("4thgrade_math_sirt")   # download one table
 
 ```python
 # Python
-# pip install "git+https://github.com/itemresponsewarehouse/Python-pkg.git"
+# pip install irw
 import irw
 
 irw.info()
