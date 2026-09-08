@@ -17,7 +17,9 @@ quarto preview                        # Dev server on port 4200
 quarto render vignettes/cfa.qmd       # Render a single file
 ```
 
-The site is published by GitHub Actions (`.github/workflows/quarto_publish.yaml`) to `gh-pages`. This is **not** automatic: the workflow is `workflow_dispatch` only, so pushing to `main` does not deploy. Trigger a publish by hand — `gh workflow run quarto_publish.yaml`, or the "Render and Publish" workflow in the Actions UI.
+The site is published by GitHub Actions (`.github/workflows/quarto_publish.yaml`) to `gh-pages`. **Pushing to `main` still does not deploy** — there is no push trigger. Trigger a publish by hand — `gh workflow run quarto_publish.yaml`, or the "Render and Publish" workflow in the Actions UI.
+
+Since 2026-09-08 there is also a **daily scheduled rebuild at 14:30 UTC, conditional on `main` having moved since the last publish** (the `decide` job compares the two branches' commit timestamps and skips the render otherwise). So a commit to `main` reaches the live site within a day without anyone asking; it is a safety net, not a replacement for dispatching when you want it now. Note it watches *this repository only*: a new `irw_meta` release changes what the live-queried pages would say without changing anything here, and that direction is reported by the drift report in `ben-domingue/irw` (#1940) rather than triggering a render.
 
 ## Environment Setup
 

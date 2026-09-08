@@ -1,10 +1,78 @@
 on:
   workflow_dispatch:
+  # Daily rebuild, but only when main has actually moved since the last
+  # publish -- see the `decide` job. The render takes ~14 minutes and every
+  # publish adds a commit to gh-pages, so rebuilding an unchanged site is not
+  # free: it is wall-clock, Actions minutes and permanent git history for no
+  # change in output.
+  #
+  # 14:30 UTC deliberately: after ben-domingue/irw's weekly metadata pipeline
+  # (Mon 13:00) and its daily version manifest (13:30), so a day's repo-side
+  # work has landed before the site is rebuilt on top of it.
+  schedule:
+    - cron: "30 14 * * *"
 
 name: Render and Publish
 
 jobs:
+  # Should the render run at all? A manual dispatch always renders -- if you
+  # asked for it, you meant it. A scheduled run renders only if main carries
+  # work that the last publish does not.
+  #
+  # The comparison is commit TIMESTAMPS, not SHAs, because gh-pages holds built
+  # output and never shares a commit with main, so there is no SHA to compare
+  # against. quarto publish commits to gh-pages at the END of a successful
+  # render, so its commit is always later than the main commit it rendered:
+  # gh-pages newer than main means the site is current.
+  #
+  # This deliberately watches THIS repository only, which is what makes it
+  # cheap and predictable. It does NOT notice a new irw_meta release in the
+  # warehouse -- the pages query Redivis live at render time, so a publish
+  # there changes what the site would say without changing anything here. That
+  # direction is covered by the daily drift report in ben-domingue/irw
+  # (#1940), which reports when the warehouse has moved and the site has not.
+  decide:
+    runs-on: ubuntu-latest
+    outputs:
+      render: ${{ steps.check.outputs.render }}
+    steps:
+      - name: Compare main against the last publish
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "render=true" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch -- rendering."
+            exit 0
+          fi
+          main_at="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" \
+                       --jq '.commit.committer.date')"
+          # A repository that has never published has no gh-pages branch yet.
+          # Render in that case rather than skipping forever.
+          if ! pages_at="$(gh api "repos/$GITHUB_REPOSITORY/commits/gh-pages" \
+                             --jq '.commit.committer.date' 2>/dev/null)"; then
+            echo "render=true" >> "$GITHUB_OUTPUT"
+            echo "No gh-pages branch yet -- rendering."
+            exit 0
+          fi
+          echo "main     last commit: $main_at"
+          echo "gh-pages last commit: $pages_at"
+          # Compare as epoch seconds. `[[ a > b ]]` on the ISO strings would
+          # be a locale-collated comparison, which is a needless dependency on
+          # the runner's LC_COLLATE for a question that is purely numeric.
+          if [ "$(date -d "$main_at" +%s)" -gt "$(date -d "$pages_at" +%s)" ]; then
+            echo "render=true" >> "$GITHUB_OUTPUT"
+            echo "main is ahead of the last publish -- rendering."
+          else
+            echo "render=false" >> "$GITHUB_OUTPUT"
+            echo "Site is current -- skipping the render."
+          fi
+
   build-deploy:
+    needs: decide
+    if: needs.decide.outputs.render == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
