@@ -460,14 +460,20 @@ one.
 #| label: tbl-stage-b
 #| echo: true
 if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
+  # Deliberately NOT filtered on a non-missing estimate: a fit that timed out has
+  # no estimates, and dropping it would erase the outcome the status column
+  # exists to report.
   stage_b |>
-    filter(!is.na(phi_ar1)) |>
     transmute(Item = item, Arm = arm, Model = family,
               `Floor (%)` = round(floor_pct, 1),
-              `AR(1)` = sprintf("%.3f [%.3f, %.3f]", phi_ar1, phi_ar1_lo, phi_ar1_hi),
-              `cor(mean, disp)` = round(cor_mean_disp, 3),
-              `Rhat` = round(rhat_ar, 3), `ESS` = round(ess_ar),
-              `Div.` = n_divergent,
+              Carryover = ifelse(is.na(phi_ar1), "—",
+                            sprintf("%.3f [%.3f, %.3f]", phi_ar1, phi_ar1_lo, phi_ar1_hi)),
+              `cor(mean, disp)` = ifelse(is.na(cor_mean_disp), "—",
+                                    sprintf("%.3f", cor_mean_disp)),
+              Rhat = ifelse(is.na(rhat_ar), "—", sprintf("%.3f", rhat_ar)),
+              ESS  = ifelse(is.na(ess_ar),  "—", sprintf("%.0f", ess_ar)),
+              `Div.` = ifelse(is.na(n_divergent), "—", sprintf("%.0f", n_divergent)),
+              `Min` = round(mins),
               Sampler = status) |>
     arrange(Item, Arm, Model) |>
     kable(caption = "Same data, competing theories of the floor. The carryover coefficient is comparable across families; the correlation is not strictly so — see Limitations. Rows marked no in the OK column failed the mixing screen and are not estimates.")
