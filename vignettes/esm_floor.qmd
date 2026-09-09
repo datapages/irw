@@ -629,6 +629,55 @@ if (nrow(stage_b) > 0) {
 }
 ```
 
+### Where all three are estimable, censoring is the outlier
+
+```{r}
+#| label: tbl-full-cells
+#| echo: true
+if (nrow(stage_b) > 0) {
+  full <- stage_b |> filter(converged) |> group_by(item, arm) |>
+    filter(n() >= 3) |> ungroup()
+  if (nrow(full) > 0) {
+    full |> transmute(Item = item, Arm = arm, Model = family,
+                      `At floor (%)` = round(floor_pct, 1),
+                      Carryover = round(phi_ar1, 3),
+                      `cor(mean, disp)` = round(cor_mean_disp, 3)) |>
+      arrange(Item, Arm, Model) |>
+      kable(caption = "Cells where every admissible family converged.")
+  }
+}
+```
+
+```{r}
+#| label: outlier-readout
+#| echo: false
+#| output: asis
+if (nrow(stage_b) > 0) {
+  full <- stage_b |> filter(converged, !is.na(cor_mean_disp)) |>
+    group_by(item, arm) |> filter(n() >= 3) |> ungroup()
+  if (nrow(full) > 0) {
+    o <- full |> group_by(item, arm) |>
+      mutate(dist = abs(cor_mean_disp - median(cor_mean_disp))) |>
+      slice_max(dist, n = 1) |> ungroup()
+    cat("In every cell where all three admissible families converge, the model ",
+        "furthest from the others on the mean-dispersion correlation is **",
+        paste(unique(o$family), collapse = ", "), "**. ", sep = "")
+    cat("That matters for how the preprint's recommendation reads. Comparing only ",
+        "a naive Gaussian against a censored model, the censored estimate looks ",
+        "like a correction — it is the one that moved. With a third, independently ",
+        "motivated treatment of the boundary in the comparison, the naive and ",
+        "inflated-beta estimates sit close together and the censored one sits ",
+        "apart. Being the estimate that moves is not the same as being the ",
+        "estimate that is right, and two models are not enough to tell those ",
+        "apart.\n\n", sep = "")
+    cat("This section exists because reviewers of the scoping brief argued that an ",
+        "appropriate link should be compared against censoring rather than assumed ",
+        "away. With only the two models the page originally proposed, the ",
+        "distinction above could not have been seen.\n\n", sep = "")
+  }
+}
+```
+
 ## Limitations
 
 **There is no predictive-fit comparison here, and that is deliberate.** Two
