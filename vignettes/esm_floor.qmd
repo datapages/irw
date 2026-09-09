@@ -504,14 +504,34 @@ if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
   d <- stage_b |> filter(!is.na(phi_ar1), converged)
   if (nrow(d) > 0) {
     sp <- d |> group_by(item, arm) |>
-      summarise(spread = diff(range(phi_ar1)), .groups = "drop") |>
+      summarise(spread = diff(range(phi_ar1)),
+                cor_lo = min(cor_mean_disp, na.rm = TRUE),
+                cor_hi = max(cor_mean_disp, na.rm = TRUE),
+                flips  = min(cor_mean_disp, na.rm = TRUE) < 0 &
+                         max(cor_mean_disp, na.rm = TRUE) > 0,
+                n_fam  = n(), .groups = "drop") |>
       arrange(desc(spread))
-    cat("Across the fits that converged, the AR(1) estimate moves by up to **",
+
+    cat("Across the fits that converged, the carryover coefficient moves by up to **",
         sprintf("%.3f", max(sp$spread)), "** between model families on the same ",
-        "data (", sp$item[1], ", ", sp$arm[1], " arm). ",
-        "That is the practical question for anyone fitting these models: the ",
-        "carryover parameter is not invariant to a modelling choice the field ",
-        "usually makes by convention.\n\n", sep = "")
+        "data (", sp$item[1], ", ", sp$arm[1], " arm). The carryover parameter is ",
+        "not invariant to a modelling choice the field usually makes by ",
+        "convention.\n\n", sep = "")
+
+    fl <- sp |> filter(flips, n_fam >= 2)
+    if (nrow(fl) > 0) {
+      cat("More consequentially, **the correlation between a person's mean level ",
+          "and their innovation variance changes sign** depending on which theory ",
+          "of the floor is adopted", sep = "")
+      cat(" — in ", paste(sprintf("%s (%s arm), %.3f to %.3f",
+            fl$item, fl$arm, fl$cor_lo, fl$cor_hi), collapse = "; "), ". ", sep = "")
+      cat("That is the parameter the preprint reports as biased when the floor is ",
+          "ignored. These estimates come from converged fits on identical data, ",
+          "differing only in what the model assumes a floor to be. A reader who ",
+          "picks one family and reports the correlation would conclude that people ",
+          "with higher average levels are *more* variable, or *less*, depending on ",
+          "that choice alone.\n\n", sep = "")
+    }
   }
 }
 ```
