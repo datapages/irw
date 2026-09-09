@@ -83,6 +83,20 @@ if (cache_ok) {
   r_all_candidates <- 0L; r_n_tables_run <- 0L
 }
 
+# Three-way sampler status, not a pass/fail. An Rhat above 1.01 means the chains
+# disagree — a qualitatively different problem from a fit that mixed cleanly but
+# fell short on effective draws, which more iterations would fix. Collapsing them
+# would make non-convergence look routine and understate how specific the
+# censored failures are.
+if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
+  stage_b <- stage_b |>
+    mutate(status = dplyr::case_when(
+      is.na(rhat_ar)                 ~ "not fitted",
+      rhat_ar > 1.01                 ~ "did not mix",
+      ess_ar  < 400                  ~ "under-sampled",
+      TRUE                           ~ "ok"))
+}
+
 knitr::opts_chunk$set(eval = cache_ok)
 ```
 
@@ -449,7 +463,7 @@ if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
               `cor(mean, disp)` = round(cor_mean_disp, 3),
               `Rhat` = round(rhat_ar, 3), `ESS` = round(ess_ar),
               `Div.` = n_divergent,
-              OK = ifelse(converged, "yes", "**no**")) |>
+              Sampler = status) |>
     arrange(Item, Arm, Model) |>
     kable(caption = "Same data, competing theories of the floor. The carryover coefficient is comparable across families; the correlation is not strictly so — see Limitations. Rows marked no in the OK column failed the mixing screen and are not estimates.")
 }
@@ -484,15 +498,29 @@ if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
   n_bad <- sum(!stage_b$converged, na.rm = TRUE)
   n_div <- sum(stage_b$n_divergent > 0, na.rm = TRUE)
   if (n_bad > 0) {
-    who <- stage_b |> filter(!converged) |>
-      mutate(lab = sprintf("%s / %s / %s", item, arm, family)) |> pull(lab)
-    cat("::: {.callout-warning}\n## ", n_bad, " fit(s) did not mix\n\n",
-        "Rhat above 1.01 or bulk ESS below 400: ", paste(who, collapse = "; "),
-        ". These are excluded from the figure, so read the gaps there as ",
-        "'would not estimate', not 'was not tried'. Failure to converge is not ",
-        "proof that a model is wrong — but a model that will not estimate on the ",
-        "data it is recommended for is a practical result in its own right.",
-        "\n:::\n\n", sep = "")
+    nomix <- stage_b |> filter(status == "did not mix") |>
+      mutate(lab = sprintf("%s / %s / %s (Rhat %.2f, ESS %.0f)",
+                           item, arm, family, rhat_ar, ess_ar)) |> pull(lab)
+    under <- stage_b |> filter(status == "under-sampled") |>
+      mutate(lab = sprintf("%s / %s / %s (Rhat %.3f, ESS %.0f)",
+                           item, arm, family, rhat_ar, ess_ar)) |> pull(lab)
+    if (length(nomix) > 0) {
+      cat("::: {.callout-warning}\n## ", length(nomix), " fit(s) did not mix\n\n",
+          "The chains disagree (Rhat above 1.01): ", paste(nomix, collapse = "; "),
+          ". These are excluded from the figure, so read a gap there as 'would ",
+          "not estimate' rather than 'was not tried'. Failure to converge is not ",
+          "proof that a model is wrong — but a model that will not estimate on ",
+          "the data it is recommended for is a practical result in its own ",
+          "right.\n:::\n\n", sep = "")
+    }
+    if (length(under) > 0) {
+      cat("::: {.callout-note}\n## ", length(under), " fit(s) mixed but were ",
+          "under-sampled\n\n", paste(under, collapse = "; "),
+          ". These are a different situation from the ones above: the chains ",
+          "agree, there are simply too few effective draws at draft settings. ",
+          "More iterations would fix them, and they are excluded from the figure ",
+          "only out of caution, not because the model failed.\n:::\n\n", sep = "")
+    }
   }
   if (n_div > 0) {
     cat("::: {.callout-note}\n## ", n_div, " fit(s) had divergent transitions\n\n",
