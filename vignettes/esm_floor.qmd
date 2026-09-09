@@ -91,10 +91,15 @@ if (cache_ok) {
 if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
   stage_b <- stage_b |>
     mutate(status = dplyr::case_when(
-      is.na(rhat_ar)                 ~ "not fitted",
-      rhat_ar > 1.01                 ~ "did not mix",
-      ess_ar  < 400                  ~ "under-sampled",
-      TRUE                           ~ "ok"))
+      # A timed-out fit returns a broken sampler object rather than an error, so
+      # it arrives here as all-NA with mins at the budget. Distinguishing it from
+      # a fit never attempted matters: one is evidence about the model, the other
+      # is evidence about nothing.
+      is.na(rhat_ar) & !is.na(mins) & mins >= 45 ~ "timed out",
+      is.na(rhat_ar)                             ~ "not fitted",
+      rhat_ar > 1.01                             ~ "did not mix",
+      ess_ar  < 400                              ~ "under-sampled",
+      TRUE                                       ~ "ok"))
 }
 
 knitr::opts_chunk$set(eval = cache_ok)
@@ -606,18 +611,28 @@ if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
 #| echo: false
 #| output: asis
 if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
-  ce <- stage_b |> filter(family == "censored", !is.na(rhat_ar))
+  ce <- stage_b |> filter(family == "censored", !is.na(n_cat))
   ord <- ce |> filter(n_cat <= 10); con <- ce |> filter(n_cat > 10)
   if (nrow(ord) > 0 || nrow(con) > 0) {
-    cat("Of the censored fits attempted so far, **", sum(con$converged), " of ",
+    cat("Of the censored fits attempted so far, **", sum(con$status == "ok"), " of ",
         nrow(con), "** on a near-continuous response converged, and **",
-        sum(ord$converged), " of ", nrow(ord),
-        "** on a five-point response did.\n\n", sep = "")
+        sum(ord$status == "ok"), " of ", nrow(ord),
+        "** on a five-point response did", sep = "")
+    if (any(ord$status == "timed out")) {
+      cat(" (", sum(ord$status == "timed out"), " of the ordinal attempts did not ",
+          "finish inside a 45-minute budget rather than failing to mix — a ",
+          "different outcome, reported separately because a fit that ran out of ",
+          "time has not been shown to be unfittable)", sep = "")
+    }
+    cat(".\n\n", sep = "")
     if (nrow(ord) > 0) {
-      cat("The ordinal failures are not marginal: ",
-          paste(sprintf("%s/%s reached Rhat %.2f with bulk ESS %.0f after %.0f minutes",
-                        ord$item, ord$arm, ord$rhat_ar, ord$ess_ar, ord$mins),
-                collapse = "; "), ".\n\n", sep = "")
+      nm <- ord |> filter(status == "did not mix")
+      if (nrow(nm) > 0) {
+        cat("The ordinal failures are not marginal: ",
+            paste(sprintf("%s/%s reached Rhat %.2f with bulk ESS %.0f after %.0f minutes",
+                          nm$item, nm$arm, nm$rhat_ar, nm$ess_ar, nm$mins),
+                  collapse = "; "), ".\n\n", sep = "")
+      }
     }
     cat("This is what the censoring assumption predicts about itself. A censored ",
         "model says the observed floor conceals a continuum extending below it. ",
@@ -626,7 +641,8 @@ if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
         "region the response format does not have — so the sampler cannot ",
         "settle. Randomisation is what makes this readable: participants did not ",
         "choose their response format.\n\n", sep = "")
-    cat("Note that floor mass does not explain the split. The two ordinal items ",
+    if (nrow(con) > 0 && any(con$status == "ok") && nrow(ord) > 0)
+    cat("Note that floor mass does not explain the split. The ordinal items ",
         "carry ", sprintf("%.1f%%", min(ord$floor_pct)), " and ",
         sprintf("%.1f%%", max(ord$floor_pct)), " of responses at the floor and ",
         "both fail; the continuous item carries ",
