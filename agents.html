@@ -26,6 +26,41 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 </style>
 
 
@@ -281,7 +316,42 @@ gtag('config', 'G-NM0Y0TP4RY', { 'anonymize_ip': true});
 
 
 <p>If you want to use an AI assistant — Claude, ChatGPT, Gemini — to help you analyze IRW data, the problem is not that it doesn’t know psychometrics. It does. The problem is that it doesn’t know <em>this</em> warehouse: which defaults are already filtering your data, which reshaping step quietly drops people, which tables are large enough to matter. Those mistakes don’t throw errors. They give you numbers that look fine and aren’t.</p>
-<p>So we wrote the assistant a briefing. Paste this at the start of your conversation, followed by whatever you actually want to do:</p>
+<p>There are two ways to fix that, and they solve different halves of the problem.</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th></th>
+<th><a href="#the-briefing">The briefing</a></th>
+<th><a href="#the-irw-server">The IRW server</a></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>What it does</strong></td>
+<td>Teaches the assistant how to write correct IRW code</td>
+<td>Lets the assistant look things up in the warehouse itself</td>
+</tr>
+<tr class="even">
+<td><strong>Setup</strong></td>
+<td>None — paste one paragraph</td>
+<td>Install a package, edit a config file, once</td>
+</tr>
+<tr class="odd">
+<td><strong>Works with</strong></td>
+<td>Any assistant</td>
+<td>Assistants that support MCP</td>
+</tr>
+<tr class="even">
+<td><strong>Best for</strong></td>
+<td>“Help me fit a model to this table”</td>
+<td>“What’s in the IRW that suits my question?”</td>
+</tr>
+</tbody>
+</table>
+<p>They are complementary, and using both is reasonable: the briefing is what stops the assistant writing subtly wrong code, and the server is what stops it recommending the wrong table in the first place. If you only do one, start with the briefing — it costs nothing.</p>
+<section id="the-briefing" class="level2">
+<h2 class="anchored" data-anchor-id="the-briefing">The briefing</h2>
+<p>Paste this at the start of your conversation, followed by whatever you actually want to do:</p>
 <pre class="text"><code>You are helping me with psychometric modeling using the Item Response
 Warehouse. Before writing any code, fetch and follow
 https://itemresponsewarehouse.org/llms.txt — it documents the data standard,
@@ -289,13 +359,13 @@ the R/Python API, and several defaults that produce wrong results if you guess.
 
 Then help me with: &lt;your question&gt;</code></pre>
 <p>That’s it. The assistant fetches the current briefing, so you don’t have to keep a copy up to date.</p>
-<section id="what-it-covers" class="level2">
-<h2 class="anchored" data-anchor-id="what-it-covers">What it covers</h2>
+<section id="what-it-covers" class="level3">
+<h3 class="anchored" data-anchor-id="what-it-covers">What it covers</h3>
 <p>The briefing opens with an analysis that runs with <strong>no Redivis account and no download at all</strong> — the <code>irw</code> package ships a real warehouse table, so you can confirm your setup works and see a genuine result before setting anything up.</p>
 <p>From there it covers the data standard, how to find tables worth your time, the handful of defaults that silently change your results, how to avoid downloading far more data than you need, realistic sample-size floors and per-table compute costs, and how to tell a model that doesn’t fit from code that’s broken.</p>
 </section>
-<section id="if-your-assistant-cant-browse-the-web" class="level2">
-<h2 class="anchored" data-anchor-id="if-your-assistant-cant-browse-the-web">If your assistant can’t browse the web</h2>
+<section id="if-your-assistant-cant-browse-the-web" class="level3">
+<h3 class="anchored" data-anchor-id="if-your-assistant-cant-browse-the-web">If your assistant can’t browse the web</h3>
 <p>Some tools can’t fetch a URL. In that case, copy the text below into the conversation instead.</p>
 <div class="callout callout-style-default callout-note no-icon callout-titled">
 <div class="callout-header d-flex align-content-center collapsed" data-bs-toggle="collapse" data-bs-target=".callout-1-contents" aria-controls="callout-1" aria-expanded="false" aria-label="Toggle callout">
@@ -749,9 +819,86 @@ Worked analyses: https://itemresponsewarehouse.org/vignettes/
 </div>
 </div>
 </section>
+</section>
+<section id="the-irw-server" class="level2">
+<h2 class="anchored" data-anchor-id="the-irw-server">The IRW server</h2>
+<p>The briefing tells an assistant how the IRW works. It does not let the assistant <em>look at</em> the IRW — it still has to guess which tables exist, and it will guess plausibly and wrongly.</p>
+<p>The IRW server closes that gap. It’s a small program that runs on your own computer and gives your assistant read-only access to the warehouse, so it can search the catalogue, read a table’s metadata, and check how a table was built before it recommends anything. You ask a question in ordinary English; the assistant does the looking.</p>
+<section id="why-this-matters-more-than-it-sounds" class="level3">
+<h3 class="anchored" data-anchor-id="why-this-matters-more-than-it-sounds">Why this matters more than it sounds</h3>
+<p>The single most useful thing the server does is read our <strong>processing notes</strong>.</p>
+<p>Every IRW table was built by a script, and the top of that script is where the person who built it wrote down what they had to decide. Whether <code>id</code> really identifies a person or had to fall back to a row number. What a <code>cov_</code> column actually contains. Which columns from the source were deliberately excluded, and why. These are the facts that determine whether a table can answer your question, and none of them are in the metadata — they’re prose in a Python file on GitHub that almost nobody reads.</p>
+<p>An assistant working from metadata alone will confidently recommend a table that scores perfectly on every number and cannot do what you need. An assistant with the server can go and read why.</p>
+<p>Coverage is uneven. Not every table’s script carries a header, and where several scripts share a name the server reports the ambiguity rather than picking one. A missing note is not evidence that no decisions were made — it means you have to go to the source yourself.</p>
+</section>
+<section id="setting-it-up" class="level3">
+<h3 class="anchored" data-anchor-id="setting-it-up">Setting it up</h3>
+<p>You need Python 3.10 or newer, a <a href="https://redivis.com">Redivis</a> account (free), and an assistant that supports MCP — Claude Desktop and Claude Code both do.</p>
+<p><strong>1. Install the package with the server included:</strong></p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install <span class="st">"irw[mcp]&gt;=0.1.4"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>The version matters: the server ships in 0.1.4 and later. Earlier releases declare no <code>mcp</code> extra, so an unpinned install quietly gives you the plain package and no <code>irw-mcp</code> command.</p>
+<p><strong>2. Sign in to Redivis once</strong>, so your credentials are cached:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> <span class="at">-c</span> <span class="st">"import irw; irw.list_tables()"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>This opens a browser login the first time. Do it in a normal terminal — the server cannot complete an interactive login, and will tell you so rather than hang. (Alternatively, set a <code>REDIVIS_API_TOKEN</code> environment variable.)</p>
+<p><strong>3. Tell your assistant about it.</strong></p>
+<p>For <strong>Claude Code</strong>, one command:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">claude</span> mcp add irw <span class="at">--</span> irw-mcp</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>For <strong>Claude Desktop</strong>, add this to your configuration file (<code>~/Library/Application Support/Claude/claude_desktop_config.json</code> on macOS, <code>%APPDATA%\Claude\claude_desktop_config.json</code> on Windows):</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode json code-with-copy"><code class="sourceCode json"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"mcpServers"</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">"irw"</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>      <span class="dt">"command"</span><span class="fu">:</span> <span class="st">"/absolute/path/to/irw-mcp"</span></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">}</span></span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Use the full path — <code>python -c "import shutil; print(shutil.which('irw-mcp'))"</code> will print it, and <code>~</code> is not reliably expanded in application config files. If you already have other servers configured, add the <code>irw</code> entry to the existing <code>mcpServers</code> object rather than replacing it. A desktop application also won’t necessarily inherit a <code>REDIVIS_API_TOKEN</code> you exported in a terminal; set it in the application’s own environment if you go that route.</p>
+<p><strong>4. Restart the application.</strong> The server is loaded at startup, so a running assistant won’t see it until you do.</p>
+</section>
+<section id="what-a-session-looks-like" class="level3">
+<h3 class="anchored" data-anchor-id="what-a-session-looks-like">What a session looks like</h3>
+<p>You type a research question in plain English. Nothing IRW-specific, no commands:</p>
+<blockquote class="blockquote">
+<p><em>I need repeated measures of depression in adolescents, where treatment assignment is also recorded.</em></p>
+</blockquote>
+<p>The assistant then does several things you don’t see: searches the catalogue, pulls full metadata on the plausible candidates, reads the processing notes for the ones that survive, and may pull a few rows to check the shape. It comes back with prose — a handful of tables, what each actually contains, and why it ruled others out.</p>
+<p>From there you push back the way you would with a colleague. <em>Does the second one actually link people across waves? What’s the item wording? How do I cite it?</em> Each of those is another lookup you don’t have to do yourself.</p>
+<p>You end up with a table name, a real sense of whether it fits, item text if it exists, and a citation. <strong>Then you go to R or Python and pull the data properly.</strong> The server is for the part before the analysis — deciding what to analyze. It doesn’t hand over datasets and it doesn’t run models.</p>
+</section>
+<section id="what-it-can-do" class="level3">
+<h3 class="anchored" data-anchor-id="what-it-can-do">What it can do</h3>
+<ul>
+<li>Search the catalogue by text or by any filter the <code>irw</code> package supports, and explain what a filter’s values mean</li>
+<li>Return a table’s full metadata and statistics</li>
+<li><strong>Read the processing notes</strong> for how a table was built</li>
+<li>Fetch a bounded preview of rows so you can see the actual data — the first rows in storage order, not a random sample</li>
+<li>Return item text, together with the licence on the response data, any rights restrictions we know of on the instrument itself, and any published problems with the wording. A licence to use the data is not permission to reuse the instrument</li>
+<li>Return a BibTeX citation for the original data producers</li>
+<li>List the IRW’s collections</li>
+</ul>
+<p>Everything is read-only. Nothing you do through the assistant can change the warehouse.</p>
+</section>
+<section id="what-it-costs" class="level3">
+<h3 class="anchored" data-anchor-id="what-it-costs">What it costs</h3>
+<p>It runs on your machine under your own Redivis credentials. A discovery conversation costs very little on either side — some tokens in your assistant, a negligible slice of your Redivis allowance. There is no IRW-held key, and your use of the server is not billed to the IRW.</p>
+<p>Two requests are not cheap, and the server says so when you make them. Asking for a table in wide format, or with duplicate responses removed, describes the whole table and so downloads the whole table; both are refused above a million responses. And paging through rows re-reads the rows before them, so a page deep into a table costs everything up to it — the server caps that at 10,000 rows and tells you to use R or Python beyond it.</p>
+<div class="callout callout-style-simple callout-note no-icon">
+<div class="callout-body d-flex">
+<div class="callout-icon-container">
+<i class="callout-icon no-icon"></i>
+</div>
+<div class="callout-body-container">
+<p>The server is per-person: each user installs it themselves. There is no link we can host that gives an assistant access on your behalf.</p>
+</div>
+</div>
+</div>
+</section>
+</section>
 <section id="a-caution" class="level2">
 <h2 class="anchored" data-anchor-id="a-caution">A caution</h2>
-<p>An assistant that has read the briefing writes considerably better IRW code than one that hasn’t. It still isn’t a substitute for knowing your data. Check what it gives you — especially that the table it picked measures what you think it measures, and that the model it chose suits your response type.</p>
+<p>An assistant that has read the briefing writes considerably better IRW code than one that hasn’t. An assistant with the server picks considerably better tables. Neither is a substitute for knowing your data.</p>
+<p>Two things in particular are worth checking yourself, because they are exactly where a confident answer can be wrong:</p>
+<p><strong>“The IRW doesn’t have that.”</strong> Our tags are added by hand and are incomplete — several hundred tables carry no tags at all. A search that comes back empty means <em>nothing matched what has been labelled</em>, which is not the same as nothing existing. The server says so in every response, but whether your assistant passes that on to you is up to your assistant. If a result seems too thin, ask it to search again by name or by variable rather than by tag.</p>
+<p><strong>“This table fits your design.”</strong> Check that claim against the table’s own processing notes and its documentation. Ask the assistant directly: <em>how do you know <code>id</code> identifies the same person across waves here?</em> A good answer cites the processing notes. A vague one is a signal to look yourself.</p>
 <p>For worked analyses written by people, see the <a href="./vignettes/index.html">vignettes</a>. For the underlying documentation, see <a href="./getstarted.html">Getting Started</a> and the <a href="./standard.html">data standard</a>.</p>
 
 
