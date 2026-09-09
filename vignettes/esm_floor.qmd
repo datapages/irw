@@ -435,12 +435,12 @@ if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
               `Floor (%)` = round(floor_pct, 1),
               `AR(1)` = sprintf("%.3f [%.3f, %.3f]", phi_ar1, phi_ar1_lo, phi_ar1_hi),
               `cor(mean, disp)` = round(cor_mean_disp, 3),
-              `elpd` = round(loo_elpd, 1),
+              `elpd (see note)` = round(loo_elpd, 1),
               `Rhat` = round(rhat_ar, 3), `ESS` = round(ess_ar),
               `Div.` = n_divergent,
               OK = ifelse(converged, "yes", "**no**")) |>
     arrange(Item, Arm, Model) |>
-    kable(caption = "Same data, competing theories of the floor. AR(1) is comparable across families; the correlation is not strictly so — see Limitations. Rows marked no in the OK column failed the convergence screen and should not be read as estimates.")
+    kable(caption = "Same data, competing theories of the floor. AR(1) is comparable across families. The correlation is not strictly so, and elpd is comparable ONLY within a response representation — see Limitations. Rows marked no in the OK column failed the convergence screen and are not estimates.")
 }
 ```
 
@@ -507,6 +507,16 @@ if (nrow(stage_b) == 0 || !"phi_ar1" %in% names(stage_b)) {
 
 ## Limitations
 
+**`elpd` cannot be compared across all four families.** The Gaussian and
+censored models are fitted to a standardised continuous response and their
+log-densities are directly comparable to each other. The cumulative model is
+fitted to an ordinal probability mass function and the inflated beta to a
+density on the unit interval — different response representations, so their
+elpd values are not on a common scale and a "best fit" ranking across the whole
+table would be meaningless. The column is shown because the within-pair
+comparison (naive vs censored) is informative, not because the column has a
+maximum worth reading.
+
 **The dispersion parameter is not the same object across families.** The Gaussian
 and censored models have a residual standard deviation; the inflated beta has a
 precision, and the cumulative model a discrimination. Their person-level
@@ -537,9 +547,18 @@ observed minimum of that item. For a reverse-keyed item that is the substantive
 ceiling. This is reported as found rather than silently corrected, because
 recovering the intended keying reliably is its own problem.
 
-**Draft sampler settings.** The fits use short chains suitable for a draft. The
-intervals are wider than a final run would give, and any fit that failed to
-converge is reported as missing rather than quietly imputed.
+**The target parameter is hard to estimate at ESM sample sizes.** The first
+draft run of this page produced Rhat 1.8, a bulk effective sample size of 3, and
+416 divergent transitions on a fit that nonetheless reported a tight-looking
+interval. The location-scale structure the preprint's parameter requires — each
+person's mean correlated with their own residual variability — is only weakly
+identified with tens of people and tens of occasions, and flat priors leave the
+sampler nowhere to stand. The fits here use weakly informative priors, a
+standardised response, and `adapt_delta = 0.99`. Convergence is reported per
+fit rather than assumed, and non-converging fits are excluded from the figure.
+This is a practical caveat on the preprint's recommendation as much as on this
+page: a model can be the right one and still be beyond what the data will
+support.
 
 ## Reproducibility
 

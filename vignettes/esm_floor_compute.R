@@ -46,7 +46,8 @@ set.seed(20260908)
 PILOT          <- TRUE   # TRUE: Stage B on the two headline items only
 STAGE_B        <- TRUE   # FALSE: skip all Stan fitting, emit Stage A only
 CHAINS         <- 2
-ITER           <- 1000   # 500 warmup; a draft setting, raise for the final run
+ITER           <- 2000   # 1000 warmup
+ADAPT_DELTA    <- 0.99
 # Cells are capped to a COMMON size rather than each arm's natural size. The
 # mood-block items carry ~11k rows against att1's ~1.8k, so uncapped the fits
 # differ in n by 6x and take wildly different wall-clock. Equal cells also mean
@@ -201,7 +202,11 @@ message(sprintf("Stage A done: %d of %d tables profiled", nrow(floor_summary), l
 # stress -- never sliderised, so it is the internal control; well powered.
 # wt1    -- format changed (-2..2 -> -50..50) AND well powered, so it carries the
 #          format contrast that att1 is too thin to support.
-PILOT_ITEMS <- c("att1", "stress", "wt1")
+# wt1 dropped from the draft run: the doubled iterations needed for convergence
+# have to be paid for in wall-clock somewhere, and att1 (format changed) plus
+# stress (format unchanged, the control) is the minimum pair that carries the
+# argument. Add wt1 back for the full run.
+PILOT_ITEMS <- c("att1", "stress")
 
 fit_one <- function(dat, family_label) {
   suppressPackageStartupMessages(library(brms))
@@ -209,9 +214,9 @@ fit_one <- function(dat, family_label) {
     gaussian = "sigma", censored = "sigma", zoib = "phi", cumulative = "disc")
 
   form <- switch(family_label,
-    gaussian  = brms::bf(resp ~ 1 + ar(time = occ, gr = id) + (1 | p | id),
+    gaussian  = brms::bf(resp_z ~ 1 + ar(time = occ, gr = id) + (1 | p | id),
                          sigma ~ 1 + (1 | p | id)),
-    censored  = brms::bf(resp | cens(cens_ind) ~ 1 + ar(time = occ, gr = id) + (1 | p | id),
+    censored  = brms::bf(resp_z | cens(cens_ind) ~ 1 + ar(time = occ, gr = id) + (1 | p | id),
                          sigma ~ 1 + (1 | p | id)),
     zoib      = brms::bf(resp01 ~ 1 + ar(time = occ, gr = id) + (1 | p | id),
                          phi ~ 1 + (1 | p | id)),
@@ -224,9 +229,22 @@ fit_one <- function(dat, family_label) {
     zoib     = brms::brmsfamily("zero_one_inflated_beta"),
     cumulative = brms::brmsfamily("cumulative"))
 
-  brms::brm(form, data = dat, family = fam,
+  # Weakly informative priors. Without them the first draft run produced Rhat
+  # 1.8, bulk ESS 3.1 and 416 divergences: the location-scale random effects
+  # (a person's mean correlated with their log residual SD) are only weakly
+  # identified at ESM sample sizes, and flat priors leave the sampler nowhere
+  # to stand. lkj(2) in particular keeps the correlation off +/-1.
+  # No class="b" prior: the formula carries only an Intercept and no other
+  # population-level fixed effect, so class "b" matches no parameter and brms
+  # rejects the whole model. (It did, on all 12 fits, instantly.)
+  prs <- c(
+    brms::prior(normal(0, 0.5),  class = "ar"),
+    brms::prior(exponential(2),  class = "sd"),
+    brms::prior(lkj(2),          class = "cor")
+  )
+  brms::brm(form, data = dat, family = fam, prior = prs,
             chains = CHAINS, iter = ITER, refresh = 0, backend = "rstan",
-            silent = 2, control = list(adapt_delta = 0.95))
+            silent = 2, control = list(adapt_delta = ADAPT_DELTA, max_treedepth = 12))
 }
 
 # Which families are even admissible depends on the format -- itself part of the
@@ -320,7 +338,8 @@ if (STAGE_B) {
     dat <- dat %>% mutate(
       cens_ind = ifelse(resp == lo, "left", "none"),          # floor = left-censored
       resp01   = (resp - lo) / (hi - lo),                     # ZOIB needs [0,1]
-      resp_ord = factor(resp, levels = sort(unique(resp)), ordered = TRUE)
+      resp_ord = factor(resp, levels = sort(unique(resp)), ordered = TRUE),
+      resp_z   = as.numeric(scale(resp))
     )
 
     map_dfr(families_for(n_distinct(dat$resp)), function(fam) {
