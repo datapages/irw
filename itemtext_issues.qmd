@@ -1480,6 +1480,27 @@ issues <- yaml.load(r"---(
     The paper numbers this scale's items differently from the data file. Its Table 2 lists the "irritated" item as item 2 and the "no control over ICT changes" item as item 3, while the deposited SPSS files label the columns the other way round — and those labels carry the item numbers inside the label text itself (`PDTS2. How often have you felt that you had no control…`). IRW follows the data file, which is the direct tie to the codes in this table, and the response data weakly corroborates it: the undisputed "upset" item correlates 0.783 with PDTS3 against 0.733 with PDTS2 in the paper's Study 1, and 0.660 against 0.611 in Study 2, as expected if PDTS3 is the near-synonymous "irritated" item. **Readers comparing against the paper's item numbers should be aware that PDTS2 and PDTS3 may be interchanged**; the other four items are unambiguous.
 
     Separately, the item text and response options are shipped in the administered Polish. The English in the translated columns for the *response options* was written by IRW, because the study's own English renderings of those anchors are inconsistent across its files.
+- table: makransky_2016_mcq_correct
+  issue: |-
+    This table's resp is a 0/1 score, not a chosen option, and for **MCQ7** the score and the published answer key disagree. The paper's S1 Table marks "the differential agent" as correct, but the deposited data score the alternative "a carbon source": every one of the 60 pre-test and 56 post-test responses scored 1 chose that option, and the counts match exactly, so the disagreement is systematic rather than a few coding slips.
+
+    The published key is the scientifically correct one — in mannitol salt agar the salt is the selective agent and mannitol is the differential agent — so this is best read as a scoring error in the study's own data. `correct_response` therefore carries the published key, while `resp` faithfully reproduces the study's scoring. The practical consequence: for MCQ7 only, `resp = 1` means the respondent chose "a carbon source", not the answer named in `correct_response`.
+- table: makransky_2016_self_efficacy
+  issue: |-
+    The response anchors shipped here are the ones in the study's own data file and S1 Table ("Completely disagree" to "Completely agree"), which differ in wording from the article body's description of the same scale as running "Strongly disagree" to "Strongly agree". The two level-1 sources agree with each other, so the article's phrasing is the outlier.
+- table: malik_2018_individual_motivation
+  issue: |-
+    Item text is the study's own terse SPSS variable labels (for example "Interest in job", "Availability of adequate food") rather than the full sentences respondents read. The questionnaire's own item phrasing and its instructions are not published in the article or its supplement, so the short labels are all that exists.
+- table: malik_2018_organizational_motivation
+  issue: |-
+    As with its sibling tables, the item text is the study's terse SPSS variable labels rather than the sentences respondents read. Two caveats specific to this table. One item ("Career advancement and growth") carries no response-option labels in the source file, so the 1-5 anchors shared by the other 35 items in the same block were applied to it — an inference, not a transcription. And two typos are shipped verbatim as the source has them: "Availability of proper of proper dressing rooms", and a double space in "Number of staff  available during work".
+- table: malik_2018_social_motivation
+  issue: |-
+    The source questionnaire's socio-cultural section has 15 items but this table carries 14. The processing script treated the data file's `SC3` and `CS4` as the same variable when they are two different items with different wording and different responses, so `SC3` ("I am satisfied with my personal life issues") is absent from IRW altogether, and every code from the third onward is shifted: `social_3` carries `CS4`'s wording ("I am satisfied with the team work around me during work").
+
+    The item text shown is faithful to the data as it currently stands — each code is labelled with the column genuinely behind it. The missing item is a defect in the response data, tracked separately, and fixing it will renumber these codes.
+
+    Item text here is also the study's terse SPSS variable labels rather than the sentences respondents read.
 )---")
 
 issues <- issues[order(vapply(issues, \(x) x$table, character(1)))]
