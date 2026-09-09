@@ -186,7 +186,12 @@ message(sprintf("Stage A done: %d of %d tables profiled", nrow(floor_summary), l
 # correlations with the intercept are analogous in role but not numerically
 # identical quantities. The AR(1) coefficient IS comparable across all four, so
 # it is the primary outcome here and the correlation is secondary.
-PILOT_ITEMS <- c("att1", "stress")
+# att1  -- format changed (1-5 -> 0-100), highest floor mass, but thin: the att
+#          items were administered far less often than the mood block.
+# stress -- never sliderised, so it is the internal control; well powered.
+# wt1    -- format changed (-2..2 -> -50..50) AND well powered, so it carries the
+#          format contrast that att1 is too thin to support.
+PILOT_ITEMS <- c("att1", "stress", "wt1")
 
 fit_one <- function(dat, family_label) {
   suppressPackageStartupMessages(library(brms))
@@ -300,10 +305,46 @@ if (STAGE_B) {
 # ---------------------------------------------------------------------------
 # Save
 # ---------------------------------------------------------------------------
+bib_path <- file.path(DATA_DIR, "references.bib")
 tryCatch(
-  irw_save_bibtex(intersect(ESM_POOL, floor_summary$table),
-                  output_file = file.path(DATA_DIR, "references.bib")),
+  irw_save_bibtex(intersect(ESM_POOL, floor_summary$table), output_file = bib_path),
   error = function(e) message("bibtex generation failed: ", conditionMessage(e)))
+
+# irw_save_bibtex() OVERWRITES the file, so the method citations have to be
+# appended after it on every run, not maintained by hand in the .bib.
+#
+# molenaar2022zero is copied verbatim from continuous_bounded_data/references.bib
+# -- the same paper that vignette cites as the missing zero-one-inflated model.
+#
+# The preprint's AUTHOR FIELD IS DELIBERATELY EMPTY. The OSF record did not
+# expose a contributor list and the names were not recoverable from search;
+# inventing them would be worse than an incomplete entry. Fill this in before
+# the page is published.
+cat('
+@article{molenaar2022zero,
+  title={Zero and One Inflated Item Response Theory Models for Bounded Continuous Data},
+  author={Molenaar, Dylan and C{\'u}ri, Mariana and Baz{\'a}n, Jorge L.},
+  journal={Journal of Educational and Behavioral Statistics},
+  volume={47}, number={6}, pages={693--735}, year={2022},
+  doi={10.3102/10769986221108455}
+}
+
+@misc{beneaththefloor2026,
+  title={Beneath the Floor: Censored {DSEM} Models for Analyzing {ESM} Data with Floor Effects},
+  year={2026},
+  howpublished={PsyArXiv preprint},
+  url={https://osf.io/preprints/psyarxiv/3adgx},
+  note={Author list not yet filled in -- see esm_floor_compute.R}
+}
+
+@article{vollbracht2026,
+  title={Slider versus Likert scales: Psychometric properties in ambulatory assessment},
+  author={Vollbracht, D. and Ottenstein, C. and Ecker, S.},
+  journal={Behavior Research Methods},
+  volume={58}, pages={97}, year={2026},
+  doi={10.3758/s13428-026-02992-4}
+}
+', file = bib_path, append = TRUE)
 
 saveRDS(list(
   floor_summary    = floor_summary,

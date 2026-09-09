@@ -221,6 +221,12 @@ administered at each beep. Because items within one instrument sit at very
 different points on the scale, that average can drive the composite's floor mass
 to almost nothing while individual items remain heavily piled.
 
+It does, and by a lot. The gap is not uniform, though, and the pattern is
+informative: **compositing hides the floor precisely when the items disagree
+about where the floor is.** Where every item in an instrument is heavily floored,
+the composite stays floored and nothing is concealed. Where one item floors and
+its neighbours do not, the average washes it out entirely.
+
 ```{r}
 #| label: fig-item-vs-composite
 #| echo: true
@@ -244,6 +250,26 @@ if (nrow(floor_summary) > 0) {
 ```
 
 ```{r}
+#| label: hiding-readout
+#| echo: false
+#| output: asis
+if (nrow(floor_summary) > 0) {
+  fs <- floor_summary |> filter(!is.na(composite_floor))
+  n_half <- sum(fs$composite_floor < fs$floor_max / 2)
+  n_hid  <- sum(fs$composite_floor < 1 & fs$floor_max > 20)
+  worst  <- fs |> mutate(ratio = floor_max / pmax(composite_floor, .001)) |>
+    arrange(desc(ratio)) |> slice(1)
+  cat("In **", n_half, " of ", nrow(fs), "** tables the composite's floor mass is ",
+      "less than half that of the table's most-floored item. In **", n_hid,
+      "** of them the composite sits below 1% while an item is above 20%. ",
+      "The extreme case is `", worst$table, "`, where an item at ",
+      sprintf("%.1f%%", worst$floor_max), " floor becomes a composite at ",
+      sprintf("%.3f%%", worst$composite_floor), " — a factor of roughly ",
+      format(round(worst$ratio), big.mark = ","), ".\n\n", sep = "")
+}
+```
+
+```{r}
 #| label: tbl-hiding
 #| echo: true
 if (nrow(floor_summary) > 0) {
@@ -260,6 +286,35 @@ if (nrow(floor_summary) > 0) {
     kable(caption = "Where compositing conceals the most floor mass.")
 }
 ```
+
+```{r}
+#| label: fig-heterogeneity
+#| echo: true
+if (nrow(floor_summary) > 0) {
+  p <- floor_summary |>
+    filter(!is.na(composite_floor)) |>
+    mutate(spread = floor_max - floor_min,
+           ratio  = floor_max / pmax(composite_floor, .001),
+           text = sprintf("%s\nitem floor spread: %.1f pp\nworst item %.1f%% -> composite %.3f%%",
+                          table, spread, floor_max, composite_floor)) |>
+    ggplot(aes(x = spread, y = ratio, colour = format, text = text)) +
+    geom_point(size = 2.6, alpha = .85) +
+    scale_y_log10() +
+    scale_colour_manual(values = c("Ordinal" = irw_amber,
+                                   "Slider / continuous" = irw_blue), name = NULL) +
+    labs(x = "Spread of per-item floor mass within the table (percentage points)",
+         y = "Worst item floor / composite floor (log scale)",
+         title = "Compositing hides the floor when items disagree about where it is",
+         subtitle = "Instruments whose items all floor together conceal nothing") +
+    theme(legend.position = "top")
+  ggplotly(p, tooltip = "text")
+}
+```
+
+Three tables (`emoji_scheffler_2024`, `sondell_2018_dementia_motivation`,
+`tears`) are absent from the composite comparisons: they carry no usable
+per-occasion index, so there is no defensible way to say what "the composite at
+this beep" means. They remain in the per-item figures.
 
 ### The model comparison, and why it runs on this table
 
@@ -344,10 +399,18 @@ if (nrow(item_detail) > 0) {
 }
 ```
 
-Two things to read off this. Floor mass varies enormously *within* a single
-instrument, so a table-level summary is close to meaningless. And the ordinal
-tables carry systematically more of it than the slider tables — which is what
-motivates asking whether the two formats need the same treatment.
+Two things to read off this, one of them not what we expected.
+
+Floor mass varies enormously *within* a single instrument, so a table-level
+summary is close to meaningless — which is the case for treating the floor as an
+item property throughout.
+
+The second is that **the two response formats carry about the same amount of
+it.** Going continuous does not empty the bottom of the scale in practice; a
+slider simply relocates where people pile up. That undercuts a tempting
+shortcut — "use a VAS and the problem goes away" — and it is why the model
+comparison below has to be run in both formats rather than only in the ordinal
+one.
 
 ### Does the model you choose change the answer?
 
