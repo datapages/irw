@@ -96,6 +96,11 @@ An assistant working from metadata alone will confidently recommend a table that
 scores perfectly on every number and cannot do what you need. An assistant with
 the server can go and read why.
 
+Coverage is uneven. Not every table's script carries a header, and where several
+scripts share a name the server reports the ambiguity rather than picking one. A
+missing note is not evidence that no decisions were made — it means you have to
+go to the source yourself.
+
 ### Setting it up
 
 You need Python 3.10 or newer, a [Redivis](https://redivis.com) account (free),
@@ -104,8 +109,12 @@ and an assistant that supports MCP — Claude Desktop and Claude Code both do.
 **1. Install the package with the server included:**
 
 ``` bash
-pip install "irw[mcp]"
+pip install "irw[mcp]>=0.1.4"
 ```
+
+The version matters: the server ships in 0.1.4 and later. Earlier releases
+declare no `mcp` extra, so an unpinned install quietly gives you the plain
+package and no `irw-mcp` command.
 
 **2. Sign in to Redivis once**, so your credentials are cached:
 
@@ -133,14 +142,18 @@ For **Claude Desktop**, add this to your configuration file
 {
   "mcpServers": {
     "irw": {
-      "command": "irw-mcp"
+      "command": "/absolute/path/to/irw-mcp"
     }
   }
 }
 ```
 
-If your assistant reports that it can't find `irw-mcp`, give it the full path —
-`python -c "import shutil; print(shutil.which('irw-mcp'))"` will print it.
+Use the full path — `python -c "import shutil; print(shutil.which('irw-mcp'))"`
+will print it, and `~` is not reliably expanded in application config files. If
+you already have other servers configured, add the `irw` entry to the existing
+`mcpServers` object rather than replacing it. A desktop application also won't
+necessarily inherit a `REDIVIS_API_TOKEN` you exported in a terminal; set it in
+the application's own environment if you go that route.
 
 **4. Restart the application.** The server is loaded at startup, so a running
 assistant won't see it until you do.
@@ -174,8 +187,12 @@ analyze. It doesn't hand over datasets and it doesn't run models.
   explain what a filter's values mean
 - Return a table's full metadata and statistics
 - **Read the processing notes** for how a table was built
-- Fetch a bounded sample of rows so you can see the actual data
-- Return item text, together with its licence and any known problems with it
+- Fetch a bounded preview of rows so you can see the actual data — the first
+  rows in storage order, not a random sample
+- Return item text, together with the licence on the response data, any rights
+  restrictions we know of on the instrument itself, and any published problems
+  with the wording. A licence to use the data is not permission to reuse the
+  instrument
 - Return a BibTeX citation for the original data producers
 - List the IRW's collections
 
@@ -184,11 +201,17 @@ warehouse.
 
 ### What it costs
 
-It runs on your machine under your own Redivis credentials, and downloads only
-what you asked for rather than whole tables. A discovery conversation costs very
-little on either side — some tokens in your assistant, a negligible slice of
-your Redivis allowance. There is no IRW-held key, and your use of the server is
-not billed to the IRW.
+It runs on your machine under your own Redivis credentials. A discovery
+conversation costs very little on either side — some tokens in your assistant, a
+negligible slice of your Redivis allowance. There is no IRW-held key, and your
+use of the server is not billed to the IRW.
+
+Two requests are not cheap, and the server says so when you make them. Asking
+for a table in wide format, or with duplicate responses removed, describes the
+whole table and so downloads the whole table; both are refused above a million
+responses. And paging through rows re-reads the rows before them, so a page deep
+into a table costs everything up to it — the server caps that at 10,000 rows and
+tells you to use R or Python beyond it.
 
 ::: {.callout-note appearance="simple"}
 The server is per-person: each user installs it themselves. There is no link we
