@@ -1,0 +1,89 @@
+---
+title: "News"
+---
+
+Major changes to the IRW — new data, new tools, and changes to what the
+warehouse claims about itself. Smaller day-to-day work (individual table
+additions, item-text disclosures) is not listed here; see
+[Known Issues](itemtext_issues.qmd) for the running record of item-text
+caveats, and the [GitHub repositories](https://github.com/ben-domingue/irw)
+for everything else.
+
+This log begins in September 2026, when the page was created. The IRW is older
+than the log, and changes before then are recorded only in the repositories'
+commit history and in the versioned data itself.
+
+## 2026-09-08 — An MCP server for the IRW
+
+The Python package now ships a local [MCP](https://modelcontextprotocol.io)
+server, so an AI assistant can search the corpus, describe a table, read its
+processing notes, and fetch bounded slices of data without you pasting anything
+in by hand. Seven tools, all read-only. Setup instructions are on
+[Using an AI Assistant](agents.qmd), alongside the plain-text
+[briefing at /llms.txt](llms.txt) for assistants that cannot run a server.
+
+`resp_raw` is now documented in [the core data standard](standard.qmd): the
+column that preserves a response exactly as the source recorded it, when
+`resp` had to be coerced to a number.
+
+## 2026-09-07 — `pip install irw`
+
+The Python package is [on PyPI](https://pypi.org/project/irw/). Previously it
+had to be installed from GitHub. One consequence worth knowing: `pip install
+irw` gives you the last *released* version, so a fix that has been merged is
+not necessarily a fix you have.
+
+## 2026-09-05 — Item text outgrew one table, and some wording was withdrawn
+
+Item text is now spread across shards (`irw_text`, `irw_text_2`) because a
+single Redivis dataset holds at most 1000 tables. Both the R and Python
+packages resolve shards for you; if you were querying `irw_text` directly, you
+were seeing only part of the collection.
+
+Separately, a rights review removed IRW-hosted item *wording* for several
+instruments — including PROMIS, the TAS-20 and the DSES — where the
+instrument's own licence bars redistribution, even though the response data
+remains freely available. The licence on a deposited dataset is not a licence
+to the instrument inside it. Response data for those tables is untouched;
+only the wording is gone. R package 1.1.3 released the same day.
+
+## 2026-09-04 — Tag coverage, and what the tags are worth
+
+A long backfill closed the tag gap: missing tag cells went from 1,427 to 11,
+published in IRW data version 20.0. Because more coverage is not the same as
+more accuracy, there is now a [Tag Quality](tags_quality.qmd) page reporting
+what human-versus-machine comparisons actually found — including where the
+machine labels disagree with a table's own covariates. Tags are a search aid,
+not a warranty.
+
+The same day, [/llms.txt](llms.txt) went up: a single plain-text briefing on
+the IRW written for AI assistants, and a [page explaining it](agents.qmd) for
+the humans pointing them at it.
+
+## 2026-09-03 — One version number for the whole corpus
+
+Every response now carries an `irw_version`, and there is a corpus-wide
+version manifest behind it. `irw_version()` / `irw_use_version()` in R and
+`irw.version()` in Python let you read the current version, look up what was
+current on a given date, and pin an entire analysis to one version. Version
+numbers are never reused or renumbered.
+
+Also that day: a [pilot of per-table landing pages](data.qmd) for 25 tables,
+each with schema.org and Croissant metadata, so individual IRW tables can be
+found and machine-read from outside the warehouse.
+
+## 2026-09-02 — R package gains prediction utilities
+
+`irw_imv()` and `irw_predict()` give the information-theoretic model
+comparison example a home in the package rather than in a vignette. `redivis`
+moved from Imports to Suggests, so installing `irw` no longer requires it
+until you fetch data. `irw_simdata()`'s 2PL discriminations now have a spread
+worth simulating — previously they were near-constant. Released as 1.1.0
+through 1.1.2.
+
+## 2026-08-29 — Collections
+
+Related tables are now grouped into named collections, browsable on
+[Browse IRW Collections](collections.qmd), filterable in the data explorer,
+and readable from R with `irw_collections()` and `irw_collection()`. Inclusion
+calls are ours and are worth verifying before you rely on one.
