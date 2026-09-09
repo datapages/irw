@@ -46,8 +46,13 @@ set.seed(20260908)
 PILOT          <- TRUE   # TRUE: Stage B on the two headline items only
 STAGE_B        <- TRUE   # FALSE: skip all Stan fitting, emit Stage A only
 CHAINS         <- 2
-ITER           <- 1500   # 750 warmup; a draft setting, raise for the final run
-MAX_PERSONS    <- 250    # per arm; vollbracht has ~200/206 so this is not binding
+ITER           <- 1000   # 500 warmup; a draft setting, raise for the final run
+# Cells are capped to a COMMON size rather than each arm's natural size. The
+# mood-block items carry ~11k rows against att1's ~1.8k, so uncapped the fits
+# differ in n by 6x and take wildly different wall-clock. Equal cells also mean
+# a difference between items cannot be an artefact of differing precision.
+MAX_PERSONS    <- 90
+MAX_OCCASIONS  <- 45     # earliest N occasions per person
 
 DATA_DIR <- "vignettes/esm_floor_data"
 FIT_DIR  <- file.path(DATA_DIR, "fits")
@@ -291,7 +296,8 @@ if (STAGE_B) {
       filter(.data$item == !!item, cov_group == group, !is.na(resp)) %>%
       transmute(id = as.factor(id), occ = as.integer(trial_occasion), resp = as.numeric(resp))
     keep <- dat %>% count(id) %>% filter(n >= 10) %>% slice_head(n = MAX_PERSONS) %>% pull(id)
-    dat <- dat %>% filter(id %in% keep) %>% arrange(id, occ)
+    dat <- dat %>% filter(id %in% keep) %>% arrange(id, occ) %>%
+      group_by(id) %>% slice_head(n = MAX_OCCASIONS) %>% ungroup()
     if (nrow(dat) < 200) return(tibble())
 
     lo <- min(dat$resp); hi <- max(dat$resp)
