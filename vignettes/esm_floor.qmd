@@ -74,7 +74,9 @@ if (cache_ok) {
     item = character(), arm = character(), family = character(),
     n_obs = integer(), n_persons = integer(), floor_pct = numeric(),
     phi_ar1 = numeric(), phi_ar1_lo = numeric(), phi_ar1_hi = numeric(),
-    cor_mean_disp = numeric(), loo_elpd = numeric()
+    cor_mean_disp = numeric(), loo_elpd = numeric(),
+    rhat_ar = numeric(), ess_ar = numeric(), n_divergent = numeric(),
+    converged = logical()
   )
   candidate_tables <- character(); esm_slider <- character(); esm_ordinal <- character()
   date_run <- Sys.Date(); is_pilot <- FALSE
@@ -432,10 +434,13 @@ if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
     transmute(Item = item, Arm = arm, Model = family,
               `Floor (%)` = round(floor_pct, 1),
               `AR(1)` = sprintf("%.3f [%.3f, %.3f]", phi_ar1, phi_ar1_lo, phi_ar1_hi),
-              `cor(mean, dispersion)` = round(cor_mean_disp, 3),
-              `elpd` = round(loo_elpd, 1)) |>
+              `cor(mean, disp)` = round(cor_mean_disp, 3),
+              `elpd` = round(loo_elpd, 1),
+              `Rhat` = round(rhat_ar, 3), `ESS` = round(ess_ar),
+              `Div.` = n_divergent,
+              OK = ifelse(converged, "yes", "**no**")) |>
     arrange(Item, Arm, Model) |>
-    kable(caption = "Same data, four theories of the floor. AR(1) is comparable across families; the correlation is not strictly so — see Limitations.")
+    kable(caption = "Same data, competing theories of the floor. AR(1) is comparable across families; the correlation is not strictly so — see Limitations. Rows marked no in the OK column failed the convergence screen and should not be read as estimates.")
 }
 ```
 
@@ -443,7 +448,7 @@ if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
 #| label: fig-ar1
 #| echo: true
 if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
-  d <- stage_b |> filter(!is.na(phi_ar1))
+  d <- stage_b |> filter(!is.na(phi_ar1), converged)
   if (nrow(d) > 0) {
     ggplot(d, aes(x = family, y = phi_ar1, colour = arm)) +
       geom_pointrange(aes(ymin = phi_ar1_lo, ymax = phi_ar1_hi),
@@ -465,7 +470,14 @@ if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
 #| echo: false
 #| output: asis
 if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
-  d <- stage_b |> filter(!is.na(phi_ar1))
+  n_bad <- sum(!stage_b$converged, na.rm = TRUE)
+  if (n_bad > 0) {
+    cat("::: {.callout-warning}\n## ", n_bad, " fit(s) did not converge\n\n",
+        "They are listed in the table above with `OK = no` and are excluded from ",
+        "the figure. A short draft chain is the likely cause; they need rerunning ",
+        "at higher iterations before anything is concluded from them.\n:::\n\n", sep = "")
+  }
+  d <- stage_b |> filter(!is.na(phi_ar1), converged)
   if (nrow(d) > 0) {
     sp <- d |> group_by(item, arm) |>
       summarise(spread = diff(range(phi_ar1)), .groups = "drop") |>

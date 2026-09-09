@@ -243,12 +243,28 @@ families_for <- function(n_cat) {
   else             c("gaussian", "censored", "zoib")
 }
 
+# Convergence diagnostics are recorded per fit, not assumed. Without them a
+# stuck sampler is indistinguishable from a precise estimate: the first draft run
+# returned ar = 0.092 [0.084, 0.099], an interval ~6x narrower than 1/sqrt(n)
+# allows, which is what prompted adding this. Any fit whose ar Rhat exceeds 1.01
+# or whose bulk ESS falls under 400 is reported as unreliable on the page rather
+# than silently plotted.
 extract_pars <- function(fit, family_label) {
   vc <- tryCatch(brms::VarCorr(fit)$id$cor, error = function(e) NULL)
   cor_mean_disp <- if (!is.null(vc) && dim(vc)[1] >= 2) vc[1, "Estimate", 2] else NA_real_
-  fx <- brms::fixef(fit)
   ar <- tryCatch(as.data.frame(brms::as_draws_df(fit))[["ar[1]"]], error = function(e) NULL)
+
+  smry <- tryCatch(as.data.frame(posterior::summarise_draws(
+            posterior::subset_draws(brms::as_draws(fit), variable = "ar[1]"))),
+          error = function(e) NULL)
+  rhat_ar <- if (!is.null(smry) && nrow(smry)) smry$rhat[1]      else NA_real_
+  ess_ar  <- if (!is.null(smry) && nrow(smry)) smry$ess_bulk[1]  else NA_real_
+  ndiv <- tryCatch(sum(brms::nuts_params(fit, pars = "divergent__")$Value),
+                   error = function(e) NA_real_)
+
   tibble(
+    rhat_ar = rhat_ar, ess_ar = ess_ar, n_divergent = ndiv,
+    converged = !is.na(rhat_ar) && rhat_ar <= 1.01 && !is.na(ess_ar) && ess_ar >= 400,
     phi_ar1      = if (!is.null(ar)) mean(ar) else NA_real_,
     phi_ar1_lo   = if (!is.null(ar)) quantile(ar, .025) else NA_real_,
     phi_ar1_hi   = if (!is.null(ar)) quantile(ar, .975) else NA_real_,
