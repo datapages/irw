@@ -481,10 +481,15 @@ if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
   n_bad <- sum(!stage_b$converged, na.rm = TRUE)
   n_div <- sum(stage_b$n_divergent > 0, na.rm = TRUE)
   if (n_bad > 0) {
+    who <- stage_b |> filter(!converged) |>
+      mutate(lab = sprintf("%s / %s / %s", item, arm, family)) |> pull(lab)
     cat("::: {.callout-warning}\n## ", n_bad, " fit(s) did not mix\n\n",
-        "Listed above with `OK = no` (Rhat above 1.01 or bulk ESS below 400) and ",
-        "excluded from the figure. They need rerunning at higher iterations ",
-        "before anything is concluded from them.\n:::\n\n", sep = "")
+        "Rhat above 1.01 or bulk ESS below 400: ", paste(who, collapse = "; "),
+        ". These are excluded from the figure, so read the gaps there as ",
+        "'would not estimate', not 'was not tried'. Failure to converge is not ",
+        "proof that a model is wrong — but a model that will not estimate on the ",
+        "data it is recommended for is a practical result in its own right.",
+        "\n:::\n\n", sep = "")
   }
   if (n_div > 0) {
     cat("::: {.callout-note}\n## ", n_div, " fit(s) had divergent transitions\n\n",
