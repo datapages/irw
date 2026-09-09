@@ -549,6 +549,86 @@ if (nrow(stage_b) == 0 || !"phi_ar1" %in% names(stage_b)) {
 }
 ```
 
+### Can the censored model even be fitted?
+
+The sharpest result here is not an estimate but an outcome. `att1` was
+administered as a five-point item to one randomised arm and as a slider to the
+other, with the same protocol and schedule. The censored model — the remedy the
+preprint recommends — was fitted to both.
+
+```{r}
+#| label: tbl-estimability
+#| echo: true
+if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
+  ce <- stage_b |> filter(family == "censored") |>
+    transmute(Item = item, Arm = arm, `Categories` = n_cat,
+              `At floor (%)` = round(floor_pct, 1),
+              Rhat = round(rhat_ar, 3), ESS = round(ess_ar),
+              `Minutes` = round(mins, 1),
+              Estimable = ifelse(converged, "yes", "**no**"))
+  if (nrow(ce) > 0) kable(ce, caption = "The censored model, by response format.")
+}
+```
+
+```{r}
+#| label: estimability-readout
+#| echo: false
+#| output: asis
+if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
+  ce <- stage_b |> filter(family == "censored", !is.na(rhat_ar))
+  ord <- ce |> filter(n_cat <= 10); con <- ce |> filter(n_cat > 10)
+  if (nrow(ord) > 0 && nrow(con) > 0) {
+    cat("On the continuous version the model converges (Rhat ",
+        sprintf("%.3f", con$rhat_ar[1]), ", ESS ", round(con$ess_ar[1]),
+        ") in about ", round(con$mins[1]), " minutes. On the ordinal version of ",
+        "**the same item, from randomly assigned participants**, it does not: ",
+        "Rhat ", sprintf("%.2f", ord$rhat_ar[1]), ", bulk ESS ",
+        round(ord$ess_ar[1]), ", after ", round(ord$mins[1]), " minutes.\n\n",
+        sep = "")
+    cat("This is what the censoring assumption predicts about itself. A censored ",
+        "model says the observed floor hides a continuum extending below it. On a ",
+        "slider that is a coherent claim. On a five-point item there is nothing ",
+        "below category one, and the likelihood has to place mass in a region the ",
+        "response format does not have — so the sampler cannot settle. ",
+        "Randomisation is what makes this readable: the two arms differ in ",
+        "response format and in nothing else that we chose.\n\n", sep = "")
+  }
+}
+```
+
+### What is robust, and what is not
+
+```{r}
+#| label: robustness-readout
+#| echo: false
+#| output: asis
+if (nrow(stage_b) > 0) {
+  d <- stage_b |> filter(converged, !is.na(cor_mean_disp))
+  if (nrow(d) > 1) {
+    byc <- d |> group_by(item, arm) |>
+      summarise(phi_spread = diff(range(phi_ar1)),
+                cor_spread = diff(range(cor_mean_disp)),
+                flips = min(cor_mean_disp) < 0 & max(cor_mean_disp) > 0,
+                .groups = "drop") |> filter(!is.na(cor_spread))
+    if (nrow(byc) > 0) {
+      cat("Within a cell, the carryover coefficient moves across families by ",
+          sprintf("%.3f", min(byc$phi_spread)), " to ",
+          sprintf("%.3f", max(byc$phi_spread)),
+          ", while the mean-dispersion correlation moves by ",
+          sprintf("%.3f", min(byc$cor_spread)), " to ",
+          sprintf("%.3f", max(byc$cor_spread)), ". ", sep = "")
+      if (any(byc$flips)) {
+        cat("The correlation changes **sign** in ", sum(byc$flips), " of ",
+            nrow(byc), " cells. ", sep = "")
+      }
+      cat("The asymmetry is the point: carryover survives a change in what you ",
+          "assume the floor to be, and the parameter the preprint is concerned ",
+          "with does not.\n\n", sep = "")
+    }
+  }
+}
+```
+
 ## Limitations
 
 **There is no predictive-fit comparison here, and that is deliberate.** Two
