@@ -67,7 +67,12 @@ dir.create(FIT_DIR, recursive = TRUE, showWarnings = FALSE)
 ESM_SLIDER <- c(
   "westhoff2023_pbat", "westhoff2023_stopd",
   "vollbracht_et_al_2026_ambulatory_assessment",
-  "emoji_scheffler_2024", "tears",
+  # REMOVED after inspection: emoji_scheffler_2024 (`id = name`, the emoji;
+  # `rater = submission_id`, the person) and tears (`id <- x$Video_ID`,
+  # `rater <- x$ID`). Both are stimulus-rating designs where the person is the
+  # rater, not the id -- the same error that excluded moralvignettes. They
+  # reached this list from the occasions-per-person screen, not from the
+  # script-confirmed set, which is exactly the failure mode curation prevents.
   "nas_rogoza_2024_study5_nas", "nas_rogoza_2024_study5_ngs",
   "nas_rogoza_2024_study5_nvs",
   "zhang_2020_trait_creativity_mood", "opentsstvr_linnig_2025_vas"
@@ -248,7 +253,27 @@ extract_pars <- function(fit, family_label) {
   )
 }
 
+save_results <- function(stage_b_now) saveRDS(list(
+  floor_summary    = floor_summary,
+  item_detail      = item_detail,
+  stage_b          = stage_b_now,
+  candidate_tables = ESM_POOL,
+  n_all_candidates = length(ESM_POOL),
+  esm_slider       = ESM_SLIDER,
+  esm_ordinal      = ESM_ORDINAL,
+  pilot            = PILOT,
+  date_run         = Sys.Date(),
+  session          = utils::capture.output(utils::sessionInfo())
+), file.path(DATA_DIR, "esm_floor_results.rds"))
+
 stage_b <- NULL
+
+# Write a Stage-A-only cache BEFORE Stage B starts. Stage B can run for hours and
+# may be interrupted; without this an incomplete run leaves no cache at all and
+# the page renders as "cache not found" despite Stage A being finished.
+save_results(NULL)
+message("Wrote Stage-A-only cache; the page is renderable from here on.")
+
 if (STAGE_B) {
   message("=== Stage B: model comparison on vollbracht_et_al_2026 ===")
   # Raw fetch is cached locally but deliberately NOT committed (1.2 MB, and
@@ -345,18 +370,5 @@ cat('
   doi={10.3758/s13428-026-02992-4}
 }
 ', file = bib_path, append = TRUE)
-
-saveRDS(list(
-  floor_summary    = floor_summary,
-  item_detail      = item_detail,
-  stage_b          = stage_b,
-  candidate_tables = ESM_POOL,
-  n_all_candidates = length(ESM_POOL),
-  esm_slider       = ESM_SLIDER,
-  esm_ordinal      = ESM_ORDINAL,
-  pilot            = PILOT,
-  date_run         = Sys.Date(),
-  session          = utils::capture.output(utils::sessionInfo())
-), file.path(DATA_DIR, "esm_floor_results.rds"))
-
+save_results(stage_b)
 message("Wrote ", file.path(DATA_DIR, "esm_floor_results.rds"))
