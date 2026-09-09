@@ -1,0 +1,484 @@
+---
+title: "What Is a Floor, Actually?"
+description: |
+  Experience-sampling responses pile up at the bottom of the scale, and a recent
+  preprint argues that ignoring that pile biases the person-level correlations
+  that dynamic structural equation models are fitted to estimate. Its remedy is a
+  censored model. But censoring is only one theory of what a floor is — an
+  appropriate link models the boundedness directly, and a graded model says the
+  floor was never special to begin with. This vignette measures how much floor
+  mass IRW's intensive longitudinal datasets actually carry, shows that the
+  composite scores the field models hide almost all of it, and puts the competing
+  models against each other on a study that randomised its participants to a
+  Likert or a slider version of the same protocol.
+date: today
+bibliography: esm_floor_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(plotly)
+library(knitr)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue  <- "#2166ac"
+irw_red   <- "#d73027"
+irw_amber <- "#b8791f"
+irw_grey  <- "grey50"
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+cache_path <- "esm_floor_data/esm_floor_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache           <- readRDS(cache_path)
+  floor_summary    <- .cache$floor_summary
+  item_detail      <- .cache$item_detail
+  stage_b          <- .cache$stage_b %||% tibble()
+  candidate_tables <- .cache$candidate_tables
+  esm_slider       <- .cache$esm_slider
+  esm_ordinal      <- .cache$esm_ordinal
+  date_run         <- .cache$date_run
+  is_pilot         <- isTRUE(.cache$pilot)
+  r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
+  r_n_tables_run   <- nrow(floor_summary)
+} else {
+  floor_summary <- tibble(
+    table = character(), n_items = integer(), n_persons = integer(),
+    n_responses = integer(), occasion_col = character(),
+    floor_min = numeric(), floor_max = numeric(), floor_median = numeric(),
+    composite_floor = numeric(), format = character()
+  )
+  item_detail <- tibble(
+    table = character(), item = character(), n = integer(),
+    lo = numeric(), hi = numeric(), n_cat = integer(),
+    floor_pct = numeric(), ceil_pct = numeric()
+  )
+  stage_b <- tibble(
+    item = character(), arm = character(), family = character(),
+    n_obs = integer(), n_persons = integer(), floor_pct = numeric(),
+    phi_ar1 = numeric(), phi_ar1_lo = numeric(), phi_ar1_hi = numeric(),
+    cor_mean_disp = numeric(), loo_elpd = numeric()
+  )
+  candidate_tables <- character(); esm_slider <- character(); esm_ordinal <- character()
+  date_run <- Sys.Date(); is_pilot <- FALSE
+  r_all_candidates <- 0L; r_n_tables_run <- 0L
+}
+
+knitr::opts_chunk$set(eval = cache_ok)
+```
+
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+if (!cache_ok) {
+  cat("::: {.callout-warning}\n## Results cache not found\n\n",
+      "This page renders from `", cache_path, "`, which is not present. ",
+      "Run `Rscript vignettes/esm_floor_compute.R` from the repository root ",
+      "(with `REDIVIS_API_TOKEN` set) to generate it. Every results chunk below ",
+      "is skipped until then.\n:::\n", sep = "")
+}
+```
+
+```{r}
+#| label: pilot-warning
+#| echo: false
+#| eval: !expr cache_ok
+#| output: asis
+if (is_pilot) {
+  cat("::: {.callout-note}\n## Partial run\n\n",
+      "This page was built from a **pilot** run: ", r_n_tables_run, " of ",
+      r_all_candidates, " candidate tables profiled, and the model comparison ",
+      "restricted to two headline items. Numbers will shift when the full batch ",
+      "completes.\n:::\n", sep = "")
+}
+```
+
+::: {.callout-note appearance="simple"}
+This vignette was drafted by Claude with human review. The scoping decisions —
+which datasets qualify as experience sampling, and which models are being
+compared — came out of a written brief circulated to IRW collaborators, and the
+model set below was revised in response to their comments.
+:::
+
+## Motivation
+
+Ask people how they feel several times a day for a fortnight and a lot of their
+answers land on the bottom of the scale. Not anxious. Not stressed. Not at all.
+That pile is a nuisance for the models the field fits to such data: dynamic
+structural equation models (DSEM) treat each person's series as a continuous
+process with a mean, an autoregression, and an innovation variance, and then
+estimate how those person-level quantities correlate.
+
+A recent preprint — *Beneath the Floor: Censored DSEM Models for Analyzing ESM
+Data with Floor Effects* [@beneaththefloor2026] — argues that ignoring the pile
+biases exactly those correlations, most sharply the one between a person's mean
+level and their innovation variance, and recommends modelling the censoring
+explicitly.
+
+That recommendation carries an assumption worth naming. **A censored model says
+there is a latent continuum extending below the boundary that we simply cannot
+observe** — the person is somewhere below "not at all anxious", and the scale
+truncated them. That is a specific and contestable claim about what a floor
+*is*, and it is not the only one available:
+
+- **Censoring.** A continuum runs past the boundary; the floor is truncation.
+  Someone at the floor could have been lower.
+- **Zero-inflation.** Sitting *at* the floor is a different kind of event from
+  sitting just above it. "Not at all" is a state, not a smaller amount of
+  something. Under an inflated beta model the boundary gets its own probability
+  and the interior gets a bounded continuous density.
+- **Graded response.** The answer was categorical the whole time. The floor is
+  the bottom category, and nothing about it needs special handling.
+
+These are not three ways of patching the same nuisance. They are three theories
+of the data, they imply different generative stories, and — usefully — they make
+different predictions about the very correlation the preprint reports.
+
+IRW is a reasonable place to adjudicate because it holds intensive longitudinal
+data in both ordinal and near-continuous response formats, in one schema. The
+two vignettes closest to this one are
+[Bounded Continuous Responses](./continuous_bounded.qmd), which compares
+bounded-response model families cross-sectionally, and
+[Dimensionality Across IRW](./dimensionality.qmd), which is the template for an
+assumption audit run across many tables at once. This page is the time-domain
+sibling of the first.
+
+That earlier vignette also left this exact question open. It stress-tested four
+bounded-response specifications against 20% boundary inflation and concluded that
+all of them degrade, because *none* of them includes a zero-one-inflated
+component — "a true zero-one-inflated extension would be needed for that"
+[@molenaar2022zero]. It named the missing model and stopped. This page fits it.
+
+## Data and methods
+
+### Finding the datasets at all
+
+IRW has no reliable handle for intensive longitudinal data, which is the first
+finding and the reason the pool below had to be built by hand.
+
+- `metadata$longitudinal` flags 703 tables, but it is a text search for `wave` or
+  `date` in the column list, so it matches `cov_birthdate` and `cov_startdate`.
+- The `intensive_longitudinal` collection requires `date` **and** `wave`
+  together. Of its 81 members, 72 are one COVID panel study at about 2.6 waves
+  per person, and exactly one is experience sampling. Its own definition says as
+  much.
+- There is no temporal tag. The tag vocabulary covers age, sample, construct,
+  tool, format and language — nothing about design over time.
+
+Across 4,238 tables, 551 carry `wave` and 224 carry `date`, but only 81 carry
+both, so requiring both excludes most genuine ESM studies while admitting a large
+panel study.
+
+What works is **occasions per person** — responses per participant divided by
+item count — followed by reading each surviving table's processing script. That
+screen produced the pool used here.
+
+```{r}
+#| label: tbl-pool
+#| echo: true
+if (nrow(floor_summary) > 0) {
+  floor_summary |>
+    mutate(`occ/person` = round(n_responses / n_persons / n_items, 1)) |>
+    select(Table = table, Format = format, Persons = n_persons, Items = n_items,
+           `occ/person`, `Time index` = occasion_col) |>
+    arrange(desc(`occ/person`)) |>
+    kable(caption = "The curated ESM pool, ordered by occasions per person.")
+}
+```
+
+Confirming each table by script mattered: four candidates that pass any
+column-based screen fail on inspection. `narcissism_schneider_2025_study2_*`
+(18 tables) falls back to a survey disposition code as `id`, so `id` is not a
+person and the recorded participant count is 3.
+`moralvignettes_rakhmankulova_2025` has `id` as a video and `rater` as the
+person. `political_psychology` drops `wave` in processing. And about 21
+cognitive trial-level tasks have many measurements per person, but those are
+trials, not occasions.
+
+### The floor is an item-level property
+
+The field reports floor rates for a composite — the mean of the items
+administered at each beep. Because items within one instrument sit at very
+different points on the scale, that average can drive the composite's floor mass
+to almost nothing while individual items remain heavily piled.
+
+```{r}
+#| label: fig-item-vs-composite
+#| echo: true
+if (nrow(floor_summary) > 0) {
+  p <- floor_summary |>
+    filter(!is.na(composite_floor)) |>
+    mutate(text = sprintf("%s\nitems: %.1f%%–%.1f%% at floor\ncomposite: %.3f%%",
+                          table, floor_min, floor_max, composite_floor)) |>
+    ggplot(aes(x = floor_max, y = composite_floor, colour = format, text = text)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = irw_grey) +
+    geom_point(size = 2.6, alpha = .85) +
+    scale_colour_manual(values = c("Ordinal" = irw_amber,
+                                   "Slider / continuous" = irw_blue), name = NULL) +
+    labs(x = "Highest per-item floor mass in the table (%)",
+         y = "Floor mass of the composite (%)",
+         title = "Averaging items hides the floor",
+         subtitle = "Points below the dashed line: the composite understates its own worst item") +
+    theme(legend.position = "top")
+  ggplotly(p, tooltip = "text")
+}
+```
+
+```{r}
+#| label: tbl-hiding
+#| echo: true
+if (nrow(floor_summary) > 0) {
+  floor_summary |>
+    filter(!is.na(composite_floor)) |>
+    mutate(hiding = floor_max - composite_floor) |>
+    arrange(desc(hiding)) |>
+    transmute(Table = table, Format = format,
+              `Worst item (%)` = round(floor_max, 1),
+              `Median item (%)` = round(floor_median, 1),
+              `Composite (%)`   = round(composite_floor, 3),
+              `Hidden (pp)`     = round(hiding, 1)) |>
+    head(12) |>
+    kable(caption = "Where compositing conceals the most floor mass.")
+}
+```
+
+### The model comparison, and why it runs on this table
+
+`vollbracht_et_al_2026_ambulatory_assessment` [@vollbracht2026] randomised 406
+participants to complete the same ambulatory protocol with either a Likert or a
+slider response format, then measured them roughly 37 times each.
+
+One correction to how this was originally scoped: **the format is a
+between-person randomisation, not a within-person crossing.** Every one of the
+406 participants has exactly one `cov_group` value — 200 in the Likert arm, 206
+in the slider arm. That is weaker than a crossed design for isolating format, but
+it is still a randomised manipulation of response format holding the protocol,
+the items and the sampling schedule fixed, which is rare.
+
+The table also supplies a control that nobody designed. **The `stress` item was
+never sliderised** — it is a 1–5 item in both arms. So it functions as a
+within-study placebo: whatever changes for the items whose format actually
+changed, but not for `stress`, is attributable to format rather than to the
+people in each arm.
+
+```{r}
+#| label: tbl-format-floor
+#| echo: true
+if (nrow(item_detail) > 0) {
+  v <- item_detail |> filter(table == "vollbracht_et_al_2026_ambulatory_assessment")
+  if (nrow(v) > 0) {
+    v |> transmute(Item = item, `Scale low` = lo, `Scale high` = hi,
+                   Categories = n_cat, `At floor (%)` = round(floor_pct, 1),
+                   `At ceiling (%)` = round(ceil_pct, 1)) |>
+      arrange(desc(`At floor (%)`)) |>
+      kable(caption = "Per-item floor mass in vollbracht, pooled across arms.")
+  }
+}
+```
+
+Every model uses the same mean structure — a person-level random intercept and a
+within-person AR(1) — and adds a person-level dispersion random effect correlated
+with that intercept, because the mean-level-to-innovation-variance correlation is
+the parameter the preprint reports as biased.
+
+```{r}
+#| label: model-spec
+#| eval: false
+#| echo: true
+# Shared across families; only the response distribution changes.
+brms::bf(resp ~ 1 + ar(time = occ, gr = id) + (1 | p | id),
+         sigma ~ 1 + (1 | p | id))                      # gaussian, and censored
+brms::bf(resp | cens(cens_ind) ~ ..., sigma ~ ...)      # floor = left-censored
+brms::bf(resp01 ~ ..., phi ~ ...)                       # zero-one-inflated beta
+brms::bf(resp_ord ~ ..., disc ~ ...)                    # cumulative (graded)
+```
+
+Which families are even *admissible* depends on the format, and that is part of
+the finding rather than an inconvenience. A zero-one-inflated beta cannot be
+fitted to a five-category item; a graded model is impractical on a 101-point
+slider. So "apply the censoring fix to both formats" — the field's current
+habit — is not a choice between equally available options. For much of this data
+the alternatives are ruled out before anyone compares fit.
+
+## Results
+
+### How much floor mass is actually out there
+
+```{r}
+#| label: fig-floor-spread
+#| echo: true
+if (nrow(item_detail) > 0) {
+  ord <- floor_summary |> arrange(floor_max) |> pull(table)
+  p <- item_detail |>
+    left_join(select(floor_summary, table, format), by = "table") |>
+    mutate(table = factor(table, levels = ord),
+           text = sprintf("%s\nitem %s: %.1f%% at floor\nscale %g–%g (%d categories)",
+                          table, item, floor_pct, lo, hi, n_cat)) |>
+    ggplot(aes(x = floor_pct, y = table, colour = format, text = text)) +
+    geom_point(alpha = .7, size = 1.9) +
+    scale_colour_manual(values = c("Ordinal" = irw_amber,
+                                   "Slider / continuous" = irw_blue), name = NULL) +
+    labs(x = "Responses at the item's observed minimum (%)", y = NULL,
+         title = "Per-item floor mass within each ESM table") +
+    theme(legend.position = "top", axis.text.y = element_text(size = 8))
+  ggplotly(p, tooltip = "text")
+}
+```
+
+Two things to read off this. Floor mass varies enormously *within* a single
+instrument, so a table-level summary is close to meaningless. And the ordinal
+tables carry systematically more of it than the slider tables — which is what
+motivates asking whether the two formats need the same treatment.
+
+### Does the model you choose change the answer?
+
+```{r}
+#| label: tbl-stage-b
+#| echo: true
+if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
+  stage_b |>
+    filter(!is.na(phi_ar1)) |>
+    transmute(Item = item, Arm = arm, Model = family,
+              `Floor (%)` = round(floor_pct, 1),
+              `AR(1)` = sprintf("%.3f [%.3f, %.3f]", phi_ar1, phi_ar1_lo, phi_ar1_hi),
+              `cor(mean, dispersion)` = round(cor_mean_disp, 3),
+              `elpd` = round(loo_elpd, 1)) |>
+    arrange(Item, Arm, Model) |>
+    kable(caption = "Same data, four theories of the floor. AR(1) is comparable across families; the correlation is not strictly so — see Limitations.")
+}
+```
+
+```{r}
+#| label: fig-ar1
+#| echo: true
+if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
+  d <- stage_b |> filter(!is.na(phi_ar1))
+  if (nrow(d) > 0) {
+    ggplot(d, aes(x = family, y = phi_ar1, colour = arm)) +
+      geom_pointrange(aes(ymin = phi_ar1_lo, ymax = phi_ar1_hi),
+                      position = position_dodge(width = .4)) +
+      facet_wrap(~ item) +
+      scale_colour_manual(values = c("Likert" = irw_amber, "Slider" = irw_blue),
+                          name = NULL) +
+      labs(x = NULL, y = "AR(1) coefficient (95% CrI)",
+           title = "Carryover estimated under each theory of the floor",
+           subtitle = "stress kept the same 1–5 format in both arms; att1 did not") +
+      theme(legend.position = "top",
+            axis.text.x = element_text(angle = 20, hjust = 1))
+  }
+}
+```
+
+```{r}
+#| label: stage-b-readout
+#| echo: false
+#| output: asis
+if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
+  d <- stage_b |> filter(!is.na(phi_ar1))
+  if (nrow(d) > 0) {
+    sp <- d |> group_by(item, arm) |>
+      summarise(spread = diff(range(phi_ar1)), .groups = "drop") |>
+      arrange(desc(spread))
+    cat("Across the fits that converged, the AR(1) estimate moves by up to **",
+        sprintf("%.3f", max(sp$spread)), "** between model families on the same ",
+        "data (", sp$item[1], ", ", sp$arm[1], " arm). ",
+        "That is the practical question for anyone fitting these models: the ",
+        "carryover parameter is not invariant to a modelling choice the field ",
+        "usually makes by convention.\n\n", sep = "")
+  }
+}
+```
+
+```{r}
+#| label: stage-b-missing
+#| echo: false
+#| output: asis
+if (nrow(stage_b) == 0 || !"phi_ar1" %in% names(stage_b)) {
+  cat("::: {.callout-note}\n## Model comparison not yet in the cache\n\n",
+      "Stage A (the floor profiles above) is complete, but the Stage B model ",
+      "fits are absent from this cache — either the run is still in progress or ",
+      "`STAGE_B` was set to `FALSE`. The descriptive result stands on its own; ",
+      "the comparison below fills in once the fits land.\n:::\n", sep = "")
+}
+```
+
+## Limitations
+
+**The dispersion parameter is not the same object across families.** The Gaussian
+and censored models have a residual standard deviation; the inflated beta has a
+precision, and the cumulative model a discrimination. Their person-level
+correlations with the intercept play analogous roles but are not numerically the
+same quantity, so the `cor(mean, dispersion)` column should be read for sign and
+rough magnitude, not compared digit for digit. The AR(1) coefficient *is*
+comparable across all four, which is why it carries the headline. This is a real
+obstacle to the preprint's framing, not just to ours: the parameter it reports as
+biased is defined inside a Gaussian latent-variable metric, and the alternatives a
+reader might reach for do not all have one.
+
+**The format contrast is between persons.** Randomisation makes it a fair
+comparison, but it is not the within-person crossing that would let us hold the
+participant fixed. The `stress` item mitigates this — same format in both arms,
+so arm differences on it are attributable to sample rather than format — but one
+control item is not a full design.
+
+**These are bipolar scales.** Both the Likert (−2…5) and slider (−50…100) items
+run from a negative to a positive pole, so the "floor" is an extreme negative
+response, not the absence of a symptom. The preprint's motivating case —
+depression and anxiety ESM, where the floor means "no symptoms today" and is very
+common — is the unipolar situation. The ordinal tables in the pool above include
+that case; vollbracht does not. Results here should not be read as settling what
+happens on a unipolar symptom scale.
+
+**Response direction is not harmonised in IRW.** "Floor" throughout means the
+observed minimum of that item. For a reverse-keyed item that is the substantive
+ceiling. This is reported as found rather than silently corrected, because
+recovering the intended keying reliably is its own problem.
+
+**Draft sampler settings.** The fits use short chains suitable for a draft. The
+intervals are wider than a final run would give, and any fit that failed to
+converge is reported as missing rather than quietly imputed.
+
+## Reproducibility
+
+```{r}
+#| label: repro
+#| echo: false
+#| output: asis
+if (cache_ok) {
+  cat("Computed on **", format(date_run), "**, profiling ", r_n_tables_run,
+      " of ", r_all_candidates, " candidate tables.\n\n", sep = "")
+}
+```
+
+Run `Rscript vignettes/esm_floor_compute.R` from the repository root, with
+`REDIVIS_API_TOKEN` set to a read-scoped token. The script caches every table
+profile and every model fit separately under `esm_floor_data/fits/`, so an
+interrupted run resumes rather than restarting.
+
+{{< include ../components/_data-version.qmd >}}
+
+{{< include ../components/_source-links.qmd >}}
+
+## References
+
+::: {#refs}
+:::
