@@ -186,8 +186,8 @@ message(sprintf("Stage A done: %d of %d tables profiled", nrow(floor_summary), l
 #             internal control: whatever changes for att1 but not for stress is
 #             attributable to format rather than to the arm's participants.
 #
-# Every model uses the same mean structure -- person random intercept, AR(1)
-# within person -- and a person-level dispersion random effect correlated with
+# Every model uses the same mean structure -- person random intercept, plus a
+# person-mean-centred lagged response carrying within-person carryover -- and a person-level dispersion random effect correlated with
 # the intercept, because that correlation (individual mean level vs innovation
 # variance) is the parameter the preprint reports as biased.
 #
@@ -214,13 +214,13 @@ fit_one <- function(dat, family_label) {
     gaussian = "sigma", censored = "sigma", zoib = "phi", cumulative = "disc")
 
   form <- switch(family_label,
-    gaussian  = brms::bf(resp_z ~ 1 + ar(time = occ, gr = id) + (1 | p | id),
+    gaussian  = brms::bf(resp_z ~ 1 + lag_c + (1 | p | id),
                          sigma ~ 1 + (1 | p | id)),
-    censored  = brms::bf(resp_z | cens(cens_ind) ~ 1 + ar(time = occ, gr = id) + (1 | p | id),
+    censored  = brms::bf(resp_z | cens(cens_ind) ~ 1 + lag_c + (1 | p | id),
                          sigma ~ 1 + (1 | p | id)),
-    zoib      = brms::bf(resp01 ~ 1 + ar(time = occ, gr = id) + (1 | p | id),
+    zoib      = brms::bf(resp01 ~ 1 + lag_c + (1 | p | id),
                          phi ~ 1 + (1 | p | id)),
-    cumulative = brms::bf(resp_ord ~ 1 + ar(time = occ, gr = id) + (1 | p | id),
+    cumulative = brms::bf(resp_ord ~ 1 + lag_c + (1 | p | id),
                           disc ~ 1 + (1 | p | id))
   )
   fam <- switch(family_label,
@@ -238,7 +238,7 @@ fit_one <- function(dat, family_label) {
   # population-level fixed effect, so class "b" matches no parameter and brms
   # rejects the whole model. (It did, on all 12 fits, instantly.)
   prs <- c(
-    brms::prior(normal(0, 0.5),  class = "ar"),
+    brms::prior(normal(0, 1),    class = "b"),
     brms::prior(exponential(2),  class = "sd"),
     brms::prior(lkj(2),          class = "cor")
   )
@@ -270,10 +270,10 @@ families_for <- function(n_cat) {
 extract_pars <- function(fit, family_label) {
   vc <- tryCatch(brms::VarCorr(fit)$id$cor, error = function(e) NULL)
   cor_mean_disp <- if (!is.null(vc) && dim(vc)[1] >= 2) vc[1, "Estimate", 2] else NA_real_
-  ar <- tryCatch(as.data.frame(brms::as_draws_df(fit))[["ar[1]"]], error = function(e) NULL)
+  ar <- tryCatch(as.data.frame(brms::as_draws_df(fit))[["b_lag_c"]], error = function(e) NULL)
 
   smry <- tryCatch(as.data.frame(posterior::summarise_draws(
-            posterior::subset_draws(brms::as_draws(fit), variable = "ar[1]"))),
+            posterior::subset_draws(brms::as_draws(fit), variable = "b_lag_c"))),
           error = function(e) NULL)
   rhat_ar <- if (!is.null(smry) && nrow(smry)) smry$rhat[1]      else NA_real_
   ess_ar  <- if (!is.null(smry) && nrow(smry)) smry$ess_bulk[1]  else NA_real_
@@ -340,7 +340,23 @@ if (STAGE_B) {
       resp01   = (resp - lo) / (hi - lo),                     # ZOIB needs [0,1]
       resp_ord = factor(resp, levels = sort(unique(resp)), ordered = TRUE),
       resp_z   = as.numeric(scale(resp))
-    )
+    ) %>%
+      # Carryover is modelled as DSEM actually formulates it -- a regression on
+      # the previous occasion, y_it = mu_i + phi*(y_i,t-1 - mu_i) + e_it -- not
+      # as a residual ARMA covariance. brms's ar() builds a per-group correlation
+      # matrix, and combined with a person-varying sigma (which the preprint's
+      # target parameter requires) it was both badly identified and ruinously
+      # slow: Rhat 1.41, bulk ESS 5, and 147 minutes for a single fit.
+      #
+      # The lagged predictor is cheaper, better identified, closer to DSEM, and
+      # gives a phi that is an ordinary regression coefficient -- so it is
+      # genuinely comparable across all four response families, which an ar[]
+      # parameter was not.
+      group_by(id) %>%
+      arrange(occ, .by_group = TRUE) %>%
+      mutate(lag_c = dplyr::lag(resp_z) - mean(resp_z, na.rm = TRUE)) %>%
+      ungroup() %>%
+      filter(!is.na(lag_c))   # drops each person's first occasion
 
     map_dfr(families_for(n_distinct(dat$resp)), function(fam) {
       label <- sprintf("%s_%s_%s", item, tolower(arm), fam)

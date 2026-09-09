@@ -361,20 +361,29 @@ if (nrow(item_detail) > 0) {
 }
 ```
 
-Every model uses the same mean structure — a person-level random intercept and a
-within-person AR(1) — and adds a person-level dispersion random effect correlated
-with that intercept, because the mean-level-to-innovation-variance correlation is
+Every model uses the same mean structure and differs only in the response
+distribution. Carryover is written the way DSEM actually formulates it — each
+occasion regressed on the previous one,
+$y_{it} = \mu_i + \phi(y_{i,t-1} - \mu_i) + e_{it}$ — rather than as a
+residual autocorrelation structure. That choice was forced by the data and is
+described in Limitations, but it is also the more faithful one, and it makes
+$\phi$ an ordinary regression coefficient that means the same thing in all four
+families.
+
+Each model then adds a person-level dispersion random effect correlated with the
+person intercept, because the mean-level-to-innovation-variance correlation is
 the parameter the preprint reports as biased.
 
 ```{r}
 #| label: model-spec
 #| eval: false
 #| echo: true
+# lag_c is the previous occasion's response, centred on the person's own mean.
 # Shared across families; only the response distribution changes.
-brms::bf(resp ~ 1 + ar(time = occ, gr = id) + (1 | p | id),
+brms::bf(resp_z ~ 1 + lag_c + (1 | p | id),
          sigma ~ 1 + (1 | p | id))                      # gaussian, and censored
-brms::bf(resp | cens(cens_ind) ~ ..., sigma ~ ...)      # floor = left-censored
-brms::bf(resp01 ~ ..., phi ~ ...)                       # zero-one-inflated beta
+brms::bf(resp_z | cens(cens_ind) ~ ..., sigma ~ ...)    # floor = left-censored
+brms::bf(resp01   ~ ..., phi  ~ ...)                    # zero-one-inflated beta
 brms::bf(resp_ord ~ ..., disc ~ ...)                    # cumulative (graded)
 ```
 
@@ -546,6 +555,17 @@ happens on a unipolar symptom scale.
 observed minimum of that item. For a reverse-keyed item that is the substantive
 ceiling. This is reported as found rather than silently corrected, because
 recovering the intended keying reliably is its own problem.
+
+**Carryover is a lagged predictor, not a residual AR process.** The first
+version of this page used brms's `ar()` term. It builds a per-group residual
+autocorrelation matrix, and combined with the person-varying `sigma` that the
+preprint's target parameter requires, it was both badly identified and
+extremely slow — Rhat 1.41, bulk effective sample size 5, and 147 minutes for a
+single fit. The lagged-predictor form above is what DSEM actually specifies, is
+far cheaper, and yields a carryover coefficient comparable across response
+families in a way an `ar[1]` parameter is not. One consequence to keep in mind:
+$\phi$ here is a population-level coefficient. DSEM typically lets it vary by
+person, and that random slope is not fitted here.
 
 **The target parameter is hard to estimate at ESM sample sizes.** The first
 draft run of this page produced Rhat 1.8, a bulk effective sample size of 3, and
