@@ -580,21 +580,32 @@ if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
 if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
   ce <- stage_b |> filter(family == "censored", !is.na(rhat_ar))
   ord <- ce |> filter(n_cat <= 10); con <- ce |> filter(n_cat > 10)
-  if (nrow(ord) > 0 && nrow(con) > 0) {
-    cat("On the continuous version the model converges (Rhat ",
-        sprintf("%.3f", con$rhat_ar[1]), ", ESS ", round(con$ess_ar[1]),
-        ") in about ", round(con$mins[1]), " minutes. On the ordinal version of ",
-        "**the same item, from randomly assigned participants**, it does not: ",
-        "Rhat ", sprintf("%.2f", ord$rhat_ar[1]), ", bulk ESS ",
-        round(ord$ess_ar[1]), ", after ", round(ord$mins[1]), " minutes.\n\n",
-        sep = "")
+  if (nrow(ord) > 0 || nrow(con) > 0) {
+    cat("Of the censored fits attempted so far, **", sum(con$converged), " of ",
+        nrow(con), "** on a near-continuous response converged, and **",
+        sum(ord$converged), " of ", nrow(ord),
+        "** on a five-point response did.\n\n", sep = "")
+    if (nrow(ord) > 0) {
+      cat("The ordinal failures are not marginal: ",
+          paste(sprintf("%s/%s reached Rhat %.2f with bulk ESS %.0f after %.0f minutes",
+                        ord$item, ord$arm, ord$rhat_ar, ord$ess_ar, ord$mins),
+                collapse = "; "), ".\n\n", sep = "")
+    }
     cat("This is what the censoring assumption predicts about itself. A censored ",
-        "model says the observed floor hides a continuum extending below it. On a ",
-        "slider that is a coherent claim. On a five-point item there is nothing ",
-        "below category one, and the likelihood has to place mass in a region the ",
-        "response format does not have — so the sampler cannot settle. ",
-        "Randomisation is what makes this readable: the two arms differ in ",
-        "response format and in nothing else that we chose.\n\n", sep = "")
+        "model says the observed floor conceals a continuum extending below it. ",
+        "On a slider that is a coherent claim. On a five-point item there is ",
+        "nothing below category one, and the likelihood must place mass in a ",
+        "region the response format does not have — so the sampler cannot ",
+        "settle. Randomisation is what makes this readable: participants did not ",
+        "choose their response format.\n\n", sep = "")
+    cat("Note that floor mass does not explain the split. The two ordinal items ",
+        "carry ", sprintf("%.1f%%", min(ord$floor_pct)), " and ",
+        sprintf("%.1f%%", max(ord$floor_pct)), " of responses at the floor and ",
+        "both fail; the continuous item carries ",
+        sprintf("%.1f%%", con$floor_pct[1]), " and converges in ",
+        round(con$mins[1]), " minutes. It is the number of categories beneath ",
+        "the floor, not the amount of mass sitting on it, that decides whether ",
+        "the model can be estimated at all.\n\n", sep = "")
   }
 }
 ```
