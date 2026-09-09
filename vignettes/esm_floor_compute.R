@@ -38,7 +38,7 @@
 # Requires REDIVIS_API_TOKEN (read scope is sufficient; nothing here writes).
 
 suppressPackageStartupMessages({
-  library(irw); library(dplyr); library(tidyr); library(purrr); library(tibble)
+  library(R.utils); library(irw); library(dplyr); library(tidyr); library(purrr); library(tibble)
 })
 
 set.seed(20260908)
@@ -48,6 +48,14 @@ STAGE_B        <- TRUE   # FALSE: skip all Stan fitting, emit Stage A only
 CHAINS         <- 2
 ITER           <- 2000   # 1000 warmup
 ADAPT_DELTA    <- 0.99
+# max_treedepth 12 allows up to 2^12 = 4096 leapfrog steps per iteration. On
+# stress/Slider -- a 5-point item with 37% of responses at the floor, the most
+# extreme geometry in the set -- that turned a fit whose Likert twin took 6
+# minutes into one still running after 8 hours. 10 caps the cost at 1024 steps;
+# saturation then surfaces as a treedepth warning rather than an overnight
+# stall, which is the failure mode you want.
+MAX_TREEDEPTH  <- 10
+FIT_BUDGET_MIN <- 45     # abandon a fit past this and record it as timed out
 # Cells are capped to a COMMON size rather than each arm's natural size. The
 # mood-block items carry ~11k rows against att1's ~1.8k, so uncapped the fits
 # differ in n by 6x and take wildly different wall-clock. Equal cells also mean
@@ -244,7 +252,7 @@ fit_one <- function(dat, family_label) {
   )
   brms::brm(form, data = dat, family = fam, prior = prs,
             chains = CHAINS, iter = ITER, refresh = 0, backend = "rstan",
-            silent = 2, control = list(adapt_delta = ADAPT_DELTA, max_treedepth = 12))
+            silent = 2, control = list(adapt_delta = ADAPT_DELTA, max_treedepth = MAX_TREEDEPTH))
 }
 
 # Which families are even admissible depends on the format -- itself part of the
@@ -365,7 +373,9 @@ if (STAGE_B) {
       message("  fitting: ", label, "  (n=", nrow(dat), ", persons=", n_distinct(dat$id), ")")
       t0 <- Sys.time()
       out <- tryCatch({
-        fit <- fit_one(dat, fam)
+        fit <- R.utils::withTimeout(fit_one(dat, fam),
+                                    timeout = FIT_BUDGET_MIN * 60,
+                                    onTimeout = "error")
         extract_pars(fit, fam) %>%
           mutate(item = item, arm = arm, family = fam,
                  n_obs = nrow(dat), n_persons = n_distinct(dat$id),
@@ -374,8 +384,14 @@ if (STAGE_B) {
                  mins = as.numeric(difftime(Sys.time(), t0, units = "mins")),
                  .before = 1)
       }, error = function(e) {
-        message("    FAILED: ", conditionMessage(e))
-        tibble(item = item, arm = arm, family = fam, error = conditionMessage(e))
+        msg <- conditionMessage(e)
+        timed_out <- grepl("reached elapsed time limit|timed out", msg, ignore.case = TRUE)
+        message("    ", if (timed_out) "TIMED OUT" else "FAILED", ": ", msg)
+        tibble(item = item, arm = arm, family = fam,
+               n_cat = n_distinct(dat$resp),
+               floor_pct = 100 * mean(dat$resp == lo),
+               mins = FIT_BUDGET_MIN,
+               error = if (timed_out) "exceeded the wall-clock budget" else msg)
       })
       saveRDS(out, f)
       out
