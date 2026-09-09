@@ -640,6 +640,22 @@ if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
                   collapse = "; "), ".\n\n", sep = "")
       }
     }
+    # The single most informative row: an ordinal item answered by participants
+    # who were randomised INTO the slider arm. If censoring failed only in the
+    # Likert arm, the arm's participants would be a rival explanation. It does
+    # not, so they are not.
+    cross <- ord |> filter(arm == "Slider")
+    if (nrow(cross) > 0) {
+      cat("One row separates response format from the people in each arm. **",
+          cross$item[1], " kept its five-point format in the slider arm** — it was ",
+          "never converted — so those participants were randomised into the ",
+          "slider condition while still answering an ordinal item. The censored ",
+          "model fails there too (Rhat ", sprintf("%.2f", cross$rhat_ar[1]),
+          ", bulk ESS ", round(cross$ess_ar[1]), "), exactly as it does in the ",
+          "Likert arm. Had it failed only among Likert-arm participants, those ",
+          "participants would have been a rival explanation. They are not: it is ",
+          "the item's response format that decides, not the arm.\n\n", sep = "")
+    }
     cat("This is what the censoring assumption predicts about itself. A censored ",
         "model says the observed floor conceals a continuum extending below it. ",
         "On a slider that is a coherent claim. On a five-point item there is ",
