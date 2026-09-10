@@ -80,15 +80,18 @@ TABLES <- tribble(
   "enem_2013_1mil_cn",   5, FALSE,
   "enem_2014_1mil_ch",   5, FALSE,
   "enem_2019_1mil_ch",   5, FALSE,
-  # enem_2019_1mil_lc is deliberately absent. It fails two model-free
-  # answer-key checks badly enough that no guessing model can be evaluated on
-  # it: one of its two elective language blocks is scored 0 for all ~1,500
-  # candidates who sat it (0 correct of 7,520 responses), and of the items
-  # that survive the zero-variance screen, 73% correlate below 0.05 with the
-  # total of the others, against a median item-rest correlation of 0.09-0.49
-  # on every other table here. It stays in guessing_key_diagnostics.R, which
-  # is where the evidence for excluding it lives -- dropping it from the
-  # diagnostics too would erase the reason it is gone.
+  # enem_2019_1mil_lc was excluded until 2026-09-10 on answer-key grounds: one
+  # of its two elective language blocks scored 0 for all ~1,500 candidates who
+  # sat it (0 correct of 7,520 responses), and 73% of the items surviving the
+  # zero-variance screen correlated below 0.05 with the total of the others.
+  # Both signals were artifacts of the LC 1:1 response alignment, fixed in the
+  # ENEM rebuild published in dataset v52.0. On the rebuilt table no item has
+  # p = 0 (the elective block reads p ~ 0.24 over ~504k respondents) and the
+  # item-rest correlations are median 0.33 with 4% below 0.05 -- the best of
+  # any ENEM table here. It stays in guessing_key_diagnostics.R, which now
+  # carries the evidence that the check passes rather than the reason it was
+  # dropped.
+  "enem_2019_1mil_lc",   5, FALSE,
   "enem_2024_1mil_ch",   5, FALSE,
   "gilbert_meta_1",      4, TRUE,
   "gilbert_meta_102",    5, TRUE,
