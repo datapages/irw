@@ -908,6 +908,21 @@ the same way as the dimensionality cross-check above. Given the small,
 divergence-thinned sample here, this reads as a plausible corroboration of
 the eigenvalue-ratio result, not a stronger replacement for it.
 
+Two cautions on what this quantity is, both taken from `easybgm`'s own
+documentation for `clusterBayesfactor()`, as rewritten upstream in
+September 2026. First, the count the
+SBM puts a posterior on is the number of clusters the model has
+*available*, which can exceed the number that actually hold items, since a
+cluster may come out empty — so "one cluster" is a statement about the
+fitted block structure, not directly a count of item groupings. Second, and
+more to the point of this section's framing: evidence for clustering
+concerns the network's **edge structure**, and is not by itself evidence of
+multidimensionality. A network can carry clustered edges under a single
+dominant factor. That is a second reason — alongside the slow accumulation
+of evidence for the one-cluster hypothesis noted above — why this check
+disagreeing with an eigenvalue-ratio call is not, on its own, a
+contradiction: the two diagnostics are not asking quite the same question.
+
 ### Cross-vignette payoff 2: do locally dependent tables look denser?
 
 ```{r}
@@ -1643,6 +1658,17 @@ more carefully, not a settled prescription.
   relationship consistent with the eigenvalue-ratio cross-check, but on a
   small, divergence-thinned sample. Not run at full-batch scale, for the
   same runtime-cost reasons noted throughout this section for `bgms`.
+  Separately: the Bayes factor here is computed by hand from `bgms`'s
+  posterior over the cluster count against its own zero-truncated Poisson
+  prior, not via `easybgm::clusterBayesfactor()`. `easybgm`'s
+  implementation of that function was rewritten upstream in September 2026,
+  but the rewrite targets `bgms` 0.2.0.0's shifted-Poisson prior and its
+  differently-normalized SBM summary, and its documentation warns against
+  applying it to fits made under an earlier convention; these fits use
+  `bgms` 0.1.6.3. The two cautions quoted at the end of that section (what
+  the block count counts, and clustering evidence not being
+  multidimensionality evidence) come from the rewritten documentation and
+  do apply here.
 - **Option A's uniform-GGM treatment of binary/ordinal data is an
   approximation this vignette inherited deliberately, not a claim it's the
   ideal model for IRW's data.** It's the same simplifying choice Huth et
