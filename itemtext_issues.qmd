@@ -428,9 +428,6 @@ issues <- yaml.load(r"---(
 - table: florida_twins_friends
   issue: |-
     Items `friends20`/`friends21` are not documented in the Florida Twin Project's Wave 1 Child Survey Measures codebook; the other 19 items match exactly
-- table: addy_2021_sdq_ghana
-  issue: |-
-    `SDQ_7`'s response options run in reverse order in the source codebook (0=certainly true ... 2=not true) relative to the other 9 items; transcribed as given, so this item may need reverse-coding
 - table: aguirre_camacho_2021_shai
   issue: |-
     Item text is the English SHAI-18 original, but the study administered a Spanish translation whose wording the paper never quotes. The instrument has no item stems -- each item is a group of four statements -- so all text sits in `option_text` and `item_text` is empty. The 14/4 split between the two subscales is confirmed against the paper's subscale statistics, but item order *within* each subscale rests on `HAnx<N>` being the instrument's item *N*
@@ -662,9 +659,6 @@ issues <- yaml.load(r"---(
 - table: chen_2021_enculturation
   issue: |-
     The BAS-MBIW was administered as a Mandarin Chinese interview (with an interpreter where needed), but no Chinese wording is published in the paper or its S1 Data file, so the item text shown is the English wording carried in the data file's own SPSS variable labels. Note also that the published scale is scored 0-4 (never..always) while the IRW table stores 1-5, so the anchors here are attached to the shifted coding.
-- table: ALSECYPIAMH_WU_2022_SDQ
-  issue: |-
-    These five items are the prosocial subscale of the Strengths and Difficulties Questionnaire, scored 1 = "not true" to 3 = "certainly true". Item text is the canonical English SDQ; the study administered a Chinese translation whose wording is not published. The study's own data file leaves the item columns unlabelled and the paper is paywalled, so the order of the middle three items within the subscale is inferred from the column numbering rather than read from any source that names them; only the two endpoints are pinned. Note also that the source file's `SDQ_Pro` column is not an item -- it is the rounded mean of the five, which reproduces exactly for all 7,841 respondents -- and it was removed from both the response table and this item table under issue #1691, so it is no longer shipped.
 - table: weber2026_name_knowledge
   issue: |-
     `item_text`, `option_text` and `instructions` carry the administered German; the English in the `_translated` columns is the authors' own, published in the same record, rather than an IRW rendering. The 1-5 response direction follows the order the printed questionnaire shows its checkboxes in: the study's data file stores unlabelled integers with no value labels, so the direction could not be confirmed against the data and rests on the instrument alone.
@@ -1775,6 +1769,61 @@ issues <- yaml.load(r"---(
     Study 1 randomly assigned participants to an English- or Spanish-language version of the same
     task (63 English, 56 Spanish); the item text shipped here is the English wording, and the IRW
     response table does not record which language a given participant received.
+- table: QCDQES_Oliveira_2022
+  issue: |-
+    The Portuguese item, option and instruction wording here is the study's own, transcribed from
+    its SPSS value labels. The English in the `_translated` columns was produced by IRW -- it is not
+    the study's wording and has not been reviewed or back-translated by a Portuguese speaker. Treat
+    it as a reading aid rather than a validated English instrument.
+- table: qi_2025_panas
+  issue: |-
+    The instrument is the Qiu, Zheng & Wang (2008) Chinese revision of the PANAS, not Watson et al.'s
+    20-item original: it has 18 items and six of them (grateful, joyful, elated and jittery among
+    them) are not Watson adjectives. Neither the study's OSF deposit nor its supplement contains any
+    questionnaire wording, so the Chinese item, anchor and instruction text was taken from the
+    Institute of Psychology (CAS) Cognitive Experiment Standard Toolbox's own administration of that
+    instrument and corroborated item-for-item against a second independent reproduction. The English
+    in the `_translated` columns was produced by IRW, not by the study.
+- table: queiros_2018_qcae
+  issue: |-
+    Two things to know. The response options ship in the administered Portuguese ('Discordo
+    Fortemente' ... 'Concordo Fortemente') with the QCAE authors' own English alongside, and all 31
+    items are stored RAW -- so the four reverse-worded items (`QCAE_1`, `QCAE_2`, `QCAE_17`,
+    `QCAE_29`) still need reversing before scoring; the source deposit's pre-reversed copies of those
+    four were dropped by the IRW build. Separately, the English *instructions* are an IRW translation
+    of the Portuguese, because this adaptation's instruction text was never published in English. The
+    English item and option wording, by contrast, is the QCAE authors' own.
+- table: qiang_2025_workplace_friendship
+  issue: |-
+    Item `fr5` is questionnaire item 35, which the IRW processing script had dropped as a presumed
+    Chinese duplicate of item 36. The response data shows they are different administered items --
+    they agree on only 81 of 396 rows, r = 0.208 -- so it was restored on 2026-09-10 and the response
+    table rebuilt from 1,584 to 1,980 rows. It is coded `fr5` rather than inserted in questionnaire
+    order because `fr1`-`fr4` were already published item codes. Item 35 is the one item in this
+    block the deposit prints only in Chinese, so unlike the other four its English here was written
+    by IRW rather than by the study.
+- table: PMT_Trzcinska_2023_PMT
+  issue: |-
+    The Polish item text ships both gender-matched forms of every item in one field, marked
+    [girls' form] and [boys' form], because the item code does not record which form a child saw. The
+    32 `TWO*` item codes are the same 32 questions re-administered two weeks later to a 27-child
+    retest subsample, not new items. The English in the `_translated` columns was assembled by IRW
+    from the paper's own English wording of each picture and question; the study never prints them as
+    sentences.
+- table: poza2026_hlseu
+  issue: |-
+    This table was administered in two languages -- 93 of the 101 respondents answered the Arabic form
+    and 8 the French form -- so `item_text` carries both administered wordings in one field, marked
+    [Arabic version] and [French version]. The English in the `_translated` columns was written by
+    IRW, not by the study. The response labels shipped for 0 and 1 are the data file's own Spanish
+    labels for the study's difficult/easy dichotomisation ('DIFICIL/MUY DIFICIL', 'MUY FACIL/FACIL'),
+    because the administered Arabic and French anchors are published nowhere.
+- table: aspirations_sonmez_2022
+  issue: |-
+    The item text here is the administered Turkish, which is what respondents read. The English in the
+    `_translated` columns was produced by IRW rather than by the study's authors. Kasser & Ryan's
+    English Aspiration Index exists, but the Turkish set was not verified one-to-one against it. The
+    instruction text carries doubled spaces from the source layout, left verbatim.
 )---")
 
 issues <- issues[order(vapply(issues, \(x) x$table, character(1)))]
