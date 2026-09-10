@@ -686,42 +686,6 @@ p <- ggplot(dist_df, aes(x = strength_a_cor, y = "", text = tooltip)) +
 ggplotly(p, tooltip = "text") |> layout(margin = list(t = 40))
 ```
 
-```{r}
-#| label: fig-cor-vs-weighted-density
-#| fig-cap: "Strength-discrimination correlation against each table's weighted network density -- mean absolute edge weight over all possible edges, counting absent edges as zero, so higher values mean a denser and/or more strongly-connected network. Unlike a plotting-only axis, this one carries real meaning: a theory that predicts a densely, uniformly connected network under a strong single factor also predicts higher weighted density should go with better strength-discrimination agreement. The two estimators are shown separately and on their own x scales because their edge weights are not in the same units -- EBICglasso weights are partial correlations, bounded by 1, while IsingFit weights are log-odds and unbounded, so pooling them onto one axis would compare quantities that are not comparable. One IsingFit table (eurpar2_mudfold, weighted density 14.1, more than ten times the next-largest value) is off-scale and omitted from the panel; the correlation reported for IsingFit excludes it. One point per table with a usable comparison. Hover for table details."
-#| fig-height: 5
-
-density_df <- summary_df %>%
-  filter(!is.na(strength_a_cor)) %>%
-  rowwise() %>%
-  mutate(weighted_density = edge_stats(graphs_list[[table]])$weighted_density) %>%
-  ungroup() %>%
-  filter(!is.na(weighted_density)) %>%
-  mutate(tooltip = paste0(
-    "Table: ", table,
-    "<br>Strength-a correlation: ", round(strength_a_cor, 2),
-    "<br>Weighted density: ", round(weighted_density, 2),
-    "<br>Network method: ", network_method,
-    "<br>n_items: ", n_items
-  ))
-
-# Edge weights are not on a common scale across the two estimators (partial
-# correlations vs. log-odds), so each is plotted on its own x axis. One
-# IsingFit table sits an order of magnitude beyond the rest and is dropped
-# from the panel so the bulk of the distribution is legible.
-DENSITY_PLOT_CUTOFF <- 10
-density_plot_df <- filter(density_df, weighted_density <= DENSITY_PLOT_CUTOFF)
-
-p <- ggplot(density_plot_df, aes(x = weighted_density, y = strength_a_cor, text = tooltip)) +
-  geom_point(colour = irw_blue, size = 1.6, alpha = 0.7) +
-  geom_smooth(method = "loess", se = FALSE, colour = irw_red, linewidth = 0.8) +
-  geom_hline(yintercept = 0, linetype = "dashed", colour = irw_grey) +
-  facet_wrap(~ network_method, scales = "free_x") +
-  labs(x = "Weighted network density (mean |edge weight| over all possible edges)",
-       y = "Strength-discrimination correlation")
-
-ggplotly(p, tooltip = "text") |> layout(margin = list(t = 60))
-```
 
 ```{r}
 #| label: cor-summary-inline
@@ -731,21 +695,6 @@ med_cor <- median(summary_df$strength_a_cor, na.rm = TRUE)
 prop_strong <- mean(summary_df$strength_a_cor > 0.7, na.rm = TRUE)
 n_na_cor <- sum(is.na(summary_df$strength_a_cor))
 EMPTY_TABLES <- summary_df$table[is.na(summary_df$strength_a_cor) & summary_df$network_density == 0]
-# Correlations are computed within estimator, for the same reason the figure
-# facets: a pooled correlation mixes partial correlations with log-odds.
-# The IsingFit correlation is computed on the same points the panel shows,
-# i.e. excluding the one off-scale table.
-density_by_method <- density_plot_df %>%
-  group_by(network_method) %>%
-  summarise(
-    n = n(),
-    r = cor(weighted_density, strength_a_cor),
-    p = cor.test(weighted_density, strength_a_cor)$p.value,
-    .groups = "drop"
-  )
-fmt_p <- function(p) if (p < 0.001) "p < 0.001" else paste0("p = ", round(p, 3))
-dens_ggm  <- filter(density_by_method, network_method == "EBICglasso")
-dens_ising <- filter(density_by_method, network_method == "IsingFit")
 ```
 
 The median strength-discrimination correlation across `r sum(!is.na(summary_df$strength_a_cor))`
@@ -753,19 +702,7 @@ tables with a usable comparison is `r round(med_cor, 2)`, and
 `r scales::percent(prop_strong, accuracy = 1)` of tables exceed 0.7.
 `r if (n_na_cor > 0) paste0(n_na_cor, " table(s) are excluded here because their regularized network had no edges at all -- an empty network, not a low correlation.") else ""`
 The relationship is real and often strong, but — as the two comparisons
-below make concrete — it is not universal. The density half of Epskamp
-et al.'s prediction — that a strong single factor should produce a densely,
-uniformly connected network *and* good agreement with discrimination, so the
-two should move together — gets only weak support. Among the
-`r dens_ggm$n` tables fit with EBICglasso, where edge weights are partial
-correlations, weighted density correlates with the strength-discrimination
-correlation at r = `r sprintf("%.2f", dens_ggm$r)` (`r fmt_p(dens_ggm$p)`): in the
-predicted direction, but small enough that density explains barely more than
-one percent of the variation in agreement. Among the `r dens_ising$n`
-IsingFit tables it is r = `r sprintf("%.2f", dens_ising$r)`
-(`r fmt_p(dens_ising$p)`) — no reliable relationship at all. The two
-estimators are kept apart here because their edge weights aren't in the same
-units: pooling them yields a single number that describes neither.
+below make concrete — it is not universal.
 
 ### Why are 7 networks empty? A closer look
 
@@ -912,10 +849,15 @@ tightly-connected cluster, or more than one? Following a reviewer
 suggestion, this fits the SBM (`bgms::bgm(..., edge_prior =
 "Stochastic-Block")`) on the same 20-table Option B stratified subset used
 for the ordinal-MRF robustness check elsewhere on this page, and derives a
-literal Bayes factor for one cluster vs. more than one (via Savage-Dickey
-against `bgm()`'s own zero-truncated-Poisson prior on cluster count), to
+literal *clustering* Bayes factor for one cluster vs. more than one
+(posterior odds of a single cluster weighed against the prior odds implied
+by `bgm()`'s own zero-truncated-Poisson prior on cluster count), to
 compare against the strength-discrimination correlation the same way the
-eigenvalue-ratio check above does.
+eigenvalue-ratio check above does. "Clustering Bayes factor" is the term
+used for this quantity in `easybgm`; it is not the Savage-Dickey
+edge-inclusion Bayes factor described under Data and methods above, which
+answers a different question (is *this edge* present) about a different
+model.
 
 ```{r}
 #| label: sbm-check-inline
@@ -929,19 +871,31 @@ if (sbm_ok) {
   max_bf_k1 <- max(sbm_reliable$bf_k1)
   cor_bf_strength <- cor(sbm_reliable$bf_k1, sbm_reliable$strength_a_cor)
   cor_p_strength  <- cor(sbm_reliable$post_p_k1, sbm_reliable$strength_a_cor)
+  # BF > 3 as well as BF > 10: the SBM accumulates evidence for the
+  # one-cluster null slowly, so the usual "strong evidence" bar is
+  # stringent here (see the text below).
+  n_bf3 <- sum(sbm_reliable$bf_k1 > 3)
 }
 ```
 
 `r if (sbm_ok) paste0("Of the 20 candidate tables, one failed to fetch (an unsupported data type), one had no strength-discrimination match, and four had to be dropped for a severe MCMC convergence failure -- three tables' chains diverged on 100% of post-warmup samples, one on 25% -- leaving ", n_sbm_reliable, " tables with a trustworthy SBM fit and a usable comparison.") else "SBM results not available."`
 Two things came out of it. First, **no table clears the BF > 10 bar for
-one-cluster structure** — the highest Bayes factor across all
+one-cluster structure** — the highest clustering Bayes factor across all
 `r if (sbm_ok) n_sbm_reliable else "--"` reliable tables is
 `r if (sbm_ok) round(max_bf_k1, 2) else "--"`, well short of "strong
-evidence" by the same BF10 convention used throughout this vignette. The
-two-group comparison a reviewer originally suggested (compare
-strength-discrimination correlation for BF>10-favoring-one-cluster tables
-against the rest) isn't possible in this sample — there is no
-one-cluster-favoring group. Second, the *continuous* version of the same
+evidence" by the same BF10 convention used throughout this vignette. That
+bar is arguably the wrong one here. Huth points out that the SBM, like
+other Bayesian model-comparison procedures, is known in simulation to
+accumulate evidence for the null — here, the one-cluster hypothesis —
+only slowly, so BF > 10 is a stringent standard for a hypothesis this
+design is intrinsically slow to support, and BF > 3 is the more defensible
+threshold. It changes little in this sample: the number of tables clearing
+BF > 3 is `r if (sbm_ok) n_bf3 else "--"` of
+`r if (sbm_ok) n_sbm_reliable else "--"`. Either way, the two-group comparison a reviewer
+originally suggested (compare strength-discrimination correlation for
+one-cluster-favoring tables against the rest) isn't possible in this
+sample — at BF > 10 there is no one-cluster-favoring group at all, and at
+BF > 3 there is a single table in it. Second, the *continuous* version of the same
 signal still points the right way: both the Bayes factor and the raw
 posterior probability of one cluster correlate positively with the
 strength-discrimination correlation
@@ -953,6 +907,21 @@ own cluster structure rather than an IRT-side eigenvalue ratio) pointing
 the same way as the dimensionality cross-check above. Given the small,
 divergence-thinned sample here, this reads as a plausible corroboration of
 the eigenvalue-ratio result, not a stronger replacement for it.
+
+Two cautions on what this quantity is, both taken from `easybgm`'s own
+documentation for `clusterBayesfactor()`, as rewritten upstream in
+September 2026. First, the count the
+SBM puts a posterior on is the number of clusters the model has
+*available*, which can exceed the number that actually hold items, since a
+cluster may come out empty — so "one cluster" is a statement about the
+fitted block structure, not directly a count of item groupings. Second, and
+more to the point of this section's framing: evidence for clustering
+concerns the network's **edge structure**, and is not by itself evidence of
+multidimensionality. A network can carry clustered edges under a single
+dominant factor. That is a second reason — alongside the slow accumulation
+of evidence for the one-cluster hypothesis noted above — why this check
+disagreeing with an eigenvalue-ratio call is not, on its own, a
+contradiction: the two diagnostics are not asking quite the same question.
 
 ### Cross-vignette payoff 2: do locally dependent tables look denser?
 
@@ -1640,15 +1609,6 @@ more carefully, not a settled prescription.
   Data and methods), but an exact ordinal-MRF network fit (rather than a
   Gaussian approximation on polychoric correlations) is still not
   implemented here.
-- **Weighted density is not comparable across the two estimators.**
-  EBICglasso edge weights are partial correlations (bounded by 1);
-  IsingFit weights are log-odds and unbounded, so the same nominal
-  "weighted density" means different things in the two halves of the
-  sample. The density figure and the correlations reported with it are
-  therefore split by estimator rather than pooled, and one IsingFit table
-  (`eurpar2_mudfold`, weighted density 14.1, over ten times the
-  next-largest value) is excluded from the IsingFit panel and its
-  correlation as an outlier on that unbounded scale.
 - **Network estimation is more sample- and tuning-sensitive** than fitting
   a single IRT model. Small tables in this sample should be read
   cautiously; an empty regularized network (no edges survive
@@ -1690,13 +1650,25 @@ more carefully, not a settled prescription.
   and lost 6 of those 20 to data/convergence issues** (1 unsupported data
   type, 1 no strength-discrimination match, 4 severe MCMC divergence — 3 at
   100% of post-warmup samples). No table in the remaining 14 cleared the
-  BF > 10 bar for one-cluster structure, so the originally-planned
-  two-group comparison (one-cluster-favoring tables vs. the rest) couldn't
-  run; the continuous version (Bayes factor / posterior probability of one
+  BF > 10 bar for one-cluster structure, and only one clears the more
+  lenient BF > 3 bar that the SBM's slow accumulation of evidence for the
+  null arguably warrants, so the originally-planned two-group comparison
+  (one-cluster-favoring tables vs. the rest) couldn't run either way; the continuous version (Bayes factor / posterior probability of one
   cluster vs. strength-discrimination correlation) showed a weak positive
   relationship consistent with the eigenvalue-ratio cross-check, but on a
   small, divergence-thinned sample. Not run at full-batch scale, for the
   same runtime-cost reasons noted throughout this section for `bgms`.
+  Separately: the Bayes factor here is computed by hand from `bgms`'s
+  posterior over the cluster count against its own zero-truncated Poisson
+  prior, not via `easybgm::clusterBayesfactor()`. `easybgm`'s
+  implementation of that function was rewritten upstream in September 2026,
+  but the rewrite targets `bgms` 0.2.0.0's shifted-Poisson prior and its
+  differently-normalized SBM summary, and its documentation warns against
+  applying it to fits made under an earlier convention; these fits use
+  `bgms` 0.1.6.3. The two cautions quoted at the end of that section (what
+  the block count counts, and clustering evidence not being
+  multidimensionality evidence) come from the rewritten documentation and
+  do apply here.
 - **Option A's uniform-GGM treatment of binary/ordinal data is an
   approximation this vignette inherited deliberately, not a claim it's the
   ideal model for IRW's data.** It's the same simplifying choice Huth et
@@ -1793,7 +1765,14 @@ by overall network stability rather than trimming weak-evidence edges — the
 last of these was her suggested alternative to what this page did before, and
 is a cleaner test of the same question. She also corrected our framing of why
 the ordinal Markov random field was not used, and caught a claim that both
-model options shared the matrix-F prior when only one does.
+model options shared the matrix-F prior when only one does. In a second
+round of notes she asked us to drop a figure relating the
+strength-discrimination correlation to weighted network density (the two
+measures were too easily confused, and the reason they behave differently
+was not understood well enough to publish), corrected our terminology for
+the stochastic-block-model Bayes factor, and passed on her colleague's
+point about how slowly that Bayes factor accumulates evidence for the
+one-cluster hypothesis.
 
 This revised version incorporates her notes but was not itself reviewed by
 her; the analytic choices, interpretations and any remaining errors are ours

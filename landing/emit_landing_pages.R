@@ -16,6 +16,11 @@
 #
 # Run as a Quarto post-render step. Skips itself (with a message, exit 0) when
 # REDIVIS_API_TOKEN is absent, so a local preview without credentials still works.
+# In CI (env CI set) an absent token is a hard error instead -- see the guard below.
+#
+# CREDENTIAL: this script only ever READS (irw_meta and table metadata). The token
+# it expects is a read-scoped Redivis token; it needs no data.edit scope, and a
+# write-scoped token should not be used here.
 #
 # THREE RULES THIS FILE EXISTS TO KEEP -- see the 2026-09-03 scoping comment on
 # ben-domingue/irw#1706 for the measurements behind them:
@@ -39,6 +44,26 @@
 #    6ebce93a, which predates R/manifest.R. When that pin is next bumped for other
 #    reasons, replace .read_manifest() with irw::irw_version().
 
+# The skip below exists for one case only: a local preview by someone without
+# Redivis credentials. In CI it must NOT skip. `quarto publish` replaces the
+# published site wholesale, so a silent skip on a green build would delete the
+# 25 table landing pages and their Croissant files from itemresponsewarehouse.org
+# with nothing in the log louder than one message() -- exactly the failure mode
+# that makes datapages/irw's REDIVIS_API_TOKEN secret dangerous to touch
+# (ben-domingue/irw#2129). A missing credential in CI is a broken build, not a
+# reason to publish a smaller site. stop() here fails the post-render step, which
+# fails the render, which means nothing is published and the live pages survive.
+if (!nzchar(Sys.getenv("REDIVIS_API_TOKEN"))) {
+  if (nzchar(Sys.getenv("CI"))) {
+    stop("[landing] REDIVIS_API_TOKEN is not set, but CI is. Refusing to publish ",
+         "a site without the table landing pages. Set the REDIVIS_API_TOKEN ",
+         "secret on this repository to a read-scoped Redivis token.", call. = FALSE)
+  }
+  message("[landing] REDIVIS_API_TOKEN not set -- skipping landing page emission ",
+          "(local preview; this is a hard error in CI).")
+  quit(status = 0)
+}
+
 suppressWarnings(suppressMessages({
   library(redivis); library(jsonlite)
 }))
@@ -59,11 +84,6 @@ SHARD_REF <- c(
   item_response_warehouse_5 = "item_response_warehouse_5:3ykx",
   item_response_warehouse_6 = "item_response_warehouse_6:fpe6"
 )
-
-if (!nzchar(Sys.getenv("REDIVIS_API_TOKEN"))) {
-  message("[landing] REDIVIS_API_TOKEN not set -- skipping landing page emission.")
-  quit(status = 0)
-}
 
 # ---------------------------------------------------------------- small helpers
 
