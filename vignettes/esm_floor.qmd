@@ -656,6 +656,37 @@ if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
           "participants would have been a rival explanation. They are not: it is ",
           "the item's response format that decides, not the arm.\n\n", sep = "")
     }
+    # A censored failure only implicates censoring if some other family managed
+    # the same data. Where nothing converges, the cell says nothing about
+    # censoring in particular -- and one cell here is exactly that.
+    clean <- stage_b |> group_by(item, arm) |>
+      summarise(others_ok = any(status == "ok" & family != "censored"),
+                cens_bad  = any(family == "censored" & status != "ok"),
+                n_cat = first(n_cat), floor_pct = first(floor_pct),
+                .groups = "drop") |>
+      filter(n_cat <= 10)
+    if (nrow(clean) > 0) {
+      informative <- clean |> filter(others_ok)
+      dead        <- clean |> filter(!others_ok)
+      cat("That count needs one qualification before it can be read as being ",
+          "about censoring. A censored failure only implicates censoring if some ",
+          "other family managed the same rows. In **",
+          sum(informative$cens_bad), " of ", nrow(informative),
+          "** ordinal cells where another family did converge, the censored model ",
+          "did not — so there the failure is specific to it.", sep = "")
+      if (nrow(dead) > 0) {
+        cat(" But in ", nrow(dead), " ordinal cell", if (nrow(dead) > 1) "s" else "",
+            " (", paste(sprintf("%s/%s, %.0f%% at floor", dead$item, dead$arm,
+                                dead$floor_pct), collapse = "; "),
+            ") **no model converged at all** — not the censored one, not the ",
+            "graded one, not even the naive Gaussian, which exhausted its time ",
+            "budget. That cell is evidence that a severe floor is hard for ",
+            "everything, and it is not evidence about censoring in particular. ",
+            "Counting it toward the censored tally would overstate the case.",
+            sep = "")
+      }
+      cat("\n\n", sep = "")
+    }
     cat("This is what the censoring assumption predicts about itself. A censored ",
         "model says the observed floor conceals a continuum extending below it. ",
         "On a slider that is a coherent claim. On a five-point item there is ",
