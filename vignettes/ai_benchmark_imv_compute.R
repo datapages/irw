@@ -26,6 +26,8 @@
 # Usage (from project root):
 #   Rscript vignettes/ai_benchmark_imv_compute.R          # full pipeline
 #   Rscript vignettes/ai_benchmark_imv_compute.R smoke    # one small fit, no output
+#   Rscript vignettes/ai_benchmark_imv_compute.R combine  # no fitting; combine fits on disk
+#   Rscript vignettes/ai_benchmark_imv_compute.R only=choi  # fit matching matrices only
 
 library(irw)
 library(mirt)
@@ -189,8 +191,10 @@ fit_matrix <- function(spec) {
   }
   passing <- varying_items(df)
   n_item_filtered <- n_distinct(df$item) - length(passing)
-  if (!is.null(spec$j)) {
-    if (length(passing) < spec$j) stop(spec$key, ": only ", length(passing), " items pass the filter")
+  # Two human sources have barely more than J_COMMON items, and a subsample of
+  # ~120-150 people leaves some of them near-constant. Those draws keep every
+  # item that passes (J is recorded) rather than failing.
+  if (!is.null(spec$j) && length(passing) > spec$j) {
     passing <- sample(passing, spec$j)
   }
   df <- df[df$item %in% passing, c("id", "item", "resp")]
@@ -205,6 +209,7 @@ fit_matrix <- function(spec) {
       draw            = spec$draw,
       N               = n_distinct(df$id),
       J               = n_distinct(df$item),
+      J_target        = if (is.null(spec$j)) NA_integer_ else as.integer(spec$j),
       n_obs           = nrow(df),
       density         = nrow(df) / (n_distinct(df$id) * n_distinct(df$item)),
       p_correct       = mean(df$resp),
@@ -424,9 +429,18 @@ fit_to_disk <- function(spec) {
   if (!is.null(result)) saveRDS(result, out_file)
 }
 
-plan(multisession, workers = min(8, parallel::detectCores() %/% 2))
-future_map(specs, fit_to_disk,
-           .options = furrr_options(seed = TRUE, packages = c("irw", "mirt", "dplyr", "purrr", "tibble")))
+# `only=<regex>` restricts the run to matching matrix keys.
+only <- sub("^only=", "", grep("^only=", args, value = TRUE))
+todo <- if (length(only)) keep(specs, \(s) grepl(only, s$key)) else specs
+if ("combine" %in% args) todo <- list()  # rebuild results from fits already on disk
+
+# AI matrices take 4-5x longer than human draws, so give each matrix its own
+# future (scheduling = Inf) rather than chunking, which leaves workers idle.
+# Each worker holds ~1-1.5 GB; twelve at once exhausted a 30 GB machine.
+plan(multisession, workers = min(4, parallel::detectCores() %/% 2))
+future_map(todo, fit_to_disk,
+           .options = furrr_options(seed = TRUE, scheduling = Inf,
+                                    packages = c("irw", "mirt", "dplyr", "purrr", "tibble")))
 plan(sequential)
 
 # ==============================================================================

@@ -8,6 +8,8 @@ description: |
   and compare them with the cross-validated InterModel Vigorish (IMV).
 date: today
 bibliography: ai_benchmark_imv_data/references.bib
+nocite: |
+  @*
 format:
   html:
     code-fold: true
@@ -156,12 +158,16 @@ Only a handful of binary IRW tables are naturally the size of these benchmarks
 (roughly 120–150 respondents × 400+ items), and one of those is sparse.
 Instead, we take dense, right/wrong-scored human tables and **subsample** them.
 Each draw picks as many respondents as the benchmark has models, and then
-`r settings$j_common` items from those that vary in the sample. The AI matrices
-are cut the same way. Each benchmark gets `r settings$n_draws` draws of
+`r settings$j_common` items from those that vary in the sample. Two sources
+have barely more than `r settings$j_common` items, so a draw from them sometimes
+keeps every varying item instead
+(`r if (nrow(results)) paste0(min(results$J[results$source == "human"]), "–", max(results$J[results$source == "human"])) else "280–300"`
+items). The AI matrices are cut the same way. Each benchmark gets `r settings$n_draws` draws of
 `r settings$j_common` items, plus one fit on all of its items for reference.
 
 ```{r}
 #| label: tbl-human
+#| tbl-cap: "Human IRW tables subsampled for the comparison."
 
 tibble(
   Table = c("choi_2026_cmsce_2019_1", "previc_bohn2023", "vermeiren_2022_vocab"),
@@ -207,33 +213,87 @@ richer model predicts held-out responses *worse*.
 
 ## Results
 
+Each large dot below is one matrix: a full benchmark, a 300-item draw from it,
+or a human table subsampled to the benchmark's size. Its value is the IMV
+averaged over the `r settings$nfold` cross-validation folds. The small faint
+dots behind it are the individual folds, which show how much the estimate moves
+with the choice of held-out responses.
+
 ```{r}
 #| label: fig-imv
-#| fig-cap: "Cross-validated IMV for each matrix. Each point is one matrix (a full benchmark, an item draw from it, or a subsample of a human table), averaged over folds. Hollow points had at least one fit that did not converge."
-#| fig-height: 6
-#| fig-width: 10
+#| fig-cap: "Cross-validated IMV, AI models against people. Large dots: one matrix, averaged over folds (shape marks the source). Small faint dots: individual folds. The dashed line is no gain; below it, the richer model predicts held-out responses worse."
+#| fig-height: 7
 
 if (nrow(results)) {
-  plot_df <- results |>
-    pivot_longer(c(imv_rasch_2pl, imv_2pl_2f), names_to = "comparison", values_to = "imv") |>
-    mutate(
-      comparison = recode(comparison,
-                          imv_rasch_2pl = "Rasch → 2PL",
-                          imv_2pl_2f    = "2PL → two factors"),
-      comparison = factor(comparison, levels = c("Rasch → 2PL", "2PL → two factors")),
-      group = factor(group, levels = rev(c("AI: all items", "AI: item draws",
-                                           sort(unique(group[source == "human"])))))
-    )
+  comparison_levels <- c(imv_rasch_2pl = "Rasch → 2PL", imv_2pl_2f = "2PL → two factors")
+  who_levels <- c(ai = "AI models", human = "People")
+  matrix_shapes <- c("AI: all items" = 18, "AI: item draws" = 16,
+                     "Human: choi_2026_cmsce_2019_1" = 15,
+                     "Human: previc_bohn2023" = 17,
+                     "Human: vermeiren_2022_vocab" = 1)
 
-  ggplot(plot_df, aes(x = imv, y = group, colour = source)) +
-    geom_vline(xintercept = 0, colour = irw_grey, linetype = "dashed") +
-    geom_point(aes(shape = all_converged), size = 3, stroke = 1.1) +
-    scale_shape_manual(values = c(`TRUE` = 16, `FALSE` = 1), guide = "none") +
-    scale_colour_manual(values = c(ai = irw_red, human = irw_blue),
-                        labels = c(ai = "AI models", human = "People")) +
-    facet_grid(benchmark ~ comparison, scales = "free_x") +
-    labs(x = "IMV (richer model vs simpler model)", y = NULL, colour = NULL) +
-    theme(legend.position = "bottom", panel.spacing = unit(1.2, "lines"))
+  to_long <- function(d) {
+    d |>
+      pivot_longer(c(imv_rasch_2pl, imv_2pl_2f), names_to = "comparison", values_to = "imv") |>
+      mutate(comparison = factor(comparison_levels[comparison], levels = comparison_levels),
+             who = factor(who_levels[source], levels = who_levels))
+  }
+
+  # Spread each group's matrices evenly across its strip, and put each matrix's
+  # folds in a narrow column directly beneath its dot.
+  slot <- results |>
+    group_by(benchmark, source) |>
+    arrange(group, draw, .by_group = TRUE) |>
+    mutate(x = match(source, names(who_levels)) +
+             if (n() == 1) 0 else seq(-0.3, 0.3, length.out = n())) |>
+    ungroup() |>
+    select(key, x)
+
+  matrix_df <- to_long(results) |>
+    left_join(slot, by = "key") |>
+    mutate(tip = paste0(group, if_else(draw > 0, paste0(" (draw ", draw, ")"), ""),
+                        "<br>", N, " respondents × ", J, " items",
+                        "<br>IMV ", fmt(imv, 4), " (mean of ", settings$nfold, " folds)"))
+  set.seed(1)
+  fold_df <- folds |>
+    inner_join(select(results, key, source, benchmark, group), by = "key") |>
+    to_long() |>
+    left_join(slot, by = "key") |>
+    mutate(x = x + runif(n(), -0.025, 0.025))
+
+  p <- ggplot(matrix_df, aes(x = x, y = imv, colour = who)) +
+    geom_hline(yintercept = 0, colour = irw_grey, linetype = "dashed") +
+    geom_point(data = fold_df, alpha = 0.3, size = 1.1) +
+    geom_point(aes(shape = group, text = tip), size = 3.2, stroke = 1.1) +
+    scale_x_continuous(breaks = seq_along(who_levels), labels = who_levels,
+                       limits = c(0.55, 2.45)) +
+    scale_colour_manual(values = c("AI models" = irw_red, "People" = irw_blue), guide = "none") +
+    scale_shape_manual(values = matrix_shapes, name = NULL) +
+    facet_grid(comparison ~ benchmark, scales = "free_y") +
+    labs(x = NULL, y = "IMV (richer model vs simpler model)") +
+    theme(legend.position = "bottom", panel.spacing = unit(1.2, "lines"),
+          panel.grid.major.x = element_blank(), panel.grid.minor.x = element_blank())
+
+  plotly::ggplotly(p, tooltip = "text") |>
+    plotly::layout(legend = list(orientation = "h", y = -0.12)) |>
+    plotly::config(displayModeBar = FALSE)
+}
+```
+
+```{r}
+#| label: tbl-all
+#| tbl-cap: "Every matrix in the pilot, with fold-averaged IMV."
+
+if (nrow(results)) {
+  results |>
+    arrange(benchmark, desc(source), table, draw) |>
+    transmute(Benchmark = benchmark, Matrix = group,
+              Draw = if_else(draw == 0, "all", as.character(draw)),
+              N, J, `Share 1` = fmt(p_correct, 2),
+              `Rasch → 2PL` = fmt(imv_rasch_2pl, 4),
+              `2PL → two factors` = fmt(imv_2pl_2f, 4),
+              Converged = if_else(all_converged, "yes", "no")) |>
+    kable()
 }
 ```
 
@@ -262,8 +322,8 @@ if (nrow(med)) {
     transmute(Benchmark = benchmark,
               Respondents = if_else(source == "ai", "AI models", "People"),
               Draws = n,
-              `Rasch → 2PL` = fmt(rasch_2pl),
-              `2PL → two factors` = fmt(twopl_2f)) |>
+              `Rasch → 2PL` = fmt(rasch_2pl, 4),
+              `2PL → two factors` = fmt(twopl_2f, 4)) |>
     kable()
 }
 ```
@@ -277,9 +337,9 @@ if (nrow(med)) {
   three human tables, is a rough guide at best.
 - **The human draws overlap.** `vermeiren_2022_vocab` has only 236
   respondents, so two draws of 120–150 of them share many people.
-- **The human sources are not matched on content.** A medical licensing exam,
+- **The human sources are not matched on content.** A medical-school examination,
   a parent-report vocabulary checklist and a student vocabulary test are all
-  cognitive, but none resembles instruction following or refusal behaviour.
+  cognitive, but none of them resembles instruction following or refusal behaviour.
   Matching on shape isolates respondent type from sample size, not from
   construct.
 - **AI respondents are not independent.** Many models are fine-tunes or
