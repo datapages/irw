@@ -1,0 +1,327 @@
+---
+title: "AI Models as Respondents: An IMV Model Comparison"
+description: |
+  Does the extra structure of a 2PL, or of a second factor, improve
+  prediction the same way when the respondents are AI models as when they are
+  people? We fit Rasch, 2PL and two-factor models to item-level AI benchmark
+  results from OpenEval and to human IRW tables subsampled to the same size,
+  and compare them with the cross-validated InterModel Vigorish (IMV).
+date: today
+bibliography: ai_benchmark_imv_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: false
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(knitr)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+
+cache_path <- "ai_benchmark_imv_data/ai_benchmark_imv_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache      <- readRDS(cache_path)
+  results     <- .cache$results
+  folds       <- .cache$folds
+  prep        <- .cache$prep_counts
+  settings    <- .cache$settings
+  hf_revision <- .cache$hf_revision
+  date_run    <- .cache$date_run
+  pilot       <- .cache$pilot
+} else {
+  results  <- tibble(key = character(), source = character(), benchmark = character(),
+                     table = character(), draw = integer(), N = integer(), J = integer(),
+                     imv_rasch_2pl = numeric(), imv_2pl_2f = numeric(),
+                     all_converged = logical())
+  folds    <- tibble()
+  prep     <- tibble(benchmark = character())
+  settings <- list(j_common = 300, n_draws = 2, nfold = 5, min_coverage = 0.9, min_outcome = 5)
+  hf_revision <- "23a1ded985b3c2cdaaddb27581a35bfabe0ad7e7"
+  date_run <- Sys.Date()
+  pilot    <- TRUE
+}
+
+fmt  <- function(x, d = 3) formatC(x, format = "f", digits = d)
+pct  <- function(x) paste0(round(100 * x), "%")
+
+group_label <- function(source, table, draw) {
+  case_when(
+    source == "ai" & draw == 0 ~ "AI: all items",
+    source == "ai"             ~ "AI: item draws",
+    TRUE                       ~ paste0("Human: ", table)
+  )
+}
+results <- results |> mutate(group = group_label(source, table, draw))
+```
+
+::: {.callout-warning}
+## Pilot
+
+This is a draft built from a deliberately small run: two benchmarks, three
+human source tables and `r settings$n_draws` draws of each. It exists to check
+the pipeline and to see whether the question is worth a full run. The numbers
+below should not be quoted as findings. See
+[datapages/irw#186](https://github.com/datapages/irw/issues/186).
+:::
+
+## Motivation
+
+Item-level results from AI benchmarks now form response matrices: models as
+rows, benchmark items as columns, correct or not in the cells. Psychometric
+tools are starting to be applied to them. OpenEval [@jiang2026aievaluationrequire]
+reports classical test theory and item factor analysis, and names IRT as
+unexplored.
+
+A model comparison for these matrices has an obvious reference point: what the
+same comparison gives on human data of the same shape. If going from a Rasch
+model to a 2PL, or from one factor to two, buys the same predictive gain for AI
+respondents as for people, the usual IRT toolkit carries over with its usual
+trade-offs. If the gains differ, that difference says something about how AI
+models "respond". Examples would be much larger gains from discrimination
+parameters, or a second dimension that pays for itself only for AI.
+
+We use the InterModel Vigorish [IMV, @domingue2024imvlens], which scores models
+by how well they predict held-out responses. With only 100 to 150 respondents
+per benchmark, a predictive, cross-validated criterion is a safer choice than
+likelihood-ratio tests or limited-information fit statistics. Their asymptotics
+assume far more respondents than this.
+
+## Data
+
+### AI benchmarks (OpenEval)
+
+Responses come from OpenEval, read directly from Hugging Face
+(`Open-Eval-Commons/OpenEval`), pinned to revision
+`r substr(hf_revision, 1, 8)`. They are **not** part of IRW. The data is
+licensed CC BY-NC 4.0, so only fitted summaries are kept here.
+
+```{r}
+#| label: tbl-prep
+#| tbl-cap: "OpenEval benchmarks used in the pilot."
+
+if (nrow(prep)) {
+  prep |>
+    transmute(
+      Benchmark = benchmark,
+      `Coding (1 = ...)` = coding,
+      `Models (>= 90% coverage)` = n_models,
+      `...after merging aliases` = n_models_dealiased,
+      Items = n_items,
+      `Items with >= 5 of each outcome` = n_items_varying,
+      `Mean score` = fmt(p_correct, 2),
+      `Replicate runs dropped` = n_replicate_rows
+    ) |>
+    kable()
+}
+```
+
+Three coding decisions shape these matrices.
+
+- **IFEval is dichotomised.** OpenEval stores the share of a prompt's
+  instructions that were followed (0, 1/3, 1/2, 2/3 or 1).
+  `r if (nrow(prep)) paste0(format(prep$n_fractional[prep$benchmark == "ifeval"], big.mark = ","), " of ", format(prep$n_rows[prep$benchmark == "ifeval"], big.mark = ","), " responses")` are fractional.
+  We use IFEval's prompt-level strict accuracy, which scores 1 only when every
+  instruction is followed.
+- **SORRY-Bench measures a propensity, not an ability.** A fine-tuned judge
+  labels each response as fulfilling (1) or refusing (0) a potentially unsafe
+  request, so a "high score" means a less cautious model. The judge makes
+  mistakes. About 3.5% of responses it labels as fulfilling begin with a
+  refusal phrase such as "I can't", compared with 70% of those it labels as
+  refusals.
+- **Respondents are model names as OpenEval records them.** Dated snapshots
+  and near-duplicates (for example `gpt-4o-mini` and `gpt-4o-mini-2024-07-18`)
+  are kept as separate respondents. The table shows how many models remain
+  after merging obvious aliases.
+
+### Human comparison tables
+
+Only a handful of binary IRW tables are naturally the size of these benchmarks
+(roughly 120–150 respondents × 400+ items), and one of those is sparse.
+Instead, we take dense, right/wrong-scored human tables and **subsample** them.
+Each draw picks as many respondents as the benchmark has models, and then
+`r settings$j_common` items from those that vary in the sample. The AI matrices
+are cut the same way. Each benchmark gets `r settings$n_draws` draws of
+`r settings$j_common` items, plus one fit on all of its items for reference.
+
+```{r}
+#| label: tbl-human
+
+tibble(
+  Table = c("choi_2026_cmsce_2019_1", "previc_bohn2023", "vermeiren_2022_vocab"),
+  Content = c("Korean Clinical Medical Science Comprehensive Examination (one form)",
+              "Parent-reported expressive vocabulary, children aged 3-8 (German)",
+              "University students' English vocabulary"),
+  `Full size` = c("4,190 × 302", "1,190 × 379", "236 × 668")
+) |> kable()
+```
+
+We restricted the human sources to right/wrong-scored tests on purpose.
+Personality inventories are larger and denser, but they contain reverse-keyed
+items. A Rasch model or a positive slope prior fits those items badly, which
+would inflate the 2PL's apparent gain for reasons that have nothing to do with
+who the respondents are.
+
+## Method
+
+Each matrix gets the same treatment:
+
+1. **Drop near-constant items.** An item needs at least
+   `r settings$min_outcome` correct and `r settings$min_outcome` incorrect
+   responses.
+2. **Split responses into `r settings$nfold` folds.** Responses, not
+   respondents, are split, so every model and every item appears in each
+   training set. All three models share one fold assignment.
+3. **In each fold, fit three models** with `mirt` to the training responses:
+   - a Rasch model;
+   - a 2PL with a lognormal(0, 1) prior on slopes, as in the site's
+     [IMV tutorial](imv.qmd);
+   - an exploratory two-factor 2PL, with the same prior on first-factor slopes
+     and a normal(0, 1) prior on second-factor slopes.
+4. **Score the held-out responses** using EAP ability estimates and each
+   item's trace line.
+5. **Compute the IMV** from Rasch to 2PL and from 2PL to two factors, then
+   average over folds.
+
+The IMV turns each model's held-out likelihood into the weight of a coin with
+the same predictive accuracy, then reports the proportional change in that
+weight. An IMV of 0.01 means the richer model is equivalent to a coin weighted
+1% more heavily: 0.707 rather than 0.700, for example. Negative values mean the
+richer model predicts held-out responses *worse*.
+
+## Results
+
+```{r}
+#| label: fig-imv
+#| fig-cap: "Cross-validated IMV for each matrix. Each point is one matrix (a full benchmark, an item draw from it, or a subsample of a human table), averaged over folds. Hollow points had at least one fit that did not converge."
+#| fig-height: 6
+#| fig-width: 10
+
+if (nrow(results)) {
+  plot_df <- results |>
+    pivot_longer(c(imv_rasch_2pl, imv_2pl_2f), names_to = "comparison", values_to = "imv") |>
+    mutate(
+      comparison = recode(comparison,
+                          imv_rasch_2pl = "Rasch → 2PL",
+                          imv_2pl_2f    = "2PL → two factors"),
+      comparison = factor(comparison, levels = c("Rasch → 2PL", "2PL → two factors")),
+      group = factor(group, levels = rev(c("AI: all items", "AI: item draws",
+                                           sort(unique(group[source == "human"])))))
+    )
+
+  ggplot(plot_df, aes(x = imv, y = group, colour = source)) +
+    geom_vline(xintercept = 0, colour = irw_grey, linetype = "dashed") +
+    geom_point(aes(shape = all_converged), size = 3, stroke = 1.1) +
+    scale_shape_manual(values = c(`TRUE` = 16, `FALSE` = 1), guide = "none") +
+    scale_colour_manual(values = c(ai = irw_red, human = irw_blue),
+                        labels = c(ai = "AI models", human = "People")) +
+    facet_grid(benchmark ~ comparison, scales = "free_x") +
+    labs(x = "IMV (richer model vs simpler model)", y = NULL, colour = NULL) +
+    theme(legend.position = "bottom", panel.spacing = unit(1.2, "lines"))
+}
+```
+
+```{r}
+#| label: summaries
+
+med <- results |>
+  filter(draw > 0) |>
+  group_by(benchmark, source) |>
+  summarise(rasch_2pl = median(imv_rasch_2pl), twopl_2f = median(imv_2pl_2f),
+            n = n(), .groups = "drop")
+
+getmed <- function(b, s, col) {
+  x <- med[[col]][med$benchmark == b & med$source == s]
+  if (length(x)) fmt(x) else "NA"
+}
+n_nonconv <- sum(!results$all_converged)
+```
+
+```{r}
+#| label: tbl-medians
+#| tbl-cap: "Median IMV across the matched-size draws (J items each)."
+
+if (nrow(med)) {
+  med |>
+    transmute(Benchmark = benchmark,
+              Respondents = if_else(source == "ai", "AI models", "People"),
+              Draws = n,
+              `Rasch → 2PL` = fmt(rasch_2pl),
+              `2PL → two factors` = fmt(twopl_2f)) |>
+    kable()
+}
+```
+
+<!-- RESULTS-TEXT -->
+
+## What this pilot can and cannot say
+
+- **Small numbers of draws.** Each human source contributes only
+  `r settings$n_draws` subsamples. The spread across draws, and across the
+  three human tables, is a rough guide at best.
+- **The human draws overlap.** `vermeiren_2022_vocab` has only 236
+  respondents, so two draws of 120–150 of them share many people.
+- **The human sources are not matched on content.** A medical licensing exam,
+  a parent-report vocabulary checklist and a student vocabulary test are all
+  cognitive, but none resembles instruction following or refusal behaviour.
+  Matching on shape isolates respondent type from sample size, not from
+  construct.
+- **AI respondents are not independent.** Many models are fine-tunes or
+  snapshots of the same base weights, so the effective number of respondents
+  is smaller than the count. This is part of what makes AI respondents
+  different, not a defect to correct.
+- **Prior choice.** Both richer models use a slope prior. Without it, 2PL and
+  two-factor fits at this sample size can overfit badly, and the IMV would then
+  mostly measure that overfitting. A no-prior comparison is left for the full run.
+- **Decoding settings are mixed.**
+  `r if (nrow(prep)) prep$n_models_nongreedy[prep$benchmark == "ifeval"] else "Some"`
+  IFEval models were run with non-zero temperature and the rest greedily. The
+  pilot keeps them all.
+
+## Next steps for a full run
+
+- Add GPQA (`chain_of_thought_correctness`), OR-Bench (refusal) and, after
+  checking its coding, TruthfulQA.
+- Increase draws per human source, and add human tables whose content is closer
+  to each benchmark where IRW has them.
+- Run a greedy-only sensitivity analysis and a version with merged aliases.
+- Compare with and without the slope priors.
+
+---
+
+## Reproducibility
+
+{{< include ../components/_source-links.qmd >}}
+
+{{< include ../components/_data-version.qmd >}}
+
+AI benchmark responses: OpenEval, Hugging Face `Open-Eval-Commons/OpenEval` at
+revision [`r substr(hf_revision, 1, 8)`](https://huggingface.co/datasets/Open-Eval-Commons/OpenEval/tree/`r hf_revision`),
+read directly and not stored in IRW.
+
+Results computed `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+Rscript vignettes/ai_benchmark_imv_compute.R
+quarto::quarto_render("vignettes/ai_benchmark_imv.qmd")
+```
+
+---
+
+## References
