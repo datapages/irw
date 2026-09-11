@@ -71,7 +71,12 @@ BENCHMARKS <- list(
     coding = "fine-tuned Mistral-7B judge: 1 = the model complied with an unsafe request"
   )
 )
-HUMAN_TABLES <- c("choi_2026_cmsce_2019_1", "previc_bohn2023", "vermeiren_2022_vocab")
+# vermeiren_2022_vocab (236 x 668) was dropped after the first run: its 668
+# item names are ~483 words with whitespace variants, and 57k (id, word) cells
+# are duplicated, 14.6k of them with conflicting responses. The check in
+# human_file() now stops on that. No other dense right/wrong IRW table has
+# 300+ items apart from further forms of the CMSCE exam.
+HUMAN_TABLES <- c("choi_2026_cmsce_2019_1", "previc_bohn2023")
 
 if (!PILOT) stop("Full run not specified yet -- see datapages/irw#186.")
 
@@ -378,6 +383,12 @@ human_file <- function(tbl) {
     message("Fetching ", tbl)
     df <- irw_fetch(tbl)[, c("id", "item", "resp")]
     stopifnot(all(df$resp %in% c(0, 1)))
+    # irw_long2resp() trims item names, so whitespace variants would merge
+    # into one column after the per-fold checks; duplicated cells would put
+    # copies of a response on both sides of a fold.
+    if (any(duplicated(data.frame(df$id, trimws(df$item))))) {
+      stop(tbl, " has duplicate (id, item) cells once item names are trimmed")
+    }
     saveRDS(df, f)
   }
   f

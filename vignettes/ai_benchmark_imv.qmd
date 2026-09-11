@@ -76,8 +76,10 @@ results <- results |> mutate(group = group_label(source, table, draw))
 ::: {.callout-warning}
 ## Pilot
 
-This is a draft built from a deliberately small run: two benchmarks, three
-human source tables and `r settings$n_draws` draws of each. It exists to check
+This is a draft built from a deliberately small run: two benchmarks, two
+human source tables and `r settings$n_draws` draws of each, `r nrow(results)`
+matrices in all. One planned IFEval item draw was stopped unfinished, so IFEval
+has one 300-item AI draw rather than two. The run exists to check
 the pipeline and to see whether the question is worth a full run. The numbers
 below should not be quoted as findings. See
 [datapages/irw#186](https://github.com/datapages/irw/issues/186).
@@ -158,8 +160,8 @@ Only a handful of binary IRW tables are naturally the size of these benchmarks
 (roughly 120–150 respondents × 400+ items), and one of those is sparse.
 Instead, we take dense, right/wrong-scored human tables and **subsample** them.
 Each draw picks as many respondents as the benchmark has models, and then
-`r settings$j_common` items from those that vary in the sample. Two sources
-have barely more than `r settings$j_common` items, so a draw from them sometimes
+`r settings$j_common` items from those that vary in the sample. Both sources
+have barely more than `r settings$j_common` items, so a draw from them usually
 keeps every varying item instead
 (`r if (nrow(results)) paste0(min(results$J[results$source == "human"]), "–", max(results$J[results$source == "human"])) else "280–300"`
 items). The AI matrices are cut the same way. Each benchmark gets `r settings$n_draws` draws of
@@ -170,11 +172,10 @@ items). The AI matrices are cut the same way. Each benchmark gets `r settings$n_
 #| tbl-cap: "Human IRW tables subsampled for the comparison."
 
 tibble(
-  Table = c("choi_2026_cmsce_2019_1", "previc_bohn2023", "vermeiren_2022_vocab"),
+  Table = c("choi_2026_cmsce_2019_1", "previc_bohn2023"),
   Content = c("Korean Clinical Medical Science Comprehensive Examination (one form)",
-              "Parent-reported expressive vocabulary, children aged 3-8 (German)",
-              "University students' English vocabulary"),
-  `Full size` = c("4,190 × 302", "1,190 × 379", "236 × 668")
+              "Parent-reported expressive vocabulary, children aged 3-8 (German)"),
+  `Full size` = c("4,190 × 302", "1,190 × 379")
 ) |> kable()
 ```
 
@@ -229,8 +230,7 @@ if (nrow(results)) {
   who_levels <- c(ai = "AI models", human = "People")
   matrix_shapes <- c("AI: all items" = 18, "AI: item draws" = 16,
                      "Human: choi_2026_cmsce_2019_1" = 15,
-                     "Human: previc_bohn2023" = 17,
-                     "Human: vermeiren_2022_vocab" = 1)
+                     "Human: previc_bohn2023" = 17)
 
   to_long <- function(d) {
     d |>
@@ -328,18 +328,65 @@ if (nrow(med)) {
 }
 ```
 
-<!-- RESULTS-TEXT -->
+```{r}
+#| label: ranges
+
+rng <- function(b, s, col) {
+  x <- results[[col]][results$benchmark == b & results$source == s]
+  if (length(x)) paste0(fmt(min(x)), " to ", fmt(max(x))) else "NA"
+}
+```
+
+```{r}
+#| label: position
+
+# Where the AI matrices fall relative to every human draw for one benchmark.
+position <- function(b, col) {
+  ai <- results[[col]][results$benchmark == b & results$source == "ai"]
+  hu <- results[[col]][results$benchmark == b & results$source == "human"]
+  if (!length(ai) || !length(hu)) return("not yet comparable")
+  if (min(ai) > max(hu)) "above every human draw"
+  else if (max(ai) < min(hu)) "below every human draw"
+  else "within the range of the human draws"
+}
+line_for <- function(b, col) {
+  paste0(rng(b, "ai", col), " for the AI matrices, ", position(b, col),
+         " (", rng(b, "human", col), ")")
+}
+```
+
+What the pilot suggests, subject to the caveats below:
+
+- **The two human sources disagree with each other more than draws from either
+  one do.** On the medical-school exam the 2PL helps a little and a second
+  factor hurts. On the parent-report vocabulary checklist, both steps are close
+  to zero. Each source forms a tight cluster, so the human reference is a
+  range, and with two sources a narrow one.
+- **IFEval.** Rasch → 2PL: `r line_for("ifeval", "imv_rasch_2pl")`.
+  2PL → two factors: `r line_for("ifeval", "imv_2pl_2f")`.
+- **SORRY-Bench.** Rasch → 2PL: `r line_for("sorry-bench", "imv_rasch_2pl")`.
+  2PL → two factors: `r line_for("sorry-bench", "imv_2pl_2f")`.
+- **Cutting a benchmark to 300 items changes little.** The 300-item draws land
+  close to the fit on all of a benchmark's items.
+
+The pattern to test in a full run: **a second factor pays off for both AI
+benchmarks, and for the human sources barely or not at all.** Discrimination parameters help
+IFEval clearly and SORRY-Bench hardly at all. With two human sources and two
+draws each, this is a lead, not a finding. The obvious check is a human test
+with genuinely multidimensional content, which might land among the AI points.
 
 ## What this pilot can and cannot say
 
-- **Small numbers of draws.** Each human source contributes only
-  `r settings$n_draws` subsamples. The spread across draws, and across the
-  three human tables, is a rough guide at best.
-- **The human draws overlap.** `vermeiren_2022_vocab` has only 236
-  respondents, so two draws of 120–150 of them share many people.
-- **The human sources are not matched on content.** A medical-school examination,
-  a parent-report vocabulary checklist and a student vocabulary test are all
-  cognitive, but none of them resembles instruction following or refusal behaviour.
+- **Two human sources, two draws each.** IRW has few dense, right/wrong-scored
+  tables with 300 or more items. Apart from other forms of the same Korean
+  exam, the only other candidate, `vermeiren_2022_vocab` (236 × 668), was
+  dropped after its first fits. Its 668 item names turn out to be about 483
+  words with whitespace variants, and some 57,000 person-by-word cells appear
+  more than once, about 40% of them with conflicting answers. That table needs
+  checking against its source before it's used for anything.
+- **The human sources are not matched on content.** A medical-school
+  examination and a parent-report vocabulary checklist are both cognitive, but
+  neither resembles instruction following or refusal behaviour.
   Matching on shape isolates respondent type from sample size, not from
   construct.
 - **AI respondents are not independent.** Many models are fine-tunes or
