@@ -31,18 +31,26 @@ be cited, and to be what a release DOI resolves to if irw#1870 lands. GitHub
 Pages does not reliably serve an extensionless path for a `.html` file, and an
 extension inside a citable identifier ages badly. Same file count either way.
 
-## Known limitation: Croissant validates but does not load
+## Croissant loading, and the 100MB limit
 
-The Croissant `contentUrl` points at the Redivis *table page*, not at a data
-file. Verified 2026-09-03: the Redivis API returns `401 "No credentials were
-provided"` even for a public table, so there is no unauthenticated URL a loader
-could read. `mlcroissant` therefore parses all 25 files successfully and would
-then read zero records.
+Each Croissant file's `contentUrl` is Redivis' `table.listRows` endpoint, which
+serves a public table as CSV with no token (enabled by Redivis 2026-09-19; before
+that it answered 401 and the files validated but read zero records). The URL is
+pinned to the Redivis dataset version the page reports, and addresses the table
+by name:
 
-So sub-action 4.3 is **partly** delivered: the descriptions are valid and a
-NeurIPS submission can point at one, but programmatic loading via `mlcroissant`
-or TFDS needs a direct download URL that does not yet exist. Do not describe
-Hugging Face / Kaggle / OpenML support as delivered.
+    https://redivis.com/api/v1/tables/datapages.<shard>:v7_0.<table>/rows?format=csv
+
+Redivis refuses anonymous requests for tables over 100MB. The cutoff tracks the
+table's `numBytes` property exactly (checked on 12 tables between 60MB and
+160MB), so the emitter reads `numBytes` and, for a larger table, points
+`contentUrl` at the Redivis page instead and says so in the file's description.
+In the pilot that is 3 of 25 tables: `16_personalityfactors`,
+`condon_2024_sapa_personality` and `criticalperiod_syntax`. Their files validate
+but do not load; the other 22 load.
+
+The bar is records, not parsing: `mlc.Dataset(jsonld=f)` succeeds on a file
+whose data URL is a web page. See the check below.
 
 ## How it runs
 
@@ -77,5 +85,7 @@ Rscript landing/emit_landing_pages.R && cp -r _site/tables /tmp/run1 \
 
 # Croissant -- must be 25/25
 pip install mlcroissant
-python -c "import mlcroissant as mlc, glob; [mlc.Dataset(jsonld=f) for f in glob.glob('_site/tables/*.jsonld')]"
+python -c "import mlcroissant as mlc, glob; [mlc.Dataset(jsonld=f) for f in glob.glob('_site/tables/*/croissant.jsonld')]"
+# ...and records must actually load: 22 of 25 non-empty, the 3 over 100MB excepted
+python -c "import mlcroissant as mlc, glob, itertools; print({f.split('/')[-2]: len(list(itertools.islice(mlc.Dataset(jsonld=f).records('responses'), 5))) for f in glob.glob('_site/tables/*/croissant.jsonld')})"
 ```

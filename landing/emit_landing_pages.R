@@ -73,6 +73,13 @@ OUT_DIR      <- file.path("_site", "tables")
 PILOT_LIST   <- file.path("landing", "pilot_tables.txt")
 MANIFEST_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
                        "metadata/version_manifest.tsv")
+# Redivis' table.listRows endpoint serves a public table as CSV with no token, but
+# only up to 100MB: above that it answers 401 "Results larger than 100MB are not
+# supported for unauthenticated requests". The cutoff follows the table's own
+# numBytes property exactly -- verified 2026-09-19 on 12 tables between 60MB and
+# 160MB: every one at <= 95.6MB returned 200, every one at >= 105.2MB returned 401.
+ROWS_API       <- "https://redivis.com/api/v1/tables/"
+ANON_MAX_BYTES <- 100e6
 
 # Shard name -> Redivis scoped reference. Mirrors the map in _load-data.qmd;
 # authoritative source is IRW_CORE_DATASETS in ben-domingue/irw metadata/redivis_config.R.
@@ -212,15 +219,18 @@ build_jsonld <- function(x) {
     d$variableMeasured <- lapply(x$variables, function(v)
       list("@type" = "PropertyValue", name = v))
   }
-  # NOTE (verified 2026-09-03): contentUrl is the Redivis *table page*, not a
-  # data file. The Redivis API returns 401 "No credentials were provided" even
-  # for a public table, so there is no unauthenticated URL a Croissant loader
-  # could read. The files therefore VALIDATE but do not LOAD -- see the caveat
-  # comment on ben-domingue/irw#1706. Do not describe Croissant support as
-  # delivered until a direct download URL exists.
-  d$distribution <- list(
+  # The CSV download is listed only when x$rows_url exists, i.e. the table is
+  # small enough for Redivis to serve without a login (see ANON_MAX_BYTES). A
+  # larger table gets its Redivis page instead, which is not a data file and is
+  # labelled as such rather than as text/csv.
+  csv <- if (nzchar(x$rows_url))
+    list("@type" = "DataDownload", name = paste0(x$table, " (CSV)"),
+         encodingFormat = "text/csv", contentUrl = x$rows_url)
+  else
     list("@type" = "DataDownload", name = paste0(x$table, " on Redivis"),
-         encodingFormat = "text/csv", contentUrl = x$redivis_url),
+         encodingFormat = "text/html", contentUrl = x$redivis_url)
+  d$distribution <- list(
+    csv,
     list("@type" = "DataDownload", name = paste0(x$table, " (Croissant)"),
          encodingFormat = "application/ld+json", contentUrl = x$croissant_url)
   )
@@ -280,14 +290,26 @@ build_croissant <- function(x) {
                      paste0("Item Response Warehouse table '", x$table, "', IRW v",
                             x$irw_version, "."),
     citeAs       = if (!blank(x$reference)) x$reference else NULL,
+    # TRUE although the data URL is pinned to one Redivis version. A non-live
+    # dataset must carry a sha256/md5 per file (mlcroissant rejects it without),
+    # and no stable hash exists: Redivis returns rows in arbitrary order, so the
+    # same version's CSV differs byte-for-byte between requests.
     isLiveDataset = TRUE,
     distribution = list(list(
       "@type"         = "cr:FileObject",
       "@id"           = "redivis-table",
       name            = "redivis-table",
+      # A table over ANON_MAX_BYTES has no anonymous CSV URL. Its file still
+      # validates, pointing at the Redivis page, but a loader reads nothing from
+      # it; the description says so, since the file itself cannot.
       description     = paste0("The '", x$table, "' table as released on Redivis in ",
-                               x$shard, " ", x$shard_version, "."),
-      contentUrl      = x$redivis_url,
+                               x$shard, " ", x$shard_version, ".",
+                               if (!nzchar(x$rows_url))
+                                 paste0(" This table is larger than Redivis serves ",
+                                        "without a login, so contentUrl is its Redivis ",
+                                        "page; download it with the irw R or Python ",
+                                        "package instead.") else ""),
+      contentUrl      = if (nzchar(x$rows_url)) x$rows_url else x$redivis_url,
       encodingFormat  = "text/csv",
       sha256          = NULL
     )),
@@ -377,10 +399,14 @@ build_page <- function(x) {
 "library(irw)\ndf &lt;- irw_fetch(\"", esc(x$table), "\")</pre>\n",
 "<pre># Python\npip install irw\n\n",
 "import irw\ndf = irw.fetch(\"", esc(x$table), "\")</pre>\n",
-"<p>Browse or download it directly on <a href=\"", esc(x$redivis_url),
-"\">Redivis</a>, or take the ",
+if (nzchar(x$rows_url)) paste0(
+"<p><a href=\"", esc(x$rows_url), "\">Download as CSV</a> (no account needed), ",
+"browse it on <a href=\"", esc(x$redivis_url), "\">Redivis</a>, or take the ",
 "<a href=\"croissant.jsonld\">Croissant description</a> ",
-"of this table for use with Hugging Face, Kaggle or OpenML.</p>\n")
+"of this table for use with Hugging Face, Kaggle or OpenML.</p>\n") else paste0(
+"<p>Browse it on <a href=\"", esc(x$redivis_url), "\">Redivis</a>. ",
+"This table is larger than Redivis serves without a login, so download it with ",
+"one of the packages above or while signed in to Redivis.</p>\n"))
 
   prov <- kv_rows(list(
     list("IRW version",               paste0("v", x$irw_version)),
@@ -537,15 +563,28 @@ main <- function() {
   # This is what a landing page should point at: constructing a URL by hand
   # produced a 404 in the first run, because the path uses short ids
   # (as2e-cv7jb41fd/tables/hye4-...) that are not derivable from the table name.
-  table_url <- function(shard, name, fallback) {
-    out <- tryCatch(
-      redivis$user("datapages")$dataset(SHARD_REF[[shard]])$table(name)$get()$properties$url,
+  # The same call gives numBytes, which decides whether the anonymous CSV URL
+  # exists; an unknown size is treated as too large, never as small enough.
+  table_props <- function(shard, name, fallback) {
+    p <- tryCatch(
+      redivis$user("datapages")$dataset(SHARD_REF[[shard]])$table(name)$get()$properties,
       error = function(e) NULL)
-    if (is.null(out) || !nzchar(out)) fallback else out
+    url <- p$url
+    list(url = if (is.null(url) || !nzchar(url)) fallback else url,
+         bytes = suppressWarnings(as.numeric(p$numBytes %||% NA)))
+  }
+
+  # The anonymous CSV URL for a table, pinned to the dataset version the page
+  # reports: datapages.<shard>:v7_0.<table>. Addressed by name, never by
+  # reference id (see above). "" when Redivis would refuse it without a login.
+  rows_url_of <- function(shard, version, name, bytes) {
+    if (is.na(bytes) || bytes > ANON_MAX_BYTES || !nzchar(version)) return("")
+    paste0(ROWS_API, "datapages.", shard, ":", gsub(".", "_", version, fixed = TRUE),
+           ".", name, "/rows?format=csv")
   }
 
   dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
-  rows <- list(); urls <- character(0); lagging <- character(0); missing <- character(0)
+  rows <- list(); urls <- character(0); lagging <- character(0); missing <- character(0); too_big <- character(0)
 
   for (tb in tables) {
     k <- tolower(tb)
@@ -604,8 +643,11 @@ main <- function() {
       keywords = unname(unlist(tags)),
       page_url = page_url,
       croissant_url = paste0(SITE_URL, "/tables/", slug, "/croissant.jsonld"),
-      redivis_url = table_url(shard, chr(mrow$table), si$url)
+      redivis_url = ""
     )
+    tp <- table_props(shard, x$table, si$url)
+    x$redivis_url <- tp$url
+    x$rows_url    <- rows_url_of(shard, si$version, x$table, tp$bytes)
     # Google Dataset Search wants a description of at least 50 characters, and the
     # dictionary Sheet's Description column is frequently a two-word label
     # ("Personality assessment"): 10 of the 25 pilot tables fell under the limit.
@@ -636,6 +678,7 @@ main <- function() {
     urls <- c(urls, page_url)
     rows[[length(rows) + 1]] <- list(table = x$table, slug = slug, shard = shard,
                                      n_responses = mrow$n_responses)
+    if (!nzchar(x$rows_url)) too_big <- c(too_big, x$table)
   }
 
   rows <- rows[order(vapply(rows, function(r) tolower(r$table), character(1)))]
@@ -645,6 +688,9 @@ main <- function() {
 
   message("[landing] emitted ", length(rows), " pages + ", length(rows),
           " Croissant files into ", OUT_DIR)
+  message("[landing] ", length(rows) - length(too_big), " Croissant files load without ",
+          "a login; ", length(too_big), " exceed ", ANON_MAX_BYTES / 1e6, "MB",
+          if (length(too_big)) paste0(": ", paste(too_big, collapse = ", ")) else "")
   if (length(missing))
     message("[landing] WARNING: not in irw_meta.metadata, no page emitted: ",
             paste(missing, collapse = ", "))
