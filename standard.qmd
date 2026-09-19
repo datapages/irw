@@ -25,7 +25,7 @@ A file MUST be in long format, one row per response, and MUST contain the column
 
 ## C3. `item` {#c3}
 
-`item` is a persistent identifier for *the probe being used to measure*. There are some cases wherein a unique item identifier cannot be identified; for more information on these cases see the discussion of [trials](#considerations) below. The identifier SHOULD be kept in a form that makes subsequent matching to item text as straightforward as possible (e.g., identifiers that make it challenging to match back to original items, when available, should be avoided). `item` MUST NOT be entirely missing, and SHOULD have no missing values.
+`item` is a persistent identifier for *the probe being used to measure*, and it is always authoritative: it MUST identify the probe, including in repeated-trial designs, where details of each trial go in [`trial_` columns](#optional) rather than replacing `item`. The identifier SHOULD be kept in a form that makes subsequent matching to item text as straightforward as possible (e.g., identifiers that make it challenging to match back to original items, when available, should be avoided). `item` MUST NOT be entirely missing, and SHOULD have no missing values.
 
 ## C4. `resp` {#c4}
 
@@ -41,7 +41,7 @@ A file MUST be in long format, one row per response, and MUST contain the column
 
 ## C5. One response per `id` and `item` per occasion {#c5}
 
-A given `id`–`item` pair MUST appear at most once, unless the rows are distinguished by a column that records the occasion of the response: `wave`, `date`, `rater`, or a trial or session index (`timepoint`, `trial`, `trialnum`, `order`, `session`, `occasion`, `period`, `block`, `subtest`). A person rated by two raters, or answering the same item in two waves, is the design; the same response recorded twice is a defect.
+A given `id`–`item` pair MUST appear at most once, unless the rows are distinguished by a column that records the occasion of the response: `wave`, `date`, `rater`, a trial or session index (`timepoint`, `trial`, `trialnum`, `order`, `session`, `occasion`, `period`, `block`, `subtest`), or a `trial_` column such as `trial_number`. A person rated by two raters, or answering the same item in two waves, is the design; the same response recorded twice is a defect.
 
 ## C6. Other columns are named as defined here {#c6}
 
@@ -73,6 +73,8 @@ These elements are optional features of IRW datasets. When IRW datasets have the
 
 - `itemcov_` Covariates that are invariant for the measurement probe. NOTE: This was implemented as of V16.1; data added before that may not be reverse-compatible with this standardization element.
 
+- `trial_` Details of individual trials in repeated-trial designs, such as the trial's position (`trial_number`), its block (`trial_block`) or its list (`trial_list`). These sit alongside `item`, which still identifies the probe; a `trial_` index is what distinguishes repeated responses by one `id` to one `item` (C5).
+
 - `item_family`  An identifier for groups of items that potentially have family resemblances such that assumptions related to local independence may be violated. Examples include items with a testlet structure, items that have common features (e.g., 'how important is it that people wash their hands regularly?' versus 'how important is it that you wash your hands regularly'), or items that are clones of each other. Each element of a family of items will have a unique identifier (e.g., items in the first testlet have id `1`, items in the second testlet have id `2`, etc.) and items that are not a member of a family will be `NA`. NOTE: This was implemented as of V11.25; data added before that may not be reverse-compatible with this standardization element.
 
 ## Additional considerations {#considerations}
@@ -81,7 +83,7 @@ In some cases, we deviate from the above rules for specific reasons. We describe
 
 - Process data: In general, a single row of data in the IRW corresponds to a unique response from an individual to an item. In the context of ['process data'](https://link.springer.com/article/10.1007/s11336-022-09880-8), more information about a response is available. In such cases, responses have identifiers that can be used to understand the sequence of actions that led to a given response.
 
-- Trials: Many constructs in cognitive psychology are measured via repeated trials of similar tasks wherein the probes either do not vary or vary in terms of some quantifiable feature of the stimulus. In such cases, the `item` column is uninformative and the columns beginning `trial_` will contain information about the different trials.
+- Trials: Many constructs in cognitive psychology are measured via repeated trials of similar tasks wherein the probes either do not vary or vary in terms of some quantifiable feature of the stimulus. In such cases `item` still identifies the probe (C3), and columns beginning `trial_` record the trial itself, such as its position and block. Earlier versions of this page said `item` could be uninformative in trial data; that reading is withdrawn.
 
 The [competition](comps_standard.qmd) and [nominal](nominal_standard.qmd) standards are experimental extensions and are not part of version 1.0.
 
@@ -100,4 +102,4 @@ See [Contributing data to the IRW](contribute.qmd) for how to send a file.
 
 | Version | Date | Change |
 |---|---|---|
-| 1.0 | 2026-09-19 | First numbered version. Clauses C1–C7 state the rules this page previously gave as prose, and the rules `irw-validate` already enforced: C5 (repeated responses) and C7 (column order) were enforced but not written here. Intake policy separated from the format. |
+| 1.0 | 2026-09-19 | First numbered version. Clauses C1–C7 state the rules this page previously gave as prose, and the rules `irw-validate` already enforced: C5 (repeated responses) and C7 (column order) were enforced but not written here. Intake policy separated from the format. `item` is always authoritative (C3); the earlier description of trial data, in which `item` could be uninformative, is withdrawn, and `trial_` columns are defined as trial-level details. |
