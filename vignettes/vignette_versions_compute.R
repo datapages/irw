@@ -136,12 +136,11 @@ CACHES <- list(
   "dimensionality"         = c("dimensionality_data/dimensionality_results.rds",
                                "dimensionality_data/dimensionality_merge_results.rds"),
   "dutch_identity"         = "dutchdata/dutch_identity_results.rds",
-  # Only the caches fit to IRW data. The sim and floor-calibration caches are
-  # pure simulation, and guessing_gsweep_results.rds predates the v52.0 ENEM
-  # rebuild (2026-09-04), so letting it in would date the page by a run it
-  # no longer reflects -- or, under "newest wins", hide that it is older.
+  # Only the caches fit to IRW data; the sim and floor-calibration caches are
+  # pure simulation and say nothing about which corpus version was read.
   "guessing"               = c("guessingdata/guessing_results.rds",
-                               "guessingdata/guessing_key_diagnostics.rds"),
+                               "guessingdata/guessing_key_diagnostics.rds",
+                               "guessingdata/guessing_gsweep_results.rds"),
   "hf_reliability_paradox" = "hf_reliability/hf_reliability_results.rds",
   "il_hte"                 = "ilhtedata/il_hte_results.rds",
   "item_text_difficulty"   = "itemtextdata/item_text_difficulty_results.rds",

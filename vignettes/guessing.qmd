@@ -708,7 +708,7 @@ by simulation: both correctly return a non-significant likelihood-ratio test
 known parameters reasonably well under a true alternative (Mixture recovery
 was excellent; 1PL-AG's $\beta$ recovered well but its $\gamma$ was noisy at
 moderate sample sizes -- a limitation the source paper documents for its own
-real-data application, not an implementation defect. See Limitations below.
+real-data application, not an implementation defect). See Limitations below.
 
 ### Cross-validation
 
@@ -716,8 +716,8 @@ A single 80/20 response-level (cell) holdout per table, masked once and
 reused across all seven model fits, per this codebase's existing convention
 (@stenhaug2022) -- masking is per-person and always
 leaves at least one retained response. This is a **single split**, not the
-20 repeated splits used in the Safety Valve paper's own empirical section;
-that simplification was made deliberately for this first run.
+20 repeated splits used in the Safety Valve paper's own empirical section
+(see Limitations).
 
 ## Results
 
@@ -1038,8 +1038,7 @@ if (cache_ok && nrow(summary_df) > 0 && nrow(imv_vs_rasch_df) > 0) {
            "the Safety Valve paper uses in its own empirical section** (see ",
            "Limitations). The Mixture's margins in particular are small ",
            "enough (|IMV| at most %.4f) that individual signs should not be ",
-           "read as settled until checked against the 20-split version of ",
-           "this analysis.\n"),
+           "read as settled without repeated splits.\n"),
     max(abs(w$Mixture), na.rm = TRUE)))
 
   n_pur_neg <- sum(w$`Purified Rasch` < 0, na.rm = TRUE)
@@ -1224,9 +1223,9 @@ if (cache_ok && nrow(summary_df) > 0) {
 if (cache_ok && nrow(summary_df) > 0) {
   cat("### What to notice\n\n")
 
-  no_guess_lbl <- if (no_guess_tbl$pi_hat > 0.95) "Safety-valve-suppressed / least guessing detected" else "Least guessing detected (of tables run so far)"
+  no_guess_lbl <- if (no_guess_tbl$pi_hat > 0.95) "Safety-valve-suppressed / least guessing detected" else "Least guessing detected"
   cat(sprintf(
-    "**%s**: `%s` has π̂ = %.3f -- the Mixture model assigns the largest engaged share of the tables run so far, with IMV(Rasch,Mixture) of %.4f. %s\n\n",
+    "**%s**: `%s` has π̂ = %.3f -- the Mixture model assigns the largest engaged share of any table here, with IMV(Rasch,Mixture) of %.4f. %s\n\n",
     no_guess_lbl, no_guess_tbl$table, no_guess_tbl$pi_hat, no_guess_tbl$Mixture,
     if (no_guess_tbl$pi_hat > 0.95) "A near-zero IMV here is not a failure of the Mixture model; it is the safety-valve property working as intended -- there is nothing for it to correct." else ""
   ))
@@ -1305,12 +1304,9 @@ if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
     paste0("It holds, as far as %d tables and a single split can show ",
            "it, though as a tendency rather than a clean law. The Mixture's ",
            "gain over Rasch falls as the engaged share grows (r = %.2f ",
-           "across tables): its largest gain, %+.4f, is on `%s`, where the ",
-           "guessing class is fullest at $\\hat\\pi$ = %.2f, while at the ",
-           "other end `%s` sits at %+.4f with $\\hat\\pi$ = %.2f. The ",
-           "scatter around that is real -- `%s` has the emptiest guessing ",
-           "class of all at $\\hat\\pi$ = %.2f and still gains only %+.4f, ",
-           "so no single table carries the pattern. It is ",
+           "across tables): its largest gain, %+.4f, is on `%s` at ",
+           "$\\hat\\pi$ = %.2f, while `%s`, where the guessing class is ",
+           "emptiest at $\\hat\\pi$ = %.2f, gains %+.4f. %s It is ",
            "positive on %d of the %d, and %s.\n\nWhat this does *not* show ",
            "is a table at $\\hat\\pi$ close to 1. The largest engaged share ",
            "here is %.2f, so the collapse is visible as a trend rather than ",
@@ -1325,8 +1321,20 @@ if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
            "matter?](#how-much-does-the-assumed-g-matter)).\n\n"),
     nrow(sv), cor(sv$pi_hat, sv$imv),
     best$imv, best$table, best$pi_hat,
-    hi$table, hi$imv, hi$pi_hat,
-    lo$table, lo$pi_hat, lo$imv,
+    hi$table, hi$pi_hat, hi$imv,
+    # The largest gain and the fullest guessing class need not be the same
+    # table; an earlier template assumed they were and mislabelled both when
+    # they came apart.
+    if (lo$table == best$table) {
+      sprintf(paste0("That largest gain is also where the guessing class is ",
+                     "fullest, so the two ends of the range agree."))
+    } else {
+      sprintf(paste0("The scatter around that is real -- `%s` has the ",
+                     "fullest guessing class of all at $\\hat\\pi$ = %.2f ",
+                     "and still gains only %+.4f, less than `%s`, so no ",
+                     "single table carries the pattern."),
+              lo$table, lo$pi_hat, lo$imv, best$table)
+    },
     sum(sv$imv > 0), nrow(sv),
     if (n_neg == 0) {
       "negative on none"
@@ -1496,7 +1504,7 @@ if (gsweep_ok && nrow(gsweep_spread) > 0) {
     median(gsweep_spread$range_mix), max(gsweep_spread$range_mix)))
   cat(sprintf(
     paste0("The worst single 1PLg value anywhere on the grid is %.3f, ",
-           "against %.3f for the Mixture. The asymmetry is the practical ",
+           "against %.4f for the Mixture. The asymmetry is the practical ",
            "content of the safety-valve claim: a fixed-floor model is only ",
            "as good as the analyst's $g$, whereas the Mixture degrades ",
            "toward its Rasch baseline instead of past it.\n\n"),
@@ -1571,17 +1579,24 @@ if (gsweep_ok && nrow(gsweep_spread) > 0) {
   isolation.
 - **$\alpha$ is not identified when the data carry no guessing floor, and the
   LR test cannot detect this.** Where every $\hat\gamma_j$ goes to the
-  no-guessing boundary the likelihood is flat in $\alpha$, so the fit returns
-  its starting value and the test returns $p \approx 1$ -- numerically
-  indistinguishable from a genuine null. Those cells are labelled rather than
-  reported here, but the general lesson is that a non-significant $\alpha$ in
-  a 1PL-AG fit should never be read as evidence against ability-dependent
-  guessing without first checking that $\hat\gamma$ is interior. The
-  simulation validation on this page did not catch it because data generated
-  from the 1PL-AG always has a floor by construction; it takes real data that
-  rejects a floor to produce the failure. The argument for it here is the
-  derivative above and the refits that accompany it, not a published result:
-  the identification literature for this family runs the other way.
+  no-guessing boundary the likelihood is flat in $\alpha$ -- $\alpha$ enters
+  only through the guessing branch, $\partial P/\partial\alpha \propto
+  (1-r)\,s(1-s)\,\theta$ with $s = \mathrm{expit}(\alpha\theta+\gamma)$, and
+  a vanishing $s$ zeroes it -- so the fit returns its starting value and the
+  test returns $p \approx 1$, numerically indistinguishable from a genuine
+  null. On the current tables $\alpha$ is identified everywhere and the page
+  flags any table where it is not. On an earlier release of the ENEM tables,
+  before the scored-absence block was removed, five of them failed exactly
+  this way: refitting from $\alpha \in \{\pm 0.1, \pm 0.3\}$ returned the
+  starting value with the log-likelihood unchanged. The general lesson is
+  that a non-significant $\alpha$ in a 1PL-AG fit should never be read as
+  evidence against ability-dependent guessing without first checking that
+  $\hat\gamma$ is interior. The simulation validation on this page did not
+  catch it because data generated from the 1PL-AG always has a floor by
+  construction; it takes real data that rejects a floor to produce the
+  failure. The argument for it here is that derivative and those refits,
+  not a published result: the identification literature for this family
+  runs the other way.
   @sanmartin2013 identify the 1PL-G's item parameters and scale by *fixing*
   one item's guessing parameter at zero — a restriction imposed to buy
   identification, not a boundary the data arrive at on their own, and the
@@ -1601,7 +1616,7 @@ if (gsweep_ok && nrow(gsweep_spread) > 0) {
 - **Single 80/20 split, not repeated cross-validation.** IMV estimates here
   reflect one holdout draw per table; they are not averaged over multiple
   splits the way the Safety Valve paper's own empirical section is.
-- **Secondary (gilbert_meta_*) tables come from one study family.** All
+- **The secondary (`gilbert_meta_*`) tables come from one study family.** All
   three item-text-verified tables share an underlying literacy-intervention
   study; they are not independent evidence of generalizability beyond that
   context.
