@@ -408,9 +408,21 @@ build_page <- function(x) {
   # download buttons -- where someone takes the data, not only in the About box
   # (Ben, 2026-09-19).
   terms <- licence_terms(x$license)
+  # A Custom licence has no fixed meaning, so its note says to check the terms,
+  # quoting them where the dictionary records them (19 of 313 on 2026-09-19) and
+  # pointing at the source otherwise. "Permission via Email" gets no note: the
+  # licence shown is the whole story (Ben, 2026-09-19).
+  custom <- identical(tolower(chr(x$license)), "custom")
   licnote <- if (length(terms)) paste0(
     "<p class=\"licnote\">Licence: <strong>", esc(x$license), "</strong> &mdash; ",
-    paste(terms, collapse = "; "), ".</p>\n") else ""
+    paste(terms, collapse = "; "), ".</p>\n") else if (custom) paste0(
+    "<p class=\"licnote\"><strong>Custom licence</strong> &mdash; check the terms before reuse",
+    if (!blank(x$license_terms)) paste0(": ", esc(x$license_terms))
+    else if (!blank(x$source_url)) paste0(" at the <a href=\"", esc(x$source_url),
+                                          "\">source data</a>")
+    else "",
+    if (!blank(x$license_terms) && grepl("[.!?]$", chr(x$license_terms))) "" else ".",
+    "</p>\n") else ""
   access <- paste0(licnote,
 if (nzchar(x$rows_url)) paste0(
 "<div class=\"btns\">",
@@ -687,6 +699,8 @@ main <- function() {
       description = if (nrow(brow)) chr(brow[1, "Description"]) else "",
       reference   = if (nrow(brow)) chr(brow[1, "Reference_x"]) else "",
       license     = if (nrow(brow)) chr(brow[1, "Derived_License"]) else "",
+      license_terms = if (nrow(brow) && "Custom_License_Terms" %in% names(brow))
+                        chr(brow[1, "Custom_License_Terms"]) else "",
       source_url  = if (nrow(brow)) chr(brow[1, "URL__for_data_"]) else "",
       doi = doi, doi_url = doi_url,
       keywords = unname(unlist(tags)),
