@@ -140,7 +140,8 @@ CACHES <- list(
   # pure simulation and say nothing about which corpus version was read.
   "guessing"               = c("guessingdata/guessing_results.rds",
                                "guessingdata/guessing_key_diagnostics.rds",
-                               "guessingdata/guessing_gsweep_results.rds"),
+                               "guessingdata/guessing_gsweep_results.rds",
+                               "guessingdata/guessing_m_check.rds"),
   "hf_reliability_paradox" = "hf_reliability/hf_reliability_results.rds",
   "il_hte"                 = "ilhtedata/il_hte_results.rds",
   "item_text_difficulty"   = "itemtextdata/item_text_difficulty_results.rds",

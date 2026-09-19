@@ -131,10 +131,14 @@ if (cache_ok) {
 #                            item-total point-biserials, per table.
 # guessing_floor_calibration_compute.R -- what an estimated guessing floor of
 #                            1/m looks like at these N, J and latent spreads.
+# guessing_m_check.R -- whether m = 5 holds for the ENEM tables, from the
+#                            letters candidates marked and the 2023 item text.
 sim_path    <- "guessingdata/guessing_sim_results.rds"
 gsweep_path <- "guessingdata/guessing_gsweep_results.rds"
 keydiag_path <- "guessingdata/guessing_key_diagnostics.rds"
 floorcal_path <- "guessingdata/guessing_floor_calibration.rds"
+mcheck_path <- "guessingdata/guessing_m_check.rds"
+mcheck_ok <- file.exists(mcheck_path)
 sim_ok    <- file.exists(sim_path)
 gsweep_ok <- file.exists(gsweep_path)
 keydiag_ok <- file.exists(keydiag_path)
@@ -150,6 +154,9 @@ if (keydiag_ok) {
 }
 if (floorcal_ok) {
   .fc <- readRDS(floorcal_path); floorcal_df <- .fc$summary
+}
+if (mcheck_ok) {
+  .mc <- readRDS(mcheck_path)
 }
 ```
 
@@ -382,11 +389,9 @@ underlying literacy-intervention study.
 
 That pool alone was thin and not very representative of the high-stakes
 settings where guessing corrections matter most. ENEM (Brazil's national
-university-admissions exam) carries no item text in IRW, so its response
-options can't be verified from IRW data directly -- but ENEM's format is
-externally documented as a stable 5-option (A-E) multiple choice test across
-subjects and years. We use that documented value ($m=5$) for 8 ENEM
-candidate tables spanning 2013, 2014, 2019, and 2024 and all four subject
+university-admissions exam) is documented as a 5-option (A-E) multiple
+choice test across subjects and years, and the check below confirms
+$m = 5$ from the data. We use it for 8 ENEM candidate tables spanning 2013, 2014, 2019, and 2024 and all four subject
 areas (`mt`=math, `lc`=languages, `ch`=human sciences, `cn`=natural
 sciences), restricted to the density=1 table/years (every respondent
 answered the identical fixed item set, no rotated-booklet missingness). All
@@ -396,9 +401,42 @@ version of this page on answer-key grounds that the v52.0 rebuild removed
 missingness at all: both `lc` tables carry the elective English/Spanish
 block, which every candidate answers exactly half of. Each ENEM table
 has roughly a million respondents; we work with a fixed-seed random
-subsample of `r subsample_n` per table for compute tractability. **This is
-an assumed, not IRW-verified, value of $m$** -- flagged explicitly rather
-than silently treated as equivalent to the item-text-verified tables.
+subsample of `r subsample_n` per table for compute tractability.
+
+```{r}
+#| label: m-check-note
+#| results: asis
+if (mcheck_ok) {
+  bt <- .mc$by_table; it <- .mc$itemtext
+  odd <- setdiff(.mc$other_codes$resp_raw, c(".", "*"))
+  # share and head count from the same item, so the two figures describe one
+  # letter rather than the minimum of each taken from different tables
+  least <- .mc$letters_by_item |> slice_min(min_share, n = 1, with_ties = FALSE)
+  cat(sprintf(
+    paste0("IRW carries no item text for these eight tables, so $m$ cannot be ",
+           "counted from options as it is for the `gilbert_meta` tables. It can ",
+           "be checked another way. The ENEM tables record the letter each ",
+           "candidate marked, and on all %d items across the eight tables ",
+           "%s. Even the least-chosen letter on any item drew %.1f%% of ",
+           "the candidates who answered it (%s people), which rules out a four-option item, and %s, ",
+           "which rules out a sixth option. The adjacent year does carry item ",
+           "text: %s of %s ENEM 2023 items have exactly five options, A to E, ",
+           "and %s. So $m = 5$ here is checked, not assumed ",
+           "(`guessing_m_check.R`).\n\n"),
+    sum(bt$n_items),
+    if (all(bt$n_all_five == bt$n_items)) "every one of A-E was chosen"
+      else sprintf("all five letters were chosen on %d", sum(bt$n_all_five)),
+    100 * least$min_share,
+    format(round(least$min_share * least$n_marked), big.mark = ","),
+    if (length(odd) == 0) paste0("nothing besides A-E, a blank and a double ",
+                                 "mark occurs anywhere")
+      else sprintf("other codes also occur (%s)", paste(odd, collapse = ", ")),
+    sum(it$n_five_options), sum(it$n_items),
+    if (all(it$instructions_state_five)) paste0("each of the four booklets ",
+      "says so in its instructions (\"são apresentadas 5 opções\")")
+      else "not every booklet states the count in its instructions"))
+}
+```
 
 Per **@xiao2026safetyvalve** (Section 3.2), two-alternative forced-choice
 (2AFC) items are excluded from this design on principle, not just by
@@ -413,9 +451,10 @@ class-separated region the Safety Valve paper establishes.
 #| label: table-list
 if (cache_ok) {
   tables_df |>
-    mutate(source = ifelse(m_verified, "item-text-verified", "documented (ENEM)")) |>
+    mutate(source = ifelse(m_verified, "item text",
+                          "marked letters, and ENEM 2023 item text")) |>
     select(table, m, source) |>
-    knitr::kable(col.names = c("Table", "m", "Source"), align = "lrl",
+    knitr::kable(col.names = c("Table", "m", "How m is established"), align = "lrl",
                  caption = "Tables used")
 }
 ```
@@ -1541,10 +1580,6 @@ if (gsweep_ok && nrow(gsweep_spread) > 0) {
 
 ## Limitations
 
-- **ENEM's $m=5$ is an assumed, not verified, value.** IRW carries no item
-  text for these tables; the value comes from documented exam structure, not
-  from counting options in the data itself. If that assumption is wrong for
-  any particular year/subject, every ENEM result here inherits the error.
 - **The scored-absence screen is a safeguard, not a repair.** On the
   current release of these tables it removes a handful of candidates at
   most (see [Screening scored absences](#screening-scored-absences)). On an
@@ -1648,15 +1683,20 @@ source("vignettes/guessing_key_diagnostics.R")
 #    latent spreads (simulation; no Redivis access needed)
 source("vignettes/guessing_floor_calibration_compute.R")
 
-# 6. Re-render this page
+# 6. Whether m = 5 holds for the ENEM tables: letters marked per item, and
+#    the ENEM 2023 item text (server-side counts; needs REDIVIS_API_TOKEN)
+source("vignettes/guessing_m_check.R")
+
+# 7. Re-render this page
 quarto::quarto_render("vignettes/guessing.qmd")
 ```
 
-Steps 2-5 write their own caches
+Steps 2-6 write their own caches
 (`guessingdata/guessing_sim_results.rds`,
 `guessingdata/guessing_gsweep_results.rds`,
 `guessingdata/guessing_key_diagnostics.rds`,
-`guessingdata/guessing_floor_calibration.rds`); the page renders without
+`guessingdata/guessing_floor_calibration.rds`,
+`guessingdata/guessing_m_check.rds`); the page renders without
 them, with those sections showing a placeholder instead. The estimators themselves,
 and the checks behind the variance and gradient claims in Data and methods,
 are in `vignettes/guessing_helpers.R` and
