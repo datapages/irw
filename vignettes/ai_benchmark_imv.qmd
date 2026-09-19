@@ -111,10 +111,11 @@ assume far more respondents than this.
 
 ### AI benchmarks (OpenEval)
 
-Responses come from OpenEval, read directly from Hugging Face
-(`Open-Eval-Commons/OpenEval`), pinned to revision
-`r substr(hf_revision, 1, 8)`. They are **not** part of IRW. The data is
-licensed CC BY-NC 4.0, so only fitted summaries are kept here.
+Responses come from OpenEval (`Open-Eval-Commons/OpenEval` on Hugging Face),
+pinned to revision `r substr(hf_revision, 1, 8)`. IFEval is in IRW as
+`jiang_2026_openeval_ifeval` and is read from there. SORRY-Bench is not in IRW
+and is read directly from Hugging Face. The data is licensed CC BY-NC 4.0, so
+only fitted summaries are kept here.
 
 ```{r}
 #| label: tbl-prep
@@ -138,8 +139,9 @@ if (nrow(prep)) {
 
 Three coding decisions shape these matrices.
 
-- **IFEval is dichotomised.** OpenEval stores the share of a prompt's
-  instructions that were followed (0, 1/3, 1/2, 2/3 or 1).
+- **IFEval is dichotomised.** Each prompt carries one to three instructions,
+  and the IRW table records how many were followed (OpenEval stores the share:
+  0, 1/3, 1/2, 2/3 or 1).
   `r if (nrow(prep)) paste0(format(prep$n_fractional[prep$benchmark == "ifeval"], big.mark = ","), " of ", format(prep$n_rows[prep$benchmark == "ifeval"], big.mark = ","), " responses")` are fractional.
   We use IFEval's prompt-level strict accuracy, which scores 1 only when every
   instruction is followed.
@@ -419,8 +421,10 @@ with genuinely multidimensional content, which might land among the AI points.
 {{< include ../components/_data-version.qmd >}}
 
 AI benchmark responses: OpenEval, Hugging Face `Open-Eval-Commons/OpenEval` at
-revision [`r substr(hf_revision, 1, 8)`](https://huggingface.co/datasets/Open-Eval-Commons/OpenEval/tree/`r hf_revision`),
-read directly and not stored in IRW.
+revision [`r substr(hf_revision, 1, 8)`](https://huggingface.co/datasets/Open-Eval-Commons/OpenEval/tree/`r hf_revision`).
+IFEval is read from the IRW table `jiang_2026_openeval_ifeval`, which was built
+from that revision. SORRY-Bench is read directly from Hugging Face and is not
+stored in IRW.
 
 Results computed `r format(date_run, "%B %d, %Y")`. To regenerate:
 

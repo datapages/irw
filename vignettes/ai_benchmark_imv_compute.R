@@ -7,10 +7,11 @@
 # item-level AI benchmark results from OpenEval and to human IRW tables
 # subsampled to the same number of respondents and items.
 #
-# AI data is read from Hugging Face (Open-Eval-Commons/OpenEval), pinned to one
-# dataset revision. It is not in IRW and is licensed CC BY-NC 4.0, so raw
-# responses stay in a local cache outside this repository; only fit summaries
-# are written here. See datapages/irw#186.
+# AI data comes from OpenEval (CC BY-NC 4.0). ifeval is read from IRW
+# (jiang_2026_openeval_ifeval, built from the pinned revision below; ben-domingue/irw#2166).
+# sorry-bench is not in IRW and is read from Hugging Face (Open-Eval-Commons/OpenEval),
+# pinned to one dataset revision. Raw responses stay in a local cache outside this
+# repository; only fit summaries are written here. See datapages/irw#186.
 #
 # Human comparison: only a handful of binary IRW tables are naturally the size
 # of these benchmarks (~120-150 respondents x 400+ items), so instead each
@@ -54,14 +55,18 @@ PILOT <- TRUE  # TRUE: two benchmarks, three human sources, two draws -- a draft
 
 # `file` is the shard prefix on HF (underscores); names are OpenEval's (hyphens).
 # `score` turns the per-response score into 0/1.
+# `irw_table`, where set, reads the benchmark from IRW instead of HF. `score` then
+# takes the IRW table and returns its 0/1 resp.
 BENCHMARKS <- list(
   "ifeval" = list(
-    file   = "ifeval",
-    metric = "ifeval_strict_accuracy",
-    # The stored value is the share of a prompt's instructions followed
-    # (0, 1/3, 1/2, 2/3, 1). IFEval's prompt-level strict accuracy counts a
-    # prompt as passed only when every instruction is followed.
-    score  = function(v) as.integer(v == 1),
+    file      = "ifeval",
+    irw_table = "jiang_2026_openeval_ifeval",
+    metric    = "ifeval_strict_accuracy",
+    # IRW's resp is the number of the prompt's instructions followed. IFEval's
+    # prompt-level strict accuracy counts a prompt as passed only when every
+    # instruction is followed. (OpenEval stores the share followed, so on HF
+    # this was value == 1; the two give identical cells.)
+    score  = function(d) as.integer(d$resp == d$itemcov_n_instructions),
     coding = "prompt-level strict accuracy: 1 only if every instruction in the prompt is followed"
   ),
   "sorry-bench" = list(
@@ -283,8 +288,58 @@ alias_key <- function(x) {
 summary_json <- jsonlite::fromJSON(hf_download(HF_SUMMARY), simplifyVector = FALSE)
 listing      <- bind_rows(hf_files("response"), hf_files("item"))
 
+# The cache stem: IRW-read benchmarks get their own, so a cache built from HF
+# is never mistaken for one built from IRW.
+cache_stem <- function(bench) {
+  cfg <- BENCHMARKS[[bench]]
+  if (is.null(cfg$irw_table)) cfg$file else cfg$irw_table
+}
+
+# ifeval: IRW already holds one run and one metric per model x item (asserted by
+# its processing script), so only the coverage filter and 0/1 coding remain.
+prep_benchmark_irw <- function(bench) {
+  cfg <- BENCHMARKS[[bench]]
+  out <- file.path(CACHE_DIR, "long", paste0(cache_stem(bench), ".rds"))
+  if (file.exists(out)) return(readRDS(out)$counts)
+  message("Preparing ", bench, " from IRW table ", cfg$irw_table)
+
+  d <- irw_fetch(cfg$irw_table)
+  stopifnot(!anyDuplicated(d[, c("id", "item")]))
+  n_items <- n_distinct(d$item)
+  long <- d |> mutate(resp = cfg$score(d), temperature = cov_temperature)
+
+  coverage <- long |> count(id) |> mutate(coverage = n / n_items)
+  keep_ids <- coverage$id[coverage$coverage >= MIN_COVERAGE]
+  kept     <- long |> filter(id %in% keep_ids) |> select(id, item, resp, temperature)
+
+  summary_cov <- map_dbl(summary_json[[bench]], "coverage")
+  counts <- tibble(
+    benchmark           = bench,
+    metric              = cfg$metric,
+    coding              = cfg$coding,
+    n_rows              = nrow(d),
+    n_replicate_rows    = 0L,
+    n_disagreeing       = 0L,
+    n_fractional        = sum(d$resp > 0 & d$resp < d$itemcov_n_instructions),
+    n_models_all        = n_distinct(d$id),
+    n_models            = length(keep_ids),
+    n_models_summary    = sum(summary_cov >= 100 * MIN_COVERAGE),
+    n_models_dealiased  = n_distinct(alias_key(keep_ids)),
+    n_items             = n_items,
+    n_items_varying     = length(varying_items(kept)),
+    p_correct           = mean(kept$resp),
+    temperatures        = paste(sort(unique(kept$temperature)), collapse = ", "),
+    n_models_nongreedy  = n_distinct(kept$id[!is.na(kept$temperature) & kept$temperature > 0]),
+    irw_table           = cfg$irw_table
+  )
+  dir.create(dirname(out), recursive = TRUE, showWarnings = FALSE)
+  saveRDS(list(long = kept, counts = counts), out)
+  counts
+}
+
 prep_benchmark <- function(bench) {
   cfg <- BENCHMARKS[[bench]]
+  if (!is.null(cfg$irw_table)) return(prep_benchmark_irw(bench))
   out <- file.path(CACHE_DIR, "long", paste0(cfg$file, ".rds"))
 
   shards <- listing |> filter(startsWith(path, paste0("response/", cfg$file, "-")))
@@ -362,9 +417,9 @@ print(prep_counts)
 
 # AI matrices are read by workers from a slim copy holding only id/item/resp.
 ai_file <- function(bench) {
-  f <- file.path(CACHE_DIR, "long", paste0(BENCHMARKS[[bench]]$file, "_resp.rds"))
+  f <- file.path(CACHE_DIR, "long", paste0(cache_stem(bench), "_resp.rds"))
   if (!file.exists(f)) {
-    saveRDS(readRDS(file.path(CACHE_DIR, "long", paste0(BENCHMARKS[[bench]]$file, ".rds")))$long |>
+    saveRDS(readRDS(file.path(CACHE_DIR, "long", paste0(cache_stem(bench), ".rds")))$long |>
               select(id, item, resp), f)
   }
   f
