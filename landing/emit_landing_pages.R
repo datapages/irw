@@ -347,7 +347,14 @@ PAGE_CSS <- paste0(
 ".pilot p{margin:.35rem 0}",
 ".pilot .tag{display:inline-block;background:#d98b1f;color:#fff;font-weight:700;",
 "font-size:.72rem;letter-spacing:.09em;padding:.12rem .5rem;border-radius:3px;",
-"margin-bottom:.45rem}")
+"margin-bottom:.45rem}",
+".btns{display:flex;flex-wrap:wrap;gap:.6rem;margin:.4rem 0 .5rem}",
+".btn{display:inline-flex;flex-direction:column;padding:.55rem .95rem;border-radius:6px;",
+"border:1px solid #8c1515;text-decoration:none;font-weight:600;font-size:.93rem;line-height:1.3}",
+".btn small{font-weight:400;font-size:.75rem;opacity:.85}",
+".btn.primary{background:#8c1515;color:#fff}",
+".btn:hover{background:#f7eded}.btn.primary:hover{background:#6f1010}",
+".note{font-size:.88rem;color:#555}")
 
 build_page <- function(x) {
   jsonld <- toJSON(build_jsonld(x), auto_unbox = TRUE, pretty = TRUE, null = "null")
@@ -394,19 +401,26 @@ build_page <- function(x) {
              "</span>", collapse = ""), "</p>\n")
   }
 
+  btn <- function(href, label, hint, cls = "btn")
+    paste0("<a class=\"", cls, "\" href=\"", esc(href), "\">", label,
+           "<small>", hint, "</small></a>")
   access <- paste0(
+if (nzchar(x$rows_url)) paste0(
+"<div class=\"btns\">",
+btn(x$rows_url, "Download CSV", "no account needed", "btn primary"),
+btn(x$redivis_url, "Browse on Redivis", "explore and query"),
+btn("croissant.jsonld", "Croissant metadata", "Hugging Face, Kaggle, OpenML"),
+"</div>\n") else paste0(
+"<div class=\"btns\">",
+btn(x$redivis_url, "Browse on Redivis", "sign in to download"),
+"</div>\n",
+"<p class=\"note\">This table is larger than Redivis serves without a login, so ",
+"download it with one of the packages below or while signed in to Redivis.</p>\n"),
+"<p class=\"note\">Or load it directly in R or Python:</p>\n",
 "<pre># R\ninstall.packages(\"remotes\")\nremotes::install_github(\"itemresponsewarehouse/Rpkg\")\n",
 "library(irw)\ndf &lt;- irw_fetch(\"", esc(x$table), "\")</pre>\n",
 "<pre># Python\npip install irw\n\n",
-"import irw\ndf = irw.fetch(\"", esc(x$table), "\")</pre>\n",
-if (nzchar(x$rows_url)) paste0(
-"<p><a href=\"", esc(x$rows_url), "\">Download as CSV</a> (no account needed), ",
-"browse it on <a href=\"", esc(x$redivis_url), "\">Redivis</a>, or take the ",
-"<a href=\"croissant.jsonld\">Croissant description</a> ",
-"of this table for use with Hugging Face, Kaggle or OpenML.</p>\n") else paste0(
-"<p>Browse it on <a href=\"", esc(x$redivis_url), "\">Redivis</a>. ",
-"This table is larger than Redivis serves without a login, so download it with ",
-"one of the packages above or while signed in to Redivis.</p>\n"))
+"import irw\ndf = irw.fetch(\"", esc(x$table), "\")</pre>\n")
 
   prov <- kv_rows(list(
     list("IRW version",               paste0("v", x$irw_version)),
