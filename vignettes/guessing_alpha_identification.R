@@ -15,7 +15,7 @@
 #
 # Background. An earlier version of the page printed "alpha-hat 0.000 (p=1.000)"
 # on the five ENEM 2013/2014 tables and interior estimates on the other six.
-# Doria Torres Irribarra pointed out that p = 1.000 needs an LR statistic below
+# Doria (Xingyao Xiao) pointed out that p = 1.000 needs an LR statistic below
 # about 4e-7, that alpha starts at exactly 0 in fit_1pl_ag(), and that the
 # pattern therefore looked like an optimizer never leaving its starting value.
 # She also showed by simulation -- two independent free-variance implementations,
