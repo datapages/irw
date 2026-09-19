@@ -1,0 +1,898 @@
+---
+title: "What Is a Floor, Actually?"
+description: |
+  Experience-sampling responses pile up at the bottom of the scale, and a recent
+  preprint argues that ignoring that pile biases the person-level correlations
+  that dynamic structural equation models are fitted to estimate. Its remedy is a
+  censored model. But censoring is only one theory of what a floor is — an
+  appropriate link models the boundedness directly, and a graded model says the
+  floor was never special to begin with. This vignette measures how much floor
+  mass IRW's intensive longitudinal datasets actually carry, shows that the
+  composite scores the field models hide almost all of it, and puts the competing
+  models against each other on a study that randomised its participants to a
+  Likert or a slider version of the same protocol.
+date: today
+bibliography: esm_floor_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(plotly)
+library(knitr)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue  <- "#2166ac"
+irw_red   <- "#d73027"
+irw_amber <- "#b8791f"
+irw_grey  <- "grey50"
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+cache_path <- "esm_floor_data/esm_floor_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache           <- readRDS(cache_path)
+  floor_summary    <- .cache$floor_summary
+  item_detail      <- .cache$item_detail
+  stage_b          <- .cache$stage_b %||% tibble()
+  candidate_tables <- .cache$candidate_tables
+  esm_slider       <- .cache$esm_slider
+  esm_ordinal      <- .cache$esm_ordinal
+  date_run         <- .cache$date_run
+  is_pilot         <- isTRUE(.cache$pilot)
+  r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
+  r_n_tables_run   <- nrow(floor_summary)
+} else {
+  floor_summary <- tibble(
+    table = character(), n_items = integer(), n_persons = integer(),
+    n_responses = integer(), occasion_col = character(),
+    floor_min = numeric(), floor_max = numeric(), floor_median = numeric(),
+    composite_floor = numeric(), format = character()
+  )
+  item_detail <- tibble(
+    table = character(), item = character(), n = integer(),
+    lo = numeric(), hi = numeric(), n_cat = integer(),
+    floor_pct = numeric(), ceil_pct = numeric()
+  )
+  stage_b <- tibble(
+    item = character(), arm = character(), family = character(),
+    n_obs = integer(), n_persons = integer(), floor_pct = numeric(),
+    phi_ar1 = numeric(), phi_ar1_lo = numeric(), phi_ar1_hi = numeric(),
+    cor_mean_disp = numeric(), loo_elpd = numeric(),
+    rhat_ar = numeric(), ess_ar = numeric(), n_divergent = numeric(),
+    converged = logical()
+  )
+  candidate_tables <- character(); esm_slider <- character(); esm_ordinal <- character()
+  date_run <- Sys.Date(); is_pilot <- FALSE
+  r_all_candidates <- 0L; r_n_tables_run <- 0L
+}
+
+# Three-way sampler status, not a pass/fail. An Rhat above 1.01 means the chains
+# disagree — a qualitatively different problem from a fit that mixed cleanly but
+# fell short on effective draws, which more iterations would fix. Collapsing them
+# would make non-convergence look routine and understate how specific the
+# censored failures are.
+if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
+  stage_b <- stage_b |>
+    mutate(status = dplyr::case_when(
+      # A timed-out fit returns a broken sampler object rather than an error, so
+      # it arrives here as all-NA with mins at the budget. Distinguishing it from
+      # a fit never attempted matters: one is evidence about the model, the other
+      # is evidence about nothing.
+      is.na(rhat_ar) & !is.na(mins) & mins >= 45 ~ "timed out",
+      is.na(rhat_ar)                             ~ "not fitted",
+      rhat_ar > 1.01                             ~ "did not mix",
+      ess_ar  < 400                              ~ "under-sampled",
+      TRUE                                       ~ "ok"))
+}
+
+knitr::opts_chunk$set(eval = cache_ok)
+```
+
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+if (!cache_ok) {
+  cat("::: {.callout-warning}\n## Results cache not found\n\n",
+      "This page renders from `", cache_path, "`, which is not present. ",
+      "Run `Rscript vignettes/esm_floor_compute.R` from the repository root ",
+      "(with `REDIVIS_API_TOKEN` set) to generate it. Every results chunk below ",
+      "is skipped until then.\n:::\n", sep = "")
+}
+```
+
+```{r}
+#| label: pilot-warning
+#| echo: false
+#| eval: !expr cache_ok
+#| output: asis
+if (is_pilot) {
+  n_fits <- if (nrow(stage_b)) nrow(stage_b) else 0
+  cat("::: {.callout-note}\n## Partial run\n\n",
+      "Floor profiles: **", r_n_tables_run, " of ", r_all_candidates,
+      "** curated ESM tables — complete. Model comparison: **", n_fits,
+      " of 12** fits (2 items x 2 arms x the families admissible for each). ",
+      "Sections below compute only from fits that are present, so a cell absent ",
+      "from a table has not been run rather than been excluded. Sampler settings ",
+      "are draft-grade; intervals will narrow in a final run.\n:::\n", sep = "")
+}
+```
+
+::: {.callout-note appearance="simple"}
+This vignette was drafted by Claude with human review. The scoping decisions —
+which datasets qualify as experience sampling, and which models are being
+compared — came out of a written brief circulated to IRW collaborators, and the
+model set below was revised in response to their comments.
+:::
+
+## Motivation
+
+Ask people how they feel several times a day for a fortnight and a lot of their
+answers land on the bottom of the scale. Not anxious. Not stressed. Not at all.
+That pile is a nuisance for the models the field fits to such data: dynamic
+structural equation models (DSEM) treat each person's series as a continuous
+process with a mean, an autoregression, and an innovation variance, and then
+estimate how those person-level quantities correlate.
+
+A recent preprint — *Beneath the Floor: Censored DSEM Models for Analyzing ESM
+Data with Floor Effects* [@beneaththefloor2026] — argues that ignoring the pile
+biases exactly those correlations, most sharply the one between a person's mean
+level and their innovation variance, and recommends modelling the censoring
+explicitly.
+
+That recommendation carries an assumption worth naming. **A censored model says
+there is a latent continuum extending below the boundary that we simply cannot
+observe** — the person is somewhere below "not at all anxious", and the scale
+truncated them. That is a specific and contestable claim about what a floor
+*is*, and it is not the only one available:
+
+- **Censoring.** A continuum runs past the boundary; the floor is truncation.
+  Someone at the floor could have been lower.
+- **Zero-inflation.** Sitting *at* the floor is a different kind of event from
+  sitting just above it. "Not at all" is a state, not a smaller amount of
+  something. Under an inflated beta model the boundary gets its own probability
+  and the interior gets a bounded continuous density.
+- **Graded response.** The answer was categorical the whole time. The floor is
+  the bottom category, and nothing about it needs special handling.
+
+These are not three ways of patching the same nuisance. They are three theories
+of the data, they imply different generative stories, and — usefully — they make
+different predictions about the very correlation the preprint reports.
+
+IRW is a reasonable place to adjudicate because it holds intensive longitudinal
+data in both ordinal and near-continuous response formats, in one schema. The
+two vignettes closest to this one are
+[Bounded Continuous Responses](./continuous_bounded.qmd), which compares
+bounded-response model families cross-sectionally, and
+[Dimensionality Across IRW](./dimensionality.qmd), which is the template for an
+assumption audit run across many tables at once. This page is the time-domain
+sibling of the first.
+
+That earlier vignette also left this exact question open. It stress-tested four
+bounded-response specifications against 20% boundary inflation and concluded that
+all of them degrade, because *none* of them includes a zero-one-inflated
+component — "a true zero-one-inflated extension would be needed for that"
+[@molenaar2022zero]. It named the missing model and stopped. This page fits it.
+
+## Data and methods
+
+### Finding the datasets at all
+
+IRW has no reliable handle for intensive longitudinal data, which is the first
+finding and the reason the pool below had to be built by hand.
+
+- `metadata$longitudinal` flags 703 tables, but it is a text search for `wave` or
+  `date` in the column list, so it matches `cov_birthdate` and `cov_startdate`.
+- The `intensive_longitudinal` collection requires `date` **and** `wave`
+  together. Of its 81 members, 72 are one COVID panel study at about 2.6 waves
+  per person, and exactly one is experience sampling. Its own definition says as
+  much.
+- There is no temporal tag. The tag vocabulary covers age, sample, construct,
+  tool, format and language — nothing about design over time.
+
+Across 4,238 tables, 551 carry `wave` and 224 carry `date`, but only 81 carry
+both, so requiring both excludes most genuine ESM studies while admitting a large
+panel study.
+
+What works is **occasions per person** — responses per participant divided by
+item count — followed by reading each surviving table's processing script. That
+screen produced the pool used here.
+
+```{r}
+#| label: tbl-pool
+#| echo: true
+if (nrow(floor_summary) > 0) {
+  floor_summary |>
+    mutate(`occ/person` = round(n_responses / n_persons / n_items, 1)) |>
+    select(Table = table, Format = format, Persons = n_persons, Items = n_items,
+           `occ/person`, `Time index` = occasion_col) |>
+    arrange(desc(`occ/person`)) |>
+    kable(caption = "The curated ESM pool, ordered by occasions per person.")
+}
+```
+
+Confirming each table by script mattered: four candidates that pass any
+column-based screen fail on inspection. `narcissism_schneider_2025_study2_*`
+(18 tables) falls back to a survey disposition code as `id`, so `id` is not a
+person and the recorded participant count is 3.
+`moralvignettes_rakhmankulova_2025` has `id` as a video and `rater` as the
+person. `political_psychology` drops `wave` in processing. And about 21
+cognitive trial-level tasks have many measurements per person, but those are
+trials, not occasions.
+
+Two more were caught only after they had been profiled, which is worth
+recording because it shows what the screen alone cannot do.
+`emoji_scheffler_2024` (`id` is the emoji, `rater` the person) and `tears`
+(`id` is a video, `rater` the person) are stimulus-rating studies: many
+responses per `id`, no time dimension at all. They scored well on
+occasions-per-person precisely *because* many raters judged each stimulus. Both
+were dropped.
+
+### The floor is an item-level property
+
+The field reports floor rates for a composite — the mean of the items
+administered at each beep. Because items within one instrument sit at very
+different points on the scale, that average can drive the composite's floor mass
+to almost nothing while individual items remain heavily piled.
+
+It does, and by a lot. The gap is not uniform, though, and the pattern is
+informative: **compositing hides the floor precisely when the items disagree
+about where the floor is.** Where every item in an instrument is heavily floored,
+the composite stays floored and nothing is concealed. Where one item floors and
+its neighbours do not, the average washes it out entirely.
+
+```{r}
+#| label: fig-item-vs-composite
+#| echo: true
+if (nrow(floor_summary) > 0) {
+  p <- floor_summary |>
+    filter(!is.na(composite_floor)) |>
+    mutate(text = sprintf("%s\nitems: %.1f%%–%.1f%% at floor\ncomposite: %.3f%%",
+                          table, floor_min, floor_max, composite_floor)) |>
+    ggplot(aes(x = floor_max, y = composite_floor, colour = format, text = text)) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = irw_grey) +
+    geom_point(size = 2.6, alpha = .85) +
+    scale_colour_manual(values = c("Ordinal" = irw_amber,
+                                   "Slider / continuous" = irw_blue), name = NULL) +
+    labs(x = "Highest per-item floor mass in the table (%)",
+         y = "Floor mass of the composite (%)",
+         title = "Averaging items hides the floor",
+         subtitle = "Points below the dashed line: the composite understates its own worst item") +
+    theme(legend.position = "top")
+  ggplotly(p, tooltip = "text")
+}
+```
+
+```{r}
+#| label: hiding-readout
+#| echo: false
+#| output: asis
+if (nrow(floor_summary) > 0) {
+  fs <- floor_summary |> filter(!is.na(composite_floor))
+  n_half <- sum(fs$composite_floor < fs$floor_max / 2)
+  n_hid  <- sum(fs$composite_floor < 1 & fs$floor_max > 20)
+  worst  <- fs |> mutate(ratio = floor_max / pmax(composite_floor, .001)) |>
+    arrange(desc(ratio)) |> slice(1)
+  cat("In **", n_half, " of ", nrow(fs), "** tables the composite's floor mass is ",
+      "less than half that of the table's most-floored item. In **", n_hid,
+      "** of them the composite sits below 1% while an item is above 20%. ",
+      "The extreme case is `", worst$table, "`, where an item at ",
+      sprintf("%.1f%%", worst$floor_max), " floor becomes a composite at ",
+      sprintf("%.3f%%", worst$composite_floor), " — a factor of roughly ",
+      format(round(worst$ratio), big.mark = ","), ".\n\n", sep = "")
+}
+```
+
+```{r}
+#| label: tbl-hiding
+#| echo: true
+if (nrow(floor_summary) > 0) {
+  floor_summary |>
+    filter(!is.na(composite_floor)) |>
+    mutate(hiding = floor_max - composite_floor) |>
+    arrange(desc(hiding)) |>
+    transmute(Table = table, Format = format,
+              `Worst item (%)` = round(floor_max, 1),
+              `Median item (%)` = round(floor_median, 1),
+              `Composite (%)`   = round(composite_floor, 3),
+              `Hidden (pp)`     = round(hiding, 1)) |>
+    head(12) |>
+    kable(caption = "Where compositing conceals the most floor mass.")
+}
+```
+
+```{r}
+#| label: fig-heterogeneity
+#| echo: true
+if (nrow(floor_summary) > 0) {
+  p <- floor_summary |>
+    filter(!is.na(composite_floor)) |>
+    mutate(spread = floor_max - floor_min,
+           ratio  = floor_max / pmax(composite_floor, .001),
+           text = sprintf("%s\nitem floor spread: %.1f pp\nworst item %.1f%% -> composite %.3f%%",
+                          table, spread, floor_max, composite_floor)) |>
+    ggplot(aes(x = spread, y = ratio, colour = format, text = text)) +
+    geom_point(size = 2.6, alpha = .85) +
+    scale_y_log10() +
+    scale_colour_manual(values = c("Ordinal" = irw_amber,
+                                   "Slider / continuous" = irw_blue), name = NULL) +
+    labs(x = "Spread of per-item floor mass within the table (percentage points)",
+         y = "Worst item floor / composite floor (log scale)",
+         title = "Compositing hides the floor when items disagree about where it is",
+         subtitle = "Instruments whose items all floor together conceal nothing") +
+    theme(legend.position = "top")
+  ggplotly(p, tooltip = "text")
+}
+```
+
+`sondell_2018_dementia_motivation` is absent from the composite comparisons for
+a different and more interesting reason: it has a perfectly good `wave`, but
+across all 5,312 person-occasions **only ever one item is answered at a time**.
+Its two items were never co-administered, so there is no occasion at which a
+composite could be formed. It stays in the per-item figures.
+
+### The model comparison, and why it runs on this table
+
+`vollbracht_et_al_2026_ambulatory_assessment` [@vollbracht2026] randomised 406
+participants to complete the same ambulatory protocol with either a Likert or a
+slider response format, then measured them roughly 37 times each.
+
+One correction to how this was originally scoped: **the format is a
+between-person randomisation, not a within-person crossing.** Every one of the
+406 participants has exactly one `cov_group` value — 200 in the Likert arm, 206
+in the slider arm. That is weaker than a crossed design for isolating format, but
+it is still a randomised manipulation of response format holding the protocol,
+the items and the sampling schedule fixed, which is rare.
+
+The table also supplies a control that nobody designed. **The `stress` item was
+never sliderised** — it is a 1–5 item in both arms. So it functions as a
+within-study placebo: whatever changes for the items whose format actually
+changed, but not for `stress`, is attributable to format rather than to the
+people in each arm.
+
+```{r}
+#| label: tbl-format-floor
+#| echo: true
+if (nrow(item_detail) > 0) {
+  v <- item_detail |> filter(table == "vollbracht_et_al_2026_ambulatory_assessment")
+  if (nrow(v) > 0) {
+    v |> transmute(Item = item, `Scale low` = lo, `Scale high` = hi,
+                   Categories = n_cat, `At floor (%)` = round(floor_pct, 1),
+                   `At ceiling (%)` = round(ceil_pct, 1)) |>
+      arrange(desc(`At floor (%)`)) |>
+      kable(caption = "Per-item floor mass in vollbracht, pooled across arms.")
+  }
+}
+```
+
+Every model uses the same mean structure and differs only in the response
+distribution. Carryover is written the way DSEM actually formulates it — each
+occasion regressed on the previous one,
+$y_{it} = \mu_i + \phi(y_{i,t-1} - \mu_i) + e_{it}$ — rather than as a
+residual autocorrelation structure. That choice was forced by the data and is
+described in Limitations, but it is also the more faithful one, and it makes
+$\phi$ an ordinary regression coefficient that means the same thing in all four
+families.
+
+Each model then adds a person-level dispersion random effect correlated with the
+person intercept, because the mean-level-to-innovation-variance correlation is
+the parameter the preprint reports as biased.
+
+```{r}
+#| label: model-spec
+#| eval: false
+#| echo: true
+# lag_c is the previous occasion's response, centred on the person's own mean.
+# Shared across families; only the response distribution changes.
+brms::bf(resp_z ~ 1 + lag_c + (1 | p | id),
+         sigma ~ 1 + (1 | p | id))                      # gaussian, and censored
+brms::bf(resp_z | cens(cens_ind) ~ ..., sigma ~ ...)    # floor = left-censored
+brms::bf(resp01   ~ ..., phi  ~ ...)                    # zero-one-inflated beta
+brms::bf(resp_ord ~ ..., disc ~ ...)                    # cumulative (graded)
+```
+
+Which families are even *admissible* depends on the format, and that is part of
+the finding rather than an inconvenience. A zero-one-inflated beta cannot be
+fitted to a five-category item; a graded model is impractical on a 101-point
+slider. So "apply the censoring fix to both formats" — the field's current
+habit — is not a choice between equally available options. For much of this data
+the alternatives are ruled out before anyone compares fit.
+
+## Results
+
+### How much floor mass is actually out there
+
+```{r}
+#| label: fig-floor-spread
+#| echo: true
+if (nrow(item_detail) > 0) {
+  ord <- floor_summary |> arrange(floor_max) |> pull(table)
+  p <- item_detail |>
+    left_join(select(floor_summary, table, format), by = "table") |>
+    mutate(table = factor(table, levels = ord),
+           text = sprintf("%s\nitem %s: %.1f%% at floor\nscale %g–%g (%d categories)",
+                          table, item, floor_pct, lo, hi, n_cat)) |>
+    ggplot(aes(x = floor_pct, y = table, colour = format, text = text)) +
+    geom_point(alpha = .7, size = 1.9) +
+    scale_colour_manual(values = c("Ordinal" = irw_amber,
+                                   "Slider / continuous" = irw_blue), name = NULL) +
+    labs(x = "Responses at the item's observed minimum (%)", y = NULL,
+         title = "Per-item floor mass within each ESM table") +
+    theme(legend.position = "top", axis.text.y = element_text(size = 8))
+  ggplotly(p, tooltip = "text")
+}
+```
+
+Two things to read off this, one of them not what we expected.
+
+Floor mass varies enormously *within* a single instrument, so a table-level
+summary is close to meaningless — which is the case for treating the floor as an
+item property throughout.
+
+The second is that **the two response formats carry about the same amount of
+it.** Going continuous does not empty the bottom of the scale in practice; a
+slider simply relocates where people pile up. That undercuts a tempting
+shortcut — "use a VAS and the problem goes away" — and it is why the model
+comparison below has to be run in both formats rather than only in the ordinal
+one.
+
+### Does the model you choose change the answer?
+
+```{r}
+#| label: tbl-stage-b
+#| echo: true
+if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
+  # Deliberately NOT filtered on a non-missing estimate: a fit that timed out has
+  # no estimates, and dropping it would erase the outcome the status column
+  # exists to report.
+  stage_b |>
+    transmute(Item = item, Arm = arm, Model = family,
+              `Floor (%)` = round(floor_pct, 1),
+              Carryover = ifelse(is.na(phi_ar1), "—",
+                            sprintf("%.3f [%.3f, %.3f]", phi_ar1, phi_ar1_lo, phi_ar1_hi)),
+              `cor(mean, disp)` = ifelse(is.na(cor_mean_disp), "—",
+                                    sprintf("%.3f", cor_mean_disp)),
+              Rhat = ifelse(is.na(rhat_ar), "—", sprintf("%.3f", rhat_ar)),
+              ESS  = ifelse(is.na(ess_ar),  "—", sprintf("%.0f", ess_ar)),
+              `Div.` = ifelse(is.na(n_divergent), "—", sprintf("%.0f", n_divergent)),
+              `Min` = round(mins),
+              Sampler = status) |>
+    arrange(Item, Arm, Model) |>
+    kable(caption = "Same data, competing theories of the floor. The carryover coefficient is comparable across families; the correlation is not strictly so — see Limitations. Rows marked no in the OK column failed the mixing screen and are not estimates.")
+}
+```
+
+```{r}
+#| label: fig-ar1
+#| echo: true
+if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
+  d <- stage_b |> filter(!is.na(phi_ar1), converged)
+  if (nrow(d) > 0) {
+    ggplot(d, aes(x = family, y = phi_ar1, colour = arm)) +
+      geom_pointrange(aes(ymin = phi_ar1_lo, ymax = phi_ar1_hi),
+                      position = position_dodge(width = .4)) +
+      facet_wrap(~ item) +
+      scale_colour_manual(values = c("Likert" = irw_amber, "Slider" = irw_blue),
+                          name = NULL) +
+      labs(x = NULL, y = "AR(1) coefficient (95% CrI)",
+           title = "Carryover estimated under each theory of the floor",
+           subtitle = "stress kept the same 1–5 format in both arms; att1 did not") +
+      theme(legend.position = "top",
+            axis.text.x = element_text(angle = 20, hjust = 1))
+  }
+}
+```
+
+```{r}
+#| label: stage-b-readout
+#| echo: false
+#| output: asis
+if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
+  n_bad <- sum(!stage_b$converged, na.rm = TRUE)
+  n_div <- sum(stage_b$n_divergent > 0, na.rm = TRUE)
+  if (n_bad > 0) {
+    nomix <- stage_b |> filter(status == "did not mix") |>
+      mutate(lab = sprintf("%s / %s / %s (Rhat %.2f, ESS %.0f)",
+                           item, arm, family, rhat_ar, ess_ar)) |> pull(lab)
+    under <- stage_b |> filter(status == "under-sampled") |>
+      mutate(lab = sprintf("%s / %s / %s (Rhat %.3f, ESS %.0f)",
+                           item, arm, family, rhat_ar, ess_ar)) |> pull(lab)
+    if (length(nomix) > 0) {
+      cat("::: {.callout-warning}\n## ", length(nomix), " fit(s) did not mix\n\n",
+          "The chains disagree (Rhat above 1.01): ", paste(nomix, collapse = "; "),
+          ". These are excluded from the figure, so read a gap there as 'would ",
+          "not estimate' rather than 'was not tried'. Failure to converge is not ",
+          "proof that a model is wrong — but a model that will not estimate on ",
+          "the data it is recommended for is a practical result in its own ",
+          "right.\n:::\n\n", sep = "")
+    }
+    if (length(under) > 0) {
+      cat("::: {.callout-note}\n## ", length(under), " fit(s) mixed but were ",
+          "under-sampled\n\n", paste(under, collapse = "; "),
+          ". These are a different situation from the ones above: the chains ",
+          "agree, there are simply too few effective draws at draft settings. ",
+          "More iterations would fix them, and they are excluded from the figure ",
+          "only out of caution, not because the model failed.\n:::\n\n", sep = "")
+    }
+  }
+  if (n_div > 0) {
+    cat("::: {.callout-note}\n## ", n_div, " fit(s) had divergent transitions\n\n",
+        "Divergences are reported separately from mixing because they mean ",
+        "something different: the sampler failed to explore part of the posterior ",
+        "even where Rhat and effective sample size look healthy, so the estimate ",
+        "may be biased rather than merely imprecise. These fits are kept in the ",
+        "figure — discarding them would bias the comparison toward the families ",
+        "that happen to sample easily — but the `Div.` column is the honest ",
+        "caveat on any number in their rows.\n:::\n\n", sep = "")
+  }
+  d <- stage_b |> filter(!is.na(phi_ar1), converged)
+  if (nrow(d) > 0) {
+    sp <- d |> group_by(item, arm) |>
+      summarise(spread = diff(range(phi_ar1)),
+                cor_lo = min(cor_mean_disp, na.rm = TRUE),
+                cor_hi = max(cor_mean_disp, na.rm = TRUE),
+                flips  = min(cor_mean_disp, na.rm = TRUE) < 0 &
+                         max(cor_mean_disp, na.rm = TRUE) > 0,
+                n_fam  = n(), .groups = "drop") |>
+      arrange(desc(spread))
+
+    cat("Across the fits that converged, the carryover coefficient moves by up to **",
+        sprintf("%.3f", max(sp$spread)), "** between model families on the same ",
+        "data (", sp$item[1], ", ", sp$arm[1], " arm). The carryover parameter is ",
+        "not invariant to a modelling choice the field usually makes by ",
+        "convention.\n\n", sep = "")
+
+    fl <- sp |> filter(flips, n_fam >= 2)
+    if (nrow(fl) > 0) {
+      cat("More consequentially, **the correlation between a person's mean level ",
+          "and their innovation variance changes sign** depending on which theory ",
+          "of the floor is adopted", sep = "")
+      cat(" — in ", paste(sprintf("%s (%s arm), %.3f to %.3f",
+            fl$item, fl$arm, fl$cor_lo, fl$cor_hi), collapse = "; "), ". ", sep = "")
+      cat("That is the parameter the preprint reports as biased when the floor is ",
+          "ignored. These estimates come from converged fits on identical data, ",
+          "differing only in what the model assumes a floor to be. A reader who ",
+          "picks one family and reports the correlation would conclude that people ",
+          "with higher average levels are *more* variable, or *less*, depending on ",
+          "that choice alone.\n\n", sep = "")
+    }
+  }
+}
+```
+
+```{r}
+#| label: stage-b-missing
+#| echo: false
+#| output: asis
+if (nrow(stage_b) == 0 || !"phi_ar1" %in% names(stage_b)) {
+  cat("::: {.callout-note}\n## Model comparison not yet in the cache\n\n",
+      "Stage A (the floor profiles above) is complete, but the Stage B model ",
+      "fits are absent from this cache — either the run is still in progress or ",
+      "`STAGE_B` was set to `FALSE`. The descriptive result stands on its own; ",
+      "the comparison below fills in once the fits land.\n:::\n", sep = "")
+}
+```
+
+### Can the censored model even be fitted?
+
+The sharpest result here is not an estimate but an outcome. `att1` was
+administered as a five-point item to one randomised arm and as a slider to the
+other, with the same protocol and schedule. The censored model — the remedy the
+preprint recommends — was fitted to both.
+
+```{r}
+#| label: tbl-estimability
+#| echo: true
+if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
+  ce <- stage_b |> filter(family == "censored") |>
+    transmute(Item = item, Arm = arm, `Categories` = n_cat,
+              `At floor (%)` = round(floor_pct, 1),
+              Rhat = round(rhat_ar, 3), ESS = round(ess_ar),
+              `Minutes` = round(mins, 1),
+              Estimable = ifelse(converged, "yes", "**no**"))
+  if (nrow(ce) > 0) kable(ce, caption = "The censored model, by response format.")
+}
+```
+
+```{r}
+#| label: estimability-readout
+#| echo: false
+#| output: asis
+if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
+  ce <- stage_b |> filter(family == "censored", !is.na(n_cat))
+  ord <- ce |> filter(n_cat <= 10); con <- ce |> filter(n_cat > 10)
+  if (nrow(ord) > 0 || nrow(con) > 0) {
+    cat("Of the censored fits attempted so far, **", sum(con$status == "ok"), " of ",
+        nrow(con), "** on a near-continuous response converged, and **",
+        sum(ord$status == "ok"), " of ", nrow(ord),
+        "** on a five-point response did", sep = "")
+    if (any(ord$status == "timed out")) {
+      cat(" (", sum(ord$status == "timed out"), " of the ordinal attempts did not ",
+          "finish inside a 45-minute budget rather than failing to mix — a ",
+          "different outcome, reported separately because a fit that ran out of ",
+          "time has not been shown to be unfittable)", sep = "")
+    }
+    cat(".\n\n", sep = "")
+    if (nrow(ord) > 0) {
+      nm <- ord |> filter(status == "did not mix")
+      if (nrow(nm) > 0) {
+        cat("The ordinal failures are not marginal: ",
+            paste(sprintf("%s/%s reached Rhat %.2f with bulk ESS %.0f after %.0f minutes",
+                          nm$item, nm$arm, nm$rhat_ar, nm$ess_ar, nm$mins),
+                  collapse = "; "), ".\n\n", sep = "")
+      }
+    }
+    # The single most informative row: an ordinal item answered by participants
+    # who were randomised INTO the slider arm. If censoring failed only in the
+    # Likert arm, the arm's participants would be a rival explanation. It does
+    # not, so they are not.
+    cross <- ord |> filter(arm == "Slider")
+    if (nrow(cross) > 0) {
+      cat("One row separates response format from the people in each arm. **",
+          cross$item[1], " kept its five-point format in the slider arm** — it was ",
+          "never converted — so those participants were randomised into the ",
+          "slider condition while still answering an ordinal item. The censored ",
+          "model fails there too (Rhat ", sprintf("%.2f", cross$rhat_ar[1]),
+          ", bulk ESS ", round(cross$ess_ar[1]), "), exactly as it does in the ",
+          "Likert arm. Had it failed only among Likert-arm participants, those ",
+          "participants would have been a rival explanation. They are not: it is ",
+          "the item's response format that decides, not the arm.\n\n", sep = "")
+    }
+    # A censored failure only implicates censoring if some other family managed
+    # the same data. Where nothing converges, the cell says nothing about
+    # censoring in particular -- and one cell here is exactly that.
+    clean <- stage_b |> group_by(item, arm) |>
+      summarise(others_ok = any(status == "ok" & family != "censored"),
+                cens_bad  = any(family == "censored" & status != "ok"),
+                n_cat = first(n_cat), floor_pct = first(floor_pct),
+                .groups = "drop") |>
+      filter(n_cat <= 10)
+    if (nrow(clean) > 0) {
+      informative <- clean |> filter(others_ok)
+      dead        <- clean |> filter(!others_ok)
+      cat("That count needs one qualification before it can be read as being ",
+          "about censoring. A censored failure only implicates censoring if some ",
+          "other family managed the same rows. In **",
+          sum(informative$cens_bad), " of ", nrow(informative),
+          "** ordinal cells where another family did converge, the censored model ",
+          "did not — so there the failure is specific to it.", sep = "")
+      if (nrow(dead) > 0) {
+        cat(" But in ", nrow(dead), " ordinal cell", if (nrow(dead) > 1) "s" else "",
+            " (", paste(sprintf("%s/%s, %.0f%% at floor", dead$item, dead$arm,
+                                dead$floor_pct), collapse = "; "),
+            ") **no model converged at all** — not the censored one, not the ",
+            "graded one, not even the naive Gaussian, which exhausted its time ",
+            "budget. That cell is evidence that a severe floor is hard for ",
+            "everything, and it is not evidence about censoring in particular. ",
+            "Counting it toward the censored tally would overstate the case.",
+            sep = "")
+      }
+      cat("\n\n", sep = "")
+    }
+    cat("This is what the censoring assumption predicts about itself. A censored ",
+        "model says the observed floor conceals a continuum extending below it. ",
+        "On a slider that is a coherent claim. On a five-point item there is ",
+        "nothing below category one, and the likelihood must place mass in a ",
+        "region the response format does not have — so the sampler cannot ",
+        "settle. Randomisation is what makes this readable: participants did not ",
+        "choose their response format.\n\n", sep = "")
+    if (nrow(con) > 0 && any(con$status == "ok") && nrow(ord) > 0)
+    cat("Note that floor mass does not explain the split. The ordinal items ",
+        "carry ", sprintf("%.1f%%", min(ord$floor_pct)), " and ",
+        sprintf("%.1f%%", max(ord$floor_pct)), " of responses at the floor and ",
+        "both fail; the continuous item carries ",
+        sprintf("%.1f%%", con$floor_pct[1]), " and converges in ",
+        round(con$mins[1]), " minutes. It is the number of categories beneath ",
+        "the floor, not the amount of mass sitting on it, that decides whether ",
+        "the model can be estimated at all.\n\n", sep = "")
+  }
+}
+```
+
+### What is robust, and what is not
+
+```{r}
+#| label: robustness-readout
+#| echo: false
+#| output: asis
+if (nrow(stage_b) > 0) {
+  d <- stage_b |> filter(converged, !is.na(cor_mean_disp))
+  if (nrow(d) > 1) {
+    byc <- d |> group_by(item, arm) |>
+      summarise(phi_spread = diff(range(phi_ar1)),
+                cor_spread = diff(range(cor_mean_disp)),
+                flips = min(cor_mean_disp) < 0 & max(cor_mean_disp) > 0,
+                .groups = "drop") |> filter(!is.na(cor_spread))
+    if (nrow(byc) > 0) {
+      cat("Within a cell, the carryover coefficient moves across families by ",
+          sprintf("%.3f", min(byc$phi_spread)), " to ",
+          sprintf("%.3f", max(byc$phi_spread)),
+          ", while the mean-dispersion correlation moves by ",
+          sprintf("%.3f", min(byc$cor_spread)), " to ",
+          sprintf("%.3f", max(byc$cor_spread)), ". ", sep = "")
+      if (any(byc$flips)) {
+        cat("The correlation changes **sign** in ", sum(byc$flips), " of ",
+            nrow(byc), " cells. ", sep = "")
+      }
+      cat("The asymmetry is the point: carryover survives a change in what you ",
+          "assume the floor to be, and the parameter the preprint is concerned ",
+          "with does not.\n\n", sep = "")
+    }
+  }
+}
+```
+
+### Where all three are estimable, censoring is the outlier
+
+```{r}
+#| label: tbl-full-cells
+#| echo: true
+if (nrow(stage_b) > 0) {
+  full <- stage_b |> filter(converged) |> group_by(item, arm) |>
+    filter(n() >= 3) |> ungroup()
+  if (nrow(full) > 0) {
+    full |> transmute(Item = item, Arm = arm, Model = family,
+                      `At floor (%)` = round(floor_pct, 1),
+                      Carryover = round(phi_ar1, 3),
+                      `cor(mean, disp)` = round(cor_mean_disp, 3)) |>
+      arrange(Item, Arm, Model) |>
+      kable(caption = "Cells where every admissible family converged.")
+  }
+}
+```
+
+```{r}
+#| label: outlier-readout
+#| echo: false
+#| output: asis
+if (nrow(stage_b) > 0) {
+  full <- stage_b |> filter(converged, !is.na(cor_mean_disp)) |>
+    group_by(item, arm) |> filter(n() >= 3) |> ungroup()
+  if (nrow(full) > 0) {
+    o <- full |> group_by(item, arm) |>
+      mutate(dist = abs(cor_mean_disp - median(cor_mean_disp))) |>
+      slice_max(dist, n = 1) |> ungroup()
+    cat("In every cell where all three admissible families converge, the model ",
+        "furthest from the others on the mean-dispersion correlation is **",
+        paste(unique(o$family), collapse = ", "), "**. ", sep = "")
+    cat("That matters for how the preprint's recommendation reads. Comparing only ",
+        "a naive Gaussian against a censored model, the censored estimate looks ",
+        "like a correction — it is the one that moved. With a third, independently ",
+        "motivated treatment of the boundary in the comparison, the naive and ",
+        "inflated-beta estimates sit close together and the censored one sits ",
+        "apart. Being the estimate that moves is not the same as being the ",
+        "estimate that is right, and two models are not enough to tell those ",
+        "apart.\n\n", sep = "")
+    cat("This section exists because reviewers of the scoping brief argued that an ",
+        "appropriate link should be compared against censoring rather than assumed ",
+        "away. With only the two models the page originally proposed, the ",
+        "distinction above could not have been seen.\n\n", sep = "")
+  }
+}
+```
+
+## Limitations
+
+**There is no predictive-fit comparison here, and that is deliberate.** Two
+independent problems rule it out. First, the families are not fitted to the same
+response representation: Gaussian and censored models use a standardised
+continuous response, the cumulative model an ordinal probability mass function,
+the inflated beta a density on the unit interval. Log-densities across those are
+not on a common scale, so a "best fit" ranking would be meaningless whatever the
+numbers said.
+
+Second, and decisively, PSIS-LOO breaks down on these models. The censored fit
+reported **1,516 of 1,692 observations with a Pareto k above 0.7** — the
+importance-sampling approximation has failed for almost every observation, which
+is what one should expect when each observation carries its own person-level
+location and scale parameters. An elpd column was computed and then removed from
+this page rather than shown with a caveat, because a number that cannot be
+trusted is not improved by a footnote. The comparison below therefore rests on
+the parameter estimates, not on out-of-sample fit.
+
+**The dispersion parameter is not the same object across families.** The Gaussian
+and censored models have a residual standard deviation; the inflated beta has a
+precision, and the cumulative model a discrimination. Their person-level
+correlations with the intercept play analogous roles but are not numerically the
+same quantity, so the `cor(mean, dispersion)` column should be read for sign and
+rough magnitude, not compared digit for digit. The AR(1) coefficient *is*
+comparable across all four, which is why it carries the headline. This is a real
+obstacle to the preprint's framing, not just to ours: the parameter it reports as
+biased is defined inside a Gaussian latent-variable metric, and the alternatives a
+reader might reach for do not all have one.
+
+**The format contrast is between persons.** Randomisation makes it a fair
+comparison, but it is not the within-person crossing that would let us hold the
+participant fixed. The `stress` item mitigates this — same format in both arms,
+so arm differences on it are attributable to sample rather than format — but one
+control item is not a full design.
+
+**These are bipolar scales.** Both the Likert (−2…5) and slider (−50…100) items
+run from a negative to a positive pole, so the "floor" is an extreme negative
+response, not the absence of a symptom. The preprint's motivating case —
+depression and anxiety ESM, where the floor means "no symptoms today" and is very
+common — is the unipolar situation. The ordinal tables in the pool above include
+that case; vollbracht does not. Results here should not be read as settling what
+happens on a unipolar symptom scale.
+
+**Response direction is not harmonised in IRW.** "Floor" throughout means the
+observed minimum of that item. For a reverse-keyed item that is the substantive
+ceiling. This is reported as found rather than silently corrected, because
+recovering the intended keying reliably is its own problem.
+
+**Carryover is a lagged predictor, not a residual AR process.** The first
+version of this page used brms's `ar()` term. It builds a per-group residual
+autocorrelation matrix, and combined with the person-varying `sigma` that the
+preprint's target parameter requires, it was both badly identified and
+extremely slow — Rhat 1.41, bulk effective sample size 5, and 147 minutes for a
+single fit. The lagged-predictor form above is what DSEM actually specifies, is
+far cheaper, and yields a carryover coefficient comparable across response
+families in a way an `ar[1]` parameter is not. One consequence to keep in mind:
+$\phi$ here is a population-level coefficient. DSEM typically lets it vary by
+person, and that random slope is not fitted here.
+
+**Divergent transitions are reported, not screened away.** Some fits sample
+cleanly and some produce divergences even at `adapt_delta = 0.99`. A divergence
+is not the same failure as poor mixing: it says the sampler could not explore
+part of the posterior, so an estimate can be biased while still looking precise.
+Dropping the affected fits would have quietly biased the comparison toward the
+families that happen to sample easily — precisely the families the page is
+trying to compare — so they are kept and the count is printed alongside every
+estimate.
+
+**The target parameter is hard to estimate at ESM sample sizes.** The first
+draft run of this page produced Rhat 1.8, a bulk effective sample size of 3, and
+416 divergent transitions on a fit that nonetheless reported a tight-looking
+interval. The location-scale structure the preprint's parameter requires — each
+person's mean correlated with their own residual variability — is only weakly
+identified with tens of people and tens of occasions, and flat priors leave the
+sampler nowhere to stand. The fits here use weakly informative priors, a
+standardised response, and `adapt_delta = 0.99`. Convergence is reported per
+fit rather than assumed, and non-converging fits are excluded from the figure.
+This is a practical caveat on the preprint's recommendation as much as on this
+page: a model can be the right one and still be beyond what the data will
+support.
+
+## Reproducibility
+
+```{r}
+#| label: repro
+#| echo: false
+#| output: asis
+if (cache_ok) {
+  cat("Computed on **", format(date_run), "**, profiling ", r_n_tables_run,
+      " of ", r_all_candidates, " candidate tables.\n\n", sep = "")
+}
+```
+
+Run `Rscript vignettes/esm_floor_compute.R` from the repository root, with
+`REDIVIS_API_TOKEN` set to a read-scoped token. The script caches every table
+profile and every model fit separately under `esm_floor_data/fits/`, so an
+interrupted run resumes rather than restarting.
+
+{{< include ../components/_data-version.qmd >}}
+
+{{< include ../components/_source-links.qmd >}}
+
+## References
+
+::: {#refs}
+:::
