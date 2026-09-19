@@ -133,12 +133,16 @@ if (cache_ok) {
 #                            1/m looks like at these N, J and latent spreads.
 # guessing_m_check.R -- whether m = 5 holds for the ENEM tables, from the
 #                            letters candidates marked and the 2023 item text.
+# guessing_imv_benchmark.R -- the same pipeline on ordinary IRW cognitive
+#                            tables, and the 3PL's sensitivity to its g prior.
 sim_path    <- "guessingdata/guessing_sim_results.rds"
 gsweep_path <- "guessingdata/guessing_gsweep_results.rds"
 keydiag_path <- "guessingdata/guessing_key_diagnostics.rds"
 floorcal_path <- "guessingdata/guessing_floor_calibration.rds"
 mcheck_path <- "guessingdata/guessing_m_check.rds"
 mcheck_ok <- file.exists(mcheck_path)
+bench_path <- "guessingdata/guessing_imv_benchmark.rds"
+bench_ok <- file.exists(bench_path)
 sim_ok    <- file.exists(sim_path)
 gsweep_ok <- file.exists(gsweep_path)
 keydiag_ok <- file.exists(keydiag_path)
@@ -157,6 +161,9 @@ if (floorcal_ok) {
 }
 if (mcheck_ok) {
   .mc <- readRDS(mcheck_path)
+}
+if (bench_ok) {
+  .bm <- readRDS(bench_path)
 }
 ```
 
@@ -1072,6 +1079,41 @@ if (cache_ok && nrow(summary_df) > 0 && nrow(imv_vs_rasch_df) > 0) {
                   ", where the Mixture is positive" else "")))
   }
 
+  if (bench_ok && any(!is.na(w$imv23))) {
+    bm <- .bm$bench; pc <- .bm$prior_check; pp <- .bm$paper
+    b23 <- pc |> filter(g_prior == "Beta(2,17)")
+    none <- pc |> filter(g_prior == "none")
+    cat(sprintf(
+      paste0("- **How large these numbers are.** Across 89 IRW datasets ",
+             "@domingue2024imvirt report a mean IMV(1PL, 2PL) of %.3f and a ",
+             "mean IMV(2PL, 3PL) of %.5f (largest %.4f). Here IMV(Rasch, 2PL) ",
+             "has a median of %.3f, high but inside their range: the ",
+             "discrimination of these items varies a lot. IMV(2PL, 3PL) has a ",
+             "median of %.4f, and %d of the %d tables exceed their largest ",
+             "value. That is the tables, not the pipeline. Run unchanged on %d ",
+             "ordinary IRW cognitive tables (`guessing_imv_benchmark.R`), it ",
+             "gives a median IMV(Rasch, 2PL) of %.4f and IMV(2PL, 3PL) of ",
+             "%.5f: inside the published range, and about %s of this page's ",
+             "median. Nor is it the prior on ",
+             "the floor: with no prior on $g$ at all, IMV(2PL, 3PL) on %s is ",
+             "%s; with the paper's Beta(2, 17), which pulls $g$ toward %.2f, ",
+             "it is %s, smaller but still well above their mean. These tables ",
+             "were chosen as multiple-choice tests with a known chance level, ",
+             "and on them a floor has something to do.\n"),
+      pp$imv_1pl_2pl_mean, pp$imv_2pl_3pl_mean, pp$imv_2pl_3pl_max,
+      median(w$`2PL`, na.rm = TRUE), median(w$imv23, na.rm = TRUE),
+      sum(w$imv23 > pp$imv_2pl_3pl_max, na.rm = TRUE), sum(!is.na(w$imv23)),
+      nrow(bm), median(bm$imv_rasch_2pl), median(bm$imv_2pl_3pl),
+      {
+        r <- median(bm$imv_2pl_3pl) / median(w$imv23, na.rm = TRUE)
+        if (r <= 0) "none" else sprintf("1/%.0f", 1 / r)
+      },
+      paste0("`", none$table, "`", collapse = ", "),
+      paste(sprintf("%.4f", none$imv_2pl_3pl), collapse = ", "),
+      median(b23$g_median),
+      paste(sprintf("%.4f", b23$imv_2pl_3pl), collapse = ", ")))
+  }
+
   cat(sprintf(
     paste0("- **This is a single 80/20 split, not the repeated-split design ",
            "the Safety Valve paper uses in its own empirical section** (see ",
@@ -1687,16 +1729,21 @@ source("vignettes/guessing_floor_calibration_compute.R")
 #    the ENEM 2023 item text (server-side counts; needs REDIVIS_API_TOKEN)
 source("vignettes/guessing_m_check.R")
 
-# 7. Re-render this page
+# 7. The same pipeline on ordinary IRW cognitive tables, and the 3PL's
+#    sensitivity to its prior on g (needs REDIVIS_API_TOKEN)
+source("vignettes/guessing_imv_benchmark.R")
+
+# 8. Re-render this page
 quarto::quarto_render("vignettes/guessing.qmd")
 ```
 
-Steps 2-6 write their own caches
+Steps 2-7 write their own caches
 (`guessingdata/guessing_sim_results.rds`,
 `guessingdata/guessing_gsweep_results.rds`,
 `guessingdata/guessing_key_diagnostics.rds`,
 `guessingdata/guessing_floor_calibration.rds`,
-`guessingdata/guessing_m_check.rds`); the page renders without
+`guessingdata/guessing_m_check.rds`,
+`guessingdata/guessing_imv_benchmark.rds`); the page renders without
 them, with those sections showing a placeholder instead. The estimators themselves,
 and the checks behind the variance and gradient claims in Data and methods,
 are in `vignettes/guessing_helpers.R` and
