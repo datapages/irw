@@ -4,36 +4,30 @@ title: "Data"
 
 {{< include components/_dataset_jsonld.qmd >}}
 
-```{r}
-#| label: pilot-table-pages
-#| echo: false
-#| message: false
-# Which tables have a landing page under /tables/ (ben-domingue/irw#1706).
-# Read from the emitter's own list so the two cannot drift: when the pilot grows,
-# this grows with it, and neither the prose count below nor the OJS link logic
-# needs touching. The emitter runs post-render and cannot tell this chunk
-# anything, so the shared file is the contract.
-pilot_tables_chr <- local({
-  f <- file.path("landing", "pilot_tables.txt")
-  if (!file.exists(f)) return(character(0))
-  ln <- trimws(sub("#.*$", "", readLines(f, warn = FALSE)))
-  sort(unique(tolower(ln[nzchar(ln)])))
-})
-n_pilot <- length(pilot_tables_chr)
-ojs_define(pilot_tables = pilot_tables_chr)
-```
-
 This page has two tools, and individual tables have their own pages:
 
 - [**Explore all datasets**](#explore-all-datasets) — filter and browse across all IRW datasets by size, response type, and other properties. As you filter, this tool builds a ready-to-run R code snippet that reproduces your selection with the `irw` package.
 - [**Look up a single dataset**](#look-up-a-single-dataset) — search for one dataset by name and generate its citation (reference and BibTeX) for use in your own work.
-- [**Browse table pages**](/tables/) — every table has its own page, giving a description of what it measures and where it came from, its size and shape (responses, respondents, items and response categories), the tags that classify it, item text statistics where they exist, the columns it contains, and ready-to-run R and Python code to fetch it. Each page names the IRW version it describes, so it can be cited. **This is a pilot: only `r n_pilot` tables have a page so far**, chosen to test the page generator against awkward cases rather than because they are the most useful tables. Use *Explore all datasets* above to search the whole warehouse.
+- [**Browse table pages**](/tables/) — every table with a recorded licence has its own page, giving a description of what it measures and where it came from, its size and shape (responses, respondents, items and response categories), the tags that classify it, item text statistics where they exist, the columns it contains, and ready-to-run R and Python code to fetch it. Each page names the IRW version it describes, so it can be cited.
 
 ---
 
 ## Explore all datasets
 
 {{< include _load-data-explore.qmd >}}
+
+```{r}
+#| label: table-pages
+#| echo: false
+#| message: false
+# Which tables have a landing page under /tables/ (ben-domingue/irw#1706). The
+# emitter runs post-render and cannot tell this page anything, so both read the
+# same rule from landing/page_rules.R: a table gets a page unless it has no
+# recorded licence (held, see irw#2266). Withdrawn tables have a tombstone, not a
+# page, and are not linked from here.
+source(file.path("landing", "page_rules.R"))
+ojs_define(page_tables = tolower(page_tables(metadata_table, biblio)))
+```
 
 {{< include components/_interval.qmd >}}
 {{< include components/_hist.qmd >}}
@@ -428,9 +422,9 @@ viewof row = Inputs.table(dsf, {
 // Tables that have a landing page. ojs_define collapses a length-1 list to a
 // bare string and gives an empty vector as undefined, so both are normalised.
 has_page = new Set(
-  (typeof pilot_tables === "undefined" || pilot_tables === null
+  (typeof page_tables === "undefined" || page_tables === null
      ? []
-     : (Array.isArray(pilot_tables) ? pilot_tables : [pilot_tables])
+     : (Array.isArray(page_tables) ? page_tables : [page_tables])
   ).map(s => String(s).toLowerCase())
 )
 
