@@ -1,27 +1,57 @@
 ---
 title: "The IRW Data Standard"
+subtitle: "Version 1.0 · 2026-09-19"
 ---
 
 Data standards are an essential mechanism of increasing reusability and interoperability of data amongst researchers. As such, they play a critical role in increasing the extent to which science is [FAIR](https://www.nature.com/articles/sdata201618) (findable, accessible, interoperable, reusable). The IRW data standard is meant to be a straightforward way of standardizing item response data such that it can be readily used by interested researchers in a wide variety of psychometric analyses.
 
+You can use the standard without depositing anything with the IRW. To check a file against it, drop it on the [browser validator](validate.qmd) (your file stays on your computer), or run `pip install irw-validate` and then `irw-validate mydata.csv`. Both report every problem against the numbered clauses below.
 
-## Key Elements
+**Cite as:** Item Response Warehouse (2026). *The IRW Data Standard*, version 1.0. <https://itemresponsewarehouse.org/standard.html>
 
-The following three features are essential components of an IRW dataset (with some small exceptions to be explained below). Note that the typesetting of the data elements is consistent with that of the IRW.
+## How to read this page
 
-- `id` This is a persistent identifier for the focal unit, i.e., *the thing being measured*. This will typically be a person but in some cases may be, for example, a word (when interest is in establishing some property of the word).
+The standard is a set of numbered clauses. **MUST** marks a requirement: a file that breaks one does not conform. **SHOULD** marks a strong expectation that a validator will warn about but that does not by itself make a file nonconforming. The clause numbers are stable; the validator names them in its reports (`[C4]`), and a later version will add clauses rather than renumber them.
 
-- `item` This is a persistent identifier for *the probe being used to measure*. There are some cases wherein a unique item identifier cannot be identified; for more information on these cases see the discussion of trials below. Note that the identifier should be kept in a form that makes subsequent matching to item text as straightforward as possible (e.g., identifiers that make it challenging to match back to original items, when available, should be avoided).
+The standard defines the *format* of a response table. What the IRW itself chooses to host (licences, a minimum sample size, table names) is a separate matter, described under [IRW intake policy](#intake) at the end.
 
-- `resp` These are the item responses. It is coded as a numeric value that can be directly utilized in various psychometric models. Given its centrality, we make a few additional points:
+## C1. Long format, with three required columns {#c1}
 
-  + Response values that were imputed in the original data have been removed.
+A file MUST be in long format, one row per response, and MUST contain the columns `id`, `item` and `resp`, described in C2–C4.
 
-  + Within an item, values are meant to be consistently coded so that higher numbers indicate a consistently meaningful change in a response (i.e., higher numbers indicate stronger agreement). However, values may load on the latent variable in opposite ways across items (i.e., higher numbers may indicate strong agreement for some items and weaker agreement for others).
+## C2. `id` {#c2}
 
-  + While responses are most commonly discrete ordinal values (e.g., 1–5 Likert), bounded continuous responses are also permitted. Examples include visual-analogue or slider scales (e.g., 0–100 "does not describe me at all" to "describes me perfectly"). In such cases `resp` is stored as a float rather than an integer.
+`id` is a persistent identifier for the focal unit, i.e., *the thing being measured*. This will typically be a person but in some cases may be, for example, a word (when interest is in establishing some property of the word). `id` MUST NOT be entirely missing, and SHOULD have no missing values.
 
-## Other elements
+## C3. `item` {#c3}
+
+`item` is a persistent identifier for *the probe being used to measure*. There are some cases wherein a unique item identifier cannot be identified; for more information on these cases see the discussion of [trials](#considerations) below. The identifier SHOULD be kept in a form that makes subsequent matching to item text as straightforward as possible (e.g., identifiers that make it challenging to match back to original items, when available, should be avoided). `item` MUST NOT be entirely missing, and SHOULD have no missing values.
+
+## C4. `resp` {#c4}
+
+`resp` holds the item responses. Every value that is present MUST be numeric, so that it can be directly utilized in various psychometric models. Given its centrality, we make a few additional points:
+
+- A code for a missing or non-substantive answer (e.g., `-9`, `99`, "don't know") is not a response. Rows without a response SHOULD be omitted rather than carried with an empty `resp`, and a text token such as `NA` is not a number.
+
+- Response values that were imputed in the original data SHOULD be removed.
+
+- Within an item, values are meant to be consistently coded so that higher numbers indicate a consistently meaningful change in a response (i.e., higher numbers indicate stronger agreement). However, values may load on the latent variable in opposite ways across items (i.e., higher numbers may indicate strong agreement for some items and weaker agreement for others).
+
+- While responses are most commonly discrete ordinal values (e.g., 1–5 Likert), bounded continuous responses are also permitted. Examples include visual-analogue or slider scales (e.g., 0–100 "does not describe me at all" to "describes me perfectly"). In such cases `resp` is stored as a float rather than an integer.
+
+## C5. One response per `id` and `item` per occasion {#c5}
+
+A given `id`–`item` pair MUST appear at most once, unless the rows are distinguished by a column that records the occasion of the response: `wave`, `date`, `rater`, or a trial or session index (`timepoint`, `trial`, `trialnum`, `order`, `session`, `occasion`, `period`, `block`, `subtest`). A person rated by two raters, or answering the same item in two waves, is the design; the same response recorded twice is a defect.
+
+## C6. Other columns are named as defined here {#c6}
+
+Any column beyond `id`, `item` and `resp` SHOULD be one of the [optional elements](#optional) below, or one of the occasion columns in C5, or carry one of the prefixes `cov_`, `itemcov_`, `qmatrix` or `trial_`. A covariate recorded under a bare name (`age` rather than `cov_age`) cannot be told apart from a column with a defined meaning.
+
+## C7. Column order {#c7}
+
+The first three columns SHOULD be `id`, `item`, `resp`, in that order, followed by any optional columns.
+
+## Optional elements {#optional}
 
 These elements are optional features of IRW datasets. When IRW datasets have these columns, they have been consistently formatted as per the data standards described here.
 
@@ -31,12 +61,11 @@ These elements are optional features of IRW datasets. When IRW datasets have the
 
 - `date` The calendar time at which a response was produced is included. Coding of this variable is done in two ways. In some cases, there were only relative dates (e.g., 30 days into data collection). In that case, we convert to the number of seconds since the first piece of data in the dataset was collected. In cases where more exact information was given (e.g., 1:30PM 03/04/2008), we convert to [Unix time](https://www.unixtimestamp.com/) (i.e., seconds since JAN 01 1970. (UTC)).
 
-
 - `qmatrix` When items are classified into a small number of skills (i.e., for the purposes of cognitive diagnostic modeling \cite{ravand2015cognitive}), we have included these item-level classifications. Note that the column headers will be `qmatrix1`, ..., `qmatrixN` when there are `N` skills.
 
 - `rater` In scenarios wherein the focal unit is being rated by other observers (perhaps along multiple dimensions), an identifier associated with the rater producing the rating.
 
-- `wave` In settings wherein data is collected longitudinally (but precise timing as in `date` is not available), we indicate the wave of data collection. Values are ordered such that larger values represent data collected at a later date relative to smaller values. Note that this is also used to indicate pre/post treatment in the case of data collected from randomized controlled trials (RCTs). 
+- `wave` In settings wherein data is collected longitudinally (but precise timing as in `date` is not available), we indicate the wave of data collection. Values are ordered such that larger values represent data collected at a later date relative to smaller values. Note that this is also used to indicate pre/post treatment in the case of data collected from randomized controlled trials (RCTs).
 
 - `treat` An indicator of whether a respondent was in a treatment group (1=Yes) in an experimental study (e.g., an RCT or quasiexperiment).
 
@@ -46,11 +75,29 @@ These elements are optional features of IRW datasets. When IRW datasets have the
 
 - `item_family`  An identifier for groups of items that potentially have family resemblances such that assumptions related to local independence may be violated. Examples include items with a testlet structure, items that have common features (e.g., 'how important is it that people wash their hands regularly?' versus 'how important is it that you wash your hands regularly'), or items that are clones of each other. Each element of a family of items will have a unique identifier (e.g., items in the first testlet have id `1`, items in the second testlet have id `2`, etc.) and items that are not a member of a family will be `NA`. NOTE: This was implemented as of V11.25; data added before that may not be reverse-compatible with this standardization element.
 
-## Additional Considerations
+## Additional considerations {#considerations}
 
 In some cases, we deviate from the above rules for specific reasons. We describe those here. Some of the below may be considered more experimental features of the IRW; more information about these data will be forthcoming.
 
-- Process data: In general, a single row of data in the IRW corresponds to a unique response from an individual to an item. In the context of ['process data'](https://link.springer.com/article/10.1007/s11336-022-09880-8), more information about a response is available. In such cases, responses have identifiers that can be used to understand the sequence of actions that led to a given response. 
+- Process data: In general, a single row of data in the IRW corresponds to a unique response from an individual to an item. In the context of ['process data'](https://link.springer.com/article/10.1007/s11336-022-09880-8), more information about a response is available. In such cases, responses have identifiers that can be used to understand the sequence of actions that led to a given response.
 
-- Trials: Many constructs in cognitive psychology are measured via repeated trials of similar tasks wherein the probes either do not vary or vary in terms of some quantifiable feature of the stimulus. In such cases, the `item` column is uninformative and the columns beginning `trial_` will contain information about the different trials. 
+- Trials: Many constructs in cognitive psychology are measured via repeated trials of similar tasks wherein the probes either do not vary or vary in terms of some quantifiable feature of the stimulus. In such cases, the `item` column is uninformative and the columns beginning `trial_` will contain information about the different trials.
 
+The [competition](comps_standard.qmd) and [nominal](nominal_standard.qmd) standards are experimental extensions and are not part of version 1.0.
+
+## IRW intake policy (not part of the standard) {#intake}
+
+A file can conform to the standard and still not be something the IRW hosts. These are the IRW's own rules for what it accepts, and the validator reports them separately from conformance:
+
+- **Licence.** The data must normally carry an explicit open licence (CC0, CC BY or CC BY-SA), or come with the owner's written permission.
+- **Sample size.** At least 100 unique `id` values.
+- **One file per scale.** Responses to different instruments go in separate files.
+- **Table names.** `author_year_construct`, lowercase, at most 40 characters.
+
+See [Contributing data to the IRW](contribute.qmd) for how to send a file.
+
+## Versions {#versions}
+
+| Version | Date | Change |
+|---|---|---|
+| 1.0 | 2026-09-19 | First numbered version. Clauses C1–C7 state the rules this page previously gave as prose, and the rules `irw-validate` already enforced: C5 (repeated responses) and C7 (column order) were enforced but not written here. Intake policy separated from the format. |

@@ -1,0 +1,212 @@
+---
+title: "Check a file against the IRW Data Standard"
+---
+
+<!--
+The browser validator (ben-domingue/irw#1716, item 14.3). It runs the released
+`irw-validate` package unchanged, in Pyodide, so this page and the command line
+cannot disagree: there is one set of checks. Nothing is uploaded -- the file is
+copied into Pyodide's in-memory filesystem and read there.
+
+IRW_VALIDATE is pinned. Bump it after each `irw-validate-vX.Y.Z` tag reaches
+PyPI; an unreleased version fails to install and the page says so.
+-->
+
+Drop a CSV or TSV file below to check it against [the IRW Data Standard](standard.qmd) (version 1.0). **Your file never leaves your browser.** The checks run on your own computer, and nothing is sent to the IRW or anywhere else.
+
+You get two answers. **Conforms to the standard** says whether the file is a valid IRW table. **Passes IRW's intake checks** also applies the IRW's own rules for what it hosts, such as the minimum of 100 respondents. You only need that second answer if you plan to [contribute the file](contribute.qmd).
+
+```{=html}
+<style>
+  #irwv-drop {
+    border: 2px dashed #adb5bd; border-radius: .5rem; padding: 2.5rem 1rem;
+    text-align: center; cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  #irwv-drop.irwv-over { background: #eef4ff; border-color: #2780e3; }
+  #irwv-drop:focus-visible { outline: 3px solid #2780e3; outline-offset: 2px; }
+  #irwv-drop[aria-disabled="true"] { cursor: progress; opacity: .7; }
+  .irwv-verdicts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin: 1.25rem 0; }
+  .irwv-verdict { border-radius: .5rem; padding: 1rem 1.25rem; border: 1px solid; }
+  .irwv-yes { background: #edf7ee; border-color: #3fb618; }
+  .irwv-no { background: #fdeeee; border-color: #ff0039; }
+  .irwv-verdict .irwv-label { font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; color: #555; }
+  .irwv-verdict .irwv-answer { font-size: 1.35rem; font-weight: 600; }
+  #irwv-results table { font-size: .9rem; }
+  #irwv-results td { vertical-align: top; overflow-wrap: anywhere; }
+  #irwv-results td.irwv-sev-error { color: #c4002b; font-weight: 600; }
+  #irwv-results td.irwv-sev-warn { color: #9a6700; font-weight: 600; }
+  /* On a phone a four-column table leaves the message a few characters wide:
+     stack each finding instead, with its message on its own line. */
+  @media (max-width: 600px) {
+    #irwv-results thead { display: none; }
+    #irwv-results tr { display: block; padding: .5rem 0; border-bottom: 1px solid #dee2e6; }
+    #irwv-results td { display: inline; border: 0; padding: 0 .5rem 0 0; }
+    #irwv-results td:last-child { display: block; padding-top: .25rem; }
+  }
+  #irwv-results pre { white-space: pre-wrap; font-size: .8rem; }
+</style>
+
+<div id="irwv-drop" role="button" tabindex="0" aria-disabled="true"
+     aria-describedby="irwv-status">
+  <p class="mb-1"><strong>Drop a .csv or .tsv file here</strong>, or click to choose one</p>
+  <p class="mb-0 text-muted small">Up to 100 MB. Larger files are slow in a browser; use <code>irw-validate</code> instead.</p>
+  <input id="irwv-file" type="file" accept=".csv,.tsv,.txt" hidden>
+</div>
+<p id="irwv-status" class="mt-2 text-muted small" role="status" aria-live="polite">Loading the validator (about 15 MB the first time; cached after that)…</p>
+<div id="irwv-results" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js"></script>
+<script>
+(function () {
+  const IRW_VALIDATE = "irw-validate==1.1.0";
+  const MAX_MB = 100, SLOW_MB = 20;   // 29 MB / 2M rows took 30 s in Chrome (2026-09-19)
+  const drop = document.getElementById("irwv-drop");
+  const input = document.getElementById("irwv-file");
+  const status = document.getElementById("irwv-status");
+  const results = document.getElementById("irwv-results");
+  let py = null, busy = false;
+
+  function el(tag, attrs, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
+    for (const kid of kids) n.append(kid);   // strings become text nodes: never HTML
+    return n;
+  }
+  function say(text, cls) { status.textContent = text; status.className = "mt-2 small " + (cls || "text-muted"); }
+  function ready(on) { drop.setAttribute("aria-disabled", on ? "false" : "true"); }
+
+  async function boot() {
+    try {
+      py = await loadPyodide();
+      await py.loadPackage(["pandas", "micropip"]);
+      await py.pyimport("micropip").install(IRW_VALIDATE);
+      py.runPython([
+        "import json, math",
+        "from irw_validate import validate_file, format_report",
+        "def _plain(o):",   // JSON.parse rejects NaN; numpy scalars arrive as strings
+        "    if isinstance(o, dict): return {str(k): _plain(v) for k, v in o.items()}",
+        "    if isinstance(o, (list, tuple)): return [_plain(v) for v in o]",
+        "    if hasattr(o, 'item') and not isinstance(o, (str, bytes)): o = o.item()",
+        "    if isinstance(o, float) and not math.isfinite(o): return None",
+        "    return o",
+      ].join("\n"));
+      say("Ready. Checking uses " + IRW_VALIDATE.replace("==", " ") + ".");
+      ready(true);
+    } catch (e) {
+      say("The validator could not load (" + (e && e.message ? e.message.split("\n")[0] : e) +
+          "). You can still run it on your own computer: pip install irw-validate, then irw-validate yourfile.csv.",
+          "text-danger");
+    }
+  }
+
+  function verdict(label, yes, yesText, noText) {
+    return el("div", { class: "irwv-verdict " + (yes ? "irwv-yes" : "irwv-no") },
+      el("div", { class: "irwv-label" }, label),
+      el("div", { class: "irwv-answer" }, yes ? yesText : noText));
+  }
+
+  function render(name, r, text) {
+    results.replaceChildren();
+    const intakeErrors = r.findings.filter(f => f.severity === "error").length;
+    const broken = r.nonconforming.length
+      ? "No: breaks " + r.nonconforming.join(", ") : "No";
+    results.append(
+      el("h2", {}, name),
+      el("div", { class: "irwv-verdicts" },
+        verdict("Conforms to IRW Data Standard " + r.standard_version, r.conforms, "Yes", broken),
+        verdict("Passes IRW's intake checks", r.ok, "Yes",
+                "No: " + intakeErrors + " error" + (intakeErrors === 1 ? "" : "s"))));
+    if (r.stats && r.stats.n_participants !== undefined) {
+      results.append(el("p", { class: "text-muted" },
+        r.stats.n_responses.toLocaleString() + " responses · " +
+        r.stats.n_participants.toLocaleString() + " ids · " +
+        r.stats.n_items.toLocaleString() + " items"));
+    }
+    const order = { error: 0, warn: 1, info: 2 };
+    const rows = r.findings.slice().sort((a, b) => order[a.severity] - order[b.severity]);
+    if (!rows.length) {
+      results.append(el("p", {}, "Nothing to report."));
+    } else {
+      const tbody = el("tbody");
+      for (const f of rows) {
+        const clause = f.clause
+          ? el("a", { href: "standard.html#" + f.clause.toLowerCase() }, f.clause)
+          : el("span", { class: "text-muted", title: "An IRW intake rule or a data-quality heuristic. Not part of the standard, so it does not affect conformance." }, "IRW only");
+        tbody.append(el("tr", {},
+          el("td", { class: "irwv-sev-" + f.severity }, f.severity),
+          el("td", {}, clause),
+          el("td", {}, el("code", {}, f.check)),
+          el("td", {}, f.message)));
+      }
+      results.append(el("div", { class: "table-responsive" },
+        el("table", { class: "table table-sm" },
+          el("thead", {}, el("tr", {},
+            el("th", { scope: "col" }, "Severity"), el("th", { scope: "col" }, "Clause"),
+            el("th", { scope: "col" }, "Check"), el("th", { scope: "col" }, "What it found"))),
+          tbody)));
+      results.append(el("p", { class: "small text-muted" },
+        "Errors must be fixed. Warnings are worth a look, and some are legitimate for a particular design."));
+    }
+    results.append(el("details", {}, el("summary", {}, "Plain-text report (to paste into an email or issue)"),
+      el("pre", {}, text)));
+  }
+
+  async function check(file) {
+    if (!py || busy || !file) return;
+    results.replaceChildren();   // never leave one file's findings under another's name
+    input.value = "";
+    const ext = (file.name.match(/\.[^.]+$/) || [""])[0].toLowerCase();
+    if ([".rdata", ".rda", ".rds"].includes(ext)) {
+      say("R data files can't be read in the browser. Save the table as CSV first (write.csv(df, \"mydata.csv\", row.names = FALSE)) and drop that.", "text-danger");
+      return;
+    }
+    if (![".csv", ".tsv", ".txt"].includes(ext)) {
+      say(file.name + " is not a .csv or .tsv file. Save the table as CSV and try again.", "text-danger");
+      return;
+    }
+    const mb = file.size / 1024 ** 2;
+    if (mb > MAX_MB) {
+      say(file.name + " is " + mb.toFixed(0) + " MB, over the " + MAX_MB + " MB this page handles. Use pip install irw-validate on your own computer instead.", "text-danger");
+      return;
+    }
+    busy = true; ready(false); results.replaceChildren();
+    say("Checking " + file.name + (mb > SLOW_MB ? " (a large file, so this may take a few minutes)" : "") + "…");
+    await new Promise(r => setTimeout(r, 30));   // let the status paint before Python blocks
+    const path = "/tmp/upload" + ext;
+    try {
+      py.FS.writeFile(path, new Uint8Array(await file.arrayBuffer()));
+      py.globals.set("irwv_path", path);
+      py.globals.set("irwv_label", file.name);
+      const out = JSON.parse(py.runPython(
+        "_r = validate_file(irwv_path, label=irwv_label)\n" +
+        "json.dumps(_plain({'report': _r.to_dict(), 'text': format_report(_r)}), default=str)"));
+      render(file.name, out.report, out.text);
+      say("Checked " + file.name + ".");
+    } catch (e) {
+      const msg = e && e.message ? e.message.trim().split("\n").pop() : String(e);
+      say("Could not read " + file.name + ": " + msg, "text-danger");
+    } finally {
+      try { py.FS.unlink(path); } catch (_) {}
+      busy = false; ready(true); input.value = "";
+    }
+  }
+
+  drop.addEventListener("click", () => { if (py && !busy) input.click(); });
+  drop.addEventListener("keydown", e => {
+    if ((e.key === "Enter" || e.key === " ") && py && !busy) { e.preventDefault(); input.click(); }
+  });
+  input.addEventListener("change", () => check(input.files[0]));
+  ["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("irwv-over"); }));
+  ["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("irwv-over"); }));
+  drop.addEventListener("drop", e => check(e.dataTransfer.files[0]));
+  boot();
+})();
+</script>
+```
+
+The same checks are available on the command line, which is faster for large files and can run in CI:
+
+```
+pip install irw-validate
+irw-validate mydata.csv
+```
