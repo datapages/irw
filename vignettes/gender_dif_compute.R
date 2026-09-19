@@ -194,6 +194,7 @@ process_one <- function(tab) {
   if (is.null(item_res)) return(FALSE)
 
   saveRDS(list(
+    date_run   = Sys.Date(),
     tab        = tab,
     group_col  = gcol,
     group_vals = top2,

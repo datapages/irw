@@ -4,6 +4,8 @@ title: "Data documentation"
 
 Click on each dataset's name to see its description, license, citation, and link to its original source. Code used to create these data can be found [here](https://github.com/ben-domingue/irw/tree/main/data).
 
+**Every dataset here has been modified.** IRW does not redistribute source files: each one is reshaped into the [IRW data standard](standard.qmd) — long format, one row per person-item response, with columns renamed and non-response material dropped. The processing script for a given dataset is the record of exactly what was changed, and is linked above. The license shown beside each description is the **source's** license, which continues to govern reuse of that dataset: where it carries a non-commercial restriction, that restriction travels with IRW's copy.
+
 ```{=html}
 <div class="panel-tabset-container">
   <button onclick="toggleTabset()">To cite using IRW's R package</button>
@@ -97,7 +99,7 @@ library(stringr)
 library(glue)
 library(redivis)
 
-biblio <- redivis$user("bdomingu")$dataset("irw_meta:bdxt:latest")$table("biblio:qahg")$to_tibble()
+biblio <- redivis$user("datapages")$dataset("irw_meta:bdxt:latest")$table("biblio")$to_tibble()
 
 # Load datasets
 data_index <- biblio |>
@@ -109,12 +111,23 @@ data_index <- biblio |>
 
 ```{=html}
 <input type="text" id="searchBar" placeholder="Search datasets..." style="width: 100%; padding: 10px; margin-bottom: 20px; font-size: 16px;">
+<p id="search-placeholder" style="color: #888;">Start typing to search across all datasets by name, description, or reference.</p>
 <script>
 function searchDatasets() {
   var input = document.getElementById('searchBar');
-  var filter = input.value.toLowerCase();
+  var filter = input.value.toLowerCase().trim();
   var items = document.getElementsByClassName('dataset-item');
-  
+  var table = document.getElementById('dataset-table-wrapper');
+  var placeholder = document.getElementById('search-placeholder');
+
+  if (filter === '') {
+    table.style.display = 'none';
+    placeholder.style.display = '';
+    return;
+  }
+  table.style.display = '';
+  placeholder.style.display = 'none';
+
   for (var i = 0; i < items.length; i++) {
     var text = items[i].textContent || items[i].innerText;
     items[i].style.display = text.toLowerCase().indexOf(filter) > -1 ? '' : 'none';
@@ -219,16 +232,81 @@ document.getElementById('searchBar').addEventListener('input', searchDatasets);
   background-color: #cccccc;
   cursor: not-allowed;
 }
+
+.dataset-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.dataset-table th, .dataset-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e2e2;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: break-word;
+}
+.dataset-table th {
+  border-bottom: 2px solid #ccc;
+  font-weight: 600;
+}
+.dataset-table tr:hover {
+  background-color: #f7f7f7;
+}
+.dataset-table th:nth-child(1), .dataset-table td:nth-child(1) { width: 16%; }
+.dataset-table th:nth-child(2), .dataset-table td:nth-child(2) { width: 58%; }
+.dataset-table th:nth-child(3), .dataset-table td:nth-child(3) { width: 8%; }
+.dataset-table th:nth-child(4), .dataset-table td:nth-child(4) { width: 18%; }
 </style>
 ```
 
 ```{r}
 #| results: asis
-el <- function(ds) {
-  lic <- if (ds$license != "") glue("({ds$license})") else ""
+
+# A dataset's license is recorded as a name; the license itself lives elsewhere.
+# Reusers need the terms, not the label -- and where a source is offered under a
+# non-commercial or share-alike license, its own conditions ask that anyone
+# redistributing it link to that license rather than merely name it. So the
+# name is rendered as a link wherever there is a canonical text to point at.
+# Values with no such text -- "Custom", "Permission via Email" -- render as
+# plain text, which is the honest rendering: there is nothing to link to. So
+# does "CC BY-NC-ND", deliberately: it is recorded without a version, and
+# guessing 4.0 would put a wrong link on the one license whose terms most need
+# reading.
+license_urls <- c(
+  "CC0 1.0"         = "https://creativecommons.org/publicdomain/zero/1.0/",
+  "CC BY 4.0"       = "https://creativecommons.org/licenses/by/4.0/",
+  "CC BY-SA 4.0"    = "https://creativecommons.org/licenses/by-sa/4.0/",
+  "CC BY-NC 4.0"    = "https://creativecommons.org/licenses/by-nc/4.0/",
+  "CC BY-NC 3.0"    = "https://creativecommons.org/licenses/by-nc/3.0/",
+  "CC BY-NC-SA 4.0" = "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+  "CC BY-NC-SA 3.0" = "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+  "ODbL 1.0"        = "https://opendatacommons.org/licenses/odbl/1-0/",
+  "ODC-By"          = "https://opendatacommons.org/licenses/by/1-0/",
+  "MIT"             = "https://opensource.org/license/mit",
+  "GPL-2.0"         = "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+  "GPL-3.0"         = "https://www.gnu.org/licenses/gpl-3.0.en.html",
+  "LGPL-3.0"        = "https://www.gnu.org/licenses/lgpl-3.0.en.html"
+)
+
+# A few rows carry two comma-separated licenses, so link each part separately.
+license_html <- function(x) {
+  if (is.null(x) || length(x) == 0 || is.na(x) || !nzchar(trimws(x))) return("")
+  parts <- trimws(strsplit(x, ",")[[1]])
+  parts <- parts[nzchar(parts)]
+  linked <- vapply(parts, function(part) {
+    url <- unname(license_urls[part])
+    if (is.na(url)) part
+    else glue('<a href="{url}" target="_blank" rel="license noopener">{part}</a>')
+  }, character(1))
+  glue("({paste(linked, collapse = ', ')})")
+}
+
+row <- function(ds) {
+  lic <- license_html(ds$license)
   bibtex <- ds$BibTex  # Use BibTex column directly
   escaped_bibtex <- if (!is.na(bibtex) && bibtex != "") gsub("'", "\\\\'", bibtex) else ""
-  
+
   citation_button <- if (escaped_bibtex != "") {
     button_id <- paste0("cite-button-", make.names(ds$dataset))
     target_id <- paste0("cite-text-", make.names(ds$dataset))
@@ -241,25 +319,30 @@ el <- function(ds) {
   } else ""
 
   glue(
-    "
-    ::: {{.g-col-4 .dataset-item}}
-    ::: {{.callout-note collapse='true'}}
-    ## {ds$dataset}
-    {ds$description} {lic} [[link]]({ds$url})
-    <i>{ds$reference}</i>
-    {citation_button}
-    :::
-    :::
-    "
+    '
+    <tr class="dataset-item">
+      <td><strong>{ds$dataset}</strong></td>
+      <td>{ds$description} {lic} <i>{ds$reference}</i></td>
+      <td><a href="{ds$url}" target="_blank">link</a></td>
+      <td>{citation_button}</td>
+    </tr>
+    '
   )
 }
 
-els <- transpose(data_index) |> map(el) |> paste(collapse = "\n")
+rows <- transpose(data_index) |> map(row) |> paste(collapse = "\n")
 cat(glue(
-  "
-  ::: {{.grid}}
-  {els}
-  :::
-  "
+  '
+  <div id="dataset-table-wrapper" style="display: none;">
+  <table class="dataset-table">
+    <thead>
+      <tr><th>Dataset</th><th>Description</th><th>Source</th><th>Citation</th></tr>
+    </thead>
+    <tbody>
+    {rows}
+    </tbody>
+  </table>
+  </div>
+  '
 ))
 ```

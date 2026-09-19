@@ -1,10 +1,27 @@
 project:
   type: website
+  # Published at itemresponsewarehouse.org/llms.txt, which is the URL agents.qmd
+  # tells researchers to point their AI assistant at. Listed explicitly rather
+  # than left to Quarto's default resource discovery so it cannot quietly stop
+  # being copied.
+  resources:
+    - llms.txt
   preview:
     port: 4200
+  # Per-table landing pages (ben-domingue/irw#1706, pilot). Runs after Quarto has
+  # written _site/, and emits into _site/tables/. Skips itself with exit 0 when
+  # REDIVIS_API_TOKEN is unset, so a credential-free local preview still renders --
+  # but in CI a missing token is a hard error, because publishing without the
+  # landing pages deletes them from the live site (ben-domingue/irw#2129).
+  post-render:
+    - Rscript landing/emit_landing_pages.R
 
 website:
   title: "Item Response Warehouse"
+  # Without this Quarto emits no sitemap.xml at all, for any page on the site.
+  # The landing-page emitter appends its URLs to that same file rather than
+  # publishing a second one.
+  site-url: https://itemresponsewarehouse.org
   google-analytics: G-NM0Y0TP4RY
   navbar:
     search: true
@@ -17,8 +34,12 @@ website:
           text: Overview of IRW Data Standards
         - href: data.qmd
           text: Browse the IRW Data
+        - href: collections.qmd
+          text: Browse IRW Collections
         - href: metadata.qmd
           text: Metadata for IRW tables
+        - href: tags_quality.qmd
+          text: Tag Quality
         - href: docs.qmd
           text: Data Documentation
         - text: "---"
@@ -46,6 +67,8 @@ website:
         menu:
         - href: getstarted.qmd
           text: Getting Started
+        - href: agents.qmd
+          text: Using an AI Assistant
         - href: training.qmd
           text: Training Resources
         - href: problems.qmd
@@ -56,6 +79,10 @@ website:
         menu:
         - href: about.qmd
           text: About the IRW
+        - href: news.qmd
+          text: News
+        - href: corrections.qmd
+          text: Corrections
         - href: research.qmd
           text: Research!
         - href: othersites.qmd
@@ -63,12 +90,19 @@ website:
         - href: contact.qmd
           text: Contact Us
     right:
+      # Repositories, not documentation sites: this is the GitHub icon, and a
+      # reader clicking it wants the source. The R package's pkgdown reference
+      # is linked from Get Started and from the data explorer instead.
       - icon: github
         menu:
-          - text: "Data processing"
+          - text: "Data processing code"
             href: https://github.com/itemresponsewarehouse/misc/tree/main/data
-          - text: "irw: R package for managing IRW data"
-            href: https://itemresponsewarehouse.github.io/Rpkg/
+          - text: "irw: R package"
+            href: https://github.com/itemresponsewarehouse/Rpkg
+          - text: "irw: Python package"
+            href: https://github.com/itemresponsewarehouse/Python-pkg
+          - text: "This website's source"
+            href: https://github.com/datapages/irw
 
 format:
   html:

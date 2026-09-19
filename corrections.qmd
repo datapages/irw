@@ -1,0 +1,144 @@
+---
+title: "Corrections"
+---
+
+```{r}
+#| label: load-changes
+
+# The change record is a tracked file in ben-domingue/irw, appended by hand
+# when a correction is released (see red_up/README.md there). Read at render
+# time, like the version manifest in components/data_version.R. A failed fetch
+# prints a notice instead of an empty table: an empty table would read as
+# "no corrections", which is a claim this page must never make by accident.
+CHANGES_URL <- paste0(
+  "https://raw.githubusercontent.com/ben-domingue/irw/main/",
+  "metadata/table_changes.csv"
+)
+
+changes <- tryCatch({
+  con <- url(CHANGES_URL)
+  on.exit(try(close(con), silent = TRUE), add = TRUE)
+  utils::read.csv(con, stringsAsFactors = FALSE, colClasses = "character",
+                  na.strings = character(0))
+}, error = function(e) NULL, warning = function(w) NULL)
+
+if (!is.null(changes)) {
+  changes <- changes[order(changes$date, changes$table, decreasing = c(TRUE, FALSE),
+                           method = "radix"), ]
+}
+```
+
+IRW tables are sometimes wrong: a processing script reads the wrong column, an
+upload doubles a table, a response is miscoded. This page states how IRW
+handles that, and lists corrections to published response tables.
+
+## How IRW records change
+
+1. **Released versions do not change.** Every IRW release is numbered, and the
+   number always refers to the same data. Anything that pins a version
+   (`irw_use_version()` in R, a citation) keeps getting exactly what it got.
+2. **Corrections are new versions.** When a table is found to differ from its
+   source, the corrected table is published in a later release, and the earlier
+   version stays available at its release number. Pin a version for stability;
+   take the latest for correctness (the same rule applies to
+   [tags](tags_quality.qmd)).
+3. **Every correction is recorded.** Each correction to a published response
+   table adds a dated entry below: what changed, the IRW version in which it
+   took effect, and the GitHub issue where it was reported.
+4. **Renames and replacements point both ways.** A table that replaces or is
+   renamed from another names the table it replaces, and the replaced table's
+   entry names its successor.
+5. **Duplicates are recorded, not adjudicated.** When two tables derive from
+   the same source, both are kept unless one is a processing error. IRW does
+   not rank independent datasets of the same instrument or population.
+6. **Withdrawals remove material from the current release onward.** Material
+   withdrawn for legal or rights reasons is removed from the current release
+   and recorded internally; it is not listed here.
+7. **IRW corrects fidelity to the source, not the source.** A table is corrected
+   when it does not match what its source released. Doubts about whether the
+   source data are good are for the source's authors and IRW's documentation,
+   not grounds for altering or flagging a table.
+
+Corrections to item text are listed separately, on [Known Issues](itemtext_issues.qmd).
+If you think a table is wrong, open an issue on
+[GitHub](https://github.com/ben-domingue/irw/issues).
+
+## Change record
+
+This record begins with corrections released on 2026-08-27, and entries before
+2026-09-19 were reconstructed afterwards from the issue tracker and Redivis'
+version history, so it may be incomplete for that period. Earlier corrections
+are recorded only in the repositories' commit history and in the versioned data
+itself. The IRW version is the first corpus version carrying the corrected
+table; `irw_use_version()` with any earlier number returns the table as it was.
+
+```{r}
+#| label: changes-summary
+#| results: asis
+
+if (is.null(changes)) {
+  cat("::: {.callout-warning}\nThe change record could not be loaded when this",
+      "page was built. It is available directly at",
+      sprintf("[`metadata/table_changes.csv`](%s).\n:::\n",
+              "https://github.com/ben-domingue/irw/blob/main/metadata/table_changes.csv"))
+} else {
+  cat(sprintf("%d entries covering %d tables. Start typing to search.\n",
+              nrow(changes), length(unique(changes$table))))
+}
+```
+
+```{=html}
+<input type="text" id="changeSearch" placeholder="Search corrections..." oninput="filterChanges()" style="width: 100%; padding: 10px; margin-bottom: 10px; font-size: 16px;">
+<p id="change-count" style="color: #888; margin-bottom: 20px;"></p>
+
+<style>
+#changes-table { overflow-x: auto; }
+#changes-table table { width: 100%; }
+#changes-table th, #changes-table td { vertical-align: top; padding: 8px; }
+#changes-table td:nth-child(3) { word-break: break-word; }
+</style>
+
+<script>
+function filterChanges() {
+  const filter = document.getElementById('changeSearch').value.toLowerCase().trim();
+  const rows = document.querySelectorAll('#changes-table tbody tr');
+  let shown = 0;
+  rows.forEach(r => {
+    const hit = filter === '' || (r.textContent || '').toLowerCase().includes(filter);
+    r.style.display = hit ? '' : 'none';
+    if (hit) shown++;
+  });
+  const count = document.getElementById('change-count');
+  count.textContent = filter === '' ? '' :
+    shown + (shown === 1 ? ' entry matches "' : ' entries match "') + filter + '"';
+}
+</script>
+```
+
+::: {#changes-table}
+
+```{r}
+#| label: changes-table
+#| results: asis
+
+if (!is.null(changes) && nrow(changes) > 0) {
+  cell <- function(x) gsub("|", "\\|", gsub("\n", " ", x), fixed = TRUE)
+  links <- function(col, lead) ifelse(nzchar(col), sprintf(" %s `%s`.", lead, col), "")
+  issue <- ifelse(grepl("^#[0-9]+$", changes$issue),
+                  sprintf("[%s](https://github.com/ben-domingue/irw/issues/%s)",
+                          changes$issue, sub("#", "", changes$issue)),
+                  changes$issue)
+  cat("| Date | IRW version | Table | What changed | Issue |\n",
+      "|---|---|---|---|---|\n", sep = "")
+  cat(sprintf("| %s | %s | `%s` | %s%s%s | %s |",
+              changes$date, changes$irw_version, changes$table,
+              cell(changes$change),
+              links(changes$replaces, "Replaces"),
+              links(changes$replaced_by, "Replaced by"),
+              issue),
+      sep = "\n")
+  cat("\n")
+}
+```
+
+:::

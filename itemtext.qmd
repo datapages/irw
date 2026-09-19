@@ -2,6 +2,8 @@
 title: "Item Text"
 ---
 
+{{< include _itemtext-disclaimer.qmd >}}
+
 ## The standard for item information
 
 We have begun to incorporate the text of the items used to produce stimuli in the IRW. This information is available [here](https://redivis.com/datasets/07b6-11dggrv8c). A list of tables with item text can be generated using the `irw_list_itemtext_tables()` function (via the `irw` [package](https://github.com/itemresponsewarehouse/Rpkg/tree/main)). 
@@ -16,9 +18,13 @@ These data are structured as follows:
 
 - `instrument` This is the full, human-readable name or title for the instrument identified by the `table` column.
 
+- `language` This names the language in which the instrument was administered (e.g. `German`, `Spanish`), written plainly rather than as a language code. It is present when the administered language is not English.
+
 - `instructions` This contains the literal text of the instructions provided to the participant for the overall instrument.
 
 - `section_prompt` This contains the literal text of a shared prompt, such as a reading passage, that applies to all items within a given `section_id`.
+
+- `instructions` and `section_prompt` are scoped differently: `instructions` applies to the entire table regardless of `section_id`; `section_prompt` applies only to the items sharing one or more specific `section_id` values. The same span of source text should never be recorded in both fields. If framing or task-level text applies across the whole table, record it once in `instructions`. If it is specific to a subset of items sharing a `section_id` (e.g. a passage or context given before a testlet), record it in `section_prompt` only, even if it superficially resembles instructional language.
 
 - `item_text` This is the literal text of the specific prompt or question associated with an `item`.
 
@@ -27,6 +33,54 @@ These data are structured as follows:
 - `option_text` This is the literal text for a specific response option available for an item.
 
 - `resp` This is the response value assigned to a specific `option_text`. It should match the numeric, ordinal `resp` value found in the response-level IRW dataset.
+
+- `instructions_translated`, `section_prompt_translated`, `item_text_translated` and `option_text_translated` These hold the English translation of the correspondingly named field. They are present only for instruments administered in a language other than English.
+
+## Instruments administered in a language other than English
+
+Where a study was administered in a language other than English, the text fields
+(`instructions`, `section_prompt`, `item_text`, `option_text`) hold the wording that
+respondents actually read, verbatim, and `language` names that language. The English
+rendering is carried alongside in the parallel `_translated` fields, so the instrument
+is usable without reading the administered language. Where the study or its data
+deposit supplies its own English version, that is the translation we ship, and the
+source is recorded in the provenance for that table.
+
+`item` and `resp` are join keys into the response-level IRW dataset and are never
+translated. For instruments administered in English, `language` and the `_translated`
+fields are omitted entirely rather than carried empty.
+
+### When only an English version survives
+
+Some studies administered an instrument in another language but published only an
+English rendering of it — sometimes the authors' own translation in a supplementary
+file, sometimes English variable labels in the deposited data file, sometimes nothing
+but the canonical English instrument the study cites. Where the administered wording
+cannot be recovered from the data deposit or the paper's own supplements, the English
+is placed in the base text fields, the `_translated` fields are left empty, and the
+table's provenance records `text_source = translated_substitute`.
+
+**`language` still names the language the study was administered in.** It describes the
+study, not the contents of `item_text`, so a table in this situation reads
+`language = Chinese` while `item_text` is English. That combination is deliberate and
+it is the flag to read:
+
+| `language` | `item_text_translated` | what `item_text` holds |
+|---|---|---|
+| empty | empty | the administered wording; the study was in English |
+| populated | populated | the administered wording, verbatim |
+| populated | **empty** | **English — not the wording respondents read** |
+
+Any table in the third row also gets an entry on the
+[item text issues](itemtext_issues.qmd) page saying so in plain words. If you are
+analysing item wording rather than joining on `item`, treat those tables with the same
+care you would give any translation: the response data is unaffected, but the text is a
+rendering of the instrument rather than a transcript of what was administered.
+
+Item text extracted before this schema was introduced (2026-09-01) predates the
+`language` and `_translated` columns, so a non-English administration from that period
+may carry English text with no `language` value. Those tables are being revisited; the
+issues page is the reliable record in the meantime.
 
 ## Some additional notes about the item text
 
