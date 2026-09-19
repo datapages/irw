@@ -126,6 +126,7 @@ as_df <- function(tbl) as.data.frame(tbl$to_tibble(), stringsAsFactors = FALSE)
 # Every table's page shows the same sections in the same order; sections with no
 # data are omitted rather than rendered empty, so an untagged table
 # produces a shorter page, not a page full of blanks.
+# A pair may carry a third element, TRUE, to bold its value.
 kv_rows <- function(pairs) {
   keep <- vapply(pairs, function(p) !blank(p[[2]]), logical(1))
   pairs <- pairs[keep]
@@ -133,7 +134,9 @@ kv_rows <- function(pairs) {
   paste0(
     "<table class=\"kv\">\n",
     paste0(vapply(pairs, function(p)
-      paste0("<tr><th>", esc(p[[1]]), "</th><td>", esc(p[[2]]), "</td></tr>"),
+      paste0("<tr><th>", esc(p[[1]]), "</th><td>",
+             if (isTRUE(p[3][[1]])) paste0("<strong>", esc(p[[2]]), "</strong>") else esc(p[[2]]),
+             "</td></tr>"),
       character(1)), collapse = "\n"),
     "\n</table>\n")
 }
@@ -355,7 +358,8 @@ build_page <- function(x) {
     list("Description", x$description),
     list("Reference",   x$reference),
     list("DOI",         x$doi),
-    list("Licence",     x$license),
+    # Bold on every page, so terms like NC or ND are hard to miss (Ben, 2026-09-19).
+    list("Licence",     x$license, TRUE),
     list("Source data", x$source_url)))
 
   tagbody <- ""
