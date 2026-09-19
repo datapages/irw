@@ -540,7 +540,16 @@ heldout_preds_mirt <- function(fit, mask_idx) {
   preds
 }
 
-# 1PLg via constrained 3PL: a1 fixed at 1, g fixed at 1/m, d free.
+# 1PLg via constrained 3PL: a1 fixed at 1, g fixed at 1/m, d free, latent
+# variance free.
+#
+# COV_11 has to be freed by hand. mirt frees it automatically only for
+# itemtype = "Rasch"; a 3PL whose slopes are pinned keeps Var(theta) = 1, and
+# with neither slope nor variance free the model has no way to set the scale.
+# Pinned, this fit ran out the 2000-cycle budget on seven of the eleven tables
+# (spotted by Doria, 2026-09-19); freed, it converges on every table in under
+# 50 cycles. It also puts 1PLg on the same footing as every other model here
+# (see .scale_quad), and matches fit_1plg_fixedq()'s free_var = TRUE default.
 fit_1plg <- function(train_df, m, em_cycles = EM_CYCLES) {
   g_val <- 1 / m
   base <- mirt(train_df, 1, itemtype = "3PL", pars = "values", verbose = FALSE)
@@ -548,6 +557,7 @@ fit_1plg <- function(train_df, m, em_cycles = EM_CYCLES) {
   base$est[base$name == "a1"]   <- FALSE
   base$value[base$name == "g"]  <- g_val
   base$est[base$name == "g"]    <- FALSE
+  base$est[base$name == "COV_11"] <- TRUE
   mirt(train_df, 1, itemtype = "3PL", pars = base, verbose = FALSE,
        technical = list(NCYCLES = em_cycles))
 }

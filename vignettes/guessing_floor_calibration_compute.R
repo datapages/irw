@@ -10,8 +10,8 @@
 #     an estimate of a common floor by construction, and
 #   * the bias grows as the latent spread narrows, because a floor and a small
 #     ability variance explain overlapping features of the data -- both flatten
-#     the item response function's lower end. The post-screen ENEM tables sit
-#     at SD(theta) 0.39-0.72, the worst part of that range.
+#     the item response function's lower end. The ENEM tables sit
+#     at SD(theta) 0.41-0.86 under Rasch, the worst part of that range.
 #
 # So this script calibrates the column against a known truth: generate from the
 # 1PL-G with a floor of exactly 1/m on every item, at sample sizes and latent
@@ -36,7 +36,9 @@ set.seed(20260903)
 out_dir <- "vignettes/guessingdata"
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
-N_SIM     <- 1650   # median analysed N over the five screened ENEM tables
+N_SIM     <- 3000   # analysed N on every ENEM table since the v52.0 rebuild
+                    # (was 1650, the post-screen N when five tables still
+                    # carried the scored-absence block)
 J_SIM     <- 45     # J on every ENEM table on the page
 M_SIM     <- 5      # so the true floor is 1/m = 0.20 on every item
 SD_GRID   <- c(0.4, 0.7, 1.0, 1.4)   # brackets the observed post-screen range

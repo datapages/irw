@@ -1,3 +1,15 @@
+# SUPERSEDED (2026-09-19). This script documents the fits as they stood
+# before the scored-absence screen (commit 8e5440e). The five tables in
+# NOT_IDENTIFIED below were the five carrying a ~45% block of candidates
+# scored zero for a section they never sat; that block is what drove every
+# gamma to -Inf and flattened the likelihood in alpha. With the screen in
+# place, and since the v52.0 ENEM rebuild removed the block at source, alpha
+# is identified on all eleven tables (`alpha_identified` in
+# guessingdata/guessing_results.rds). Run on today's prepared/ matrices,
+# block 1 will not reproduce the flat-gradient pattern it was written to show.
+# Kept as the record of how the diagnosis was reached; the page does not
+# source it.
+#
 # Why the 1PL-AG's alpha is reported as "not identified" on five of the eleven
 # tables. Drop this next to guessing_helpers.R and run it. ~12 min. R 4.5.1.
 #

@@ -389,9 +389,10 @@ subjects and years. We use that documented value ($m=5$) for 8 ENEM
 candidate tables spanning 2013, 2014, 2019, and 2024 and all four subject
 areas (`mt`=math, `lc`=languages, `ch`=human sciences, `cn`=natural
 sciences), restricted to the density=1 table/years (every respondent
-answered the identical fixed item set, no rotated-booklet missingness). One
-of the eight, `enem_2019_1mil_lc`, is excluded further down on
-answer-key grounds, leaving 7. Note that density=1 does not mean no
+answered the identical fixed item set, no rotated-booklet missingness). All
+eight are analysed; `enem_2019_1mil_lc` was excluded from an earlier
+version of this page on answer-key grounds that the v52.0 rebuild removed
+(see [Screening the answer key](#screening-the-answer-key)). Note that density=1 does not mean no
 missingness at all: both `lc` tables carry the elective English/Spanish
 block, which every candidate answers exactly half of. Each ENEM table
 has roughly a million respondents; we work with a fixed-seed random
@@ -421,23 +422,27 @@ if (cache_ok) {
 
 ### Screening scored absences
 
-One further screen runs before any model is fit, and it turned out to matter
-more than any modelling choice on this page.
+One further screen runs before any model is fit. On the current data it
+removes almost nobody; it is on the page because, on an earlier release of
+these tables, it mattered more than any modelling choice here.
 
 On a $J$-item, $m$-option test, a candidate who guesses every item scores
 about $J/m$ -- roughly 9 of 45 at $m = 5$. Scoring *zero* on 45 answered
 items has probability around $4\times10^{-5}$. So a block of candidates at
 or near zero is not the lower tail of ability, and it is certainly not
-guessing: it is absence recorded as a wrong answer. Five of the eight ENEM
-tables carry exactly such a block, at roughly 45% of the drawn sample, with
-almost nobody between 1 and 3 correct -- a spike at zero and then a
-normal-looking distribution starting above the chance floor. The other three
-ENEM tables have none.
+guessing: it is absence recorded as a wrong answer. Before the ENEM rebuild
+in IRW dataset v52.0, five of the eight ENEM tables carried exactly such a
+block, at roughly 45% of the drawn sample, with almost nobody between 1 and
+3 correct -- a spike at zero and then a normal-looking distribution starting
+above the chance floor. The rebuild recodes a section the candidate did not
+sit as missing rather than wrong, and the block is gone.
 
 This is the same coding artifact as the elective-block problem described in
 `guessing_compute.R`'s item-level screen -- a section the candidate did not
 sit, scored 0 rather than left missing -- but at the candidate level rather
-than the item level, so an item-level check cannot see it.
+than the item level, so an item-level check cannot see it. The screen stays
+as a safeguard: any table with the same defect would otherwise pass straight
+into the fits.
 
 Every candidate is therefore tested against the lower tail of
 $\mathrm{Binomial}(J_i, 1/m)$, where $J_i$ counts the items that candidate
@@ -445,8 +450,8 @@ actually answered, and dropped when
 $P(\text{score} \le \text{observed}) < 10^{-3}$. The cut is stated as a
 tail probability rather than a raw-score threshold so that it adapts to
 tables with different $J$, different $m$, and different per-candidate
-missingness. It is deliberately strict: on the three uncontaminated ENEM
-tables it removes 0.0-0.3% of candidates.
+missingness. It is deliberately strict: on the rebuilt tables it removes at
+most a handful of candidates from each.
 
 ```{r}
 #| label: screen-table
@@ -463,33 +468,27 @@ if (cache_ok && "n_persons_screened" %in% names(summary_df)) {
 }
 ```
 
-Leaving these candidates in does not degrade the fits gently; it changes what
-the models say. On the five affected tables the estimated latent SD ran 2.2
-to 2.9 before screening and 0.4 to 0.7 after, and *every* item's guessing
+Left in, those candidates did not degrade the fits gently; they changed what
+the models said. On the five affected tables the estimated latent SD ran 2.2
+to 2.9 unscreened and 0.4 to 0.7 screened, and *every* item's guessing
 parameter was driven to the no-guessing boundary -- a floor model cannot fit
 observed zeros where it predicts $\mathrm{expit}(\gamma)$, so it sends
-$\gamma$ to $-\infty$. After screening, the floors are interior again on
-every table, so $\alpha$ is estimable everywhere. How *close to $1/m$* they
-are is a question the fits cannot answer on their own, and the section
-[below](#what-an-estimated-floor-of-1m-looks-like) says why. An earlier
-version of this page reported the unscreened fits and read the inflated
-spread and the vanishing floor as two separate findings about guessing; they
-were one artifact seen twice.
-
-Because the screen removes a large, non-random block from five tables, the
-surviving samples are range-restricted relative to the full candidate pool,
-and the latent SDs below are not comparable to what the same tables would
-give if the absent candidates had been recorded as missing rather than
-wrong. See [Limitations](#limitations).
+$\gamma$ to $-\infty$. An earlier version of this page reported the
+unscreened fits and read the inflated spread and the vanishing floor as two
+separate findings about guessing; they were one artifact seen twice. The
+screened estimates from that release land within noise of the ones on this
+page, so the screen had been recovering the right answer from the
+contaminated tables; what the rebuild adds is sample size, roughly 3,000
+candidates per table where the screen had left about 1,660.
 
 ### Screening the answer key
 
 The scored-absence screen removes candidates. It cannot tell you whether the
-responses that remain were scored against the right key, and one of the
-candidate tables fails that prior question badly enough that it is excluded
-from the model comparisons below. This section is where that decision is
-made, and the table it rests on covers every candidate table, including the
-excluded one.
+responses that remain were scored against the right key. On an earlier
+release of the ENEM tables one table failed that prior question badly enough
+to be excluded; on the rebuilt tables every one passes, and the table below
+is the evidence rather than an assurance. It also raises the one caveat that
+survives the rebuild.
 
 Two statistics say so, neither of them a model fit. The first is item
 difficulty against the chance floor: on an $m$-option item scored correctly,
@@ -526,47 +525,57 @@ if (keydiag_ok) {
 #| label: key-diagnostics-note
 #| results: asis
 if (keydiag_ok && nrow(keydiag_df) > 1) {
-  worst <- keydiag_df |> slice_min(rpb_med, n = 1)
-  rest  <- keydiag_df |> filter(table != worst$table)
+  lc19 <- keydiag_df |> filter(table == "enem_2019_1mil_lc")
+  enem <- keydiag_df |> filter(startsWith(table, "enem_"))
   cat(sprintf(
-    paste0("`%s` is the outlier on both, and the gap is not a matter of ",
-           "degree. Its median item-rest correlation is %.3f, against %.2f ",
-           "to %.2f on the other %d tables, and %.0f%% of its items ",
-           "correlate below 0.05 with the rest of the test, against at most ",
-           "%.0f%% anywhere else. %.0f%% of its items sit below the chance ",
-           "floor of 1/%d.\n\nThe elective blocks are part of the story and ",
-           "not all of it. ENEM's language paper offers English or Spanish, ",
-           "five items each, and IRW carries the block a candidate did not ",
-           "choose as missing -- correctly, and every candidate in the draw ",
-           "has exactly five missing responses among those ten items. But ",
-           "one of the two blocks came back scored *zero for every one of ",
-           "the %s candidates who sat it*: %d items with no observed ",
-           "variance at all, which the item screen drops before any model is ",
-           "fit. That is a scoring failure, not %s people getting five items ",
-           "wrong. The surviving block runs easy (p = %.2f to %.2f) against ",
-           "a median of %.2f on the common items, ",
-           "which is the opposite direction, and the %d items left after the ",
-           "drop still show the correlation collapse above. So the broken ",
-           "block is visible, removable, and not sufficient: something is ",
-           "wrong with this table's scoring beyond it.\n\n**`%s` is ",
-           "therefore excluded from every model comparison on this page.** A ",
-           "test whose items do not correlate with each other is not a test ",
-           "on which a guessing correction can be evaluated, and a number ",
-           "computed on it would carry the scoring failure rather than any ",
-           "fact about guessing. It stays in the table above, which is the ",
-           "evidence for excluding it -- dropping it from the diagnostics as ",
-           "well would leave a reader unable to see why the model results ",
-           "cover one table fewer than the candidate set.\n\n"),
-    worst$table, worst$rpb_med, min(rest$rpb_med), max(rest$rpb_med),
-    nrow(rest), 100 * worst$frac_rpb_below_05,
-    100 * max(rest$frac_rpb_below_05), 100 * worst$frac_p_below_chance,
-    worst$m,
-    format(worst$n_sat_degenerate_elective, big.mark = ","),
-    worst$n_items_degenerate,
-    format(worst$n_sat_degenerate_elective, big.mark = ","),
-    worst$elective_ok_p_min, worst$elective_ok_p_max,
-    worst$p_med, worst$n_items_analysed,
-    worst$table))
+    paste0("No table fails. The median item-rest correlation runs from %.2f ",
+           "to %.2f, and at most %.0f%% of any table's items correlate below ",
+           "0.05 with the rest of the test.\n\n"),
+    min(keydiag_df$rpb_med), max(keydiag_df$rpb_med),
+    100 * max(keydiag_df$frac_rpb_below_05)))
+  if (nrow(lc19) == 1) {
+    cat(sprintf(
+      paste0("`enem_2019_1mil_lc` was excluded from an earlier version of ",
+             "this page on exactly these statistics: one of its two elective ",
+             "language blocks came back scored zero for every candidate who ",
+             "sat it, and most of the remaining items correlated below 0.05 ",
+             "with the rest. Both were artifacts of how IRW aligned that ",
+             "table's responses to items, fixed in the v52.0 rebuild. On the ",
+             "rebuilt table its median item-rest correlation is %.2f, %s, ",
+             "and it is back in every comparison below.\n\n"),
+      lc19$rpb_med,
+      if (lc19$rpb_med >= max(enem$rpb_med)) "the best of any ENEM table here"
+      else sprintf("against %.2f to %.2f on the other ENEM tables",
+                   min(enem$rpb_med[enem$table != lc19$table]),
+                   max(enem$rpb_med[enem$table != lc19$table]))))
+  }
+  # The caveat: tables where a large share of items sit below the chance
+  # floor, with those items not tracking the rest of the test.
+  low <- keydiag_df |> filter(frac_p_below_chance >= 0.3) |>
+    arrange(desc(frac_p_below_chance))
+  rest <- keydiag_df |> filter(!table %in% low$table)
+  if (nrow(low) > 0 && "rpb_med_below_chance" %in% names(low)) {
+    cat(sprintf(
+      paste0("**The caveat is the chance floor itself.** On %s, %s of the ",
+             "items sit below $1/m$, against at most %.0f%% on any other ",
+             "table, and on those items the median item-rest correlation is ",
+             "%s: weak, and close to zero on the first, but positive, where ",
+             "items keyed to the wrong option would sit at zero or below. ",
+             "Hard forms are the likelier explanation, though not a proven ",
+             "one. `%s` is the weaker of the two, with ",
+             "the lowest median item-rest correlation of any table here ",
+             "(%.2f). Either way it matters for what ",
+             "follows. The 1PLg fixes every item's floor at $1/m$, the ",
+             "Mixture's guessing class answers at $1/m$, and the 3PL's prior ",
+             "centres its floor near there, while these items show no such ",
+             "floor in the data. On these tables the fixed-floor models rest ",
+             "on an assumption the data do not support.\n\n"),
+      paste0("`", low$table, "`", collapse = " and "),
+      paste(sprintf("%.0f%%", 100 * low$frac_p_below_chance), collapse = " and "),
+      100 * max(rest$frac_p_below_chance),
+      paste(sprintf("%.2f", low$rpb_med_below_chance), collapse = " and "),
+      low$table[which.min(low$rpb_med)], min(low$rpb_med)))
+  }
 }
 ```
 
@@ -583,8 +592,8 @@ construction, which is why this page reports the median. And the floor is
 entangled with the latent variance: a guessing floor and a small ability
 spread both flatten the lower end of the item response function, so the two
 parameters lean on each other, and the narrower the spread the harder they
-are to separate. The post-screen ENEM tables sit at
-$\mathrm{SD}(\theta) = 0.4$ to $0.7$, which is the worst part of that range.
+are to separate. The ENEM tables sit at $\mathrm{SD}(\theta) = 0.4$ to
+$0.9$ under Rasch, which is the worst part of that range.
 
 `guessing_floor_calibration_compute.R` generates from the 1PL-G with a floor
 of exactly $1/m = 0.20$ on *every* item, at the $N$ and $J$ of these tables,
@@ -671,7 +680,15 @@ Seven specifications per table:
 All seven specifications estimate the latent variance. `mirt`'s
 `itemtype = "Rasch"` fixes every slope at 1 and estimates $\mathrm{Var}(\theta)$,
 so the three standalone estimators (`fit_1pl_ag()`, `fit_mixture()`,
-`purify_rasch()`) do the same rather than pinning $\theta \sim N(0,1)$. This
+`purify_rasch()`) do the same rather than pinning $\theta \sim N(0,1)$.
+The 1PLg needs it done by hand. It is fit as a constrained `mirt` 3PL, and
+`mirt` frees the variance automatically only for `itemtype = "Rasch"`; a 3PL
+with its slopes pinned at 1 keeps $\mathrm{Var}(\theta) = 1$ unless told
+otherwise, which leaves nothing free to set the scale. An earlier version of
+this page missed this. Pinned, the 1PLg ran out its 2,000-cycle budget on
+seven of the eleven tables, and the page reported those cells as blank for
+non-convergence and called the pattern unexplained. With the variance freed
+it converges on every table in under 50 cycles. This
 matters more than it sounds. If the baseline estimates a variance the
 Mixture does not, the two are not nested, and the Mixture cannot collapse
 onto Rasch as $\hat\pi \to 1$ -- which is exactly the safety-valve property
@@ -946,8 +963,11 @@ if (cache_ok && nrow(summary_df) > 0 && nrow(imv_vs_rasch_df) > 0) {
     cat(sprintf(
       paste0("- **Modelling guessing beats ignoring it on every table.** The ",
              "3PL is positive against Rasch on all %d, from %.4f to %.4f, and ",
-             "the 1PL-AG on %d of them. There is no group here where a ",
-             "guessing correction costs you out of sample. That is a change ",
+             "the 1PL-AG on %d of them. No table is left where estimating the ",
+             "floor costs you out of sample; the one correction that does ",
+             "cost, on some tables, is the one that fixes the floor at $1/m$ ",
+             "rather than estimating it (the 1PLg; see the Mixture bullet ",
+             "below). That is a change ",
              "from an earlier version of this page, which reported the ",
              "tables splitting in two -- corrections helping on some and ",
              "actively hurting on others -- and read the split as tracking ",
@@ -981,6 +1001,36 @@ if (cache_ok && nrow(summary_df) > 0 && nrow(imv_vs_rasch_df) > 0) {
       # the 2PL, i.e. how much of it is floor rather than slopes
       100 * min(w$imv23 / w$`3PL`, na.rm = TRUE),
       100 * max(w$imv23 / w$`3PL`, na.rm = TRUE)))
+  }
+
+  if (all(c("Mixture", "3PL", "1PLg") %in% names(w)) && any(!is.na(w$Mixture))) {
+    n_mix_pos <- sum(w$Mixture > 0, na.rm = TRUE)
+    # per-table ratio is only read where the Mixture's margin is clear of
+    # zero; the range is stated, not a single multiple, because it is wide
+    ok <- !is.na(w$Mixture) & w$Mixture > 0.0005 & !is.na(w$`3PL`)
+    ratio <- w$`3PL`[ok] / w$Mixture[ok]
+    plg_neg <- w |> filter(!is.na(`1PLg`), `1PLg` < 0)
+    cat(sprintf(
+      paste0("- **The Mixture's margins are real but smaller, and that is ",
+             "what it should do.** It is positive against Rasch on %d of %d ",
+             "tables, from %.4f to %.4f, while the 3PL runs %.4f to %.4f: ",
+             "between %.1f and %.0f times the Mixture's margin table by ",
+             "table. The Mixture is Rasch-engaged -- its engaged class keeps ",
+             "every slope at 1 -- so it can only recover what a guessing ",
+             "class explains, not what varying discrimination does. Read its ",
+             "column against zero, not against the 2PL and 3PL columns beside ",
+             "it. The fairer neighbour is the 1PLg, which is Rasch-engaged ",
+             "too but applies the $1/m$ floor to every examinee: it is %s.\n"),
+      n_mix_pos, sum(!is.na(w$Mixture)),
+      min(w$Mixture, na.rm = TRUE), max(w$Mixture, na.rm = TRUE),
+      min(w$`3PL`, na.rm = TRUE), max(w$`3PL`, na.rm = TRUE),
+      min(ratio), max(ratio),
+      if (nrow(plg_neg) == 0) "positive on every table as well" else
+        sprintf("negative on %d (%s, down to %.4f)%s",
+                nrow(plg_neg), paste0("`", plg_neg$table, "`", collapse = ", "),
+                min(plg_neg$`1PLg`),
+                if (all(plg_neg$Mixture > 0, na.rm = TRUE))
+                  ", where the Mixture is positive" else "")))
   }
 
   cat(sprintf(
@@ -1487,19 +1537,16 @@ if (gsweep_ok && nrow(gsweep_spread) > 0) {
   text for these tables; the value comes from documented exam structure, not
   from counting options in the data itself. If that assumption is wrong for
   any particular year/subject, every ENEM result here inherits the error.
-- **The scored-absence screen removes a large, non-random block, and the
-  surviving samples are range-restricted.** On five of the tables the
-  screen drops roughly 45% of drawn candidates (see [Screening scored
-  absences](#screening-scored-absences)). Those candidates are not a random
-  subset -- they are whoever did not sit the section -- so the screened
-  sample is not a clean random draw from the original population, and the
-  post-screen latent SDs (0.4-0.7 on those tables) are a different estimand
-  from what the same tables would yield if absence had been coded missing
-  rather than wrong. The screen makes the guessing models estimable; it does
-  not reconstruct the data the exam would have produced. A cleaner fix lives
-  upstream, in how these tables encode a section a candidate never took:
-  everyone who pulls these five tables from IRW gets the same 45%, and a
-  screen that lives in one vignette's compute script does not help them.
+- **The scored-absence screen is a safeguard, not a repair.** On the
+  current release of these tables it removes a handful of candidates at
+  most (see [Screening scored absences](#screening-scored-absences)). On an
+  earlier release it removed roughly 45% of five tables, a non-random block
+  of candidates who had not sat the section, and the fix that mattered was
+  upstream: IRW now records a section a candidate never took as missing, so
+  everyone who pulls these tables gets that, not only readers of this page.
+  A table with the same defect would still pass the screen's results through
+  as a range-restricted sample, which is a different estimand from the one
+  the full candidate pool would give.
 - **The *level* of the recovered guessing floor is not pinned down.** At the
   sample sizes and latent spreads of these tables, a floor of exactly $1/m$
   is recovered high and with wide item-to-item scatter, and the estimated
@@ -1508,22 +1555,14 @@ if (gsweep_ok && nrow(gsweep_spread) > 0) {
   The floor column supports "there is a floor here, and it is of a plausible
   size"; it does not support a comparison between a table's floor and $1/m$,
   or between one table's floor and another's at different spreads.
-- **One candidate table, `enem_2019_1mil_lc`, was excluded as mis-scored.**
-  It carries no zero block at the candidate level, so the scored-absence
-  screen leaves it alone, but two model-free checks single it out (see
-  [Screening the answer key](#screening-the-answer-key)). One of its two
-  elective language blocks is scored zero for every candidate who sat it --
-  five items with no observed variance. And of the items that remain, the
-  majority correlate below 0.05 with the total of the others: nearly three
-  times the share of any other table here, and the smallest median item-rest
-  correlation by a wide margin. The exclusion is a judgement about scoring,
-  not about results we did not like, and the diagnostics that support it are
-  on the page. What it cost is one table's worth of evidence; what it would
-  have cost to keep is every count on this page silently including a table
-  whose items do not measure a common trait. `enem_2013_1mil_cn` is the next
-  weakest on the same statistic, by a wide margin from
-  `enem_2019_1mil_lc` and a narrow one from the rest; it is retained, and
-  deserves the same suspicion at much lower confidence.
+- **Two tables show no floor at $1/m$.** `enem_2013_1mil_cn` and
+  `enem_2013_1mil_mt` put about two-fifths of their items below the chance
+  floor (see [Screening the answer key](#screening-the-answer-key)). Hard
+  forms are the likelier reading than a key failure, though
+  `enem_2013_1mil_cn` also has the weakest item-rest correlations of any
+  table on the page. Every model here that fixes or
+  centres a floor at $1/m$ is assuming something these two tables do not
+  show, and their results deserve that discount.
 - **1PL-AG's $\gamma$ (and, to a lesser extent, $\alpha$) can be noisy.**
   Simulation validation recovered $\beta$ well but $\gamma$ poorly at
   moderate sample sizes -- consistent with @sanmartin2006's own real-data

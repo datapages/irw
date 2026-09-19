@@ -1,16 +1,24 @@
 # guessing_key_diagnostics.R -- per-table answer-key sanity checks.
 #
-# Motivation: `enem_2019_1mil_lc` behaves unlike the other ten tables (tiny
-# estimated latent SD, a median raw score below the chance floor) and the
-# scored-absence screen does not touch it -- it carries no zero block at the
-# candidate level. This script asks the prior question the model fits cannot:
-# do these responses look like they were scored against the right key?
+# Motivation: before the ENEM rebuild in dataset v52.0, `enem_2019_1mil_lc`
+# behaved unlike the other ten tables (tiny estimated latent SD, a median raw
+# score below the chance floor) and the scored-absence screen did not touch it.
+# This script asks the prior question the model fits cannot: do these
+# responses look like they were scored against the right key?
 #
-# Its answer is what excluded that table from guessing_compute.R's TABLES on
-# 2026-09-04, so this script deliberately runs over the full CANDIDATE set,
-# including the excluded table, rather than over the tables that survived.
-# Take the exclusion out of the diagnostics and the page loses the evidence
-# for its own decision.
+# Its answer excluded that table from guessing_compute.R's TABLES on
+# 2026-09-04. The cause turned out to be the LC 1:1 response alignment, fixed
+# in the rebuild, and on the rebuilt table the checks pass (median item-rest r
+# the best of any ENEM table here), so the table was restored on 2026-09-10.
+# The script still runs over every candidate table, so a reader can see that
+# each one passes rather than take it on trust.
+#
+# It also carries the one caveat the checks do raise on the rebuilt data:
+# enem_2013_1mil_cn and enem_2013_1mil_mt put ~40% of their items below 1/m,
+# with item-rest correlations near zero on those items (Doria, 2026-09-19;
+# she found per-item p stable across booklets, so it is not a booklet
+# misalignment). Hard forms, most likely -- but a fixed floor of 1/m is an
+# assumption those two tables do not show.
 #
 # Two statistics per table, both on the sample the models are actually fit to
 # (after the scored-absence screen, before the zero-variance item drop, so the
@@ -129,7 +137,13 @@ diagnose_one <- function(table_name, m) {
     frac_p_below_chance = mean(p_a < 1 / m),
     rpb_med = stats::median(r_a, na.rm = TRUE),
     rpb_min = min(r_a, na.rm = TRUE),
-    frac_rpb_below_05 = mean(r_a < 0.05, na.rm = TRUE)
+    frac_rpb_below_05 = mean(r_a < 0.05, na.rm = TRUE),
+    # item-rest r on the items below the chance floor only: a hard item that
+    # still measures the trait keeps a positive r; a floor nobody reaches by
+    # knowledge does not
+    rpb_med_below_chance = if (any(p_a < 1 / m)) {
+      stats::median(r_a[p_a < 1 / m], na.rm = TRUE)
+    } else NA_real_
   )
 }
 
@@ -137,7 +151,8 @@ diagnostics <- map2(TABLES$table, TABLES$m, diagnose_one) |> compact() |> bind_r
 
 print(as.data.frame(diagnostics[, c("table", "n_items_analysed", "p_med",
                                     "frac_p_below_chance", "rpb_med",
-                                    "frac_rpb_below_05")]), digits = 3)
+                                    "frac_rpb_below_05",
+                                    "rpb_med_below_chance")]), digits = 3)
 
 saveRDS(
   list(diagnostics = diagnostics, date_run = Sys.Date(), session = sessionInfo()),

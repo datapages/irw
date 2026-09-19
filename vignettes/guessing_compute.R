@@ -361,6 +361,7 @@ fit_one_table <- function(table_name, m, m_verified) {
     # variance, matching mirt's itemtype = "Rasch" baseline (see
     # guessing_helpers.R::.scale_quad for why this matters)
     sd_rasch = if (converged$rasch) sqrt(coef(fit_rasch, simplify = TRUE)$cov[1, 1]) else NA_real_,
+    sd_plg = if (converged$plg) sqrt(coef(fit_plg, simplify = TRUE)$cov[1, 1]) else NA_real_,
     sd_mix = if (!is.null(fit_mix)) fit_mix$sd else NA_real_,
     sd_ag  = if (!is.null(fit_ag)) fit_ag$sd else NA_real_,
     sd_pur = if (!is.null(fit_pur)) fit_pur$sd else NA_real_
@@ -441,7 +442,8 @@ summarize_one <- function(r) {
     conv_code_ag = r$conv_code_ag %||% NA_integer_,
     conv_code_g = r$conv_code_g %||% NA_integer_,
     frac_flagged = r$frac_flagged,
-    sd_rasch = r$sd_rasch %||% NA_real_, sd_mix = r$sd_mix %||% NA_real_,
+    sd_rasch = r$sd_rasch %||% NA_real_, sd_plg = r$sd_plg %||% NA_real_,
+    sd_mix = r$sd_mix %||% NA_real_,
     sd_ag = r$sd_ag %||% NA_real_, sd_pur = r$sd_pur %||% NA_real_,
     imv_1plg_mix   = imv_safe(r$preds$plg, r$preds$mix),
     imv_1plg_ag    = imv_safe(r$preds$plg, r$preds$ag),
