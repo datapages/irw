@@ -89,12 +89,18 @@ color_vars <- tags |>
 sort_alpha <- \(v) v |> fct_relevel("NA", after = Inf) |> levels()
 sort_n <- \(v) v |> fct_infreq() |> fct_relevel("NA", after = Inf) |> levels()
 
-age_range_vals <- c("Child (<18y)", "Adult (18+)", "Elderly (minimum age >50)", "Mixed", "Non-human", "NA")
+## `Not applicable (non-person)` replaced `Non-human` (irw#2206). Both stay
+## listed so the filter orders either spelling while the published tags catch up.
+age_range_vals <- c("Child (<18y)", "Adult (18+)", "Elderly (minimum age >50)", "Mixed",
+                    "Not applicable (non-person)", "Non-human", "NA")
 child_age_vals <- c("Early (<6y)", "Child (6-12y)", "Adolescent (12-18y)", "NA")
 has_item_text_vals <- c("Yes", "No")
 
 sort_funs <- list(
-  "age_range" = \(v) age_range_vals,
+  ## Known values in their fixed order, then any value the list does not know
+  ## yet -- a hard-coded list alone silently drops a new value from the filter.
+  "age_range" = \(v) c(setdiff(intersect(age_range_vals, v), "NA"),
+                        setdiff(v, age_range_vals), intersect("NA", v)),
   "child_age__for_child_focused_studies_" = \(v) child_age_vals,
   "construct_name" = sort_alpha,
   "construct_type" = sort_alpha,
