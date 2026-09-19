@@ -1,10 +1,12 @@
 #!/usr/bin/env Rscript
 #
-# Per-table landing pages for the IRW -- PILOT (ben-domingue/irw#1706).
+# Per-table landing pages for the IRW (ben-domingue/irw#1706).
 #
-# Emits, into _site/tables/, for each table named in landing/pilot_tables.txt:
+# Emits, into _site/tables/, for every table landing/page_rules.R says gets a page:
 #   <slug>/index.html       a landing page carrying schema.org/Dataset JSON-LD
 #   <slug>/croissant.jsonld a Croissant (MLCommons) description
+# plus a tombstone <slug>/index.html for each table in landing/withdrawn.tsv, and a
+# banner (and no search presence) for each table in landing/known_issues.tsv.
 #
 # The directory form is deliberate: the public URL is /tables/<slug>/ with no
 # file extension. These URLs are meant to be cited, and to be what a release DOI
@@ -12,7 +14,7 @@
 # and GitHub Pages does not reliably serve /tables/<slug> for a <slug>.html file.
 # Same file count either way; only the path shape differs. Changing it after the
 # pages are indexed and cited is the expensive move, so it is made up front.
-# plus _site/tables/index.html and sitemap entries appended to _site/sitemap.xml.
+# Also writes _site/tables/index.html and appends sitemap entries to _site/sitemap.xml.
 #
 # Run as a Quarto post-render step. Skips itself (with a message, exit 0) when
 # REDIVIS_API_TOKEN is absent, so a local preview without credentials still works.
@@ -47,7 +49,7 @@
 # The skip below exists for one case only: a local preview by someone without
 # Redivis credentials. In CI it must NOT skip. `quarto publish` replaces the
 # published site wholesale, so a silent skip on a green build would delete the
-# 25 table landing pages and their Croissant files from itemresponsewarehouse.org
+# table landing pages and their Croissant files from itemresponsewarehouse.org
 # with nothing in the log louder than one message() -- exactly the failure mode
 # that makes datapages/irw's REDIVIS_API_TOKEN secret dangerous to touch
 # (ben-domingue/irw#2129). A missing credential in CI is a broken build, not a
@@ -67,10 +69,10 @@ if (!nzchar(Sys.getenv("REDIVIS_API_TOKEN"))) {
 suppressWarnings(suppressMessages({
   library(redivis); library(jsonlite)
 }))
+source(file.path("landing", "page_rules.R"))   # SHARD_REF, blank(), slug_of(), page_tables()
 
 SITE_URL     <- "https://itemresponsewarehouse.org"
 OUT_DIR      <- file.path("_site", "tables")
-PILOT_LIST   <- file.path("landing", "pilot_tables.txt")
 MANIFEST_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
                        "metadata/version_manifest.tsv")
 # Redivis' table.listRows endpoint serves a public table as CSV with no token, but
@@ -81,31 +83,9 @@ MANIFEST_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/
 ROWS_API       <- "https://redivis.com/api/v1/tables/"
 ANON_MAX_BYTES <- 100e6
 
-# Shard name -> Redivis scoped reference. Mirrors the map in _load-data.qmd;
-# authoritative source is IRW_CORE_DATASETS in ben-domingue/irw metadata/redivis_config.R.
-SHARD_REF <- c(
-  item_response_warehouse   = "item_response_warehouse:as2e",
-  item_response_warehouse_2 = "item_response_warehouse_2:epbx",
-  item_response_warehouse_3 = "item_response_warehouse_3:5xaj",
-  item_response_warehouse_4 = "item_response_warehouse_4:980f",
-  item_response_warehouse_5 = "item_response_warehouse_5:3ykx",
-  item_response_warehouse_6 = "item_response_warehouse_6:fpe6"
-)
-
 # ---------------------------------------------------------------- small helpers
 
 `%||%` <- function(a, b) if (is.null(a) || length(a) == 0 || all(is.na(a))) b else a
-
-# The dictionary Sheets are hand-edited, so "missing" arrives in several spellings:
-# a real NA, an empty cell, or the literal text "NA" / "N/A" / "NULL". All of them
-# must count as absent, or they end up rendered as facts -- an early run emitted
-# "https://doi.org/NA" as a citation and "NA" as a schema.org keyword.
-blank <- function(x) {
-  if (is.null(x) || length(x) == 0) return(TRUE)
-  if (all(is.na(x))) return(TRUE)
-  v <- trimws(as.character(x)[1])
-  !nzchar(v) || toupper(v) %in% c("NA", "N/A", "NULL", "NONE", "-")
-}
 
 chr <- function(x) {
   if (blank(x)) return("")
@@ -120,12 +100,6 @@ esc <- function(x) {
   x <- gsub('"', "&quot;", x, fixed = TRUE)
   x
 }
-
-# URL slug rule: always lowercase. 266 of the eligible table names are not
-# lowercase, and a case-sensitive host would serve Foo.html and foo.html as two
-# pages while a case-insensitive one would collide them. The page displays the
-# true name; only the path is folded. .assert_no_slug_collisions() enforces it.
-slug_of <- function(x) tolower(x)
 
 num_fmt <- function(x) {
   if (blank(x)) return("")
@@ -145,20 +119,12 @@ num_fmt <- function(x) {
   m
 }
 
-read_pilot_tables <- function(path) {
-  ln <- readLines(path, warn = FALSE)
-  ln <- sub("#.*$", "", ln)
-  ln <- trimws(ln)
-  ln <- ln[nzchar(ln)]
-  sort(unique(ln))                        # sorted: determinism rule 1
-}
-
 as_df <- function(tbl) as.data.frame(tbl$to_tibble(), stringsAsFactors = FALSE)
 
 # ------------------------------------------------------------------ page parts
 
 # Every table's page shows the same sections in the same order; sections with no
-# data are omitted rather than rendered empty, so an untagged table (8 of the 25)
+# data are omitted rather than rendered empty, so an untagged table
 # produces a shorter page, not a page full of blanks.
 kv_rows <- function(pairs) {
   keep <- vapply(pairs, function(p) !blank(p[[2]]), logical(1))
@@ -240,7 +206,14 @@ build_jsonld <- function(x) {
 # --------------------------------------------------------------- Croissant 1.0
 
 build_croissant <- function(x) {
-  fields <- lapply(x$variables, function(v) {
+  # Only the three standard columns, whose names the data standard fixes. The
+  # other column names come from irw_meta, which stores them lowercased, while
+  # the table itself may not (chakraborty2026_SELOS_IRW has `cov_Gender`), and a
+  # Croissant field naming a column that does not exist makes the whole file fail
+  # to load. Reading their true case would take one Redivis call per table. The
+  # extra columns are still in the CSV and still listed on the page.
+  core <- intersect(c("id", "item", "resp"), x$variables)
+  fields <- lapply(core, function(v) {
     list("@type" = "cr:Field",
          "@id"   = paste0("responses/", v),
          name    = v,
@@ -342,12 +315,11 @@ PAGE_CSS <- paste0(
 "font-size:.82rem;color:#777}",
 ".pill{display:inline-block;background:#f2f2f4;border-radius:3px;padding:.1rem .45rem;",
 "margin:0 .3rem .3rem 0;font-size:.82rem}",
-".pilot{background:#fff6e5;border:1px solid #f0c987;border-left:5px solid #d98b1f;",
+".issue{background:#fff6e5;border:1px solid #f0c987;border-left:5px solid #d98b1f;",
 "border-radius:5px;padding:.85rem 1rem;margin:1.2rem 0 1.6rem}",
-".pilot p{margin:.35rem 0}",
-".pilot .tag{display:inline-block;background:#d98b1f;color:#fff;font-weight:700;",
-"font-size:.72rem;letter-spacing:.09em;padding:.12rem .5rem;border-radius:3px;",
-"margin-bottom:.45rem}",
+".issue p{margin:.35rem 0}",
+"input.find{width:100%;max-width:24rem;padding:.45rem .6rem;font-size:.95rem;",
+"border:1px solid #ccc;border-radius:5px;margin:.2rem 0 1rem}",
 ".btns{display:flex;flex-wrap:wrap;gap:.6rem;margin:.4rem 0 .5rem}",
 ".btn{display:inline-flex;flex-direction:column;padding:.55rem .95rem;border-radius:6px;",
 "border:1px solid #8c1515;text-decoration:none;font-weight:600;font-size:.93rem;line-height:1.3}",
@@ -357,7 +329,17 @@ PAGE_CSS <- paste0(
 ".note{font-size:.88rem;color:#555}")
 
 build_page <- function(x) {
+  # A table with an open data defect (landing/known_issues.tsv) keeps its page,
+  # but is kept out of search until the fix ships: noindex, no Dataset JSON-LD,
+  # no Croissant file, no sitemap entry. The banner is what a visitor sees.
+  flagged <- nzchar(x$issue)
   jsonld <- toJSON(build_jsonld(x), auto_unbox = TRUE, pretty = TRUE, null = "null")
+  issue_url <- paste0("https://github.com/ben-domingue/irw/issues/", x$issue)
+  banner <- if (flagged) paste0(
+    "<div class=\"issue\">\n<p><strong>Known data issue.</strong> This table has an open ",
+    "defect that is being fixed; see <a href=\"", esc(issue_url), "\">irw#", esc(x$issue),
+    "</a> before relying on it. This notice is removed when the corrected table is ",
+    "released.</p>\n</div>\n") else ""
 
   size <- kv_rows(list(
     list("Responses",                 num_fmt(x$m$n_responses)),
@@ -409,7 +391,7 @@ if (nzchar(x$rows_url)) paste0(
 "<div class=\"btns\">",
 btn(x$rows_url, "Download CSV", "no account needed", "btn primary"),
 btn(x$redivis_url, "Browse on Redivis", "explore and query"),
-btn("croissant.jsonld", "Croissant metadata", "Hugging Face, Kaggle, OpenML"),
+if (!flagged) btn("croissant.jsonld", "Croissant metadata", "Hugging Face, Kaggle, OpenML") else "",
 "</div>\n") else paste0(
 "<div class=\"btns\">",
 btn(x$redivis_url, "Browse on Redivis", "sign in to download"),
@@ -435,14 +417,16 @@ btn(x$redivis_url, "Browse on Redivis", "sign in to download"),
 "<title>", esc(x$table), " &mdash; Item Response Warehouse</title>\n",
 "<link rel=\"canonical\" href=\"", esc(x$page_url), "\">\n",
 "<meta name=\"description\" content=\"", esc(substr(x$meta_description, 1, 300)), "\">\n",
-"<link rel=\"alternate\" type=\"application/ld+json\" href=\"croissant.jsonld\" title=\"Croissant\">\n",
+if (flagged) "<meta name=\"robots\" content=\"noindex\">\n" else paste0(
+"<link rel=\"alternate\" type=\"application/ld+json\" href=\"croissant.jsonld\" title=\"Croissant\">\n"),
 "<style>", PAGE_CSS, "</style>\n",
-"<script type=\"application/ld+json\">\n", jsonld, "\n</script>\n",
+if (!flagged) paste0("<script type=\"application/ld+json\">\n", jsonld, "\n</script>\n") else "",
 "</head>\n<body>\n",
 "<nav class=\"crumb\"><a href=\"", SITE_URL, "/\">Item Response Warehouse</a> / ",
 "<a href=\"", SITE_URL, "/tables/\">Tables</a> / ", esc(x$table), "</nav>\n",
 "<h1>", esc(x$table), "</h1>\n",
 "<p class=\"sub\">", esc(x$size_sentence), "</p>\n",
+banner,
 section("About this table", about),
 section("Size and shape", size),
 section("Classification", tagbody),
@@ -459,39 +443,56 @@ esc(x$shard_version), ".</footer>\n",
 
 # ------------------------------------------------------------------ index page
 
-build_index <- function(rows, irw_version, n_total) {
+build_index <- function(rows, irw_version) {
   items <- paste0(vapply(rows, function(r) paste0(
-    "<tr><td><a href=\"", esc(r$slug), "/\">", esc(r$table), "</a></td>",
+    "<tr data-t=\"", esc(r$slug), "\"><td><a href=\"", esc(r$slug), "/\">", esc(r$table), "</a></td>",
     "<td>", esc(num_fmt(r$n_responses)), "</td>",
     "<td>", esc(r$shard), "</td></tr>"), character(1)), collapse = "\n")
   paste0(
 "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n",
 "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n",
-"<title>IRW table pages (pilot) &mdash; Item Response Warehouse</title>\n",
+"<title>IRW table pages &mdash; Item Response Warehouse</title>\n",
 "<link rel=\"canonical\" href=\"", SITE_URL, "/tables/\">\n",
-"<meta name=\"description\" content=\"A pilot set of ", length(rows), " individual ",
-"table pages for the Item Response Warehouse, each with schema.org and Croissant ",
-"metadata. Most IRW tables do not yet have a page.\">\n",
+"<meta name=\"description\" content=\"A page for each of the ",
+format(length(rows), big.mark = ","), " tables in the Item Response Warehouse, ",
+"each with schema.org and Croissant metadata.\">\n",
 "<style>", PAGE_CSS, "</style>\n</head>\n<body>\n",
 "<nav class=\"crumb\"><a href=\"", SITE_URL, "/\">Item Response Warehouse</a> / Tables</nav>\n",
-"<h1>IRW table pages <span class=\"tag\">PILOT</span></h1>\n",
-"<p class=\"sub\">A page per table, each naming the IRW version it describes ",
-"and carrying schema.org/Dataset and Croissant metadata.</p>\n",
-"<div class=\"pilot\">\n",
-"<span class=\"tag\">Pilot &mdash; not the full warehouse</span>\n",
-"<p><strong>Only ", length(rows), " of the IRW's ", format(n_total, big.mark = ","),
-" tables have a page.</strong> These ", length(rows), " were chosen to test the ",
-"page generator against the corpus' awkward cases &mdash; the largest and ",
-"smallest tables, tables with and without item text, tagged and untagged, and ",
-"names that break naive URL handling. They are not the most important tables, ",
-"and the selection is not a recommendation.</p>\n",
-"<p>To search the whole warehouse, use <a href=\"", SITE_URL,
-"/data.html\">Browse the IRW Data</a>. Whether this expands to every table is ",
-"being decided in <a href=\"https://github.com/ben-domingue/irw/issues/1706\">irw#1706</a>.</p>\n",
-"</div>\n",
-"<table class=\"kv\"><tr><th>Table</th><th>Responses</th><th>Redivis dataset</th></tr>\n",
-items, "\n</table>\n",
+"<h1>IRW table pages</h1>\n",
+"<p class=\"sub\">", format(length(rows), big.mark = ","), " tables, each with a page ",
+"naming the IRW version it describes and carrying schema.org/Dataset and Croissant ",
+"metadata. To filter by size, response type or classification, use ",
+"<a href=\"", SITE_URL, "/data.html\">Browse the IRW Data</a>.</p>\n",
+"<input class=\"find\" type=\"search\" placeholder=\"Filter by table name\" ",
+"aria-label=\"Filter by table name\" oninput=\"",
+"var q=this.value.toLowerCase();",
+"document.querySelectorAll('#tbl tr[data-t]').forEach(function(r){",
+"r.style.display=r.dataset.t.indexOf(q)<0?'none':''})\">\n",
+"<table class=\"kv\" id=\"tbl\"><tr><th>Table</th><th>Responses</th><th>Redivis dataset</th></tr>\n",
+items,
+"\n</table>\n",
 "<footer>Item Response Warehouse, IRW v", esc(irw_version), ".</footer>\n",
+"</body>\n</html>\n")
+}
+
+# ----------------------------------------------------------------- tombstones
+
+# A withdrawn table keeps its URL: an indexed or cited address must not become a
+# 404. Deliberately vague (Ben, 2026-09-19): "Withdrawn" and the date, no reason.
+# noindex, no JSON-LD, no Croissant file, no sitemap entry.
+build_tombstone <- function(table, date) {
+  paste0(
+"<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n",
+"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n",
+"<title>", esc(table), " (withdrawn) &mdash; Item Response Warehouse</title>\n",
+"<meta name=\"robots\" content=\"noindex\">\n",
+"<style>", PAGE_CSS, "</style>\n</head>\n<body>\n",
+"<nav class=\"crumb\"><a href=\"", SITE_URL, "/\">Item Response Warehouse</a> / ",
+"<a href=\"", SITE_URL, "/tables/\">Tables</a> / ", esc(table), "</nav>\n",
+"<h1>", esc(table), "</h1>\n",
+"<div class=\"issue\"><p><strong>Withdrawn</strong>",
+if (!blank(date)) paste0(" on ", esc(date)) else "", ".</p></div>\n",
+"<footer><a href=\"", SITE_URL, "/tables/\">All IRW table pages</a></footer>\n",
 "</body>\n</html>\n")
 }
 
@@ -535,10 +536,6 @@ merge_sitemap <- function(urls) {
 # ------------------------------------------------------------------------ main
 
 main <- function() {
-  tables <- read_pilot_tables(PILOT_LIST)
-  .assert_no_slug_collisions(tables)
-  message("[landing] ", length(tables), " tables requested")
-
   manifest <- .read_manifest()
   irw_version <- max(manifest$irw_version)
   pins <- manifest[manifest$irw_version == irw_version, ]
@@ -563,50 +560,63 @@ main <- function() {
   key <- function(df) tolower(trimws(as.character(df[[1]])))
   md$.k <- key(md); bib$.k <- key(bib); tg$.k <- key(tg); itm$.k <- key(itm)
 
-  shard_info <- list()
-  get_shard <- function(shard) {
-    if (!is.null(shard_info[[shard]])) return(shard_info[[shard]])
-    p <- redivis$user("datapages")$dataset(SHARD_REF[[shard]])$get()$properties
-    info <- list(version = p$version$tag %||% "", doi = p$doi %||% "",
-                 url = p$url %||% "")
-    shard_info[[shard]] <<- info
-    info
+  # One listing per shard, not one request per table: at ~4,000 tables the
+  # per-table call was the whole runtime. Each listed table carries Redivis' own
+  # URL (with the released version as ?v=; the path uses short ids that cannot be
+  # derived from the name, and hand-built URLs 404) and numBytes, which decides
+  # whether the anonymous CSV URL exists.
+  shard_info <- list(); listed <- list()
+  for (shard in names(SHARD_REF)) {
+    ds <- redivis$user("datapages")$dataset(SHARD_REF[[shard]])
+    p <- ds$get()$properties
+    shard_info[[shard]] <- list(version = p$version$tag %||% "", doi = p$doi %||% "",
+                                url = p$url %||% "")
+    tabs <- ds$list_tables()
+    listed[[shard]] <- data.frame(
+      .k    = tolower(vapply(tabs, function(t) t$name, character(1))),
+      url   = vapply(tabs, function(t) t$properties$url %||% "", character(1)),
+      bytes = vapply(tabs, function(t) suppressWarnings(as.numeric(t$properties$numBytes %||% NA)),
+                     numeric(1)),
+      stringsAsFactors = FALSE)
+    message("[landing] ", shard, " ", shard_info[[shard]]$version, ": ",
+            length(tabs), " tables listed")
   }
+  live_names <- unlist(lapply(listed, `[[`, ".k"), use.names = FALSE)
 
-  # Redivis' own URL for the table, which carries the released version as ?v=.
-  # This is what a landing page should point at: constructing a URL by hand
-  # produced a 404 in the first run, because the path uses short ids
-  # (as2e-cv7jb41fd/tables/hye4-...) that are not derivable from the table name.
-  # The same call gives numBytes, which decides whether the anonymous CSV URL
-  # exists; an unknown size is treated as too large, never as small enough.
-  table_props <- function(shard, name, fallback) {
-    p <- tryCatch(
-      redivis$user("datapages")$dataset(SHARD_REF[[shard]])$table(name)$get()$properties,
-      error = function(e) NULL)
-    url <- p$url
-    list(url = if (is.null(url) || !nzchar(url)) fallback else url,
-         bytes = suppressWarnings(as.numeric(p$numBytes %||% NA)))
-  }
+  tables <- page_tables(md, bib, live = live_names)
+  withdrawn <- withdrawn_tbl()
+  issues <- known_issues()
+  issue_of <- setNames(issues$issue, tolower(issues$table))
+  .assert_no_slug_collisions(c(tables, withdrawn$table))
+  in_shard <- md$table[as.character(md$dataset) %in% names(SHARD_REF)]
+  held <- sort(in_shard[!(tolower(in_shard) %in% tolower(c(tables, withdrawn$table)))])
+  message("[landing] ", length(tables), " tables get a page; ", nrow(withdrawn),
+          " tombstones; ", length(held), " held (no licence, or not listed on Redivis)")
 
   # The anonymous CSV URL for a table, pinned to the dataset version the page
   # reports: datapages.<shard>:v7_0.<table>. Addressed by name, never by
-  # reference id (see above). "" when Redivis would refuse it without a login.
+  # reference id (see above). "" when Redivis would refuse it without a login;
+  # an unknown size is treated as too large, never as small enough.
   rows_url_of <- function(shard, version, name, bytes) {
     if (is.na(bytes) || bytes > ANON_MAX_BYTES || !nzchar(version)) return("")
     paste0(ROWS_API, "datapages.", shard, ":", gsub(".", "_", version, fixed = TRUE),
            ".", name, "/rows?format=csv")
   }
 
+  # Start from an empty directory, so a table that has lost its page (withdrawn
+  # without a tombstone row, or its licence cleared) does not linger from a
+  # previous local run. In CI _site/ is fresh anyway.
+  unlink(OUT_DIR, recursive = TRUE)
   dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
-  rows <- list(); urls <- character(0); lagging <- character(0); missing <- character(0); too_big <- character(0)
+  rows <- list(); urls <- character(0); lagging <- character(0); too_big <- character(0)
 
   for (tb in tables) {
     k <- tolower(tb)
-    mrow <- md[md$.k == k, , drop = FALSE]
-    if (!nrow(mrow)) { missing <- c(missing, tb); next }
-    mrow <- mrow[1, ]
+    mrow <- md[md$.k == k, , drop = FALSE][1, ]
     shard <- chr(mrow$dataset)
-    si <- get_shard(shard)
+    si <- shard_info[[shard]]
+    lt <- listed[[shard]]
+    lrow <- lt[lt$.k == k, , drop = FALSE]
 
     brow <- bib[bib$.k == k, , drop = FALSE]
     trow <- tg[tg$.k == k, , drop = FALSE]
@@ -657,14 +667,14 @@ main <- function() {
       keywords = unname(unlist(tags)),
       page_url = page_url,
       croissant_url = paste0(SITE_URL, "/tables/", slug, "/croissant.jsonld"),
-      redivis_url = ""
+      issue = if (is.na(issue_of[k])) "" else unname(issue_of[k])
     )
-    tp <- table_props(shard, x$table, si$url)
-    x$redivis_url <- tp$url
-    x$rows_url    <- rows_url_of(shard, si$version, x$table, tp$bytes)
+    x$redivis_url <- if (nrow(lrow) && nzchar(lrow$url[1])) lrow$url[1] else si$url
+    x$rows_url    <- rows_url_of(shard, si$version, x$table,
+                                 if (nrow(lrow)) lrow$bytes[1] else NA)
     # Google Dataset Search wants a description of at least 50 characters, and the
     # dictionary Sheet's Description column is frequently a two-word label
-    # ("Personality assessment"): 10 of the 25 pilot tables fell under the limit.
+    # ("Personality assessment"): 10 of the first 25 pages fell under the limit.
     # So the published description is the label, where there is one, followed by
     # the table's own measured facts. Every part of it is sourced, nothing invented.
     lead <- if (!blank(x$description)) {
@@ -685,33 +695,66 @@ main <- function() {
     page_dir <- file.path(OUT_DIR, slug)
     dir.create(page_dir, recursive = TRUE, showWarnings = FALSE)
     writeLines(build_page(x), file.path(page_dir, "index.html"))
-    writeLines(toJSON(build_croissant(x), auto_unbox = TRUE, pretty = TRUE, null = "null"),
-               file.path(page_dir, "croissant.jsonld"))
     # Only HTML pages go in the sitemap. Each page points at its own Croissant
     # file with <link rel="alternate">, which is how crawlers are meant to find it.
-    urls <- c(urls, page_url)
+    # A flagged table gets neither, until its fix is released.
+    if (!nzchar(x$issue)) {
+      writeLines(toJSON(build_croissant(x), auto_unbox = TRUE, pretty = TRUE, null = "null"),
+                 file.path(page_dir, "croissant.jsonld"))
+      urls <- c(urls, page_url)
+    }
     rows[[length(rows) + 1]] <- list(table = x$table, slug = slug, shard = shard,
                                      n_responses = mrow$n_responses)
     if (!nzchar(x$rows_url)) too_big <- c(too_big, x$table)
   }
 
+  for (i in seq_len(nrow(withdrawn))) {
+    page_dir <- file.path(OUT_DIR, slug_of(withdrawn$table[i]))
+    dir.create(page_dir, recursive = TRUE, showWarnings = FALSE)
+    writeLines(build_tombstone(withdrawn$table[i], withdrawn$date[i]),
+               file.path(page_dir, "index.html"))
+  }
+
   rows <- rows[order(vapply(rows, function(r) tolower(r$table), character(1)))]
-  writeLines(build_index(rows, irw_version, nrow(md)), file.path(OUT_DIR, "index.html"))
+  writeLines(build_index(rows, irw_version), file.path(OUT_DIR, "index.html"))
   urls <- c(urls, paste0(SITE_URL, "/tables/"))
   merge_sitemap(unique(urls))
 
-  message("[landing] emitted ", length(rows), " pages + ", length(rows),
-          " Croissant files into ", OUT_DIR)
-  message("[landing] ", length(rows) - length(too_big), " Croissant files load without ",
-          "a login; ", length(too_big), " exceed ", ANON_MAX_BYTES / 1e6, "MB",
-          if (length(too_big)) paste0(": ", paste(too_big, collapse = ", ")) else "")
-  if (length(missing))
-    message("[landing] WARNING: not in irw_meta.metadata, no page emitted: ",
-            paste(missing, collapse = ", "))
+  flagged_n <- sum(tolower(tables) %in% names(issue_of))
+  message("[landing] emitted ", length(rows), " pages (", flagged_n,
+          " with a known-issue banner, noindex) and ", length(rows) - flagged_n,
+          " Croissant files; ", nrow(withdrawn), " tombstones")
+  message("[landing] ", length(too_big), " tables exceed ", ANON_MAX_BYTES / 1e6,
+          "MB and have no no-account CSV download")
+  stale <- setdiff(tolower(issues$table), tolower(tables))
+  if (length(stale))
+    message("[landing] WARNING: known_issues.tsv names tables that get no page: ",
+            paste(stale, collapse = ", "))
+  if (length(held))
+    message("[landing] held, no page (see ben-domingue/irw#2266): ",
+            paste(held, collapse = ", "))
   if (length(lagging))
     message("[landing] WARNING: version_manifest.tsv lags Redivis for: ",
             paste(lagging, collapse = ", "),
             " -- pages report both the manifest pin and the live released version.")
+  .warn_lost_pages(c(tables, withdrawn$table))
+}
+
+# A table that had a page on the live site and now has neither a page nor a
+# tombstone is about to become a 404 on an indexed URL. Warn loudly; the fix is a
+# row in landing/withdrawn.tsv. Reads the live sitemap, so it only ever affects
+# the log, never the output (rule 1). Tables kept out of the sitemap -- flagged or
+# tombstoned -- cannot be checked this way, which is why withdrawn.tsv is a file.
+.warn_lost_pages <- function(emitted) {
+  live <- tryCatch(readLines(url(paste0(SITE_URL, "/sitemap.xml")), warn = FALSE),
+                   error = function(e) character(0))
+  slugs <- regmatches(live, regexpr("/tables/[^/<]+/", live))
+  slugs <- sub("^/tables/", "", sub("/$", "", slugs))
+  lost <- setdiff(slugs, slug_of(emitted))
+  if (length(lost))
+    message("[landing] WARNING: these tables have a page on the live site but will ",
+            "not after this publish -- add them to landing/withdrawn.tsv: ",
+            paste(sort(lost), collapse = ", "))
 }
 
 main()
