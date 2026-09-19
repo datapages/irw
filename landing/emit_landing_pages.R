@@ -329,7 +329,21 @@ PAGE_CSS <- paste0(
 ".btn small{font-weight:400;font-size:.75rem;opacity:.85}",
 ".btn.primary{background:#8c1515;color:#fff}",
 ".btn:hover{background:#f7eded}.btn.primary:hover{background:#6f1010}",
-".note{font-size:.88rem;color:#555}")
+".note{font-size:.88rem;color:#555}",
+".licnote{background:#fff6e5;border-left:4px solid #d98b1f;padding:.5rem .8rem;",
+"margin:.2rem 0 .7rem;font-size:.93rem}")
+
+# Plain-language restrictions for a licence string, or character(0) when it is
+# not restrictive. Only NC and ND count: those limit what a user may do with the
+# data. SA is a condition on sharing adaptations, not a restriction on use.
+licence_terms <- function(lic) {
+  if (blank(lic)) return(character(0))
+  u <- toupper(lic)
+  c(if (grepl("\\bNC\\b", u)) "non-commercial use only",
+    if (grepl("\\bND\\b", u)) "no derivative works may be shared",
+    if (grepl("\\bNC\\b|\\bND\\b", u) && grepl("\\bSA\\b", u))
+      "adaptations must be shared under the same licence")
+}
 
 build_page <- function(x) {
   # A table with an open data defect (landing/known_issues.tsv) keeps its page,
@@ -390,7 +404,14 @@ build_page <- function(x) {
   btn <- function(href, label, hint, cls = "btn")
     paste0("<a class=\"", cls, "\" href=\"", esc(href), "\">", label,
            "<small>", hint, "</small></a>")
-  access <- paste0(
+  # Restrictive licences (NC or ND) are repeated, in plain words, right above the
+  # download buttons -- where someone takes the data, not only in the About box
+  # (Ben, 2026-09-19).
+  terms <- licence_terms(x$license)
+  licnote <- if (length(terms)) paste0(
+    "<p class=\"licnote\">Licence: <strong>", esc(x$license), "</strong> &mdash; ",
+    paste(terms, collapse = "; "), ".</p>\n") else ""
+  access <- paste0(licnote,
 if (nzchar(x$rows_url)) paste0(
 "<div class=\"btns\">",
 btn(x$rows_url, "Download CSV", "no account needed", "btn primary"),
