@@ -1,0 +1,1779 @@
+---
+title: "Guessing in Multiple-Choice Data: Which Correction Helps Out-of-Sample?"
+description: |
+  When guessing is present in multiple-choice data, which correction actually
+  helps out-of-sample -- and when does the correction itself become a
+  liability? Three published lenses on guessing (ability-based guessing,
+  person-level purification, and a two-class mixture "safety valve") plus the
+  standard IRT baselines, compared on real IRW tables using out-of-sample IMV.
+date: today
+bibliography: guessingdata/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: false
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(purrr)
+library(ggplot2)
+
+theme_set(theme_minimal(base_size = 13))
+
+# Colors for the widget's 5 ICCs (Rasch/1PLg/3PL/1PL-AG/Mixture) and for the
+# Results section's 6 non-Rasch models (adds 2PL and Purified Rasch, which
+# don't appear as separate curves in the widget).
+model_colors <- c(
+  Rasch    = "#2a78d6",
+  "2PL"    = "#6c757d",
+  "1PLg"   = "#eb6834",
+  "3PL"    = "#1baf7a",
+  "1PL-AG" = "#e87ba4",
+  Mixture  = "#4a3aa7",
+  "Purified Rasch" = "#c9a227"
+)
+model_order <- c("2PL", "1PLg", "3PL", "1PL-AG", "Mixture", "Purified Rasch")
+
+results_path      <- "guessingdata/guessing_results.rds"
+provisional_path  <- "guessingdata/guessing_results_provisional.rds"
+cache_ok <- file.exists(results_path) || file.exists(provisional_path)
+is_provisional <- !file.exists(results_path) && file.exists(provisional_path)
+
+if (cache_ok) {
+  .res       <- readRDS(if (file.exists(results_path)) results_path else provisional_path)
+  summary_df <- .res$summary
+  tables_df  <- .res$tables
+  date_run   <- .res$date_run
+  holdout_frac <- .res$holdout_frac
+  subsample_n  <- .res$subsample_n
+  n_complete_provisional <- .res$n_complete %||% NA_integer_
+  n_total_planned        <- .res$n_total_planned %||% NA_integer_
+
+  # All IMVs reframed relative to Rasch ("1PL"), the common no-guessing
+  # baseline, so every model's predictive gain (or cost) is on one shared
+  # scale -- computed directly from each table's cached held-out
+  # predictions, no refitting involved.
+  model_keys <- c(pl2 = "2PL", plg = "1PLg", pl3 = "3PL", ag = "1PL-AG",
+                   mix = "Mixture", purified = "Purified Rasch")
+  if (!is.null(.res$raw)) {
+    source("guessing_helpers.R")
+    imv_vs_rasch_df <- map_dfr(.res$raw, function(r) {
+      y <- r$true_vals
+      p_rasch <- r$preds$rasch
+      map_dfr(names(model_keys), function(key) {
+        p <- r$preds[[key]]
+        imv_val <- if (is.null(p) || all(is.na(p))) NA_real_ else compute_imv(p_rasch, p, y)
+        tibble(table = r$table, model = model_keys[[key]], imv = imv_val)
+      })
+    }) |> mutate(model = factor(model, levels = model_order))
+
+    # Full pairwise IMV(m1, m2) for every ordered pair of the 7 specs (IMV is
+    # directional, so m1->m2 need not equal -m2->m1), per table -- computed
+    # once here from the same cached held-out predictions, then embedded as
+    # JSON for the user-selectable comparison widget below (no server-side
+    # computation needed at view time, and the page stays a static file).
+    all_model_keys <- c(rasch = "Rasch", pl2 = "2PL", plg = "1PLg", pl3 = "3PL",
+                         ag = "1PL-AG", mix = "Mixture", purified = "Purified Rasch")
+    pairwise_imv <- map(.res$raw, function(r) {
+      y <- r$true_vals
+      out <- list()
+      for (k1 in names(all_model_keys)) {
+        p1 <- r$preds[[k1]]
+        if (is.null(p1) || all(is.na(p1))) next
+        row <- list()
+        for (k2 in names(all_model_keys)) {
+          if (k1 == k2) next
+          p2 <- r$preds[[k2]]
+          row[[all_model_keys[[k2]]]] <- if (is.null(p2) || all(is.na(p2))) NA_real_ else compute_imv(p1, p2, y)
+        }
+        out[[all_model_keys[[k1]]]] <- row
+      }
+      out
+    })
+    names(pairwise_imv) <- map_chr(.res$raw, "table")
+    pairwise_imv_json <- jsonlite::toJSON(pairwise_imv, auto_unbox = TRUE, na = "null", digits = 5)
+  } else {
+    imv_vs_rasch_df <- tibble(table = character(), model = factor(character(), levels = model_order), imv = numeric())
+    pairwise_imv_json <- jsonlite::toJSON(list())
+  }
+} else {
+  summary_df <- tibble(
+    table = character(), m = integer(), m_verified = logical(),
+    n_items = integer(), n_participants = integer(), n_heldout = integer(),
+    converged_rasch = logical(), converged_2pl = logical(),
+    converged_1plg = logical(), converged_3pl = logical(),
+    converged_ag = logical(), converged_mix = logical(),
+    pi_hat = numeric(), alpha_hat = numeric(), se_alpha = numeric(),
+    lr_stat = numeric(), lr_p = numeric(), frac_flagged = numeric()
+  )
+  imv_vs_rasch_df <- tibble(table = character(), model = factor(character(), levels = model_order), imv = numeric())
+  pairwise_imv_json <- jsonlite::toJSON(list())
+  date_run <- Sys.Date(); holdout_frac <- 0.2; subsample_n <- 3000
+  is_provisional <- FALSE
+}
+
+# Two companion caches, each optional so the page still renders without them.
+# guessing_sim_compute.R  -- Method A parameter recovery vs. held-out IMV on
+#                            simulated data with b_true known.
+# guessing_gsweep_compute.R -- sensitivity of the 1PLg and the Mixture to the
+#                            assumed guessing level g.
+# guessing_key_diagnostics.R -- item difficulty against the chance floor and
+#                            item-total point-biserials, per table.
+# guessing_floor_calibration_compute.R -- what an estimated guessing floor of
+#                            1/m looks like at these N, J and latent spreads.
+# guessing_m_check.R -- whether m = 5 holds for the ENEM tables, from the
+#                            letters candidates marked and the 2023 item text.
+# guessing_imv_benchmark.R -- the same pipeline on ordinary IRW cognitive
+#                            tables, and the 3PL's sensitivity to its g prior.
+sim_path    <- "guessingdata/guessing_sim_results.rds"
+gsweep_path <- "guessingdata/guessing_gsweep_results.rds"
+keydiag_path <- "guessingdata/guessing_key_diagnostics.rds"
+floorcal_path <- "guessingdata/guessing_floor_calibration.rds"
+mcheck_path <- "guessingdata/guessing_m_check.rds"
+mcheck_ok <- file.exists(mcheck_path)
+bench_path <- "guessingdata/guessing_imv_benchmark.rds"
+bench_ok <- file.exists(bench_path)
+sim_ok    <- file.exists(sim_path)
+gsweep_ok <- file.exists(gsweep_path)
+keydiag_ok <- file.exists(keydiag_path)
+floorcal_ok <- file.exists(floorcal_path)
+if (sim_ok) {
+  .sim <- readRDS(sim_path); sim_summary <- .sim$summary; sim_settings <- .sim$settings
+}
+if (gsweep_ok) {
+  .gsw <- readRDS(gsweep_path); gsweep_df <- .gsw$sweeps; gsweep_spread <- .gsw$spread
+}
+if (keydiag_ok) {
+  .kd <- readRDS(keydiag_path); keydiag_df <- .kd$diagnostics
+}
+if (floorcal_ok) {
+  .fc <- readRDS(floorcal_path); floorcal_df <- .fc$summary
+}
+if (mcheck_ok) {
+  .mc <- readRDS(mcheck_path)
+}
+if (bench_ok) {
+  .bm <- readRDS(bench_path)
+}
+```
+
+```{r}
+#| label: provisional-banner
+#| results: asis
+if (cache_ok && isTRUE(is_provisional)) {
+  cat(sprintf(
+    "\n::: {.callout-warning}\n**Provisional preview.** %d of %d planned tables have finished fitting so far; this page reflects those %d only and will change once the remaining tables complete.\n:::\n",
+    n_complete_provisional, n_total_planned, n_complete_provisional
+  ))
+}
+```
+
+## Motivation
+
+Multiple-choice items let respondents get a question right without knowing
+the answer. Three literatures locate that guessing behavior in three
+different places, and each proposes a different fix:
+
+- **@sanmartin2006** locate it in a **person &times; item interaction**: the
+  1PL-AG model lets the probability of a correct guess itself depend on
+  ability, via a weight $\alpha$ on top of a per-item floor. When $\alpha=0$
+  the model reduces to a fixed per-item floor (1PL-G); $\alpha \ne 0$ means
+  more able examinees guess more successfully -- partial knowledge leaking
+  into the "guess" itself.
+- **@torresirribarra2026** locate it at the **person level, in the
+  calibration sample**: rather than adding a guessing parameter to the item
+  response function, their Method A flags examinees whose response pattern
+  looks more like a flat guessing process than a Rasch process, removes them
+  from calibration, and refits. No new item parameter is introduced; the
+  item parameters themselves are what improve.
+- **@xiao2026safetyvalve** (the "Safety Valve" paper) locate it in a
+  **discrete latent class**: a two-class mixture in which one class responds
+  according to a Rasch model and the other responds at a fixed chance level,
+  with the mixing proportion $\pi$ estimated from the data. As
+  $\hat\pi \to 1$ the model collapses to a plain Rasch model, so (per their
+  central finding) it costs almost nothing when guessing is absent, while a
+  fixed-floor 1PLg can pay a large, asymmetric predictive penalty when its
+  assumed floor doesn't match the population.
+
+None of these three papers puts all three lenses, plus the standard
+Rasch/2PL/1PLg/3PL baselines, on one predictive scale across a battery of
+real datasets. That's the contribution here: fit all seven specifications on
+real IRW tables and score every one of them on genuinely held-out responses,
+using the InterModel Vigorish [IMV; @domingue2025imv].
+
+## Explore the model shapes
+
+Rasch and 1PLg apply the same floor to every examinee, regardless of whether
+they're guessing or working the problem. 1PL-AG tilts that floor by ability.
+The Mixture model only applies the floor to the estimated share of guessers.
+Drag the sliders below to see how the five item characteristic curves (ICCs)
+relate to one another.
+
+```{=html}
+<div class="guess-widget" style="border:1px solid #dee2e6;border-radius:6px;padding:1rem 1.25rem;margin:1rem 0;">
+  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px 24px;margin-bottom:0.75rem;">
+    <label style="font-size:0.9rem;">Item difficulty (b)
+      <span style="font-size:0.72rem;font-weight:600;color:#495057;">-- all five curves</span>
+      <input id="guess-b" type="range" min="-1" max="3" step="0.1" value="1.5" style="width:100%;">
+      <span id="guess-b-val" style="font-family:monospace;font-size:0.85rem;"></span>
+    </label>
+    <label style="font-size:0.9rem;">Chance level (g, for an m-option item)
+      <span style="font-size:0.72rem;font-weight:600;color:#495057;">-- all five curves</span>
+      <input id="guess-g" type="range" min="0.1" max="0.5" step="0.05" value="0.25" style="width:100%;">
+      <span id="guess-g-val" style="font-family:monospace;font-size:0.85rem;"></span>
+    </label>
+    <label style="font-size:0.9rem;">Ability weight in guessing (1PL-AG &alpha;)
+      <span style="font-size:0.72rem;font-weight:600;color:#e87ba4;">-- 1PL-AG only (pink curve)</span>
+      <input id="guess-alpha" type="range" min="0" max="1" step="0.05" value="0.2" style="width:100%;">
+      <span id="guess-alpha-val" style="font-family:monospace;font-size:0.85rem;"></span>
+    </label>
+    <label style="font-size:0.9rem;">Engaged proportion (Mixture &pi;)
+      <span style="font-size:0.72rem;font-weight:600;color:#4a3aa7;">-- Mixture only (purple curve)</span>
+      <input id="guess-pi" type="range" min="0.5" max="1" step="0.01" value="0.85" style="width:100%;">
+      <span id="guess-pi-val" style="font-family:monospace;font-size:0.85rem;"></span>
+    </label>
+  </div>
+  <p style="font-size:0.78rem;color:#666;margin:0 0 0.5rem;">
+    3PL (green) always uses discrimination fixed at 1.5 (rather than a slider)
+    purely so its curve is visually distinguishable from 1PLg's at the same
+    <em>b</em> and <em>g</em> -- it is not meant to represent a specific
+    fitted discrimination value.
+  </p>
+  <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:6px;font-size:0.82rem;">
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#2a78d6;"></span> Rasch</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#eb6834;"></span> 1PLg</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#1baf7a;"></span> 3PL</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#e87ba4;"></span> 1PL-AG</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#4a3aa7;"></span> Mixture</span>
+  </div>
+  <svg id="guess-svg" viewBox="0 0 640 380" style="width:100%;max-width:640px;height:auto;display:block;"></svg>
+  <p style="font-size:0.85rem;color:#666;margin-top:0.5rem;">
+    Rasch and 1PLg apply the same floor to every examinee. 1PL-AG tilts the
+    floor by ability. The Mixture model only applies the floor to the
+    estimated share of guessers.
+  </p>
+</div>
+
+<script>
+(function() {
+  function plogis(x) { return 1 / (1 + Math.exp(-x)); }
+  function qlogis(p) { return Math.log(p / (1 - p)); }
+
+  var ids = ["b", "g", "alpha", "pi"];
+  var els = {}, valEls = {};
+  ids.forEach(function(id) {
+    els[id] = document.getElementById("guess-" + id);
+    valEls[id] = document.getElementById("guess-" + id + "-val");
+  });
+  var svg = document.getElementById("guess-svg");
+
+  var W = 640, H = 380, mL = 50, mR = 68, mT = 10, mB = 40;
+  var plotW = W - mL - mR, plotH = H - mT - mB;
+  function px(theta) { return mL + (theta + 4) / 8 * plotW; }
+  function py(p) { return mT + (1 - p) * plotH; }
+
+  function pathFor(fn) {
+    var d = "";
+    for (var i = 0; i <= 160; i++) {
+      var theta = -4 + i * (8 / 160);
+      var x = px(theta), y = py(fn(theta));
+      d += (i === 0 ? "M" : "L") + x.toFixed(2) + "," + y.toFixed(2) + " ";
+    }
+    return d;
+  }
+
+  function staticAxesSvg() {
+    var s = "";
+    s += '<line x1="' + mL + '" y1="' + mT + '" x2="' + mL + '" y2="' + (mT + plotH) + '" stroke="#888"/>';
+    s += '<line x1="' + mL + '" y1="' + (mT + plotH) + '" x2="' + (mL + plotW) + '" y2="' + (mT + plotH) + '" stroke="#888"/>';
+    [-4, -2, 0, 2, 4].forEach(function(t) {
+      var x = px(t);
+      s += '<line x1="' + x + '" y1="' + (mT + plotH) + '" x2="' + x + '" y2="' + (mT + plotH + 5) + '" stroke="#888"/>';
+      s += '<text x="' + x + '" y="' + (mT + plotH + 18) + '" font-size="11" text-anchor="middle" fill="#333">' + t + '</text>';
+    });
+    [0, 0.25, 0.5, 0.75, 1].forEach(function(p) {
+      var y = py(p);
+      s += '<line x1="' + (mL - 5) + '" y1="' + y + '" x2="' + mL + '" y2="' + y + '" stroke="#888"/>';
+      s += '<text x="' + (mL - 9) + '" y="' + (y + 4) + '" font-size="11" text-anchor="end" fill="#333">' + p + '</text>';
+    });
+    s += '<text x="' + (mL + plotW / 2) + '" y="' + (H - 4) + '" font-size="12" text-anchor="middle" fill="#333">&#952; (ability)</text>';
+    s += '<text x="12" y="' + (mT + plotH / 2) + '" font-size="12" text-anchor="middle" fill="#333" transform="rotate(-90 12 ' + (mT + plotH / 2) + ')">P(correct)</text>';
+    return s;
+  }
+
+  function draw() {
+    var b = parseFloat(els.b.value), g = parseFloat(els.g.value),
+        alpha = parseFloat(els.alpha.value), pi = parseFloat(els.pi.value);
+    valEls.b.textContent = "b = " + b.toFixed(1);
+    valEls.g.textContent = "g = " + g.toFixed(2);
+    valEls.alpha.textContent = "α = " + alpha.toFixed(2);
+    valEls.pi.textContent = "π = " + pi.toFixed(2);
+    var gamma = qlogis(g);
+
+    var rasch    = function(t) { return plogis(t - b); };
+    var oneplg   = function(t) { return g + (1 - g) * plogis(t - b); };
+    var threepl  = function(t) { return g + (1 - g) * plogis(1.5 * (t - b)); };
+    var ag       = function(t) { var p = plogis(t - b); return p + (1 - p) * plogis(alpha * t + gamma); };
+    var mixture  = function(t) { return pi * plogis(t - b) + (1 - pi) * g; };
+
+    var curves = [
+      { name: "Rasch",   fn: rasch,   color: "#2a78d6" },
+      { name: "1PLg",    fn: oneplg,  color: "#eb6834" },
+      { name: "3PL",     fn: threepl, color: "#1baf7a" },
+      { name: "1PL-AG",  fn: ag,      color: "#e87ba4" },
+      { name: "Mixture", fn: mixture, color: "#4a3aa7" }
+    ];
+
+    var html = staticAxesSvg();
+    curves.forEach(function(c) {
+      html += '<path d="' + pathFor(c.fn) + '" fill="none" stroke="' + c.color + '" stroke-width="2.5"/>';
+    });
+
+    // Direct end-of-line labels at theta=4 (right edge), so the text sits
+    // level with the curve it names. Curves often converge near P=1 at high
+    // theta, so labels are decluttered with a minimum vertical gap, sorted
+    // by their true endpoint height (closest match to the curve retained).
+    var labels = curves.map(function(c) {
+      return { name: c.name, color: c.color, y: py(c.fn(4)) };
+    });
+    labels.sort(function(a, b) { return a.y - b.y; });
+    var minGap = 13;
+    for (var li = 1; li < labels.length; li++) {
+      if (labels[li].y - labels[li - 1].y < minGap) {
+        labels[li].y = labels[li - 1].y + minGap;
+      }
+    }
+    labels.forEach(function(lab) {
+      lab.y = Math.max(mT + 8, Math.min(mT + plotH, lab.y));
+      html += '<text x="' + (mL + plotW + 6) + '" y="' + (lab.y + 4) +
+              '" font-size="11" font-weight="600" fill="' + lab.color + '">' + lab.name + '</text>';
+    });
+
+    svg.innerHTML = html;
+  }
+
+  ids.forEach(function(id) { els[id].addEventListener("input", draw); });
+  draw();
+})();
+</script>
+```
+
+## Data and methods
+
+### Data selection
+
+Guessing corrections only make sense for genuine single-answer,
+multiple-choice items with a well-defined chance level -- so the candidate
+pool needed to satisfy several requirements simultaneously: dichotomous
+(correct/incorrect) responses, `construct_type == "Cognitive/educational"`
+(guessing is a multiple-choice-test phenomenon, not a Likert/personality-item
+one), sufficient sample size for the two custom estimators below to be
+stable, and -- critically -- a verifiable, homogeneous number of response
+options $m$ per table, since every model here needs a chance level $1/m$.
+
+A first pass required IRW item text (to count response options directly)
+plus `construct_type`/`n_categories`/`n_participants` metadata filters. That
+produced 26 metadata-plausible candidates, but manual inspection of the
+actual item text excluded most of them: some "options" columns turned out to
+be scoring-rubric labels (Correct/Incorrect/Self-correct) rather than
+response alternatives an examinee chooses from; some items were "choose
+**two** words" formats with a non-standard chance structure; one was an
+Agree/Disagree/Not-Sure belief inventory rather than a distractor-based
+knowledge test. Only three tables survived as genuine, item-text-verified,
+single-answer MC with a homogeneous option count: `gilbert_meta_1` (m=4),
+`gilbert_meta_102` (m=5), and `gilbert_meta_103` (m=5), all from the same
+underlying literacy-intervention study.
+
+That pool alone was thin and not very representative of the high-stakes
+settings where guessing corrections matter most. ENEM (Brazil's national
+university-admissions exam) is documented as a 5-option (A-E) multiple
+choice test across subjects and years, and the check below confirms
+$m = 5$ from the data. We use it for 8 ENEM candidate tables spanning 2013, 2014, 2019, and 2024 and all four subject
+areas (`mt`=math, `lc`=languages, `ch`=human sciences, `cn`=natural
+sciences), restricted to the density=1 table/years (every respondent
+answered the identical fixed item set, no rotated-booklet missingness). All
+eight are analysed; `enem_2019_1mil_lc` was excluded from an earlier
+version of this page on answer-key grounds that the v52.0 rebuild removed
+(see [Screening the answer key](#screening-the-answer-key)). Note that density=1 does not mean no
+missingness at all: both `lc` tables carry the elective English/Spanish
+block, which every candidate answers exactly half of. Each ENEM table
+has roughly a million respondents; we work with a fixed-seed random
+subsample of `r subsample_n` per table for compute tractability.
+
+```{r}
+#| label: m-check-note
+#| results: asis
+if (mcheck_ok) {
+  bt <- .mc$by_table; it <- .mc$itemtext
+  odd <- setdiff(.mc$other_codes$resp_raw, c(".", "*"))
+  # share and head count from the same item, so the two figures describe one
+  # letter rather than the minimum of each taken from different tables
+  least <- .mc$letters_by_item |> slice_min(min_share, n = 1, with_ties = FALSE)
+  cat(sprintf(
+    paste0("IRW carries no item text for these eight tables, so $m$ cannot be ",
+           "counted from options as it is for the `gilbert_meta` tables. It can ",
+           "be checked another way. The ENEM tables record the letter each ",
+           "candidate marked, and on all %d items across the eight tables ",
+           "%s. Even the least-chosen letter on any item drew %.1f%% of ",
+           "the candidates who answered it (%s people), which rules out a four-option item, and %s, ",
+           "which rules out a sixth option. The adjacent year does carry item ",
+           "text: %s of %s ENEM 2023 items have exactly five options, A to E, ",
+           "and %s. So $m = 5$ here is checked, not assumed ",
+           "(`guessing_m_check.R`).\n\n"),
+    sum(bt$n_items),
+    if (all(bt$n_all_five == bt$n_items)) "every one of A-E was chosen"
+      else sprintf("all five letters were chosen on %d", sum(bt$n_all_five)),
+    100 * least$min_share,
+    format(round(least$min_share * least$n_marked), big.mark = ","),
+    if (length(odd) == 0) paste0("nothing besides A-E, a blank and a double ",
+                                 "mark occurs anywhere")
+      else sprintf("other codes also occur (%s)", paste(odd, collapse = ", ")),
+    sum(it$n_five_options), sum(it$n_items),
+    if (all(it$instructions_state_five)) paste0("each of the four booklets ",
+      "says so in its instructions (\"são apresentadas 5 opções\")")
+      else "not every booklet states the count in its instructions"))
+}
+```
+
+Per **@xiao2026safetyvalve** (Section 3.2), two-alternative forced-choice
+(2AFC) items are excluded from this design on principle, not just by
+happenstance: at $g_{\text{fit}}=0.5$ the Rasch model already predicts
+roughly 0.5 on sufficiently difficult items, so the Mixture model's two
+classes are not empirically separable -- the guessing class predicts a flat
+0.5 that the engaged class already produces for low-ability respondents on
+hard items. All tables used here have $m \ge 4$, safely inside the
+class-separated region the Safety Valve paper establishes.
+
+```{r}
+#| label: table-list
+if (cache_ok) {
+  tables_df |>
+    mutate(source = ifelse(m_verified, "item text",
+                          "marked letters, and ENEM 2023 item text")) |>
+    select(table, m, source) |>
+    knitr::kable(col.names = c("Table", "m", "How m is established"), align = "lrl",
+                 caption = "Tables used")
+}
+```
+
+### Screening scored absences
+
+One further screen runs before any model is fit. On the current data it
+removes almost nobody; it is on the page because, on an earlier release of
+these tables, it mattered more than any modelling choice here.
+
+On a $J$-item, $m$-option test, a candidate who guesses every item scores
+about $J/m$ -- roughly 9 of 45 at $m = 5$. Scoring *zero* on 45 answered
+items has probability around $4\times10^{-5}$. So a block of candidates at
+or near zero is not the lower tail of ability, and it is certainly not
+guessing: it is absence recorded as a wrong answer. Before the ENEM rebuild
+in IRW dataset v52.0, five of the eight ENEM tables carried exactly such a
+block, at roughly 45% of the drawn sample, with almost nobody between 1 and
+3 correct -- a spike at zero and then a normal-looking distribution starting
+above the chance floor. The rebuild recodes a section the candidate did not
+sit as missing rather than wrong, and the block is gone.
+
+This is the same coding artifact as the elective-block problem described in
+`guessing_compute.R`'s item-level screen -- a section the candidate did not
+sit, scored 0 rather than left missing -- but at the candidate level rather
+than the item level, so an item-level check cannot see it. The screen stays
+as a safeguard: any table with the same defect would otherwise pass straight
+into the fits.
+
+Every candidate is therefore tested against the lower tail of
+$\mathrm{Binomial}(J_i, 1/m)$, where $J_i$ counts the items that candidate
+actually answered, and dropped when
+$P(\text{score} \le \text{observed}) < 10^{-3}$. The cut is stated as a
+tail probability rather than a raw-score threshold so that it adapts to
+tables with different $J$, different $m$, and different per-candidate
+missingness. It is deliberately strict: on the rebuilt tables it removes at
+most a handful of candidates from each.
+
+```{r}
+#| label: screen-table
+if (cache_ok && "n_persons_screened" %in% names(summary_df)) {
+  summary_df |>
+    mutate(pct = sprintf("%.1f%%", 100 * frac_persons_screened)) |>
+    select(table, n_participants, n_persons_screened, pct) |>
+    knitr::kable(
+      align = "lrrr",
+      col.names = c("Table", "N analysed", "N screened out", "% screened"),
+      caption = paste0("Candidates removed by the scored-absence screen. ",
+                       "N analysed is the count after screening, which is ",
+                       "the sample every model on this page is fit to."))
+}
+```
+
+Left in, those candidates did not degrade the fits gently; they changed what
+the models said. On the five affected tables the estimated latent SD ran 2.2
+to 2.9 unscreened and 0.4 to 0.7 screened, and *every* item's guessing
+parameter was driven to the no-guessing boundary -- a floor model cannot fit
+observed zeros where it predicts $\mathrm{expit}(\gamma)$, so it sends
+$\gamma$ to $-\infty$. An earlier version of this page reported the
+unscreened fits and read the inflated spread and the vanishing floor as two
+separate findings about guessing; they were one artifact seen twice. The
+screened estimates from that release land within noise of the ones on this
+page, so the screen had been recovering the right answer from the
+contaminated tables; what the rebuild adds is sample size, roughly 3,000
+candidates per table where the screen had left about 1,660.
+
+### Screening the answer key
+
+The scored-absence screen removes candidates. It cannot tell you whether the
+responses that remain were scored against the right key. On an earlier
+release of the ENEM tables one table failed that prior question badly enough
+to be excluded; on the rebuilt tables every one passes, and the table below
+is the evidence rather than an assurance. It also raises the one caveat that
+survives the rebuild.
+
+Two statistics say so, neither of them a model fit. The first is item
+difficulty against the chance floor: on an $m$-option item scored correctly,
+$p_j < 1/m$ should be uncommon, because a candidate who knows nothing still
+guesses right $1/m$ of the time. The second, and the sharper one, is the
+item-total point-biserial — each item's correlation with the total of the
+*other* items. A correctly keyed item correlates positively with the rest of
+the test whatever its difficulty; an item keyed to the wrong option
+correlates with it near zero.
+
+```{r}
+#| label: key-diagnostics-table
+if (keydiag_ok) {
+  keydiag_df |>
+    mutate(
+      p_lbl = sprintf("%.2f", p_med),
+      below_lbl = sprintf("%.0f%%", 100 * frac_p_below_chance),
+      rpb_lbl = sprintf("%.3f", rpb_med),
+      dead_lbl = sprintf("%.0f%%", 100 * frac_rpb_below_05)
+    ) |>
+    select(table, m, n_items_analysed, p_lbl, below_lbl, rpb_lbl, dead_lbl) |>
+    knitr::kable(
+      align = "lrrrrrr",
+      col.names = c("Table", "m", "J analysed", "median p", "% items p < 1/m",
+                    "median item-rest r", "% items r < 0.05"),
+      caption = paste0("Answer-key diagnostics, on the post-screen analysis ",
+                       "sample. Neither column involves fitting a model. ",
+                       "Items with no observed variance are excluded from ",
+                       "both, since they carry no correlation at all."))
+}
+```
+
+```{r}
+#| label: key-diagnostics-note
+#| results: asis
+if (keydiag_ok && nrow(keydiag_df) > 1) {
+  lc19 <- keydiag_df |> filter(table == "enem_2019_1mil_lc")
+  enem <- keydiag_df |> filter(startsWith(table, "enem_"))
+  cat(sprintf(
+    paste0("No table fails. The median item-rest correlation runs from %.2f ",
+           "to %.2f, and at most %.0f%% of any table's items correlate below ",
+           "0.05 with the rest of the test.\n\n"),
+    min(keydiag_df$rpb_med), max(keydiag_df$rpb_med),
+    100 * max(keydiag_df$frac_rpb_below_05)))
+  if (nrow(lc19) == 1) {
+    cat(sprintf(
+      paste0("`enem_2019_1mil_lc` was excluded from an earlier version of ",
+             "this page on exactly these statistics: one of its two elective ",
+             "language blocks came back scored zero for every candidate who ",
+             "sat it, and most of the remaining items correlated below 0.05 ",
+             "with the rest. Both were artifacts of how IRW aligned that ",
+             "table's responses to items, fixed in the v52.0 rebuild. On the ",
+             "rebuilt table its median item-rest correlation is %.2f, %s, ",
+             "and it is back in every comparison below.\n\n"),
+      lc19$rpb_med,
+      if (lc19$rpb_med >= max(enem$rpb_med)) "the best of any ENEM table here"
+      else sprintf("against %.2f to %.2f on the other ENEM tables",
+                   min(enem$rpb_med[enem$table != lc19$table]),
+                   max(enem$rpb_med[enem$table != lc19$table]))))
+  }
+  # The caveat: tables where a large share of items sit below the chance
+  # floor, with those items not tracking the rest of the test.
+  low <- keydiag_df |> filter(frac_p_below_chance >= 0.3) |>
+    arrange(desc(frac_p_below_chance))
+  rest <- keydiag_df |> filter(!table %in% low$table)
+  if (nrow(low) > 0 && "rpb_med_below_chance" %in% names(low)) {
+    cat(sprintf(
+      paste0("**The caveat is the chance floor itself.** On %s, %s of the ",
+             "items sit below $1/m$, against at most %.0f%% on any other ",
+             "table, and on those items the median item-rest correlation is ",
+             "%s: weak, and close to zero on the first, but positive, where ",
+             "items keyed to the wrong option would sit at zero or below. ",
+             "Hard forms are the likelier explanation, though not a proven ",
+             "one. `%s` is the weaker of the two, with ",
+             "the lowest median item-rest correlation of any table here ",
+             "(%.2f). Either way it matters for what ",
+             "follows. The 1PLg fixes every item's floor at $1/m$, the ",
+             "Mixture's guessing class answers at $1/m$, and the 3PL's prior ",
+             "centres its floor near there, while these items show no such ",
+             "floor in the data. On these tables the fixed-floor models rest ",
+             "on an assumption the data do not support.\n\n"),
+      paste0("`", low$table, "`", collapse = " and "),
+      paste(sprintf("%.0f%%", 100 * low$frac_p_below_chance), collapse = " and "),
+      100 * max(rest$frac_p_below_chance),
+      paste(sprintf("%.2f", low$rpb_med_below_chance), collapse = " and "),
+      low$table[which.min(low$rpb_med)], min(low$rpb_med)))
+  }
+}
+```
+
+### What an estimated floor of $1/m$ looks like
+
+The results table below reports the guessing floor the 1PL-G stage recovers,
+$\mathrm{expit}(\hat\gamma_j)$, summarised over items. Reading that column
+requires knowing what a *correct* floor of $1/m$ looks like once it has been
+estimated, and the answer is: not much like $1/m$.
+
+Two things push it around. The summary over items matters — the maximum over
+$J$ items is an extreme order statistic and is biased upward by
+construction, which is why this page reports the median. And the floor is
+entangled with the latent variance: a guessing floor and a small ability
+spread both flatten the lower end of the item response function, so the two
+parameters lean on each other, and the narrower the spread the harder they
+are to separate. The ENEM tables sit at $\mathrm{SD}(\theta) = 0.4$ to
+$0.9$ under Rasch, which is the worst part of that range.
+
+`guessing_floor_calibration_compute.R` generates from the 1PL-G with a floor
+of exactly $1/m = 0.20$ on *every* item, at the $N$ and $J$ of these tables,
+and fits it with the same estimator the page uses:
+
+```{r}
+#| label: floor-calibration-table
+if (floorcal_ok) {
+  floorcal_df |>
+    mutate(
+      med_lbl = sprintf("%.3f (%.3f-%.3f)", floor_med, floor_med_lo, floor_med_hi),
+      max_lbl = sprintf("%.3f (%.3f-%.3f)", floor_max, floor_max_lo, floor_max_hi),
+      sd_lbl = sprintf("%.2f", sd_hat)
+    ) |>
+    select(sd_theta, true_floor, med_lbl, max_lbl, sd_lbl) |>
+    knitr::kable(
+      align = "rrrrr",
+      col.names = c("True SD(θ)", "True floor", "Recovered median floor",
+                    "Recovered max floor", "Recovered SD(θ)"),
+      caption = sprintf(paste0("Recovery of a known guessing floor of 1/m = ",
+                               "%.2f on every item, N = %d, J = %d, %d ",
+                               "replications per row (range across ",
+                               "replications in parentheses)."),
+                        .fc$true_floor, .fc$n_sim, .fc$j_sim, .fc$n_reps))
+}
+```
+
+```{r}
+#| label: floor-calibration-note
+#| results: asis
+if (floorcal_ok && cache_ok && "med_guess_floor" %in% names(summary_df)) {
+  narrow <- floorcal_df |> slice_min(sd_theta, n = 1)
+  wide   <- floorcal_df |> slice_max(sd_theta, n = 1)
+  cat(sprintf(
+    paste0("At a true spread of %.1f a true floor of %.2f comes back with a ",
+           "median of %.2f and a maximum of %.2f, and the estimated spread ",
+           "itself runs high (%.2f against %.1f) -- the floor and the ",
+           "variance absorb each other's bias. By %.1f the median is %.2f ",
+           "and the maximum %.2f. Two consequences for the column below. ",
+           "First, the maximum is not evidence about the level of the floor ",
+           "in this regime, only about whether *any* floor survives, which ",
+           "is the question the identification check needs it for. Second, ",
+           "the observed medians (%.2f to %.2f across the tables here) are ",
+           "consistent with a true floor at 1/m, but they cannot establish ",
+           "it: at these spreads the estimator would return numbers in that ",
+           "range from a floor of exactly 1/m, and the page claims no ",
+           "more than that.\n\n"),
+    narrow$sd_theta, narrow$true_floor, narrow$floor_med, narrow$floor_max,
+    narrow$sd_hat, narrow$sd_theta,
+    wide$sd_theta, wide$floor_med, wide$floor_max,
+    min(summary_df$med_guess_floor, na.rm = TRUE),
+    max(summary_df$med_guess_floor, na.rm = TRUE)))
+}
+```
+
+### Models fit
+
+Seven specifications per table:
+
+1. **Rasch** -- no guessing correction.
+2. **2PL** -- `mirt`, lognormal(0,1) prior on $a_1$ (this site's existing
+   convention; see `imv.qmd`).
+3. **1PLg** -- fixed floor $g=1/m$, discrimination fixed at 1, difficulty
+   free (built via a constrained 3PL in `mirt`).
+4. **3PL** -- `mirt`, lognormal(0,1) prior on $a_1$ (same as 2PL, chosen for
+   internal consistency rather than replicating the Safety Valve paper's
+   tighter lnorm(0,0.5)) and Beta(5,17) on $g$ (mean $\approx 0.23$), per
+   the Safety Valve paper's Study 5.
+5. **1PL-AG** [@sanmartin2006] -- standalone marginal-likelihood estimator
+   (`vignettes/guessing_helpers.R::fit_1pl_ag()`), quadrature-integrated,
+   with an analytic gradient verified against finite differences before use.
+   Reports the likelihood-ratio test of $\alpha=0$.
+6. **Mixture** ("safety valve") [@xiao2026safetyvalve] -- standalone
+   estimator (`fit_mixture()`), multi-start over
+   $\pi_0 \in \{0.6, 0.75, 0.9, 0.97\}$, gradient likewise verified.
+7. **Purified Rasch** (Method A) [@torresirribarra2026] -- flags examinees
+   whose response pattern favors a flat-guessing likelihood over the Rasch
+   likelihood, removes them, refits Rasch on the retained sample
+   (`purify_rasch()`). Its held-out predictions are evaluated on the full
+   sample (including flagged persons), since the promise of purification is
+   better item parameters, not that flagged persons are themselves predicted
+   well.
+
+All seven specifications estimate the latent variance. `mirt`'s
+`itemtype = "Rasch"` fixes every slope at 1 and estimates $\mathrm{Var}(\theta)$,
+so the three standalone estimators (`fit_1pl_ag()`, `fit_mixture()`,
+`purify_rasch()`) do the same rather than pinning $\theta \sim N(0,1)$.
+The 1PLg needs it done by hand. It is fit as a constrained `mirt` 3PL, and
+`mirt` frees the variance automatically only for `itemtype = "Rasch"`; a 3PL
+with its slopes pinned at 1 keeps $\mathrm{Var}(\theta) = 1$ unless told
+otherwise, which leaves nothing free to set the scale. An earlier version of
+this page missed this. Pinned, the 1PLg ran out its 2,000-cycle budget on
+seven of the eleven tables, and the page reported those cells as blank for
+non-convergence and called the pattern unexplained. With the variance freed
+it converges on every table in under 50 cycles. This
+matters more than it sounds. If the baseline estimates a variance the
+Mixture does not, the two are not nested, and the Mixture cannot collapse
+onto Rasch as $\hat\pi \to 1$ -- which is exactly the safety-valve property
+this page sets out to test. On simulated data containing *no guessing at
+all*, that mismatch alone drove IMV(Rasch, Mixture) to $-0.002$ at
+$\mathrm{SD}(\theta) = 1.6$; with the variance free it stays within
+$\pm 0.0002$ across the same range. The effect on the 1PL-AG's $\alpha$ was
+larger still: with the prior pinned and a true $\mathrm{SD}(\theta)$ of 1.4,
+$\hat\alpha$ came back $-0.46$ when the truth was 0 and $-0.42$ when the
+truth was $+0.5$ -- a sign flip, and a negative $\alpha$ turns the item
+characteristic curve over at the low end. Freeing the variance returns
+$+0.003$ and $+0.38$ on the same data.
+
+Before use on real data, `fit_1pl_ag()` and `fit_mixture()` were validated
+by simulation: both correctly return a non-significant likelihood-ratio test
+/ $\hat\pi \approx 1$ under a true null (no guessing), and both recover
+known parameters reasonably well under a true alternative (Mixture recovery
+was excellent; 1PL-AG's $\beta$ recovered well but its $\gamma$ was noisy at
+moderate sample sizes -- a limitation the source paper documents for its own
+real-data application, not an implementation defect). See Limitations below.
+
+### Cross-validation
+
+A single 80/20 response-level (cell) holdout per table, masked once and
+reused across all seven model fits, per this codebase's existing convention
+(@stenhaug2022) -- masking is per-person and always
+leaves at least one retained response. This is a **single split**, not the
+20 repeated splits used in the Safety Valve paper's own empirical section
+(see Limitations).
+
+## Results
+
+All predictive comparisons below are framed relative to a single common
+baseline -- the Rasch model, i.e. "1PL", the no-guessing reference every
+other specification is trying to improve on. Rather than the scattered
+pairwise comparisons a first pass might reach for (1PLg vs. Mixture, 3PL vs.
+1PL-AG, and so on), every model's IMV is computed the same way,
+`compute_imv(rasch_predictions, model_predictions, y)`, on the same
+held-out cells. That puts all six non-Rasch specifications for a table on
+one shared scale: positive means "beats plain Rasch out of sample," negative
+means "costs something relative to just ignoring guessing entirely."
+
+```{r}
+#| label: results-table
+if (cache_ok && nrow(summary_df) > 0) {
+  # Caches written before the identification check exist without this column;
+  # treat those as "unknown" rather than failing to render.
+  if (!"alpha_identified" %in% names(summary_df)) summary_df$alpha_identified <- NA
+  summary_df |>
+    mutate(
+      # Where the 1PL-G stage found no guessing floor, the likelihood is flat
+      # in alpha and the fit returns its starting value with p ~ 1. Printing
+      # "0.000 (p=1.000)" there would read as a null result from a valid test,
+      # so print the reason instead. See the note under this table.
+      alpha_lbl = ifelse(
+        !is.na(alpha_identified) & !alpha_identified,
+        "not identified",
+        sprintf("%.3f (p=%.3f)", alpha_hat, lr_p)),
+      # Print the guessing floor the 1PL-G stage actually found, next to the
+      # alpha it feeds. Where alpha reads "not identified" this column is the
+      # reason and shows it directly: alpha enters the likelihood only through
+      # the guessing branch, so a floor at machine zero means there is no
+      # branch left for it to act on. Without it a reader has to take the
+      # "not identified" label on trust.
+      #
+      # The median over items, not the maximum an earlier version printed: the
+      # maximum is an extreme order statistic over J items and runs high by a
+      # factor of 2-3 at these latent spreads (see the calibration above), so
+      # it cannot carry a claim about the level of the floor. The IQR comes
+      # with it because the item-to-item spread is itself large.
+      floor_lbl = if ("med_guess_floor" %in% names(summary_df)) {
+        ifelse(is.na(med_guess_floor), NA_character_,
+               ifelse(med_guess_floor < 1e-4, sprintf("%.0e", med_guess_floor),
+                      sprintf("%.2f (%.2f-%.2f)", med_guess_floor,
+                              q1_guess_floor, q3_guess_floor)))
+      } else if ("max_guess_floor" %in% names(summary_df)) {
+        ifelse(is.na(max_guess_floor), NA_character_,
+               ifelse(max_guess_floor < 1e-4, sprintf("%.0e", max_guess_floor),
+                      sprintf("%.3f", max_guess_floor)))
+      } else NA_character_,
+      pi_lbl    = sprintf("%.3f", pi_hat),
+      frac_flagged = round(frac_flagged, 3)
+    ) |>
+    mutate(sd_lbl = if ("sd_rasch" %in% names(summary_df)) sprintf("%.2f", sd_rasch) else NA_character_) |>
+    select(table, m, n_participants, n_items, n_heldout,
+           sd_lbl, pi_lbl, floor_lbl, alpha_lbl, frac_flagged) |>
+    knitr::kable(
+      align = "lrrrrrrrrl",
+      col.names = c("Table", "m", "N", "J", "N held-out", "SD(θ)",
+                    "π̂ (Mixture)", "median expit(γ̂) (1PL-G), IQR",
+                    "α̂ (1PL-AG, p)", "Frac. flagged (Purified)"),
+      caption = paste0("Per-table model-internal diagnostics. SD(θ) is the ",
+                       "estimated latent standard deviation from the Rasch ",
+                       "baseline; every model on the page estimates it, so ",
+                       "none of these comparisons is confounded by a prior ",
+                       "held fixed at 1. expit(γ̂) is the implied guessing ",
+                       "floor from the 1PL-G stage, summarised as the median ",
+                       "over items with the interquartile range beside it. ",
+                       "It is not directly comparable to 1/m: at these ",
+                       "sample sizes and latent spreads a true floor of 1/m ",
+                       "is recovered high, by an amount the calibration ",
+                       "above quantifies. A value at machine zero means the ",
+                       "stage found no floor anywhere, which is what leaves ",
+                       "α unidentified.")
+    )
+} else {
+  cat("Results not yet computed -- run vignettes/guessing_compute.R.")
+}
+```
+
+```{r}
+#| label: imv-vs-rasch-table
+if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
+  imv_vs_rasch_df |>
+    pivot_wider(names_from = model, values_from = imv) |>
+    select(table, all_of(model_order)) |>
+    knitr::kable(
+      align = "lrrrrrr",
+      # digits must be passed to kable itself: rounding the column beforehand
+      # does nothing, because kable re-formats numeric columns with its own
+      # default (2 dp), which collapses every margin on this table to 0.00.
+      digits = 4,
+      caption = paste0("IMV(Rasch, model) for every model, on held-out cells ",
+                        "(single ", holdout_frac * 100, "% split per table)")
+    )
+}
+```
+
+```{r}
+#| label: alpha-identification-note
+#| results: asis
+if (cache_ok && nrow(summary_df) > 0 &&
+    "alpha_identified" %in% names(summary_df) &&
+    any(!summary_df$alpha_identified, na.rm = TRUE)) {
+  ni_tables <- summary_df$table[which(!summary_df$alpha_identified)]
+  floor_max <- max(summary_df$max_guess_floor[which(!summary_df$alpha_identified)],
+                   na.rm = TRUE)
+  cat(sprintf(
+    paste0("**$\\hat\\alpha$ reads \"not identified\" on %d table%s (%s), and ",
+           "that is a stronger statement than a non-significant test.** On ",
+           "these tables the 1PL-G stage drives *every* item's guessing ",
+           "parameter $\\gamma_j$ to the no-guessing boundary -- the largest ",
+           "implied floor across all items and all %d tables is %.1e. Because ",
+           "$\\alpha$ enters the likelihood only through the guessing branch ",
+           "($\\partial P/\\partial\\alpha \\propto (1-r)s(1-s)\\theta$, with ",
+           "$s = \\mathrm{expit}(\\alpha\\theta+\\gamma)$), a vanishing $s$ ",
+           "makes the log-likelihood exactly flat in $\\alpha$: the optimizer ",
+           "returns whatever value it was started at, and the likelihood-ratio ",
+           "test returns $p \\approx 1$ no matter what. Refitting from ",
+           "$\\alpha \\in \\{\\pm 0.1, \\pm 0.3\\}$ returns the starting value ",
+           "to within $10^{-11}$ with the log-likelihood unchanged to $10^{-13}$ ",
+           "relative, which is what non-identification looks like -- not a ",
+           "stuck optimizer, and not evidence that guessing is ",
+           "ability-independent. **The 1PL-AG simply has nothing to say about ",
+           "these tables**, and its IMV there (within %.4f of Rasch) reflects a ",
+           "model that has collapsed onto the Rasch baseline. Read this as a ",
+           "statement about the fit, not about the examinees: a flat floor is ",
+           "what the likelihood reports whenever the data contain observed ",
+           "zeros the model cannot otherwise accommodate, and on an earlier ",
+           "version of this page the cause was contamination rather than ",
+           "guessing behaviour -- candidates scored zero for a section they ",
+           "never sat, which the scored-absence screen now removes (see ",
+           "[Screening scored absences](#screening-scored-absences)). Where ",
+           "$\\hat\\alpha$ still reads \"not identified\" after that screen, ",
+           "the expit($\\hat\\gamma$) column above is the place to look ",
+           "first, and any remaining data-coding explanation should be ruled ",
+           "out before this is read as evidence about how examinees guess. ",
+           "Note that the statistic quoted here is the largest floor over ",
+           "items, not the median that column reports: this question is ",
+           "whether any guessing branch survives anywhere, and for that an ",
+           "extreme is the right summary.\n\n"),
+    length(ni_tables), if (length(ni_tables) > 1) "s" else "",
+    paste0("`", ni_tables, "`", collapse = ", "),
+    length(ni_tables), floor_max,
+    max(abs(imv_vs_rasch_df$imv[imv_vs_rasch_df$model == "1PL-AG" &
+                                  imv_vs_rasch_df$table %in% ni_tables]),
+        na.rm = TRUE)
+  ))
+}
+```
+
+```{r}
+#| label: plg-na-note
+#| results: asis
+if (cache_ok && nrow(summary_df) > 0 && any(!summary_df$converged_1plg)) {
+  na_tables <- summary_df$table[!summary_df$converged_1plg]
+  em_cycles_used <- 2000  # matches EM_CYCLES in guessing_compute.R
+  cat(sprintf(
+    "**1PLg is blank on %d of the %d tables (%s):** its constrained-3PL fit (`a1` fixed at 1, `g` fixed at 1/m) did not converge within the %d-cycle EM budget used for every model on this page. Rather than report a point estimate from an unconverged fit, that cell is left blank instead of a misleading number. The consequence is worth stating plainly: **in the table above, the fixed-floor-vs-safety-valve contrast rests on the %d table%s where 1PLg did converge**, not on all %d. (The $g$ sweep further down is not affected: it fits the fixed-floor model with its own standalone estimator, `fit_1plg_fixedq()`, rather than `mirt`, and converges on all %d.)\n\n",
+    length(na_tables), nrow(summary_df),
+    paste0("`", na_tables, "`", collapse = ", "), em_cycles_used,
+    nrow(summary_df) - length(na_tables),
+    if (nrow(summary_df) - length(na_tables) != 1) "s" else "",
+    nrow(summary_df), nrow(summary_df)
+  ))
+}
+```
+
+```{r}
+#| label: reading-the-table
+#| results: asis
+# Every claim in this callout is computed from the cached results rather than
+# written by hand. An earlier version hardcoded them, and they silently went
+# stale when the estimators changed (see the latent-variance note in Data and
+# methods); anything asserted here should move when the numbers move.
+if (cache_ok && nrow(summary_df) > 0 && nrow(imv_vs_rasch_df) > 0) {
+  w <- imv_vs_rasch_df |> pivot_wider(names_from = model, values_from = imv) |>
+    left_join(summary_df |> select(table, pi_hat, any_of("sd_rasch")), by = "table")
+
+  # IMV(2PL, 3PL): does the guessing floor add anything beyond free slopes?
+  pw <- map_dfr(.res$raw, function(r) {
+    p2 <- r$preds$pl2; p3 <- r$preds$pl3
+    tibble(table = r$table,
+           imv23 = if (is.null(p2) || all(is.na(p2)) || is.null(p3) || all(is.na(p3))) {
+             NA_real_
+           } else compute_imv(p2, p3, r$true_vals))
+  })
+  w <- left_join(w, pw, by = "table")
+
+  helps <- w |> filter(!is.na(`3PL`), `3PL` > 0)
+  hurts <- w |> filter(!is.na(`3PL`), `3PL` <= 0)
+
+  cat("::: {.callout-note}\n### Reading the table above\n\n")
+
+  if (nrow(helps) > 0 && nrow(hurts) > 0) {
+    # Every quantifier below is computed, not asserted. An earlier version
+    # hard-coded "every correction is at or below zero" on the `hurts` group
+    # from the sign of the 3PL alone; the Mixture is in fact positive on two
+    # of those tables, so the sentence was false against its own table.
+    corr_cols <- c("3PL", "1PL-AG", "Mixture")
+    sign_str <- function(d) {
+      pos <- purrr::map_chr(corr_cols, function(cc) {
+        v <- d[[cc]]; k <- sum(!is.na(v) & v > 0)
+        if (k == 0) NA_character_
+        else sprintf("%s on %d (up to %+.4f)", cc, k, max(v, na.rm = TRUE))
+      })
+      paste(pos[!is.na(pos)], collapse = ", ")
+    }
+    hurts_pos <- sign_str(hurts)
+    helps_all_pos <- all(!is.na(unlist(helps[corr_cols])) &
+                         unlist(helps[corr_cols]) > 0)
+    cat(sprintf(
+      paste0("- **The tables still split on whether a guessing floor pays ",
+             "off out of sample.** On %d of the %d tables (%s) the 3PL, ",
+             "1PL-AG and Mixture are ", if (helps_all_pos) "all positive" else
+               "positive more often than not", " against Rasch. On the other %d (%s) ",
+             "the 3PL is negative throughout, by %.4f to %.4f -- *worse* than ",
+             "simply ignoring guessing. %s The estimated latent spread differs ",
+             "between the groups (SD(theta) %.1f to %.1f, against %.1f to %.1f ",
+             "on the first group), but that association should be read as ",
+             "description rather than mechanism: before the scored-absence ",
+             "screen an earlier version of this page found the same split, ",
+             "attributed it to latent spread, and was wrong -- the split then ",
+             "coincided exactly with the five tables carrying a block of ",
+             "candidates scored zero for a section they never sat, and both ",
+             "the spread and the split were downstream of that (see ",
+             "[Screening scored absences](#screening-scored-absences)).\n"),
+      nrow(helps), nrow(w), paste0("`", helps$table, "`", collapse = ", "),
+      nrow(hurts), paste0("`", hurts$table, "`", collapse = ", "),
+      max(hurts$`3PL`), min(hurts$`3PL`),
+      if (nzchar(hurts_pos)) {
+        sprintf(paste0("The other two corrections are not uniformly negative ",
+                       "there, but the exceptions are marginal: %s."), hurts_pos)
+      } else {
+        "Neither of the other two corrections is positive on any of them."
+      },
+      min(hurts$sd_rasch, na.rm = TRUE), max(hurts$sd_rasch, na.rm = TRUE),
+      min(helps$sd_rasch, na.rm = TRUE), max(helps$sd_rasch, na.rm = TRUE)))
+  } else if (nrow(hurts) == 0 && nrow(helps) > 0) {
+    # The interesting case, and the one that holds after the scored-absence
+    # screen: no table is left where modelling guessing costs you.
+    cat(sprintf(
+      paste0("- **Modelling guessing beats ignoring it on every table.** The ",
+             "3PL is positive against Rasch on all %d, from %.4f to %.4f, and ",
+             "the 1PL-AG on %d of them. No table is left where estimating the ",
+             "floor costs you out of sample; the one correction that does ",
+             "cost, on some tables, is the one that fixes the floor at $1/m$ ",
+             "rather than estimating it (the 1PLg; see the Mixture bullet ",
+             "below). That is a change ",
+             "from an earlier version of this page, which reported the ",
+             "tables splitting in two -- corrections helping on some and ",
+             "actively hurting on others -- and read the split as tracking ",
+             "the spread of ability. The tables where corrections appeared ",
+             "to hurt were the five carrying a block of candidates scored ",
+             "zero for a section they never sat; with those candidates ",
+             "screened out (see [Screening scored ",
+             "absences](#screening-scored-absences)) the split disappears ",
+             "entirely.\n"),
+      nrow(helps), min(helps$`3PL`), max(helps$`3PL`),
+      sum(w$`1PL-AG` > 0, na.rm = TRUE)))
+  }
+
+  if (any(!is.na(w$imv23))) {
+    pos23 <- w |> filter(!is.na(imv23), imv23 > 0)
+    cat(sprintf(
+      paste0("- **The floor adds something beyond free slopes, but not much.** ",
+             "`IMV(2PL, 3PL)` -- what the guessing floor buys *on top of* the ",
+             "free slopes the 2PL already has -- runs from %.4f to %.4f and is ",
+             "positive on %d of %d tables. So the 3PL's advantage over Rasch ",
+             "is not purely the slopes: the floor earns its own keep ",
+             "everywhere here, at %.0f-%.0f%% of the total 3PL-over-Rasch ",
+             "margin. And because the Mixture is Rasch-engaged ",
+             "(its engaged class has slope fixed at 1), comparing it against ",
+             "the 3PL, the 1PL-AG or the 2PL folds two questions -- does ",
+             "letting discrimination vary help, and does modeling guessing ",
+             "help -- into one number.\n"),
+      min(w$imv23, na.rm = TRUE), max(w$imv23, na.rm = TRUE),
+      nrow(pos23), sum(!is.na(w$imv23)),
+      # share of the 3PL's margin over Rasch that survives conditioning on
+      # the 2PL, i.e. how much of it is floor rather than slopes
+      100 * min(w$imv23 / w$`3PL`, na.rm = TRUE),
+      100 * max(w$imv23 / w$`3PL`, na.rm = TRUE)))
+  }
+
+  if (all(c("Mixture", "3PL", "1PLg") %in% names(w)) && any(!is.na(w$Mixture))) {
+    n_mix_pos <- sum(w$Mixture > 0, na.rm = TRUE)
+    # per-table ratio is only read where the Mixture's margin is clear of
+    # zero; the range is stated, not a single multiple, because it is wide
+    ok <- !is.na(w$Mixture) & w$Mixture > 0.0005 & !is.na(w$`3PL`)
+    ratio <- w$`3PL`[ok] / w$Mixture[ok]
+    plg_neg <- w |> filter(!is.na(`1PLg`), `1PLg` < 0)
+    cat(sprintf(
+      paste0("- **The Mixture's margins are real but smaller, and that is ",
+             "what it should do.** It is positive against Rasch on %d of %d ",
+             "tables, from %.4f to %.4f, while the 3PL runs %.4f to %.4f: ",
+             "between %.1f and %.0f times the Mixture's margin table by ",
+             "table. The Mixture is Rasch-engaged -- its engaged class keeps ",
+             "every slope at 1 -- so it can only recover what a guessing ",
+             "class explains, not what varying discrimination does. Read its ",
+             "column against zero, not against the 2PL and 3PL columns beside ",
+             "it. The fairer neighbour is the 1PLg, which is Rasch-engaged ",
+             "too but applies the $1/m$ floor to every examinee: it is %s.\n"),
+      n_mix_pos, sum(!is.na(w$Mixture)),
+      min(w$Mixture, na.rm = TRUE), max(w$Mixture, na.rm = TRUE),
+      min(w$`3PL`, na.rm = TRUE), max(w$`3PL`, na.rm = TRUE),
+      min(ratio), max(ratio),
+      if (nrow(plg_neg) == 0) "positive on every table as well" else
+        sprintf("negative on %d (%s, down to %.4f)%s",
+                nrow(plg_neg), paste0("`", plg_neg$table, "`", collapse = ", "),
+                min(plg_neg$`1PLg`),
+                if (all(plg_neg$Mixture > 0, na.rm = TRUE))
+                  ", where the Mixture is positive" else "")))
+  }
+
+  if (bench_ok && any(!is.na(w$imv23))) {
+    bm <- .bm$bench; pc <- .bm$prior_check; pp <- .bm$paper
+    b23 <- pc |> filter(g_prior == "Beta(2,17)")
+    none <- pc |> filter(g_prior == "none")
+    cat(sprintf(
+      paste0("- **How large these numbers are.** Across 89 IRW datasets ",
+             "@domingue2024imvirt report a mean IMV(1PL, 2PL) of %.3f and a ",
+             "mean IMV(2PL, 3PL) of %.5f (largest %.4f). Here IMV(Rasch, 2PL) ",
+             "has a median of %.3f, high but inside their range: the ",
+             "discrimination of these items varies a lot. IMV(2PL, 3PL) has a ",
+             "median of %.4f, and %d of the %d tables exceed their largest ",
+             "value. That is the tables, not the pipeline. Run unchanged on %d ",
+             "ordinary IRW cognitive tables (`guessing_imv_benchmark.R`), it ",
+             "gives a median IMV(Rasch, 2PL) of %.4f and IMV(2PL, 3PL) of ",
+             "%.5f: inside the published range, and about %s of this page's ",
+             "median. Nor is it the prior on ",
+             "the floor: with no prior on $g$ at all, IMV(2PL, 3PL) on %s is ",
+             "%s; with the paper's Beta(2, 17), which pulls $g$ toward %.2f, ",
+             "it is %s, smaller but still well above their mean. These tables ",
+             "were chosen as multiple-choice tests with a known chance level, ",
+             "and on them a floor has something to do.\n"),
+      pp$imv_1pl_2pl_mean, pp$imv_2pl_3pl_mean, pp$imv_2pl_3pl_max,
+      median(w$`2PL`, na.rm = TRUE), median(w$imv23, na.rm = TRUE),
+      sum(w$imv23 > pp$imv_2pl_3pl_max, na.rm = TRUE), sum(!is.na(w$imv23)),
+      nrow(bm), median(bm$imv_rasch_2pl), median(bm$imv_2pl_3pl),
+      {
+        r <- median(bm$imv_2pl_3pl) / median(w$imv23, na.rm = TRUE)
+        if (r <= 0) "none" else sprintf("1/%.0f", 1 / r)
+      },
+      paste0("`", none$table, "`", collapse = ", "),
+      paste(sprintf("%.4f", none$imv_2pl_3pl), collapse = ", "),
+      median(b23$g_median),
+      paste(sprintf("%.4f", b23$imv_2pl_3pl), collapse = ", ")))
+  }
+
+  cat(sprintf(
+    paste0("- **This is a single 80/20 split, not the repeated-split design ",
+           "the Safety Valve paper uses in its own empirical section** (see ",
+           "Limitations). The Mixture's margins in particular are small ",
+           "enough (|IMV| at most %.4f) that individual signs should not be ",
+           "read as settled without repeated splits.\n"),
+    max(abs(w$Mixture), na.rm = TRUE)))
+
+  n_pur_neg <- sum(w$`Purified Rasch` < 0, na.rm = TRUE)
+  cat(sprintf(
+    paste0("- **Purified Rasch is negative on %s, and that is not evidence ",
+           "it \"doesn't work.\"** Method A was never designed to improve ",
+           "out-of-sample response prediction; its promise is better *item ",
+           "parameters* after removing guessing-contaminated persons from ",
+           "calibration. Scoring it on held-out prediction is not the test ",
+           "its own logic would ask for. ",
+           "[Two scorecards for Method A](#two-scorecards-for-method-a) below ",
+           "runs the test its logic does ask for, against known generating ",
+           "item parameters.\n"),
+    if (n_pur_neg == nrow(w)) "every table here" else sprintf("%d of %d tables", n_pur_neg, nrow(w))))
+
+  cat(":::\n\n")
+}
+```
+
+The table above fixes the baseline at Rasch. The widget below lets you pick
+*any* two of the seven specifications and see `IMV(m1, m2)` -- m1 as
+baseline, m2 as the model being evaluated -- across every table, without
+re-fitting anything (every pairwise value was precomputed from the same
+cached held-out predictions used everywhere else on this page). IMV is
+directional, so `IMV(Rasch, 3PL)` and `IMV(3PL, Rasch)` are not
+mirror images of each other -- pick both orders if you want to see that
+asymmetry directly.
+
+```{r}
+#| label: pairwise-imv-widget
+#| results: asis
+if (cache_ok) {
+  model_names_js <- jsonlite::toJSON(names(model_colors), auto_unbox = FALSE)
+  widget_html <- sprintf('
+<div class="pairwise-widget" style="border:1px solid #dee2e6;border-radius:6px;padding:1rem 1.25rem;margin:1rem 0;">
+<div style="display:flex;flex-wrap:wrap;gap:1.25rem;align-items:center;margin-bottom:0.75rem;">
+<label style="font-weight:600;font-size:0.9rem;">Baseline (m1):
+<select id="pw-m1" style="margin-left:0.4rem;"></select>
+</label>
+<label style="font-weight:600;font-size:0.9rem;">Compared model (m2):
+<select id="pw-m2" style="margin-left:0.4rem;"></select>
+</label>
+</div>
+<svg id="pw-svg" viewBox="0 0 700 440" style="width:100%%;max-width:700px;height:auto;display:block;"></svg>
+</div>
+
+<script>
+(function() {
+var pairwiseData = %s;
+var modelNames = %s;
+var tableNames = Object.keys(pairwiseData);
+
+var m1Sel = document.getElementById("pw-m1");
+var m2Sel = document.getElementById("pw-m2");
+var svg = document.getElementById("pw-svg");
+
+modelNames.forEach(function(name) {
+var o1 = document.createElement("option"); o1.value = name; o1.textContent = name;
+m1Sel.appendChild(o1);
+var o2 = document.createElement("option"); o2.value = name; o2.textContent = name;
+m2Sel.appendChild(o2);
+});
+m1Sel.value = "Rasch";
+m2Sel.value = "Mixture";
+
+var W = 700, H = 440, mL = 170, mR = 20, mT = 10, mB = 50;
+var plotW = W - mL - mR, plotH = H - mT - mB;
+
+function niceStep(maxAbs) {
+var raw = maxAbs / 3;
+var mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+var norm = raw / mag;
+var mult = norm < 1.5 ? 1 : (norm < 3.5 ? 2 : (norm < 7.5 ? 5 : 10));
+return mult * mag;
+}
+
+function fmtTick(v, step) {
+var decimals = Math.max(0, -Math.floor(Math.log(step) / Math.LN10) + 1);
+return v.toFixed(decimals);
+}
+
+function draw() {
+var m1 = m1Sel.value, m2 = m2Sel.value;
+
+var rows = tableNames.map(function(t) {
+var v = (pairwiseData[t][m1] || {})[m2];
+return { table: t, imv: (v === undefined || v === null) ? null : v };
+});
+
+if (m1 === m2) {
+svg.innerHTML = "<text x=\\"20\\" y=\\"40\\" font-size=\\"13\\" fill=\\"#666\\">Pick two different models.</text>";
+return;
+}
+
+// Fixed axis range (not rescaled per selected pair), so bar lengths are
+// directly comparable across different m1/m2 choices. Values beyond the
+// range are clipped to the panel edge but their true number is still shown
+// as text rather than being cut off or silently rescaling the axis.
+var AXIS_MAX = 0.015;
+var rowH = plotH / rows.length;
+
+function px(v) { return mL + plotW / 2 + (v / AXIS_MAX) * (plotW / 2); }
+function clampX(x) { return Math.max(mL, Math.min(mL + plotW, x)); }
+
+var html = "";
+var axisY = mT + plotH;
+html += "<line x1=\\"" + mL + "\\" y1=\\"" + axisY + "\\" x2=\\"" + (mL + plotW) + "\\" y2=\\"" + axisY + "\\" stroke=\\"#888\\"/>";
+
+var step = niceStep(AXIS_MAX);
+for (var tv = 0; tv <= AXIS_MAX + step / 2; tv += step) {
+[tv, -tv].forEach(function(v) {
+if (v !== 0 && Math.abs(v) < step / 2) return;
+var x = px(v);
+html += "<line x1=\\"" + x + "\\" y1=\\"" + mT + "\\" x2=\\"" + x + "\\" y2=\\"" + axisY +
+"\\" stroke=\\"" + (v === 0 ? "#888" : "#e5e5e5") + "\\" stroke-width=\\"" + (v === 0 ? "1.5" : "1") + "\\"/>";
+html += "<line x1=\\"" + x + "\\" y1=\\"" + axisY + "\\" x2=\\"" + x + "\\" y2=\\"" + (axisY + 5) + "\\" stroke=\\"#888\\"/>";
+html += "<text x=\\"" + x + "\\" y=\\"" + (axisY + 18) + "\\" font-size=\\"10\\" text-anchor=\\"middle\\" fill=\\"#333\\">" + fmtTick(v, step) + "</text>";
+});
+}
+
+rows.forEach(function(r, i) {
+var yTop = mT + i * rowH + rowH * 0.15;
+var barH = rowH * 0.7;
+html += "<text x=\\"" + (mL - 8) + "\\" y=\\"" + (yTop + barH / 2 + 4) +
+"\\" font-size=\\"11\\" text-anchor=\\"end\\" fill=\\"#333\\">" + r.table + "</text>";
+if (r.imv === null) {
+html += "<text x=\\"" + (mL + 4) + "\\" y=\\"" + (yTop + barH / 2 + 4) +
+"\\" font-size=\\"11\\" fill=\\"#aaa\\">not available</text>";
+return;
+}
+var x1 = px(0), x2Raw = px(r.imv), x2 = clampX(x2Raw);
+var clipped = x2 !== x2Raw;
+var barX = Math.min(x1, x2), barW = Math.abs(x2 - x1);
+var color = r.imv >= 0 ? "#1baf7a" : "#d1495b";
+html += "<rect x=\\"" + barX + "\\" y=\\"" + yTop + "\\" width=\\"" + Math.max(barW, 0.5) +
+"\\" height=\\"" + barH + "\\" fill=\\"" + color + "\\"" + (clipped ? " opacity=\\"0.6\\"" : "") + "/>";
+var lblX = r.imv >= 0 ? x2 + 4 : x2 - 4;
+var lblAnchor = r.imv >= 0 ? "start" : "end";
+if (clipped) { lblX = x2 - (r.imv >= 0 ? 4 : -4); lblAnchor = r.imv >= 0 ? "end" : "start"; }
+html += "<text x=\\"" + lblX + "\\" y=\\"" + (yTop + barH / 2 + 4) + "\\" font-size=\\"10\\" fill=\\"#333\\" text-anchor=\\"" +
+lblAnchor + "\\">" + r.imv.toFixed(4) + "</text>";
+});
+
+html += "<text x=\\"" + (mL + plotW / 2) + "\\" y=\\"" + (H - 6) +
+"\\" font-size=\\"11\\" text-anchor=\\"middle\\" fill=\\"#333\\">IMV(" + m1 + ", " + m2 + ")</text>";
+svg.innerHTML = html;
+}
+
+m1Sel.addEventListener("change", draw);
+m2Sel.addEventListener("change", draw);
+draw();
+})();
+</script>
+', pairwise_imv_json, model_names_js)
+  # results:asis inserts this text back into the Markdown stream, where
+  # pandoc re-parses it as Markdown -- any line indented 4+ spaces reads as
+  # an indented code block (swallowing the actual HTML as escaped text, so
+  # the widget silently never renders). Strip leading whitespace from every
+  # line so nothing in the generated HTML/JS can trigger that rule.
+  cat(gsub("(?m)^[ \t]+", "", widget_html, perl = TRUE))
+}
+```
+
+```{r}
+#| label: highlight-picks
+if (cache_ok && nrow(summary_df) > 0) {
+  imv_wide <- imv_vs_rasch_df |> pivot_wider(names_from = model, values_from = imv)
+  picks_df <- summary_df |> left_join(imv_wide, by = "table")
+
+  no_guess_tbl <- picks_df |> arrange(desc(pi_hat)) |> slice(1)
+  guess_tbl    <- picks_df |> arrange(pi_hat) |> slice(1)
+  disagree_tbl <- picks_df |>
+    filter(!is.na(Mixture), !is.na(`1PL-AG`)) |>
+    mutate(disagree = abs(sign(Mixture) - sign(`1PL-AG`))) |>
+    arrange(desc(disagree)) |> slice(1)
+}
+```
+
+```{r}
+#| label: what-to-notice
+#| results: asis
+if (cache_ok && nrow(summary_df) > 0) {
+  cat("### What to notice\n\n")
+
+  no_guess_lbl <- if (no_guess_tbl$pi_hat > 0.95) "Safety-valve-suppressed / least guessing detected" else "Least guessing detected"
+  cat(sprintf(
+    "**%s**: `%s` has π̂ = %.3f -- the Mixture model assigns the largest engaged share of any table here, with IMV(Rasch,Mixture) of %.4f. %s\n\n",
+    no_guess_lbl, no_guess_tbl$table, no_guess_tbl$pi_hat, no_guess_tbl$Mixture,
+    if (no_guess_tbl$pi_hat > 0.95) "A near-zero IMV here is not a failure of the Mixture model; it is the safety-valve property working as intended -- there is nothing for it to correct." else ""
+  ))
+
+  cat(sprintf(
+    "**Substantial guessing detected**: `%s` has π̂ = %.3f, meaning the Mixture model assigns roughly %.0f%% of response weight to the guessing class, with IMV(Rasch,Mixture) of %.4f.\n\n",
+    guess_tbl$table, guess_tbl$pi_hat, 100 * (1 - guess_tbl$pi_hat), guess_tbl$Mixture
+  ))
+
+  if (nrow(disagree_tbl) > 0 && disagree_tbl$disagree > 0) {
+    cat(sprintf(
+      "**Where methods disagree**: `%s` shows the Mixture and 1PL-AG comparisons against Rasch pointing in different directions (IMV(Rasch,Mixture) = %.4f vs. IMV(Rasch,1PL-AG) = %.4f) -- a reminder that these two lenses model genuinely different mechanisms and won't always agree on which correction (if any) is worth its complexity.\n\n",
+      disagree_tbl$table, disagree_tbl$Mixture, disagree_tbl$`1PL-AG`
+    ))
+  }
+}
+```
+
+### Does the safety valve hold?
+
+The Mixture's central claim is not that it wins. It is that it costs nothing
+when there is nothing to correct: as $\hat\pi \to 1$ the guessing class
+empties out, the model collapses onto the Rasch baseline, and the analyst who
+fitted it anyway is no worse off. Every model on this page estimates the
+latent variance precisely so that this collapse is available to it (see
+[Models fit](#models-fit)) -- with the Rasch baseline estimating a variance
+the Mixture did not, the two would not be nested and the collapse could not
+happen however far $\hat\pi$ went.
+
+An earlier version of this page made that argument on simulated data and on
+`enem_2014_1mil_ch`, whose apparent collapse turned out to be the zero block.
+Here it is on the tables as they stand after the scored-absence screen.
+
+```{r}
+#| label: safety-valve-plot
+#| fig-height: 3.6
+#| fig-width: 7
+if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
+  sv <- imv_vs_rasch_df |>
+    filter(model == "Mixture") |>
+    left_join(summary_df |> select(table, pi_hat), by = "table") |>
+    filter(!is.na(imv), !is.na(pi_hat))
+
+  ggplot(sv, aes(pi_hat, imv)) +
+    geom_hline(yintercept = 0, linewidth = 0.4, color = "grey45") +
+    geom_smooth(method = "lm", se = FALSE, linewidth = 0.5,
+                color = model_colors[["Mixture"]], alpha = 0.6) +
+    geom_point(size = 2.4, color = model_colors[["Mixture"]]) +
+    # geom_text rather than ggrepel: the render environment is pinned by
+    # renv.lock and ggrepel is not in it.
+    geom_text(aes(label = table), size = 2.6, color = "grey30",
+              hjust = 0, nudge_x = 0.006, check_overlap = TRUE) +
+    scale_x_continuous(limits = c(NA, 1.03)) +
+    labs(x = expression(hat(pi) ~ "(engaged share, Mixture)"),
+         y = "IMV(Rasch, Mixture)",
+         caption = paste0("Each point is one table. The safety-valve claim ",
+                          "is that this trends to zero, from above, as the ",
+                          "engaged share approaches 1."))
+}
+```
+
+```{r}
+#| label: safety-valve-note
+#| results: asis
+if (cache_ok && nrow(imv_vs_rasch_df) > 0) {
+  sv <- imv_vs_rasch_df |>
+    filter(model == "Mixture") |>
+    left_join(summary_df |> select(table, pi_hat), by = "table") |>
+    filter(!is.na(imv), !is.na(pi_hat))
+  hi <- sv |> slice_max(pi_hat, n = 1)
+  best <- sv |> slice_max(imv, n = 1)
+  lo <- sv |> slice_min(pi_hat, n = 1)
+  worst <- sv |> slice_min(imv, n = 1)
+  n_neg <- sum(sv$imv < 0)
+  cat(sprintf(
+    paste0("It holds, as far as %d tables and a single split can show ",
+           "it, though as a tendency rather than a clean law. The Mixture's ",
+           "gain over Rasch falls as the engaged share grows (r = %.2f ",
+           "across tables): its largest gain, %+.4f, is on `%s` at ",
+           "$\\hat\\pi$ = %.2f, while `%s`, where the guessing class is ",
+           "emptiest at $\\hat\\pi$ = %.2f, gains %+.4f. %s It is ",
+           "positive on %d of the %d, and %s.\n\nWhat this does *not* show ",
+           "is a table at $\\hat\\pi$ close to 1. The largest engaged share ",
+           "here is %.2f, so the collapse is visible as a trend rather than ",
+           "at its endpoint, and the simulation is still what carries the ",
+           "endpoint. Nor does it show the valve is free in general: these ",
+           "are single-split margins, small enough that the sign on any one ",
+           "table should not be read as settled (see Limitations). The ",
+           "claim it supports is the modest one -- across this range, ",
+           "fitting the Mixture where the data do not want it costs ",
+           "essentially nothing, which is the property the fixed-floor 1PLg ",
+           "conspicuously lacks (see [How much does the assumed g ",
+           "matter?](#how-much-does-the-assumed-g-matter)).\n\n"),
+    nrow(sv), cor(sv$pi_hat, sv$imv),
+    best$imv, best$table, best$pi_hat,
+    hi$table, hi$pi_hat, hi$imv,
+    # The largest gain and the fullest guessing class need not be the same
+    # table; an earlier template assumed they were and mislabelled both when
+    # they came apart.
+    if (lo$table == best$table) {
+      sprintf(paste0("That largest gain is also where the guessing class is ",
+                     "fullest, so the two ends of the range agree."))
+    } else {
+      sprintf(paste0("The scatter around that is real -- `%s` has the ",
+                     "fullest guessing class of all at $\\hat\\pi$ = %.2f ",
+                     "and still gains only %+.4f, less than `%s`, so no ",
+                     "single table carries the pattern."),
+              lo$table, lo$pi_hat, lo$imv, best$table)
+    },
+    sum(sv$imv > 0), nrow(sv),
+    if (n_neg == 0) {
+      "negative on none"
+    } else {
+      sprintf("the %d negative value%s is at worst %.4f on `%s` -- within rounding of no effect",
+              n_neg, if (n_neg > 1) "s are" else "", worst$imv, worst$table)
+    },
+    max(sv$pi_hat)))
+}
+```
+
+## Two scorecards for Method A
+
+Purified Rasch is negative in the table above on every table. Read as a
+leaderboard, that says the method fails. It is the wrong yardstick. Method A
+proposes no new item response function and makes no claim about predicting
+responses; it removes guessing-contaminated persons from the *calibration*
+sample so that the surviving item parameters are less distorted. Held-out
+response prediction is the yardstick built for models that exist to predict
+responses.
+
+The check that its own logic asks for needs a known truth, so this one is a
+simulation (`vignettes/guessing_sim_compute.R`): a two-class mixture with a
+share $\pi$ of engaged Rasch responders and the rest answering at a flat
+$g=0.2$ on every item, with the generating difficulties $b_{true}$ known.
+Both scorecards are computed on the same fitted runs -- RMSE of the
+recovered difficulties against $b_{true}$ (both centred, since $b$ is
+identified only up to location), and held-out IMV against Rasch.
+
+```{r}
+#| label: sim-two-scorecards
+if (sim_ok) {
+  sim_summary |>
+    transmute(
+      pi_true = sprintf("%.2f", pi_true),
+      pi_hat = sprintf("%.3f", pi_hat_mean),
+      flagged = sprintf("%.3f", frac_flagged_mean),
+      rmse_rasch = sprintf("%.3f", rmse_rasch_mean),
+      rmse_pur = sprintf("%.3f", rmse_pur_mean),
+      rmse_mix = sprintf("%.3f", rmse_mix_mean),
+      slope_rasch = sprintf("%.2f", slope_rasch_mean),
+      slope_pur = sprintf("%.2f", slope_pur_mean),
+      imv_pur = sprintf("%+.4f", imv_pur_mean),
+      imv_mix = sprintf("%+.4f", imv_mix_mean)
+    ) |>
+    knitr::kable(
+      align = "rrrrrrrrrr",
+      col.names = c("π (true)", "π̂", "Frac. flagged",
+                    "RMSE Rasch", "RMSE Purified", "RMSE Mixture",
+                    "Slope Rasch", "Slope Purified",
+                    "IMV Purified", "IMV Mixture"),
+      caption = sprintf(
+        paste0("Item-parameter recovery and held-out IMV on the same runs. ",
+               "N = %d, J = %d, g = %.2f, %d replications per row; ",
+               "IMV columns are against Rasch. Slope regresses centred ",
+               "b_true on centred b_hat, so slope > 1 means the estimates ",
+               "are compressed toward the middle."),
+        sim_settings$N, sim_settings$J, sim_settings$g_true, sim_settings$n_reps)
+    )
+} else {
+  cat("Simulation not yet computed -- run vignettes/guessing_sim_compute.R.")
+}
+```
+
+```{r}
+#| label: sim-verdict
+#| results: asis
+if (sim_ok) {
+  row <- sim_summary |> filter(abs(pi_true - 0.80) < 1e-8)
+  if (nrow(row) == 1) {
+    cat(sprintf(
+      paste0("With %.0f%% of respondents replaced by flat guessers, Rasch ",
+             "recovers difficulty with RMSE %.3f and Purified Rasch with ",
+             "%.3f -- purification is **%.1f times more accurate** on the ",
+             "parameters -- while giving up %.4f in IMV on the very same ",
+             "fitted runs. Rasch's recovery slope of %.2f is the ",
+             "mechanism: guessing compresses a Rasch calibration toward the ",
+             "middle, and purification (slope %.2f) largely undoes that.\n\n"),
+      100 * (1 - row$pi_true), row$rmse_rasch_mean, row$rmse_pur_mean,
+      row$rmse_rasch_mean / row$rmse_pur_mean, abs(row$imv_pur_mean),
+      row$slope_rasch_mean, row$slope_pur_mean))
+    cat(paste0("So the negative column is what this method looks like when it ",
+               "is working, not evidence against it. Two scorecards, ",
+               "different winners.\n\n"))
+    null_row <- sim_summary |> filter(abs(pi_true - 1) < 1e-8)
+    if (nrow(null_row) == 1 && null_row$rmse_pur_mean > null_row$rmse_rasch_mean) {
+      cat(sprintf(
+        paste0("Method A has no safety valve of its own, though. On the ",
+               "no-guessing row it still flags %.1f%% of respondents and ",
+               "drops them from calibration, and recovery gets slightly ",
+               "*worse* than plain Rasch as a result (RMSE %.3f vs. %.3f). ",
+               "The cost is small, but unlike the Mixture -- which collapses ",
+               "onto its Rasch baseline when there is nothing to correct -- ",
+               "purification always pays something for the persons it ",
+               "removes.\n\n"),
+        100 * null_row$frac_flagged_mean, null_row$rmse_pur_mean,
+        null_row$rmse_rasch_mean))
+    }
+
+    cat(sprintf(
+      paste0("One caveat on reading this as a defence of Method A ",
+             "specifically: the Mixture model wins *both* scorecards here ",
+             "(RMSE %.3f, IMV %+.4f). The data-generating process is the ",
+             "Mixture's own assumed model, so this is its home turf and the ",
+             "comparison is not a fair horse race between the two ",
+             "corrections. The point is narrower -- that the sign of ",
+             "Purified Rasch's IMV column carries no information about ",
+             "whether purification did its job.\n\n"),
+      row$rmse_mix_mean, row$imv_mix_mean))
+  }
+}
+```
+
+## How much does the assumed $g$ matter?
+
+Every fixed-$g$ model above is handed $g = 1/m$, so the analyst is right by
+construction on every table on this page. That is the one axis the main run
+does not vary, and it is the axis @xiao2026safetyvalve's Studies 1 and 3 are
+built on. `vignettes/guessing_gsweep_compute.R` refits the 1PLg and the
+Mixture across a grid of assumed $g$ values on each real table, scoring both
+against a common Rasch baseline on the same holdout convention.
+
+The two models mis-specify differently. The 1PLg pushes *every* person's
+floor to the assumed $g$, so a wrong $g$ is wrong for every response. The
+Mixture applies $g$ only to the share of response weight it assigns to the
+guessing class, and can shrink that share when $g$ fits badly -- the safety
+valve. The prediction is that the 1PLg should be far more sensitive.
+
+```{r}
+#| label: gsweep-plot
+#| fig-height: 4.5
+#| fig-width: 8
+if (gsweep_ok && nrow(gsweep_df) > 0) {
+  plot_df <- gsweep_df |>
+    select(table, g_fit, `1PLg` = imv_1plg, Mixture = imv_mix) |>
+    pivot_longer(c(`1PLg`, Mixture), names_to = "model", values_to = "imv")
+  nominal <- gsweep_df |> distinct(table, g_nominal)
+
+  ggplot(plot_df, aes(g_fit, imv, colour = model)) +
+    geom_hline(yintercept = 0, colour = "grey60", linetype = 3) +
+    geom_vline(data = nominal, aes(xintercept = g_nominal),
+               colour = "grey40", linetype = 2, linewidth = 0.3) +
+    geom_line(linewidth = 0.6) +
+    geom_point(size = 1.2) +
+    facet_wrap(~ table, scales = "free_y") +
+    scale_colour_manual(values = c(`1PLg` = model_colors[["1PLg"]],
+                                    Mixture = model_colors[["Mixture"]])) +
+    labs(x = "assumed g", y = "IMV vs. Rasch", colour = NULL,
+         caption = "Dashed vertical line: the g = 1/m the main results table assumes.") +
+    theme(legend.position = "top")
+} else {
+  cat("Sweep not yet computed -- run vignettes/guessing_gsweep_compute.R.")
+}
+```
+
+```{r}
+#| label: gsweep-note
+#| results: asis
+if (gsweep_ok && nrow(gsweep_spread) > 0) {
+  cat(sprintf(
+    paste0("Across the %d tables, moving the assumed $g$ over the range ",
+           "[%.2f, %.2f] moves the 1PLg's IMV by a median of %.3f ",
+           "(worst table %.3f) and the Mixture's by a median of %.3f ",
+           "(worst %.3f). "),
+    nrow(gsweep_spread), min(.gsw$g_grid), max(.gsw$g_grid),
+    median(gsweep_spread$range_1plg), max(gsweep_spread$range_1plg),
+    median(gsweep_spread$range_mix), max(gsweep_spread$range_mix)))
+  cat(sprintf(
+    paste0("The worst single 1PLg value anywhere on the grid is %.3f, ",
+           "against %.4f for the Mixture. The asymmetry is the practical ",
+           "content of the safety-valve claim: a fixed-floor model is only ",
+           "as good as the analyst's $g$, whereas the Mixture degrades ",
+           "toward its Rasch baseline instead of past it.\n\n"),
+    min(gsweep_spread$worst_1plg), min(gsweep_spread$worst_mix)))
+
+  # The two "worst" figures above fall on different tables, so their ratio is
+  # not a like-for-like comparison. Name the Mixture's worst table and give the
+  # ratio computed on that table alone, which is much less flattering than the
+  # median-to-median 116x -- and check it against the Mixture's own IMV ceiling
+  # from the main results table.
+  wm <- gsweep_spread[which.max(gsweep_spread$range_mix), ]
+  ratio_same_table <- wm$range_1plg / wm$range_mix
+  mix_ceiling <- max(abs(imv_vs_rasch_df$imv[imv_vs_rasch_df$model == "Mixture"]),
+                     na.rm = TRUE)
+  mix_here <- imv_vs_rasch_df$imv[imv_vs_rasch_df$model == "Mixture" &
+                                    imv_vs_rasch_df$table == wm$table]
+  cat(sprintf(
+    paste0("Those two worst-case figures come from different tables, though, ",
+           "so the gap between them overstates the asymmetry. The Mixture's ",
+           "worst table is `%s`, and *on that table* the 1PLg moves %.3f ",
+           "against the Mixture's %.3f -- a ratio of %.1f, not the %.0f the ",
+           "median-to-median comparison gives. That is the number to read: on ",
+           "`%s` the Mixture's sensitivity to the assumed $g$ (%.4f) is larger ",
+           "than the largest IMV the Mixture achieves against Rasch anywhere on ",
+           "this page (%.4f), and larger still than its own IMV on that table ",
+           "(%.4f). Where the valve matters most, it moves further with the ",
+           "analyst's assumption than its entire signal.\n\n"),
+    wm$table, wm$range_1plg, wm$range_mix, ratio_same_table,
+    median(gsweep_spread$range_1plg) / median(gsweep_spread$range_mix),
+    wm$table, wm$range_mix, mix_ceiling,
+    if (length(mix_here) == 1) mix_here else NA_real_))
+}
+```
+
+## Limitations
+
+- **The scored-absence screen is a safeguard, not a repair.** On the
+  current release of these tables it removes a handful of candidates at
+  most (see [Screening scored absences](#screening-scored-absences)). On an
+  earlier release it removed roughly 45% of five tables, a non-random block
+  of candidates who had not sat the section, and the fix that mattered was
+  upstream: IRW now records a section a candidate never took as missing, so
+  everyone who pulls these tables gets that, not only readers of this page.
+  A table with the same defect would still pass the screen's results through
+  as a range-restricted sample, which is a different estimand from the one
+  the full candidate pool would give.
+- **The *level* of the recovered guessing floor is not pinned down.** At the
+  sample sizes and latent spreads of these tables, a floor of exactly $1/m$
+  is recovered high and with wide item-to-item scatter, and the estimated
+  latent SD is biased in the same direction at the same time (see [What an
+  estimated floor of $1/m$ looks like](#what-an-estimated-floor-of-1m-looks-like)).
+  The floor column supports "there is a floor here, and it is of a plausible
+  size"; it does not support a comparison between a table's floor and $1/m$,
+  or between one table's floor and another's at different spreads.
+- **Two tables show no floor at $1/m$.** `enem_2013_1mil_cn` and
+  `enem_2013_1mil_mt` put about two-fifths of their items below the chance
+  floor (see [Screening the answer key](#screening-the-answer-key)). Hard
+  forms are the likelier reading than a key failure, though
+  `enem_2013_1mil_cn` also has the weakest item-rest correlations of any
+  table on the page. Every model here that fixes or
+  centres a floor at $1/m$ is assuming something these two tables do not
+  show, and their results deserve that discount.
+- **1PL-AG's $\gamma$ (and, to a lesser extent, $\alpha$) can be noisy.**
+  Simulation validation recovered $\beta$ well but $\gamma$ poorly at
+  moderate sample sizes -- consistent with @sanmartin2006's own real-data
+  application, where some items had standard errors above 100. Point
+  estimates of $\hat\alpha$ should be read alongside its LR test, not in
+  isolation.
+- **$\alpha$ is not identified when the data carry no guessing floor, and the
+  LR test cannot detect this.** Where every $\hat\gamma_j$ goes to the
+  no-guessing boundary the likelihood is flat in $\alpha$ -- $\alpha$ enters
+  only through the guessing branch, $\partial P/\partial\alpha \propto
+  (1-r)\,s(1-s)\,\theta$ with $s = \mathrm{expit}(\alpha\theta+\gamma)$, and
+  a vanishing $s$ zeroes it -- so the fit returns its starting value and the
+  test returns $p \approx 1$, numerically indistinguishable from a genuine
+  null. On the current tables $\alpha$ is identified everywhere and the page
+  flags any table where it is not. On an earlier release of the ENEM tables,
+  before the scored-absence block was removed, five of them failed exactly
+  this way: refitting from $\alpha \in \{\pm 0.1, \pm 0.3\}$ returned the
+  starting value with the log-likelihood unchanged. The general lesson is
+  that a non-significant $\alpha$ in a 1PL-AG fit should never be read as
+  evidence against ability-dependent guessing without first checking that
+  $\hat\gamma$ is interior. The simulation validation on this page did not
+  catch it because data generated from the 1PL-AG always has a floor by
+  construction; it takes real data that rejects a floor to produce the
+  failure. The argument for it here is that derivative and those refits,
+  not a published result: the identification literature for this family
+  runs the other way.
+  @sanmartin2013 identify the 1PL-G's item parameters and scale by *fixing*
+  one item's guessing parameter at zero — a restriction imposed to buy
+  identification, not a boundary the data arrive at on their own, and the
+  simultaneous collapse of every $\gamma_j$ is not a case they treat.
+  @park2015 carry the 1PL-G identification result over to the 1PL-AG and
+  leave explicitly open whether it implies any practical limitation for that
+  model; they report neither a flat likelihood nor a vanishing floor.
+  @farina2019 is the nearest treatment of the 1PL-G collapsing onto its
+  nested Rasch model. Read those as evidence that this model class is
+  fragile, and this particular failure as sitting outside what they cover.
+- **The recovery result is a simulation, on the Mixture's own DGM.** The
+  two-scorecards section generates data from exactly the two-class mixture
+  the Mixture model assumes. That is the right shape for isolating what
+  purification does to item parameters, but it is not a neutral arena for
+  ranking the corrections against each other, and it says nothing about how
+  Method A behaves when guessing is ability-dependent rather than flat.
+- **Single 80/20 split, not repeated cross-validation.** IMV estimates here
+  reflect one holdout draw per table; they are not averaged over multiple
+  splits the way the Safety Valve paper's own empirical section is.
+- **The secondary (`gilbert_meta_*`) tables come from one study family.** All
+  three item-text-verified tables share an underlying literacy-intervention
+  study; they are not independent evidence of generalizability beyond that
+  context.
+- **Purified Rasch (Method A) assumes person-level, not item-level,
+  guessing** -- an examinee is modeled as either guessing on everything or
+  nothing, per @torresirribarra2026's own stated simplification relative to
+  the (person &times; item) process that actually generates guessing.
+
+## Reproducibility
+
+Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+# 1. Fit all 7 specifications across all tables (from the project root)
+source("vignettes/guessing_compute.R")
+
+# 2. Method A parameter recovery vs. held-out IMV (simulation; no Redivis
+#    access needed)
+source("vignettes/guessing_sim_compute.R")
+
+# 3. Sensitivity of the fixed-g models to the assumed guessing level
+source("vignettes/guessing_gsweep_compute.R")
+
+# 4. Answer-key diagnostics: item difficulty against the chance floor and
+#    item-total point-biserials (seconds; reads the cached response matrices)
+source("vignettes/guessing_key_diagnostics.R")
+
+# 5. What an estimated guessing floor of 1/m looks like at these N, J and
+#    latent spreads (simulation; no Redivis access needed)
+source("vignettes/guessing_floor_calibration_compute.R")
+
+# 6. Whether m = 5 holds for the ENEM tables: letters marked per item, and
+#    the ENEM 2023 item text (server-side counts; needs REDIVIS_API_TOKEN)
+source("vignettes/guessing_m_check.R")
+
+# 7. The same pipeline on ordinary IRW cognitive tables, and the 3PL's
+#    sensitivity to its prior on g (needs REDIVIS_API_TOKEN)
+source("vignettes/guessing_imv_benchmark.R")
+
+# 8. Re-render this page
+quarto::quarto_render("vignettes/guessing.qmd")
+```
+
+Steps 2-7 write their own caches
+(`guessingdata/guessing_sim_results.rds`,
+`guessingdata/guessing_gsweep_results.rds`,
+`guessingdata/guessing_key_diagnostics.rds`,
+`guessingdata/guessing_floor_calibration.rds`,
+`guessingdata/guessing_m_check.rds`,
+`guessingdata/guessing_imv_benchmark.rds`); the page renders without
+them, with those sections showing a placeholder instead. The estimators themselves,
+and the checks behind the variance and gradient claims in Data and methods,
+are in `vignettes/guessing_helpers.R` and
+`vignettes/guessing_vignette_checks.R`.
+
+::: {.callout-tip}
+To cite the datasets used, run:
+
+```r
+irw_save_bibtex(summary_df$table, output_file = "guessingdata/irw_references.bib")
+```
+:::
+
+```{r}
+#| label: source-links
+#| output: asis
+# The shared include cannot pass `exclude`, so call the helper directly:
+# guessing_alpha_identification.R is a superseded record of the pre-screen
+# fits, not part of how this page is produced.
+source("../components/source_links.R")
+irw_source_links(exclude = "guessing_alpha_identification.R")
+```
+
+{{< include ../components/_data-version.qmd >}}
+
+## Acknowledgments
+
+We thank Xingyao Xiao and David Torres Irribarra, whose reviews of earlier
+versions of this page caught several errors and shaped much of its analysis.
+Both are authors of methods compared here (the Mixture and Method A,
+respectively). Errors that remain are ours.
+
+## References
