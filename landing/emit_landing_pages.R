@@ -170,9 +170,16 @@ build_jsonld <- function(x) {
   if (!blank(x$doi_url))   d$citation  <- x$doi_url
   if (!blank(x$reference)) d$creditText <- x$reference
 
+  # Google reads the nested isPartOf object as a second Dataset item on the page
+  # and holds it to the same required fields as the top-level one, so it needs a
+  # description of its own; without it Search Console reports "Missing field
+  # description" for every table page (2026-09-19).
   d$isPartOf <- list(
     "@type" = "Dataset",
     name    = "Item Response Warehouse",
+    description = paste0("The Item Response Warehouse (IRW), a harmonised collection of ",
+                         "item-level response data drawn from public sources and released ",
+                         "in a single long format for psychometric research."),
     url     = SITE_URL,
     version = paste0("IRW v", x$irw_version)
   )
