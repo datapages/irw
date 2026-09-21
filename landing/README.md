@@ -26,6 +26,35 @@ pages) source it, so the two cannot drift. The rules were settled by Ben on
   publish. The build log warns about any table on the live sitemap that is about
   to lose its page.
 
+## The index at /tables/
+
+`build_index()` emits one flat list of every table that has a page: **Table,
+Responses, Licence, Redivis dataset**. A name filter and click-to-sort headings
+are the only JavaScript on the site's static pages, both fixed literals so the
+file stays byte-deterministic (rule 1). Sorting moves rows with `appendChild`,
+which preserves each row's inline `display`, so a sort after a filter does not
+resurrect the hidden rows; Responses sorts on a `data-n` attribute, because the
+displayed `1,048,576` sorts lexically below `9,912`.
+
+The licence is on the list, not only on the page, because it decides whether a
+reader may use a table at all. Restrictive licences -- the ones
+`licence_terms()` recognises, NC and ND -- carry the same amber the download note
+uses. A table with no recorded licence gets no page at all, so the column is
+never blank. Tables in `known_issues.tsv` carry a "known issue" flag linking the
+issue.
+
+**Faceted filtering stays on `data.qmd`.** The index deliberately does not grow
+licence/size/tag facets: `Browse the IRW Data` is that surface, the index links
+to it, and two browse surfaces would be two things to keep in agreement.
+
+## The citation block
+
+Each page carries the source paper's BibTeX -- the dictionary's `BibTex` column,
+the same string `docs.qmd` hands out -- in a `<pre>` with a copy button, omitted
+where the column is blank. It says nothing about citing the IRW itself: what
+counts as a release is unsettled (irw#1870, irw#2317), and a citation form
+invented here would have to be withdrawn from every page later.
+
 ## URLs
 
 Pages live at `/tables/<slug>/`, served from `<slug>/index.html`, with the
