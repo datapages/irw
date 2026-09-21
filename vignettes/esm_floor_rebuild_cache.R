@@ -1,5 +1,11 @@
+# esm_floor_rebuild_cache.R
+#
 # Assembles esm_floor_results.rds from whatever per-fit caches exist right now,
-# so the page always reflects completed work even mid-batch.
+# so the page always reflects completed work even mid-batch. Companion to
+# esm_floor_compute.R (esm_floor.qmd); paths below are repo-root relative.
+#
+# Usage:
+#   Rscript vignettes/esm_floor_rebuild_cache.R
 suppressPackageStartupMessages({library(dplyr)})
 DATA_DIR <- "vignettes/esm_floor_data"; FIT_DIR <- file.path(DATA_DIR,"fits")
 sl <- c("westhoff2023_pbat","westhoff2023_stopd","vollbracht_et_al_2026_ambulatory_assessment",
