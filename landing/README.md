@@ -37,9 +37,9 @@ resurrect the hidden rows; Responses sorts on a `data-n` attribute, because the
 displayed `1,048,576` sorts lexically below `9,912`.
 
 The licence is on the list, not only on the page, because it decides whether a
-reader may use a table at all (Padma, 2026-09-21). Restrictive licences -- the
-ones `licence_terms()` recognises, NC and ND -- carry the same amber the download
-note uses. A table with no recorded licence gets no page at all, so the column is
+reader may use a table at all. Restrictive licences -- the ones
+`licence_terms()` recognises, NC and ND -- carry the same amber the download note
+uses. A table with no recorded licence gets no page at all, so the column is
 never blank. Tables in `known_issues.tsv` carry a "known issue" flag linking the
 issue.
 

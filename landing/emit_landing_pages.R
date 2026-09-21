@@ -541,10 +541,9 @@ SORT_JS <- paste0(
 
 build_index <- function(rows, irw_version) {
   # Licence on the list, not only on the page: it decides whether a reader may
-  # use a table at all, and until now it cost a click to find out (Padma,
-  # 2026-09-21). A table with no recorded licence gets no page (irw#2266), so
-  # the column is never blank. Restrictive licences (NC, ND) carry the same
-  # amber the download note uses.
+  # use a table at all, and until now it cost a click to find out. A table with
+  # no recorded licence gets no page (irw#2266), so the column is never blank.
+  # Restrictive licences (NC, ND) carry the same amber the download note uses.
   items <- paste0(vapply(rows, function(r) {
     flag <- if (nzchar(r$issue)) paste0(
       "<a class=\"flag\" href=\"", ISSUE_URL, esc(r$issue),
