@@ -75,6 +75,9 @@ SITE_URL     <- "https://itemresponsewarehouse.org"
 OUT_DIR      <- file.path("_site", "tables")
 MANIFEST_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
                        "metadata/version_manifest.tsv")
+# Data defects are tracked in the data repo, not this one: a known-issue banner
+# and the index's flag both point here.
+ISSUE_URL    <- "https://github.com/ben-domingue/irw/issues/"
 # Redivis' table.listRows endpoint serves a public table as CSV with no token, but
 # only up to 100MB: above that it answers 401 "Results larger than 100MB are not
 # supported for unauthenticated requests". The cutoff follows the table's own
@@ -107,6 +110,14 @@ num_fmt <- function(x) {
   if (is.na(v)) return(chr(x))
   if (v == round(v) && abs(v) < 1e15) formatC(v, format = "d", big.mark = ",")
   else formatC(v, format = "f", digits = 3)
+}
+
+# The same count as num_fmt, unformatted, for the index's data-n sort key: the
+# displayed "1,048,576" sorts lexically, which puts 9,912 above a million.
+# Never scientific notation, and never NA -- an unknown count sorts to the end.
+num_raw <- function(x) {
+  v <- suppressWarnings(as.numeric(x))
+  if (is.na(v)) "-1" else sprintf("%.0f", v)
 }
 
 # ------------------------------------------------------------------ the inputs
@@ -337,6 +348,13 @@ PAGE_CSS <- paste0(
 ".btn.primary{background:#8c1515;color:#fff}",
 ".btn:hover{background:#f7eded}.btn.primary:hover{background:#6f1010}",
 ".note{font-size:.88rem;color:#555}",
+"th.s{cursor:pointer;user-select:none}th.s:hover{color:#8c1515}",
+"td.restrict{background:#fff6e5}",
+".flag{display:inline-block;font-size:.76rem;background:#fff6e5;border:1px solid #f0c987;",
+"border-radius:3px;padding:0 .35rem;margin-left:.4rem;white-space:nowrap;text-decoration:none}",
+".copy{font-family:inherit;font-size:.8rem;padding:.25rem .6rem;border:1px solid #8c1515;",
+"background:#fff;color:#8c1515;border-radius:5px;cursor:pointer;margin:.15rem 0 0}",
+".copy:hover{background:#f7eded}",
 ".licnote{background:#fff6e5;border-left:4px solid #d98b1f;padding:.5rem .8rem;",
 "margin:.2rem 0 .7rem;font-size:.93rem}")
 
@@ -358,7 +376,7 @@ build_page <- function(x) {
   # no Croissant file, no sitemap entry. The banner is what a visitor sees.
   flagged <- nzchar(x$issue)
   jsonld <- toJSON(build_jsonld(x), auto_unbox = TRUE, pretty = TRUE, null = "null")
-  issue_url <- paste0("https://github.com/ben-domingue/irw/issues/", x$issue)
+  issue_url <- paste0(ISSUE_URL, x$issue)
   banner <- if (flagged) paste0(
     "<div class=\"issue\">\n<p><strong>Known data issue.</strong> This table has an open ",
     "defect that is being fixed; see <a href=\"", esc(issue_url), "\">irw#", esc(x$issue),
@@ -430,6 +448,19 @@ build_page <- function(x) {
     else "",
     if (!blank(x$license_terms) && grepl("[.!?]$", chr(x$license_terms))) "" else ".",
     "</p>\n") else ""
+  # The source paper's BibTeX, exactly the string docs.qmd hands out from the
+  # dictionary's BibTex column. Nothing here says how to cite the IRW itself:
+  # what counts as a release is unsettled (irw#1870, irw#2317), and a citation
+  # form invented on 4,000 pages would have to be withdrawn from all of them.
+  # The button degrades to a selectable <pre> where clipboard access is refused.
+  cite <- if (!blank(x$bibtex)) paste0(
+    "<pre>", esc(x$bibtex), "</pre>\n",
+    "<button class=\"copy\" type=\"button\" onclick=\"",
+    "var b=this,t=b.previousElementSibling.textContent;",
+    "navigator.clipboard.writeText(t).then(function(){",
+    "b.textContent='Copied';setTimeout(function(){b.textContent='Copy BibTeX'},2000)})",
+    "\">Copy BibTeX</button>\n") else ""
+
   access <- paste0(licnote,
 if (nzchar(x$rows_url)) paste0(
 "<div class=\"btns\">",
@@ -477,6 +508,7 @@ section("Classification", tagbody),
 section("Item text", itext),
 section("Columns", vars),
 section("Get the data", access),
+section("How to cite", cite),
 section("Version and provenance", prov),
 "<footer>Part of the <a href=\"", SITE_URL, "/\">Item Response Warehouse</a>, ",
 "IRW v", esc(x$irw_version), ". ",
@@ -487,11 +519,44 @@ esc(x$shard_version), ".</footer>\n",
 
 # ------------------------------------------------------------------ index page
 
+# One inline handler, a fixed literal: it is emitted identically on every build,
+# so the index stays byte-deterministic (the file is committed to gh-pages).
+# Rows are moved with appendChild, which preserves each row's inline
+# style.display -- a sort after a filter must not resurrect the hidden rows.
+SORT_JS <- paste0(
+"<script>\n",
+"var sd={};\n",
+"function srt(c,num){\n",
+" var rs=[].slice.call(document.querySelectorAll('#tbl tr[data-t]'));\n",
+" if(!rs.length)return;\n",
+" var d=(c in sd)?!sd[c]:!num;sd[c]=d;\n",
+" rs.sort(function(a,b){\n",
+"  var x,y;\n",
+"  if(num){x=+a.dataset.n;y=+b.dataset.n}\n",
+"  else if(c==0){x=a.dataset.t;y=b.dataset.t}\n",
+"  else{x=a.cells[c].textContent.toLowerCase();y=b.cells[c].textContent.toLowerCase()}\n",
+"  return x<y?(d?-1:1):x>y?(d?1:-1):0});\n",
+" var p=rs[0].parentNode;rs.forEach(function(r){p.appendChild(r)})}\n",
+"</script>\n")
+
 build_index <- function(rows, irw_version) {
-  items <- paste0(vapply(rows, function(r) paste0(
-    "<tr data-t=\"", esc(r$slug), "\"><td><a href=\"", esc(r$slug), "/\">", esc(r$table), "</a></td>",
+  # Licence on the list, not only on the page: it decides whether a reader may
+  # use a table at all, and until now it cost a click to find out (Padma,
+  # 2026-09-21). A table with no recorded licence gets no page (irw#2266), so
+  # the column is never blank. Restrictive licences (NC, ND) carry the same
+  # amber the download note uses.
+  items <- paste0(vapply(rows, function(r) {
+    flag <- if (nzchar(r$issue)) paste0(
+      "<a class=\"flag\" href=\"", ISSUE_URL, esc(r$issue),
+      "\" title=\"Open data defect -- see irw#", esc(r$issue), "\">known issue</a>") else ""
+    paste0(
+    "<tr data-t=\"", esc(r$slug), "\" data-n=\"", num_raw(r$n_responses), "\">",
+    "<td><a href=\"", esc(r$slug), "/\">", esc(r$table), "</a>",
+    if (nzchar(flag)) paste0(" ", flag) else "", "</td>",
     "<td>", esc(num_fmt(r$n_responses)), "</td>",
-    "<td>", esc(r$shard), "</td></tr>"), character(1)), collapse = "\n")
+    "<td", if (length(licence_terms(r$license))) " class=\"restrict\"" else "", ">",
+    esc(r$license), "</td>",
+    "<td>", esc(r$shard), "</td></tr>")}, character(1)), collapse = "\n")
   paste0(
 "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n",
 "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n",
@@ -505,16 +570,22 @@ format(length(rows), big.mark = ","), " tables in the Item Response Warehouse, "
 "<h1>IRW table pages</h1>\n",
 "<p class=\"sub\">", format(length(rows), big.mark = ","), " tables, each with a page ",
 "naming the IRW version it describes and carrying schema.org/Dataset and Croissant ",
-"metadata. To filter by size, response type or classification, use ",
+"metadata. Click a heading to sort. To filter by size, response type or ",
+"classification, use ",
 "<a href=\"", SITE_URL, "/data.html\">Browse the IRW Data</a>.</p>\n",
 "<input class=\"find\" type=\"search\" placeholder=\"Filter by table name\" ",
 "aria-label=\"Filter by table name\" oninput=\"",
 "var q=this.value.toLowerCase();",
 "document.querySelectorAll('#tbl tr[data-t]').forEach(function(r){",
 "r.style.display=r.dataset.t.indexOf(q)<0?'none':''})\">\n",
-"<table class=\"kv\" id=\"tbl\"><tr><th>Table</th><th>Responses</th><th>Redivis dataset</th></tr>\n",
+"<table class=\"kv\" id=\"tbl\"><tr>",
+"<th class=\"s\" onclick=\"srt(0,0)\">Table</th>",
+"<th class=\"s\" onclick=\"srt(1,1)\">Responses</th>",
+"<th class=\"s\" onclick=\"srt(2,0)\">Licence</th>",
+"<th class=\"s\" onclick=\"srt(3,0)\">Redivis dataset</th></tr>\n",
 items,
 "\n</table>\n",
+SORT_JS,
 "<footer>Item Response Warehouse, IRW v", esc(irw_version), ".</footer>\n",
 "</body>\n</html>\n")
 }
@@ -705,6 +776,8 @@ main <- function() {
       manifest_pin = manifest_pin, size_sentence = size_sentence,
       description = if (nrow(brow)) chr(brow[1, "Description"]) else "",
       reference   = if (nrow(brow)) chr(brow[1, "Reference_x"]) else "",
+      bibtex      = if (nrow(brow) && "BibTex" %in% names(brow))
+                      chr(brow[1, "BibTex"]) else "",
       license     = if (nrow(brow)) chr(brow[1, "Derived_License"]) else "",
       license_terms = if (nrow(brow) && "Custom_License_Terms" %in% names(brow))
                         chr(brow[1, "Custom_License_Terms"]) else "",
@@ -750,7 +823,8 @@ main <- function() {
       urls <- c(urls, page_url)
     }
     rows[[length(rows) + 1]] <- list(table = x$table, slug = slug, shard = shard,
-                                     n_responses = mrow$n_responses)
+                                     n_responses = mrow$n_responses,
+                                     license = x$license, issue = x$issue)
     if (!nzchar(x$rows_url)) too_big <- c(too_big, x$table)
   }
 
