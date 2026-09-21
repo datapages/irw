@@ -124,7 +124,15 @@ python -c "import irw; irw.list_tables()"
 
 This opens a browser login the first time. Do it in a normal terminal — the
 server cannot complete an interactive login, and will tell you so rather than
-hang. (Alternatively, set a `REDIVIS_API_TOKEN` environment variable.)
+hang.
+
+This is the way to sign in. It stores a short-lived access token that rotates,
+the credential is yours rather than shared, and Redivis can revoke it. If you
+genuinely cannot use a browser — a headless machine, or CI — a
+`REDIVIS_API_TOKEN` environment variable is read instead, but prefer the browser
+where you have one: an API token is a long-lived password-equivalent with no
+expiry, and the Redivis SDK warns that setting one for an interactive session is
+discouraged.
 
 **3. Tell your assistant about it.**
 
@@ -153,7 +161,8 @@ will print it, and `~` is not reliably expanded in application config files. If
 you already have other servers configured, add the `irw` entry to the existing
 `mcpServers` object rather than replacing it. A desktop application also won't
 necessarily inherit a `REDIVIS_API_TOKEN` you exported in a terminal; set it in
-the application's own environment if you go that route.
+the application's own environment if you went that route rather than signing in
+with a browser.
 
 **4. Restart the application.** The server is loaded at startup, so a running
 assistant won't see it until you do.
