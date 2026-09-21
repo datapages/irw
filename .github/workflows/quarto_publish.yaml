@@ -1,16 +1,29 @@
 on:
   workflow_dispatch:
-  # Daily rebuild, but only when main has actually moved since the last
-  # publish -- see the `decide` job. The render takes ~14 minutes and every
-  # publish adds a commit to gh-pages, so rebuilding an unchanged site is not
-  # free: it is wall-clock, Actions minutes and permanent git history for no
-  # change in output.
+  # Checked every 3 hours, but rendered only when main has actually moved
+  # since the last publish -- see the `decide` job. The render takes ~14
+  # minutes and every publish adds a commit to gh-pages, so rebuilding an
+  # unchanged site is not free; a check that finds nothing costs under a
+  # minute, which is why checking often is cheap and rendering often is not.
   #
-  # 14:30 UTC deliberately: after ben-domingue/irw's weekly metadata pipeline
-  # (Mon 13:00) and its daily version manifest (13:30), so a day's repo-side
-  # work has landed before the site is rebuilt on top of it.
+  # Every 3 hours (2026-09-19), not daily. The daily 14:30 cron was actually
+  # starting at 17:20-19:30 UTC -- GitHub queues scheduled jobs -- so a merge
+  # that just missed it waited ~27 hours. Minute 17 rather than :00 keeps off
+  # the top-of-hour queue that caused that delay. Because a run only renders
+  # after a change, ben-domingue/irw's weekly metadata pipeline (Mon 13:00)
+  # and daily version manifest (13:30) are still picked up by the next check
+  # after they land.
   schedule:
-    - cron: "30 14 * * *"
+    - cron: "17 */3 * * *"
+
+# One publish at a time. Two renders finishing together would race on
+# gh-pages, and a manual dispatch can now easily land beside a scheduled run.
+# Queued rather than cancelled: cancelling a render mid-publish could leave
+# gh-pages half-written, and a queued run whose `decide` finds the site
+# current skips in seconds anyway.
+concurrency:
+  group: publish-gh-pages
+  cancel-in-progress: false
 
 name: Render and Publish
 
@@ -115,4 +128,9 @@ jobs:
           target: gh-pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Read-scoped Redivis token. The render only reads (irw_meta and table
+          # metadata for the landing pages); nothing here writes, so this secret
+          # must not carry data.edit scope. If it is unset or empty the render
+          # now FAILS rather than quietly publishing a site with no table landing
+          # pages -- see landing/emit_landing_pages.R (ben-domingue/irw#2129).
           REDIVIS_API_TOKEN: ${{ secrets.REDIVIS_API_TOKEN }}

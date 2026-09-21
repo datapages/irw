@@ -1,4 +1,4 @@
-# Per-table landing pages (pilot)
+# Per-table landing pages
 
 Emits one landing page per IRW table, with `schema.org/Dataset` JSON-LD and a
 Croissant (MLCommons) description, so that individual tables are addressable and
@@ -7,15 +7,24 @@ discoverable by Google Dataset Search, Hugging Face, Kaggle and OpenML.
 Tracking issue: [ben-domingue/irw#1706](https://github.com/ben-domingue/irw/issues/1706).
 The measurements this design rests on are in that issue's 2026-09-03 scoping comment.
 
-## Status: pilot, 25 tables
+## Which tables get a page
 
-`pilot_tables.txt` lists them. They were chosen to span what could break the
-generator rather than to look good: all six warehouse shards, tables with and
-without item text, tagged and untagged, non-lowercase names, the longest name in
-the corpus, the largest and smallest tables, and one table with no `biblio` row
-at all. It deliberately excludes all 182 tables named in irw#1842 / irw#1779 --
-a superset of the 153 that irw#1856 is repairing -- so the pilot does not
-publish data already known to be wrong.
+`page_rules.R` decides, and both this emitter and `data.qmd` (which links to the
+pages) source it, so the two cannot drift. The rules were settled by Ben on
+2026-09-19 after a 25-table pilot:
+
+- **Every live table gets a page, except one with no recorded licence.** A blank
+  or `NA` `Derived_License` holds the page back until the licence is known. The
+  held tables are listed in the build log; the queue is irw#2266.
+- **Known-bad tables get a page with a banner.** `known_issues.tsv` lists tables
+  with an open data defect. Their page names the issue and is kept out of search:
+  `noindex`, no Dataset JSON-LD, no Croissant file, no sitemap entry. Delete the
+  row in the PR that *releases* the fix.
+- **Withdrawn tables keep their URL as a tombstone.** `withdrawn.tsv` lists them;
+  the page says "Withdrawn" and the date, nothing more, and is `noindex`. Add the
+  row in the same PR that withdraws a table, or its URL becomes a 404 on the next
+  publish. The build log warns about any table on the live sitemap that is about
+  to lose its page.
 
 ## URLs
 
@@ -31,18 +40,30 @@ be cited, and to be what a release DOI resolves to if irw#1870 lands. GitHub
 Pages does not reliably serve an extensionless path for a `.html` file, and an
 extension inside a citable identifier ages badly. Same file count either way.
 
-## Known limitation: Croissant validates but does not load
+## Croissant loading, and the 100MB limit
 
-The Croissant `contentUrl` points at the Redivis *table page*, not at a data
-file. Verified 2026-09-03: the Redivis API returns `401 "No credentials were
-provided"` even for a public table, so there is no unauthenticated URL a loader
-could read. `mlcroissant` therefore parses all 25 files successfully and would
-then read zero records.
+Each Croissant file's `contentUrl` is Redivis' `table.listRows` endpoint, which
+serves a public table as CSV with no token (enabled by Redivis 2026-09-19; before
+that it answered 401 and the files validated but read zero records). The URL is
+pinned to the Redivis dataset version the page reports, and addresses the table
+by name:
 
-So sub-action 4.3 is **partly** delivered: the descriptions are valid and a
-NeurIPS submission can point at one, but programmatic loading via `mlcroissant`
-or TFDS needs a direct download URL that does not yet exist. Do not describe
-Hugging Face / Kaggle / OpenML support as delivered.
+    https://redivis.com/api/v1/tables/datapages.<shard>:v7_0.<table>/rows?format=csv
+
+Redivis refuses anonymous requests for tables over 100MB. The cutoff tracks the
+table's `numBytes` property exactly (checked on 12 tables between 60MB and
+160MB), so the emitter reads `numBytes` and, for a larger table, points
+`contentUrl` at the Redivis page instead and says so in the file's description.
+On 2026-09-19 that was 135 of 4,169 tables. Their files validate but do not load,
+and their pages offer "Browse on Redivis" instead of a CSV download.
+
+Croissant fields cover only `id`, `item` and `resp`. `irw_meta` stores other
+column names lowercased while a table may not (`cov_Gender`), and a field naming a
+column that does not exist makes the whole file fail to load. The CSV still has
+every column.
+
+The bar is records, not parsing: `mlc.Dataset(jsonld=f)` succeeds on a file
+whose data URL is a web page. See the check below.
 
 ## How it runs
 
@@ -75,7 +96,9 @@ preview without credentials still renders.
 Rscript landing/emit_landing_pages.R && cp -r _site/tables /tmp/run1 \
   && Rscript landing/emit_landing_pages.R && diff -r /tmp/run1 _site/tables
 
-# Croissant -- must be 25/25
+# Croissant -- must all parse
 pip install mlcroissant
-python -c "import mlcroissant as mlc, glob; [mlc.Dataset(jsonld=f) for f in glob.glob('_site/tables/*.jsonld')]"
+python -c "import mlcroissant as mlc, glob; [mlc.Dataset(jsonld=f) for f in glob.glob('_site/tables/*/croissant.jsonld')]"
+# ...and records must actually load for tables under 100MB (spot-check a sample)
+python -c "import mlcroissant as mlc, glob, itertools; print({f.split('/')[-2]: len(list(itertools.islice(mlc.Dataset(jsonld=f).records('responses'), 5))) for f in glob.glob('_site/tables/*/croissant.jsonld')})"
 ```

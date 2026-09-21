@@ -8,9 +8,11 @@ project:
     - llms.txt
   preview:
     port: 4200
-  # Per-table landing pages (ben-domingue/irw#1706, pilot). Runs after Quarto has
+  # Per-table landing pages (ben-domingue/irw#1706). Runs after Quarto has
   # written _site/, and emits into _site/tables/. Skips itself with exit 0 when
-  # REDIVIS_API_TOKEN is unset, so a credential-free local preview still renders.
+  # REDIVIS_API_TOKEN is unset, so a credential-free local preview still renders --
+  # but in CI a missing token is a hard error, because publishing without the
+  # landing pages deletes them from the live site (ben-domingue/irw#2129).
   post-render:
     - Rscript landing/emit_landing_pages.R
 
@@ -51,7 +53,9 @@ website:
           text: Merging with IRW data
         - text: "---"
         - href: standard.qmd
-          text: The Core IRW Data Standard
+          text: The Core IRW Data Standard (v1.0)
+        - href: validate.qmd
+          text: Check a File Against the Standard
         - href: comps_standard.qmd
           text: The Competition Data Standard
         - href: nominal_standard.qmd
@@ -79,6 +83,8 @@ website:
           text: About the IRW
         - href: news.qmd
           text: News
+        - href: corrections.qmd
+          text: Corrections
         - href: research.qmd
           text: Research!
         - href: othersites.qmd

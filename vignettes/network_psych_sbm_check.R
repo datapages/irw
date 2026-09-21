@@ -59,8 +59,10 @@ message("SBM check subset (", length(SBM_TABLES), " tables, reusing option_b_tab
 
 # Prior odds of K=1 (single cluster) vs K>1 under bgm()'s own zero-truncated
 # Poisson(lambda) prior on the number of clusters, used below to convert a
-# posterior P(K=1) into a Bayes factor via posterior odds / prior odds
-# (Savage-Dickey-style). Zero-truncated Poisson pmf at k=1:
+# posterior P(K=1) into a *clustering* Bayes factor via posterior odds /
+# prior odds. (This is the quantity easybgm calls clusterBayesfactor(); it
+# is not the Savage-Dickey edge-inclusion BF used elsewhere in this
+# vignette.) Zero-truncated Poisson pmf at k=1:
 #   P(K=1) = lambda * exp(-lambda) / (1 - exp(-lambda))
 prior_p_k1 <- function(lambda) {
   (lambda * exp(-lambda)) / (1 - exp(-lambda))

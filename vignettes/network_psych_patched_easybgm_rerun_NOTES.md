@@ -91,3 +91,66 @@ current S3-era API) — pin the specific fix commit, not HEAD.
    documented — it served its one purpose and isn't referenced by the
    `.qmd`; re-run this script again if the comparison ever needs
    reproducing.
+
+---
+
+# Addendum 2026-09-10: the *second* easybgm bug (the clustering Bayes factor)
+
+Karoline Huth reports that a colleague found a bug in easybgm's SBM Bayes
+factor code and suggests re-running the models against the GitHub version.
+This is a **different bug** from the one above (that one was the
+`type == "binary"` package-dispatch line, and it never fired for this
+vignette). Findings from reading the upstream fix, before deciding whether
+to re-run:
+
+**What was fixed upstream.** Commits
+[`26e6fa5f`](https://github.com/KarolineHuth/easybgm/commit/26e6fa5f) and
+[`03d992b5`](https://github.com/KarolineHuth/easybgm/commit/03d992b5)
+(2026-09-07, Nikola Sekulovski, PR #137) rewrite `clusterBayesfactor()`
+wholesale. The rewrite is explicitly scoped to **bgms 0.2.0.0**: it assumes
+the *shifted*-Poisson prior on the cluster count (`B - 1 ~ Poisson(lambda)`)
+and corrects for the fact that 0.2.0.0's SBM summary normalizes `P(B | T)`
+over `1:p` separately for each occupied count `T`. Its own documentation
+warns: "Use it for fits with this prior and summary convention, not
+indiscriminately for historical fits."
+
+**Why the fix does not apply to this vignette's numbers as they stand.**
+`network_psych_sbm_check.R` never calls `easybgm` — deliberately (see its
+header). It calls `bgms::bgm()` and `bgms::extract_sbm()` directly and forms
+the Bayes factor by hand as posterior odds / prior odds, where the prior odds
+come from bgms 0.1.6.3's documented **zero-truncated** Poisson prior
+(`bgm.Rd`: "Rate of the zero-truncated Poisson prior on the number of
+clusters"), giving `PRIOR_P_K1 = 0.582`. The buggy easybgm code path was
+therefore never executed here, and the patched replacement cannot be run
+against these cached results: it is written for a prior and a summary
+convention that bgms 0.1.6.3 does not use.
+
+**Two things in the rewrite that do bear on our numbers.**
+
+1. *What the count means.* The new docs state that `B` counts the clusters
+   the model has **available**, including unoccupied ones — "it is not the
+   occupied item-cluster count or latent dimensionality." If bgms 0.1.6.3's
+   `posterior_num_blocks` has the same meaning, then our `post_p_k1` is
+   `P(available blocks = 1)`, which is a slightly different claim from "the
+   network is one cluster." This is checkable from
+   `posterior_mode_allocations` / the raw allocation draws — but **the SBM
+   fits were not cached** (`network_psych_data/fits/` holds the 610 Option A
+   fits only, no SBM objects), so checking it means refitting.
+2. *What clustering evidence is evidence of.* The new docs add: "Evidence
+   for clustering concerns the network's edge structure and is not by itself
+   evidence of multidimensionality." That is a direct upstream statement
+   about the SBM-vs-eigenvalue mismatch Huth's colleague raised, and is
+   arguably a better explanation of it than the BF > 10 / BF > 3 threshold
+   argument.
+
+**What a re-run would cost.** bgms 0.2.0.0 moves to S7 fit objects.
+`fit_ordinal_mrf_edge_evidence()` in `network_psych_compute.R` calls `bgms`
+directly and is written against the S3-era API, so upgrading bgms to re-run
+the SBM check also breaks (and would require re-running) the Option B
+ordinal-MRF pass. The SBM fits themselves are ~2-3 min/table x 20 tables at
+4 chains. Not started — pending a decision.
+
+**Done in the meantime** (2026-09-10, branch `worktree-huth-network-notes`):
+terminology corrected to "clustering Bayes factor" throughout, the BF > 3
+threshold and the slow-accumulation-of-null-evidence point written into the
+SBM section and Limitations, and the weighted-density figure removed.
