@@ -125,13 +125,36 @@ tag_vals <- tags |>
   select(-values) |>
   deframe()
 
-ds <- c("item_response_warehouse", "item_response_warehouse_2", "item_response_warehouse_3", "item_response_warehouse_4", "item_response_warehouse_5", "item_response_warehouse_6")
-urls <- ds |>
+## Shard name -> Redivis scoped reference, for the embed URLs in "Look up a
+## single dataset". Authoritative source is IRW_CORE_DATASETS in
+## ben-domingue/irw metadata/redivis_config.R; landing/page_rules.R mirrors it.
+ds_ref <- c(
+  item_response_warehouse   = "item_response_warehouse:as2e",
+  item_response_warehouse_2 = "item_response_warehouse_2:epbx",
+  item_response_warehouse_3 = "item_response_warehouse_3:5xaj",
+  item_response_warehouse_4 = "item_response_warehouse_4:980f",
+  item_response_warehouse_5 = "item_response_warehouse_5:3ykx",
+  item_response_warehouse_6 = "item_response_warehouse_6:fpe6"
+)
+## One listing of every shard, shared by the explorer (urls) and the lookup
+## (table_ds_ref). The lookup used to live in _load-data.qmd, which listed all
+## six shards and fetched biblio a second time on every render (irw#1719, 17.4).
+listing <- names(ds_ref) |>
   map(\(d) redivis$user("datapages")$dataset(d)$list_tables() |>
-        map(\(t) tibble(table = t$name, url = t$properties$url)) |>
+        map(\(t) tibble(table = t$name, url = t$properties$url, ds_ref = ds_ref[[d]])) |>
         list_rbind()) |>
   list_rbind() |>
-  mutate(table = str_to_lower(table), url = str_remove(url, "\\?.*$"))
+  mutate(table = str_to_lower(table))
+urls <- listing |> select(table, url) |> mutate(url = str_remove(url, "\\?.*$"))
+ojs_define(table_ds_ref = listing |> select(table, ds_ref))
+
+## The data dictionary for the lookup, from the same biblio fetch as above.
+data_index <- biblio |>
+  rename(dataset = `table`, url = URL__for_data_, license = `Derived_License`,
+         description = Description, reference = Reference_x, doi = DOI__for_paper_) |>
+  mutate(dataset = str_remove(dataset, ".R.ata$")) |>
+  arrange(dataset)
+ojs_define(data_index = data_index)
 
 # Collections (issue #1633): labelled groupings, long format -- one row per
 # (table, collection). Collapsed to a list-column so the OJS overlap filter can

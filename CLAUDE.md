@@ -69,7 +69,7 @@ broken vignette silently means no landing pages are emitted.
 
 ### Data pipeline: R + OJS dual-layer
 Data pages combine two languages:
-- **R** — fetches metadata from Redivis (`_load-data.qmd`) and does preprocessing; results are passed to OJS via `ojs_define()`
+- **R** — fetches metadata from Redivis (`_load-data-explore.qmd`) and does preprocessing; results are passed to OJS via `ojs_define()`
 - **OJS (Observable JavaScript)** — drives all interactive UI: the filterable dataset table, the Observable Plot charts, and the filter components
 
 The data explorer is `data.qmd`. Its OJS lives inline in that file — the filter

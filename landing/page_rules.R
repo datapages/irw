@@ -18,7 +18,7 @@
 #   date, and nothing else. The list is landing/withdrawn.tsv; add a row in the
 #   same PR that withdraws a table, or its page becomes a 404 on the next publish.
 
-# Shard name -> Redivis scoped reference. Mirrors the map in _load-data.qmd;
+# Shard name -> Redivis scoped reference. Mirrors the map in _load-data-explore.qmd;
 # authoritative source is IRW_CORE_DATASETS in ben-domingue/irw metadata/redivis_config.R.
 SHARD_REF <- c(
   item_response_warehouse   = "item_response_warehouse:as2e",
