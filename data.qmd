@@ -444,7 +444,9 @@ info = ({
 })
 
 // element for each info entry ($head: $text) with $text wrapped in <a> if head matches "Link"
-pullout = (head, text) => html.fragment`<p><b>${head}</b>: ${/Link/.test(head) ? html.fragment`<a href="${text}" target="_blank">${text}</a>` : text}</p>`
+// and $text is a URL. data_url also holds values like "NA" and "Author Permission";
+// linked, those became relative hrefs that crawlers followed to 404s.
+pullout = (head, text) => html.fragment`<p><b>${head}</b>: ${/Link/.test(head) && /^https?:\/\//.test(String(text)) ? html.fragment`<a href="${text}" target="_blank">${text}</a>` : text}</p>`
 
 // elements for all info entries, placeholder if no table selected
 placeholder = "No table selected"
