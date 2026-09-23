@@ -7,10 +7,10 @@ description: |
   censored model. But censoring is only one theory of what a floor is — an
   appropriate link models the boundedness directly, and a graded model says the
   floor was never special to begin with. This vignette measures how much floor
-  mass IRW's intensive longitudinal datasets actually carry, shows that the
-  composite scores the field models hide almost all of it, and puts the competing
-  models against each other on a study that randomised its participants to a
-  Likert or a slider version of the same protocol.
+  mass IRW's intensive longitudinal datasets actually carry, shows how much of it
+  survives averaging items into a within-instrument composite, and puts the
+  competing models against each other on a study that randomised its
+  participants to a Likert or a slider version of the same protocol.
 date: today
 bibliography: esm_floor_data/references.bib
 format:
@@ -50,6 +50,7 @@ if (cache_ok) {
   .cache           <- readRDS(cache_path)
   floor_summary    <- .cache$floor_summary
   item_detail      <- .cache$item_detail
+  composite_summary <- .cache$composite_summary %||% tibble()
   stage_b          <- .cache$stage_b %||% tibble()
   candidate_tables <- .cache$candidate_tables
   esm_slider       <- .cache$esm_slider
@@ -63,18 +64,25 @@ if (cache_ok) {
     table = character(), n_items = integer(), n_persons = integer(),
     n_responses = integer(), occasion_col = character(),
     floor_min = numeric(), floor_max = numeric(), floor_median = numeric(),
-    composite_floor = numeric(), format = character()
+    format = character()
   )
   item_detail <- tibble(
-    table = character(), item = character(), n = integer(),
+    table = character(), arm = character(), item = character(), n = integer(),
     lo = numeric(), hi = numeric(), n_cat = integer(),
-    floor_pct = numeric(), ceil_pct = numeric()
+    floor_pct = numeric(), ceil_pct = numeric(), format = character()
+  )
+  composite_summary <- tibble(
+    table = character(), arm = character(), instrument = character(),
+    scale = character(), format = character(), n_items = integer(),
+    n_dropped = integer(), floor_max = numeric(), floor_median = numeric(),
+    floor_min = numeric(), composite_floor = numeric()
   )
   stage_b <- tibble(
     item = character(), arm = character(), family = character(),
     n_obs = integer(), n_persons = integer(), floor_pct = numeric(),
     phi_ar1 = numeric(), phi_ar1_lo = numeric(), phi_ar1_hi = numeric(),
-    cor_mean_disp = numeric(), loo_elpd = numeric(),
+    cor_mean_disp = numeric(), cor_mean_var = numeric(), disp_param = character(),
+    loo_elpd = numeric(),
     rhat_ar = numeric(), ess_ar = numeric(), n_divergent = numeric(),
     converged = logical()
   )
@@ -141,6 +149,22 @@ This vignette was drafted by Claude with human review. The scoping decisions —
 which datasets qualify as experience sampling, and which models are being
 compared — came out of a written brief circulated to IRW collaborators, and the
 model set below was revised in response to their comments.
+:::
+
+::: {.callout-important appearance="simple"}
+## Revised 23 September 2026
+
+A reader's feedback ([datapages/irw#226](https://github.com/datapages/irw/issues/226))
+found three errors, all corrected here from cached results with no model refit.
+(1) The mean–variance correlations were compared on raw signs, but the
+cumulative and inflated-beta dispersion parameters run *inverse* to variance.
+On a common scale, the sign flip this page headlined for att1 in the Likert arm
+disappears. The one flip that survives is between the naive and censored
+Gaussian models on the slider item. (2) The composites averaged every item in a
+table, whatever its scale or instrument. They are now formed within instrument
+and scale, and the "hiding" results shrank accordingly. (3) The vollbracht
+per-item floor table pooled the two arms, so att1 read 3.9% when it is 20.9%
+(Likert) and 7.3% (slider). It is now split by arm.
 :::
 
 ## Motivation
@@ -248,34 +272,36 @@ were dropped.
 
 ### The floor is an item-level property
 
-The field reports floor rates for a composite — the mean of the items
-administered at each beep. Because items within one instrument sit at very
-different points on the scale, that average can drive the composite's floor mass
-to almost nothing while individual items remain heavily piled.
-
-It does, and by a lot. The gap is not uniform, though, and the pattern is
-informative: **compositing hides the floor precisely when the items disagree
-about where the floor is.** Where every item in an instrument is heavily floored,
-the composite stays floored and nothing is concealed. Where one item floors and
-its neighbours do not, the average washes it out entirely.
+When items are averaged into a composite, which is a common input to DSEM,
+items that sit at different points on the scale can wash out one another's
+floors. How much depends on which items are averaged. So a composite here is
+one someone would actually form: items from **one instrument, on one scale,
+within one randomised arm**. Because response direction is not harmonised in
+IRW, items with a negative item-rest correlation are dropped one at a time
+until none remains. Two tables get no composite: `zhang_2020_trait_creativity_mood`
+mixes mood adjectives with ratings of a creative task, and
+`strohacker_2024_bmzi_motive` is a profile of distinct motives that is never
+summed. A composite counts as floored at an occasion only when every item
+answered then is at the common floor.
 
 ```{r}
 #| label: fig-item-vs-composite
 #| echo: true
-if (nrow(floor_summary) > 0) {
-  p <- floor_summary |>
-    filter(!is.na(composite_floor)) |>
-    mutate(text = sprintf("%s\nitems: %.1f%%–%.1f%% at floor\ncomposite: %.3f%%",
-                          table, floor_min, floor_max, composite_floor)) |>
+if (nrow(composite_summary) > 0) {
+  p <- composite_summary |>
+    mutate(label = ifelse(is.na(arm), instrument, sprintf("%s (%s)", instrument, arm)),
+           text = sprintf("%s\n%s, %s\n%d items (%d dropped): %.1f%%–%.1f%% at floor\ncomposite: %.2f%%",
+                          table, label, scale, n_items, n_dropped,
+                          floor_min, floor_max, composite_floor)) |>
     ggplot(aes(x = floor_max, y = composite_floor, colour = format, text = text)) +
     geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = irw_grey) +
     geom_point(size = 2.6, alpha = .85) +
     scale_colour_manual(values = c("Ordinal" = irw_amber,
                                    "Slider / continuous" = irw_blue), name = NULL) +
-    labs(x = "Highest per-item floor mass in the table (%)",
+    labs(x = "Highest per-item floor mass in the composite (%)",
          y = "Floor mass of the composite (%)",
-         title = "Averaging items hides the floor",
-         subtitle = "Points below the dashed line: the composite understates its own worst item") +
+         title = "How much floor survives averaging",
+         subtitle = "One point per within-instrument composite; below the dashed line, the composite understates its worst item") +
     theme(legend.position = "top")
   ggplotly(p, tooltip = "text")
 }
@@ -285,59 +311,72 @@ if (nrow(floor_summary) > 0) {
 #| label: hiding-readout
 #| echo: false
 #| output: asis
-if (nrow(floor_summary) > 0) {
-  fs <- floor_summary |> filter(!is.na(composite_floor))
-  n_half <- sum(fs$composite_floor < fs$floor_max / 2)
-  n_hid  <- sum(fs$composite_floor < 1 & fs$floor_max > 20)
-  worst  <- fs |> mutate(ratio = floor_max / pmax(composite_floor, .001)) |>
-    arrange(desc(ratio)) |> slice(1)
-  cat("In **", n_half, " of ", nrow(fs), "** tables the composite's floor mass is ",
-      "less than half that of the table's most-floored item. In **", n_hid,
-      "** of them the composite sits below 1% while an item is above 20%. ",
-      "The extreme case is `", worst$table, "`, where an item at ",
-      sprintf("%.1f%%", worst$floor_max), " floor becomes a composite at ",
-      sprintf("%.3f%%", worst$composite_floor), " — a factor of roughly ",
-      format(round(worst$ratio), big.mark = ","), ".\n\n", sep = "")
+if (nrow(composite_summary) > 0) {
+  cs <- composite_summary
+  n_half <- sum(cs$composite_floor < cs$floor_max / 2)
+  hid <- cs |> filter(composite_floor < 1, floor_max > 20)
+  kept <- cs |> filter(floor_min > 20)
+  cat("There are **", nrow(cs), "** such composites across **", n_distinct(cs$table),
+      "** tables. In **", n_half, "** of them the composite's floor mass is less ",
+      "than half that of its most-floored item. ", sep = "")
+  if (nrow(hid) > 0) {
+    cat("Only **", nrow(hid), "** goes below 1% while an item is above 20% (",
+        paste(sprintf("`%s`, %d items, worst %.1f%% to composite %.2f%%",
+                      hid$table, hid$n_items, hid$floor_max, hid$composite_floor),
+              collapse = "; "),
+        "), and that is also the composite with the most items. ", sep = "")
+  }
+  cat("Where every item floors heavily, the composite stays floored: in the **",
+      nrow(kept), "** composites whose least-floored item is still above 20%, the ",
+      "composite keeps between ", sprintf("%.0f%%", min(kept$composite_floor)),
+      " and ", sprintf("%.0f%%", max(kept$composite_floor)), ".\n\n", sep = "")
 }
 ```
+
+So the gap is real but modest once the composite is one somebody would form.
+It grows with the number of items and with how much the items disagree about
+where the floor is. **Averaging hides the floor when the items disagree.** When
+they all floor together, the composite stays floored.
 
 ```{r}
 #| label: tbl-hiding
 #| echo: true
-if (nrow(floor_summary) > 0) {
-  floor_summary |>
-    filter(!is.na(composite_floor)) |>
+if (nrow(composite_summary) > 0) {
+  composite_summary |>
     mutate(hiding = floor_max - composite_floor) |>
     arrange(desc(hiding)) |>
-    transmute(Table = table, Format = format,
+    transmute(Table = table,
+              Composite = ifelse(is.na(arm), instrument, sprintf("%s (%s)", instrument, arm)),
+              Scale = scale, Items = n_items, Dropped = n_dropped,
               `Worst item (%)` = round(floor_max, 1),
               `Median item (%)` = round(floor_median, 1),
-              `Composite (%)`   = round(composite_floor, 3),
+              `Composite (%)`   = round(composite_floor, 2),
               `Hidden (pp)`     = round(hiding, 1)) |>
     head(12) |>
-    kable(caption = "Where compositing conceals the most floor mass.")
+    kable(caption = "Where compositing conceals the most floor mass. Dropped: items excluded for a negative item-rest correlation.")
 }
 ```
 
 ```{r}
 #| label: fig-heterogeneity
 #| echo: true
-if (nrow(floor_summary) > 0) {
-  p <- floor_summary |>
-    filter(!is.na(composite_floor)) |>
+if (nrow(composite_summary) > 0) {
+  p <- composite_summary |>
+    filter(floor_max > 0) |>
     mutate(spread = floor_max - floor_min,
-           ratio  = floor_max / pmax(composite_floor, .001),
-           text = sprintf("%s\nitem floor spread: %.1f pp\nworst item %.1f%% -> composite %.3f%%",
-                          table, spread, floor_max, composite_floor)) |>
-    ggplot(aes(x = spread, y = ratio, colour = format, text = text)) +
-    geom_point(size = 2.6, alpha = .85) +
-    scale_y_log10() +
+           kept   = composite_floor / floor_max,
+           label  = ifelse(is.na(arm), instrument, sprintf("%s (%s)", instrument, arm)),
+           text = sprintf("%s\nitem floor spread: %.1f pp, %d items\nworst item %.1f%% -> composite %.2f%%",
+                          label, spread, n_items, floor_max, composite_floor)) |>
+    ggplot(aes(x = spread, y = kept, colour = format, size = n_items, text = text)) +
+    geom_point(alpha = .75) +
+    scale_size_area(max_size = 6, guide = "none") +
     scale_colour_manual(values = c("Ordinal" = irw_amber,
                                    "Slider / continuous" = irw_blue), name = NULL) +
-    labs(x = "Spread of per-item floor mass within the table (percentage points)",
-         y = "Worst item floor / composite floor (log scale)",
-         title = "Compositing hides the floor when items disagree about where it is",
-         subtitle = "Instruments whose items all floor together conceal nothing") +
+    labs(x = "Spread of per-item floor mass within the composite (percentage points)",
+         y = "Composite floor / worst item floor",
+         title = "Averaging hides the floor when items disagree about where it is",
+         subtitle = "Point size is the number of items averaged") +
     theme(legend.position = "top")
   ggplotly(p, tooltip = "text")
 }
@@ -372,16 +411,26 @@ people in each arm.
 #| label: tbl-format-floor
 #| echo: true
 if (nrow(item_detail) > 0) {
-  v <- item_detail |> filter(table == "vollbracht_et_al_2026_ambulatory_assessment")
+  v <- item_detail |>
+    filter(table == "vollbracht_et_al_2026_ambulatory_assessment", !is.na(arm))
   if (nrow(v) > 0) {
-    v |> transmute(Item = item, `Scale low` = lo, `Scale high` = hi,
-                   Categories = n_cat, `At floor (%)` = round(floor_pct, 1),
-                   `At ceiling (%)` = round(ceil_pct, 1)) |>
-      arrange(desc(`At floor (%)`)) |>
-      kable(caption = "Per-item floor mass in vollbracht, pooled across arms.")
+    v |> transmute(item, arm,
+                   cell = sprintf("%.1f%% (%g to %g)", floor_pct, lo, hi)) |>
+      pivot_wider(names_from = arm, values_from = cell) |>
+      left_join(v |> filter(arm == "Likert") |> select(item, lik = floor_pct), by = "item") |>
+      arrange(desc(lik)) |>
+      select(Item = item, `Likert arm: at floor (range)` = Likert,
+             `Slider arm: at floor (range)` = Slider) |>
+      kable(caption = "Per-item floor mass in vollbracht, by randomised arm. Floor is each item's minimum within its arm.")
   }
 }
 ```
+
+Split by arm, the randomised contrast is plain: **every item whose format
+changed floors less in the slider arm**, and `stress`, the item that did not
+change, floors *more* there. The floor has to be computed within a response
+format. Pooled across arms, att1's minimum is the slider's 0, none of the Likert
+arm's 1–5 responses counts as floor, and the item reads as 3.9%.
 
 Every model uses the same mean structure and differs only in the response
 distribution. Carryover is written the way DSEM actually formulates it — each
@@ -425,11 +474,12 @@ the alternatives are ruled out before anyone compares fit.
 #| echo: true
 if (nrow(item_detail) > 0) {
   ord <- floor_summary |> arrange(floor_max) |> pull(table)
+  # format is per item: vollbracht's Likert arm is ordinal, its slider arm is not.
   p <- item_detail |>
-    left_join(select(floor_summary, table, format), by = "table") |>
     mutate(table = factor(table, levels = ord),
+           item_lab = ifelse(is.na(arm), item, sprintf("%s (%s arm)", item, arm)),
            text = sprintf("%s\nitem %s: %.1f%% at floor\nscale %g–%g (%d categories)",
-                          table, item, floor_pct, lo, hi, n_cat)) |>
+                          table, item_lab, floor_pct, lo, hi, n_cat)) |>
     ggplot(aes(x = floor_pct, y = table, colour = format, text = text)) +
     geom_point(alpha = .7, size = 1.9) +
     scale_colour_manual(values = c("Ordinal" = irw_amber,
@@ -441,18 +491,43 @@ if (nrow(item_detail) > 0) {
 }
 ```
 
-Two things to read off this, one of them not what we expected.
+```{r}
+#| label: format-readout
+#| echo: false
+#| output: asis
+if (nrow(item_detail) > 0) {
+  tm <- item_detail |> group_by(table, format) |>
+    summarise(m = median(floor_pct), .groups = "drop") |>
+    group_by(format) |> summarise(mm = median(m), n = n(), .groups = "drop")
+  it <- item_detail |> group_by(format) |>
+    summarise(m = median(floor_pct), n = n(), .groups = "drop")
+  g <- function(d, f, col) d[[col]][d$format == f]
+  cat("Taking each table's median item, the typical ordinal table has **",
+      sprintf("%.1f%%", g(tm, "Ordinal", "mm")), "** of responses at the floor and ",
+      "the typical slider table **", sprintf("%.1f%%", g(tm, "Slider / continuous", "mm")),
+      "** (", g(tm, "Ordinal", "n"), " and ", g(tm, "Slider / continuous", "n"),
+      " tables; vollbracht's arms count once each). Pooling items instead, the ",
+      "medians are ", sprintf("%.1f%%", g(it, "Ordinal", "m")), " and ",
+      sprintf("%.1f%%", g(it, "Slider / continuous", "m")), ".\n\n", sep = "")
+}
+```
+
+Two things to read off this.
 
 Floor mass varies enormously *within* a single instrument, so a table-level
 summary is close to meaningless — which is the case for treating the floor as an
 item property throughout.
 
-The second is that **the two response formats carry about the same amount of
-it.** Going continuous does not empty the bottom of the scale in practice; a
-slider simply relocates where people pile up. That undercuts a tempting
-shortcut — "use a VAS and the problem goes away" — and it is why the model
-comparison below has to be run in both formats rather than only in the ordinal
-one.
+The second is that **across studies, slider tables carry about as much floor as
+ordinal ones.** Taken table by table, a slider does not empty the bottom of the
+scale in practice. The item-pooled medians differ more, because the slider
+tables with many items include some with very little floor. And the one
+randomised contrast points the other way: within vollbracht, every sliderised
+item floors less than its Likert version. So the cross-study parity is not
+evidence that format has no effect. Different studies measure different
+constructs, and what the parity rules out is the shortcut "use a VAS and the
+problem goes away". That is why the model comparison below has to be run in
+both formats rather than only in the ordinal one.
 
 ### Does the model you choose change the answer?
 
@@ -468,15 +543,18 @@ if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
               `Floor (%)` = round(floor_pct, 1),
               Carryover = ifelse(is.na(phi_ar1), "—",
                             sprintf("%.3f [%.3f, %.3f]", phi_ar1, phi_ar1_lo, phi_ar1_hi)),
-              `cor(mean, disp)` = ifelse(is.na(cor_mean_disp), "—",
+              `Disp. param.` = disp_param,
+              `cor(mean, disp), raw` = ifelse(is.na(cor_mean_disp), "—",
                                     sprintf("%.3f", cor_mean_disp)),
+              `cor(mean, variance)` = ifelse(is.na(cor_mean_var), "—",
+                                    sprintf("%.3f", cor_mean_var)),
               Rhat = ifelse(is.na(rhat_ar), "—", sprintf("%.3f", rhat_ar)),
               ESS  = ifelse(is.na(ess_ar),  "—", sprintf("%.0f", ess_ar)),
               `Div.` = ifelse(is.na(n_divergent), "—", sprintf("%.0f", n_divergent)),
               `Min` = round(mins),
               Sampler = status) |>
     arrange(Item, Arm, Model) |>
-    kable(caption = "Same data, competing theories of the floor. The carryover coefficient is comparable across families; the correlation is not strictly so — see Limitations. Rows marked no in the OK column failed the mixing screen and are not estimates.")
+    kable(caption = "Same data, competing theories of the floor. The raw correlation is with each family's own dispersion parameter; disc and phi run inverse to variance, so cor(mean, variance) flips their sign to put every family on a common higher-is-more-variable scale. Compare that column, never the raw one. Rows whose Sampler status is not ok failed the mixing screen and are not estimates.")
 }
 ```
 
@@ -545,35 +623,48 @@ if (nrow(stage_b) > 0 && "phi_ar1" %in% names(stage_b)) {
   }
   d <- stage_b |> filter(!is.na(phi_ar1), converged)
   if (nrow(d) > 0) {
+    # Signs are compared on cor_mean_var, never cor_mean_disp: disc and phi run
+    # inverse to variance, and comparing raw signs manufactured a flip (#226).
     sp <- d |> group_by(item, arm) |>
       summarise(spread = diff(range(phi_ar1)),
-                cor_lo = min(cor_mean_disp, na.rm = TRUE),
-                cor_hi = max(cor_mean_disp, na.rm = TRUE),
-                flips  = min(cor_mean_disp, na.rm = TRUE) < 0 &
-                         max(cor_mean_disp, na.rm = TRUE) > 0,
+                cor_lo = min(cor_mean_var, na.rm = TRUE),
+                cor_hi = max(cor_mean_var, na.rm = TRUE),
+                flips  = min(cor_mean_var, na.rm = TRUE) < 0 &
+                         max(cor_mean_var, na.rm = TRUE) > 0,
+                fams   = paste(family, collapse = ", "),
                 n_fam  = n(), .groups = "drop") |>
       arrange(desc(spread))
 
+    sp2 <- sp |> filter(n_fam >= 2)   # a single converged fit has no spread
     cat("Across the fits that converged, the carryover coefficient moves by up to **",
-        sprintf("%.3f", max(sp$spread)), "** between model families on the same ",
-        "data (", sp$item[1], ", ", sp$arm[1], " arm). The carryover parameter is ",
-        "not invariant to a modelling choice the field usually makes by ",
-        "convention.\n\n", sep = "")
+        sprintf("%.3f", max(sp2$spread)), "** between model families on the same ",
+        "data (", sp2$item[1], ", ", sp2$arm[1], " arm), and by as little as ",
+        sprintf("%.3f", min(sp2$spread)), " (", sp2$item[nrow(sp2)], ", ",
+        sp2$arm[nrow(sp2)], " arm).\n\n", sep = "")
 
+    agree <- sp |> filter(!flips, n_fam >= 2)
+    if (nrow(agree) > 0) {
+      cat("On a common variance scale, the mean–variance correlation **keeps its ",
+          "sign** across families in ", paste(sprintf("%s (%s arm: %s), %.3f to %.3f",
+            agree$item, agree$arm, agree$fams, agree$cor_lo, agree$cor_hi),
+            collapse = "; "), ". ", sep = "")
+    }
     fl <- sp |> filter(flips, n_fam >= 2)
     if (nrow(fl) > 0) {
-      cat("More consequentially, **the correlation between a person's mean level ",
-          "and their innovation variance changes sign** depending on which theory ",
-          "of the floor is adopted", sep = "")
-      cat(" — in ", paste(sprintf("%s (%s arm), %.3f to %.3f",
-            fl$item, fl$arm, fl$cor_lo, fl$cor_hi), collapse = "; "), ". ", sep = "")
-      cat("That is the parameter the preprint reports as biased when the floor is ",
-          "ignored. These estimates come from converged fits on identical data, ",
-          "differing only in what the model assumes a floor to be. A reader who ",
-          "picks one family and reports the correlation would conclude that people ",
-          "with higher average levels are *more* variable, or *less*, depending on ",
-          "that choice alone.\n\n", sep = "")
+      fd <- d |> filter(paste(item, arm) %in% paste(fl$item, fl$arm)) |>
+        group_by(item, arm) |> arrange(cor_mean_var, .by_group = TRUE) |>
+        summarise(lab = paste(sprintf("%s %+.3f", family, cor_mean_var),
+                              collapse = ", "), .groups = "drop")
+      cat("It **changes sign** in ", paste(sprintf("%s (%s arm: %s)",
+            fd$item, fd$arm, fd$lab), collapse = "; "), ". ", sep = "")
+      cat("There the flip is between the censored and naive Gaussian models. Both ",
+          "use `sigma`, so they are directly comparable, and the inflated beta sits ",
+          "near zero between them. This is essentially the preprint's own claim: ",
+          "modelling censoring changes this correlation. What the data do not ",
+          "support is that the choice among theories of the floor flips its sign in ",
+          "general.", sep = "")
     }
+    cat("\n\n")
   }
 }
 ```
@@ -714,27 +805,31 @@ if (nrow(stage_b) > 0 && "rhat_ar" %in% names(stage_b)) {
 #| echo: false
 #| output: asis
 if (nrow(stage_b) > 0) {
-  d <- stage_b |> filter(converged, !is.na(cor_mean_disp))
+  d <- stage_b |> filter(converged, !is.na(cor_mean_var))
   if (nrow(d) > 1) {
     byc <- d |> group_by(item, arm) |>
       summarise(phi_spread = diff(range(phi_ar1)),
-                cor_spread = diff(range(cor_mean_disp)),
-                flips = min(cor_mean_disp) < 0 & max(cor_mean_disp) > 0,
-                .groups = "drop") |> filter(!is.na(cor_spread))
+                cor_spread = diff(range(cor_mean_var)),
+                flips = min(cor_mean_var) < 0 & max(cor_mean_var) > 0,
+                n_fam = n(), .groups = "drop") |>
+      filter(!is.na(cor_spread), n_fam >= 2)
     if (nrow(byc) > 0) {
       cat("Within a cell, the carryover coefficient moves across families by ",
           sprintf("%.3f", min(byc$phi_spread)), " to ",
           sprintf("%.3f", max(byc$phi_spread)),
-          ", while the mean-dispersion correlation moves by ",
+          ", while the mean–variance correlation moves by ",
           sprintf("%.3f", min(byc$cor_spread)), " to ",
           sprintf("%.3f", max(byc$cor_spread)), ". ", sep = "")
       if (any(byc$flips)) {
         cat("The correlation changes **sign** in ", sum(byc$flips), " of ",
             nrow(byc), " cells. ", sep = "")
       }
-      cat("The asymmetry is the point: carryover survives a change in what you ",
-          "assume the floor to be, and the parameter the preprint is concerned ",
-          "with does not.\n\n", sep = "")
+      cat("With only ", nrow(byc), " cells in which two or more families ",
+          "converged, neither quantity can be called robust or fragile in general. ",
+          "What can be said is narrower. Carryover is stable across families on ",
+          "the slider item, but not on the five-point item. The correlation keeps ",
+          "its sign on the five-point item, and splits the censored model from the ",
+          "naive one on the slider.\n\n", sep = "")
     }
   }
 }
@@ -752,7 +847,7 @@ if (nrow(stage_b) > 0) {
     full |> transmute(Item = item, Arm = arm, Model = family,
                       `At floor (%)` = round(floor_pct, 1),
                       Carryover = round(phi_ar1, 3),
-                      `cor(mean, disp)` = round(cor_mean_disp, 3)) |>
+                      `cor(mean, variance)` = round(cor_mean_var, 3)) |>
       arrange(Item, Arm, Model) |>
       kable(caption = "Cells where every admissible family converged.")
   }
@@ -764,21 +859,23 @@ if (nrow(stage_b) > 0) {
 #| echo: false
 #| output: asis
 if (nrow(stage_b) > 0) {
-  full <- stage_b |> filter(converged, !is.na(cor_mean_disp)) |>
+  full <- stage_b |> filter(converged, !is.na(cor_mean_var)) |>
     group_by(item, arm) |> filter(n() >= 3) |> ungroup()
   if (nrow(full) > 0) {
     o <- full |> group_by(item, arm) |>
-      mutate(dist = abs(cor_mean_disp - median(cor_mean_disp))) |>
+      mutate(dist = abs(cor_mean_var - median(cor_mean_var))) |>
       slice_max(dist, n = 1) |> ungroup()
-    cat("In every cell where all three admissible families converge, the model ",
-        "furthest from the others on the mean-dispersion correlation is **",
+    cat("In the ", n_distinct(paste(full$item, full$arm)), " cell(s) where all ",
+        "three admissible families converge, the model furthest from the others on ",
+        "the mean–variance correlation (common sign) is **",
         paste(unique(o$family), collapse = ", "), "**. ", sep = "")
     cat("That matters for how the preprint's recommendation reads. Comparing only ",
         "a naive Gaussian against a censored model, the censored estimate looks ",
         "like a correction — it is the one that moved. With a third, independently ",
         "motivated treatment of the boundary in the comparison, the naive and ",
-        "inflated-beta estimates sit close together and the censored one sits ",
-        "apart. Being the estimate that moves is not the same as being the ",
+        "inflated-beta estimates sit closer to each other than either does to the ",
+        "censored one (the beta's precision converts to a variance only in ",
+        "direction, so read that distance loosely). Being the estimate that moves is not the same as being the ",
         "estimate that is right, and two models are not enough to tell those ",
         "apart.\n\n", sep = "")
     cat("This section exists because reviewers of the scoping brief argued that an ",
@@ -808,13 +905,18 @@ this page rather than shown with a caveat, because a number that cannot be
 trusted is not improved by a footnote. The comparison below therefore rests on
 the parameter estimates, not on out-of-sample fit.
 
-**The dispersion parameter is not the same object across families.** The Gaussian
-and censored models have a residual standard deviation; the inflated beta has a
-precision, and the cumulative model a discrimination. Their person-level
-correlations with the intercept play analogous roles but are not numerically the
-same quantity, so the `cor(mean, dispersion)` column should be read for sign and
-rough magnitude, not compared digit for digit. The AR(1) coefficient *is*
-comparable across all four, which is why it carries the headline. This is a real
+**The dispersion parameter is not the same object across families, and it does
+not point the same way.** The Gaussian and censored models use `sigma`, a
+residual standard deviation, which grows with variance. The cumulative model's
+`disc` is the inverse of the latent standard deviation, and the inflated beta's
+`phi` is a precision, so both *shrink* as variance grows. A raw correlation with
+`disc` or `phi` therefore has the opposite sign convention from one with
+`sigma`. Every comparison on this page uses `cor(mean, variance)`, which negates
+the correlation for `disc` and `phi`. Even then the quantities are analogous,
+not identical. The beta variance is $\mu(1-\mu)/(1+\phi)$, so for the inflated
+beta the conversion is right in direction but not in magnitude. Read the
+converted column for sign and rough size, not digit for digit. The AR(1)
+coefficient *is* comparable across all four families. This is a real
 obstacle to the preprint's framing, not just to ours: the parameter it reports as
 biased is defined inside a Gaussian latent-variable metric, and the alternatives a
 reader might reach for do not all have one.
@@ -835,8 +937,13 @@ happens on a unipolar symptom scale.
 
 **Response direction is not harmonised in IRW.** "Floor" throughout means the
 observed minimum of that item. For a reverse-keyed item that is the substantive
-ceiling. This is reported as found rather than silently corrected, because
-recovering the intended keying reliably is its own problem.
+ceiling. Per item, this is reported as found rather than corrected, because
+recovering the intended keying reliably is its own problem. For composites,
+items with a negative item-rest correlation are *excluded* rather than
+reverse-keyed. In `westhoff2023_pbat` that removes half the items, so its
+composite covers one pole of the instrument. The instrument boundaries are
+also approximate. They come from item-name stems where a table carries several
+instruments, and otherwise the table is assumed to be one instrument.
 
 **Carryover is a lagged predictor, not a residual AR process.** The first
 version of this page used brms's `ar()` term. It builds a per-group residual
