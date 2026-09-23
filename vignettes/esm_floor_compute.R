@@ -115,55 +115,142 @@ occasion_col <- function(df) {
 # ---------------------------------------------------------------------------
 # Stage A -- floor mass per item vs per composite
 # ---------------------------------------------------------------------------
-# The field reports floor rates for a composite score. Because items in one
-# instrument sit at very different points on the scale, averaging them can drive
-# the composite's floor mass to ~0 while individual items remain heavily piled.
-# That is the gap this measures. `resp` direction is NOT harmonised in IRW, so
-# "floor" here means the observed minimum of that item, which for a reverse-keyed
-# item is the substantive ceiling -- reported, not silently corrected.
+# When items are averaged into a composite (a common input to DSEM), items that
+# sit at different points on the scale can wash out one another's floors. This
+# measures how much, but only for composites someone would actually form
+# (datapages/irw#226). The first version averaged EVERY item in a table at each
+# occasion -- in vollbracht that mixed 1-5, -50..50 and 0-100 items, so its
+# ~7,000x "hiding" ratio was an artefact of the averaging, not a finding.
+#
+# A composite here is formed within:
+#   - one ARM, where a table randomised response format (FORMAT_ARM);
+#   - one INSTRUMENT: the table, or the item-name stem where a table carries
+#     several instruments (INSTRUMENT_BY_STEM);
+#   - one SCALE: items sharing their floor value and format (ordinal items must
+#     also share their top category), so every item's floor is the same number.
+# `resp` direction is NOT harmonised in IRW, and keying cannot be recovered
+# reliably from item names. So within each such group, items whose item-rest
+# correlation is negative are dropped one at a time (most negative first) until
+# none remains -- excluded, not reverse-keyed, and reported per composite.
+#
+# Per-item floor is likewise computed within arm: pooled across vollbracht's arms,
+# att1's minimum is the slider's 0, none of the Likert arm's 1-5 responses counts
+# as floor, and 20.9% (Likert) and 7.3% (slider) read as 3.9%.
+FORMAT_ARM  <- c(vollbracht_et_al_2026_ambulatory_assessment = "cov_group")
+ARM_LABELS  <- list(vollbracht_et_al_2026_ambulatory_assessment = c(`1` = "Likert", `2` = "Slider"))
+# Checked against every table in the pool: vollbracht is the only one where an
+# item's response format differs by a grouping column. (opentsstvr's `treat`
+# changes where observed VAS responses stop, not the scale.)
+INSTRUMENT_BY_STEM <- c(
+  "vollbracht_et_al_2026_ambulatory_assessment",  # att, cla, ct, pum, wt, stress
+  "debacker_2018_justice_appraisal"               # distr/proc x group/pers
+)
+# Tables with no composite anyone would model, so none is formed:
+NO_COMPOSITE <- c(
+  # 10 mood adjectives plus originality/usefulness ratings of a creative task --
+  # two instruments, not separable by item name.
+  "zhang_2020_trait_creativity_mood",
+  # a profile of 11 distinct exercise motives; the inventory is not summed.
+  "strohacker_2024_bmzi_motive"
+)
+instrument_of <- function(tab, item)
+  if (tab %in% INSTRUMENT_BY_STEM) sub("[0-9]+$", "", item) else rep(tab, length(item))
+
+# Items with more than 10 observed categories are treated as slider/continuous,
+# the same cut families_for() uses. Format is an item property, not a table one:
+# vollbracht's Likert arm is ordinal although the table is a slider study.
+format_of <- function(n_cat) ifelse(n_cat > 10, "Slider / continuous", "Ordinal")
+
+composite_one <- function(d, items, lo) {
+  w <- d %>% filter(item %in% items) %>%
+    group_by(id, .occ, item) %>% summarise(resp = mean(resp), .groups = "drop") %>%
+    tidyr::pivot_wider(names_from = item, values_from = resp)
+  keep <- items; dropped <- character()
+  repeat {
+    if (length(keep) < 2) break
+    m <- as.matrix(w[keep])
+    r <- vapply(keep, function(i) {
+      rest <- rowMeans(m[, setdiff(keep, i), drop = FALSE], na.rm = TRUE)
+      ok <- !is.na(m[, i]) & is.finite(rest)
+      if (sum(ok) < 10) NA_real_ else suppressWarnings(cor(m[ok, i], rest[ok]))
+    }, numeric(1))
+    if (all(is.na(r) | r >= 0)) break
+    worst <- keep[which.min(r)]
+    keep <- setdiff(keep, worst); dropped <- c(dropped, worst)
+  }
+  if (length(keep) < 2) return(NULL)
+  m <- as.matrix(w[keep])
+  k <- rowSums(!is.na(m))
+  m <- m[k >= 2, , drop = FALSE]
+  if (nrow(m) == 0) return(NULL)
+  # At the composite's floor = every item answered at that occasion sits at the
+  # common floor value.
+  at_floor <- apply(m, 1, function(x) all(x[!is.na(x)] == lo))
+  tibble(items_kept = list(keep), items_dropped = list(dropped),
+         n_occasions = nrow(m), composite_floor = 100 * mean(at_floor))
+}
+
 floor_profile <- function(tab) {
   d <- irw_fetch(tab)
   if (!all(c("id", "item", "resp") %in% names(d))) stop("missing core columns")
   d <- d %>% filter(!is.na(resp))
   occ <- occasion_col(d)
+  arm_col <- unname(FORMAT_ARM[tab])
+  d$.arm <- if (!is.na(arm_col)) unname(ARM_LABELS[[tab]][as.character(d[[arm_col]])]) else NA_character_
 
   per_item <- d %>%
-    group_by(item) %>%
+    group_by(arm = .arm, item) %>%
     summarise(n = n(), lo = min(resp), hi = max(resp),
               n_cat = n_distinct(resp),
               floor_pct = 100 * mean(resp == min(resp)),
               ceil_pct  = 100 * mean(resp == max(resp)),
-              .groups = "drop")
+              .groups = "drop") %>%
+    mutate(instrument = instrument_of(tab, item),
+           format = format_of(n_cat),
+           scale  = ifelse(format == "Ordinal", sprintf("%g to %g", lo, hi),
+                           sprintf("slider from %g", lo)))
 
-  # Composite = person-occasion mean across items, which is what an ESM paper
-  # almost always models. Needs an occasion index to define "an occasion".
-  comp_floor <- NA_real_
-  if (!is.na(occ)) {
-    comp <- d %>%
-      group_by(id, .occ = .data[[occ]]) %>%
-      summarise(m = mean(resp), k = n(), .groups = "drop") %>%
-      filter(k >= 2)
-    if (nrow(comp) > 0) comp_floor <- 100 * mean(comp$m == min(comp$m))
+  composites <- tibble()
+  if (!is.na(occ) && !tab %in% NO_COMPOSITE) {
+    d$.occ <- d[[occ]]
+    groups <- per_item %>% group_by(arm, instrument, scale, format) %>%
+      filter(n() >= 2) %>% summarise(items = list(item), lo = first(lo), .groups = "drop")
+    composites <- purrr::pmap_dfr(groups, function(arm, instrument, scale, format, items, lo) {
+      dd <- if (is.na(arm)) d else d[!is.na(d$.arm) & d$.arm == arm, ]
+      out <- composite_one(dd, items, lo)
+      if (is.null(out)) return(tibble())
+      fl <- per_item$floor_pct[per_item$item %in% out$items_kept[[1]] &
+                               (is.na(arm) | per_item$arm %in% arm)]
+      out %>% mutate(table = tab, arm = arm, instrument = instrument, scale = scale,
+                     format = format, n_items = length(items_kept[[1]]),
+                     n_dropped = length(items_dropped[[1]]),
+                     floor_max = max(fl), floor_median = median(fl), floor_min = min(fl),
+                     .before = 1)
+    })
   }
 
-  tibble(
-    table          = tab,
-    n_items        = nrow(per_item),
-    n_persons      = n_distinct(d$id),
-    n_responses    = nrow(d),
-    occasion_col   = occ %||% NA_character_,
-    floor_min      = min(per_item$floor_pct),
-    floor_max      = max(per_item$floor_pct),
-    floor_median   = median(per_item$floor_pct),
-    composite_floor = comp_floor,
-    items          = list(per_item)
+  list(
+    summary = tibble(
+      table        = tab,
+      n_items      = n_distinct(per_item$item),
+      n_persons    = n_distinct(d$id),
+      n_responses  = nrow(d),
+      occasion_col = occ %||% NA_character_,
+      floor_min    = min(per_item$floor_pct),
+      floor_max    = max(per_item$floor_pct),
+      floor_median = median(per_item$floor_pct)
+    ),
+    items      = per_item,
+    composites = composites
   )
 }
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
 message("=== Stage A: floor profiles across the ESM pool ===")
 stage_a <- map(ESM_POOL, function(tab) {
-  f <- file.path(FIT_DIR, paste0("floor_", tab, ".rds"))
+  # profile_ (not the old floor_) caches: the structure changed with #226, and a
+  # stale floor_ cache would silently resurrect the pooled-arm, all-item version.
+  f <- file.path(FIT_DIR, paste0("profile_", tab, ".rds"))
   if (file.exists(f)) { message("  cached : ", tab); return(readRDS(f)) }
   message("  fetch  : ", tab)
   out <- tryCatch(floor_profile(tab),
@@ -174,11 +261,11 @@ stage_a <- map(ESM_POOL, function(tab) {
 names(stage_a) <- ESM_POOL
 stage_a <- compact(stage_a)
 
-floor_summary <- bind_rows(lapply(stage_a, function(x) select(x, -items))) %>%
+floor_summary <- bind_rows(lapply(stage_a, `[[`, "summary")) %>%
   mutate(format = ifelse(table %in% ESM_SLIDER, "Slider / continuous", "Ordinal"))
 item_detail <- bind_rows(lapply(names(stage_a), function(tab)
-  stage_a[[tab]]$items[[1]] %>% mutate(table = tab, .before = 1)))
-
+  stage_a[[tab]]$items %>% mutate(table = tab, .before = 1)))
+composite_summary <- bind_rows(lapply(stage_a, `[[`, "composites"))
 message(sprintf("Stage A done: %d of %d tables profiled", nrow(floor_summary), length(ESM_POOL)))
 
 # ---------------------------------------------------------------------------
@@ -201,9 +288,10 @@ message(sprintf("Stage A done: %d of %d tables profiled", nrow(floor_summary), l
 #
 # IMPORTANT and reported as a limitation, not hidden: "dispersion" is not the
 # same object across families. Gaussian has sigma; the beta families have a
-# precision phi; cumulative has a discrimination disc. Their person-level
-# correlations with the intercept are analogous in role but not numerically
-# identical quantities. The AR(1) coefficient IS comparable across all four, so
+# precision phi; cumulative has a discrimination disc. phi and disc run INVERSE
+# to variance, so their correlations are sign-flipped onto a common scale before
+# any comparison (common_sign(), below); even then they are analogous in role,
+# not numerically identical quantities. The AR(1) coefficient IS comparable across all four, so
 # it is the primary outcome here and the correlation is secondary.
 # att1  -- format changed (1-5 -> 0-100), highest floor mass, but thin: the att
 #          items were administered far less often than the mood block.
@@ -300,9 +388,26 @@ extract_pars <- function(fit, family_label) {
   )
 }
 
+# The person-level dispersion parameter does not point the same way in every
+# family (datapages/irw#226): gaussian and censored `sigma` grows with variance,
+# but cumulative `disc` is the inverse of the latent SD and ZOIB `phi` is a
+# precision. So cor(mean, disp) from those two carries the OPPOSITE sign
+# convention, and comparing raw signs manufactured a flip in att1/Likert that is
+# not there. Keep the raw estimate and add `cor_mean_var`, the same correlation
+# on a common "higher = more variable" scale. For the ZOIB the beta variance is
+# mu(1 - mu) / (1 + phi), so the conversion is right in direction, not magnitude.
+DISP_PARAM   <- c(gaussian = "sigma", censored = "sigma", cumulative = "disc", zoib = "phi")
+DISP_INVERSE <- c(sigma = FALSE, disc = TRUE, phi = TRUE)
+common_sign <- function(sb) {
+  if (is.null(sb) || !nrow(sb)) return(sb)
+  sb %>% mutate(disp_param   = unname(DISP_PARAM[family]),
+                cor_mean_var = ifelse(DISP_INVERSE[disp_param], -1, 1) * cor_mean_disp)
+}
+
 save_results <- function(stage_b_now) saveRDS(list(
   floor_summary    = floor_summary,
   item_detail      = item_detail,
+  composite_summary = composite_summary,
   stage_b          = stage_b_now,
   candidate_tables = ESM_POOL,
   n_all_candidates = length(ESM_POOL),
@@ -397,6 +502,7 @@ if (STAGE_B) {
       out
     })
   })
+  stage_b <- common_sign(stage_b)
   message("Stage B done: ", nrow(stage_b), " fits")
 }
 

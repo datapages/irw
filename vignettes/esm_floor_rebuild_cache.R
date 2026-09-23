@@ -11,14 +11,20 @@ DATA_DIR <- "vignettes/esm_floor_data"; FIT_DIR <- file.path(DATA_DIR,"fits")
 sl <- c("westhoff2023_pbat","westhoff2023_stopd","vollbracht_et_al_2026_ambulatory_assessment",
         "nas_rogoza_2024_study5_nas","nas_rogoza_2024_study5_ngs","nas_rogoza_2024_study5_nvs",
         "zhang_2020_trait_creativity_mood","opentsstvr_linnig_2025_vas")
-prof <- lapply(list.files(FIT_DIR,"^floor_",full.names=TRUE), readRDS)
-fsum <- bind_rows(lapply(prof, function(x) select(x,-items))) %>%
+prof <- lapply(list.files(FIT_DIR,"^profile_",full.names=TRUE), readRDS)
+fsum <- bind_rows(lapply(prof, `[[`, "summary")) %>%
   mutate(format = ifelse(table %in% sl, "Slider / continuous", "Ordinal"))
-idet <- bind_rows(lapply(prof, function(x) mutate(x$items[[1]], table=x$table, .before=1)))
-bf <- setdiff(list.files(FIT_DIR,"\\.rds$",full.names=TRUE), list.files(FIT_DIR,"^floor_",full.names=TRUE))
+idet <- bind_rows(lapply(prof, function(x) mutate(x$items, table=x$summary$table, .before=1)))
+csum <- bind_rows(lapply(prof, `[[`, "composites"))
+bf <- setdiff(list.files(FIT_DIR,"\\.rds$",full.names=TRUE), list.files(FIT_DIR,"^(floor|profile)_",full.names=TRUE))
 sb <- if (length(bf)) bind_rows(lapply(bf, readRDS)) else NULL
 if (!is.null(sb) && !"converged" %in% names(sb)) sb$converged <- NA
-saveRDS(list(floor_summary=fsum, item_detail=idet, stage_b=sb,
+# Same sign convention as esm_floor_compute.R's common_sign(): disc and phi run
+# inverse to variance (datapages/irw#226).
+if (!is.null(sb)) sb <- sb %>% mutate(
+  disp_param   = c(gaussian="sigma", censored="sigma", cumulative="disc", zoib="phi")[family],
+  cor_mean_var = ifelse(disp_param %in% c("disc","phi"), -1, 1) * cor_mean_disp)
+saveRDS(list(floor_summary=fsum, item_detail=idet, composite_summary=csum, stage_b=sb,
   candidate_tables=fsum$table, n_all_candidates=26L, esm_slider=sl,
   esm_ordinal=setdiff(fsum$table,sl), pilot=TRUE, date_run=Sys.Date(),
   session=capture.output(sessionInfo())), file.path(DATA_DIR,"esm_floor_results.rds"))
