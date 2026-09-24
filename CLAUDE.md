@@ -83,6 +83,11 @@ go in `data.qmd`; changes to what data reaches OJS go in `_load-data-explore.qmd
 ### Vignette compute pattern
 Heavy statistical computations are offloaded to a companion `*_compute.R` script that writes `.rds` cache files (e.g., `vignettes/2pldata/2pl_across_datasets_results.rds`). The vignette `.qmd` then loads the cache with `readRDS(...)` instead of re-running the model. When adding a new computation-heavy vignette, follow this pattern: create `vignettes/<name>_compute.R`, run it locally to produce the cache, commit both the script and the `.rds`, then reference the cache in the `.qmd`.
 
+Size rules (ben-domingue/irw#1719, 17.1). CI refuses any tracked file over 5 MB.
+- Commit only the final `.rds` files the `.qmd` reads. Per-table fits and resume caches (`fits/`, `prepared/`, `sweeps/`) are gitignored; `vignettes/**/fits/` is ignored repo-wide.
+- A final result over 5 MB goes on the `vignette-data` release of datapages/irw instead: gitignore it, upload it with `gh release upload vignette-data <file> --clobber -R datapages/irw`, and have the `.qmd` call `source("_fetch_result.R"); fetch_result(path)` before it reads the file. `guessing.qmd` is the worked example.
+- After rerunning such a vignette, upload the new file. A local copy always wins over the release, so your preview shows the new result while CI still renders the old one until you upload.
+
 ### Execute defaults (`_quarto.yml`)
 All code runs with `echo: false`, `message: false`, `warning: false`, `error: false` — the site is reader-facing, not a teaching document. Don't change these defaults for new pages. Individual vignettes may override locally (e.g., `echo: true` in tutorial-style pages like `imv.qmd`).
 
