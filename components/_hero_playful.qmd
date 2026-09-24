@@ -49,7 +49,7 @@ library(jsonlite)
 # lands.
 hero_stats_fallback <- list(
   generated_at = "2025-01-01T00:00:00Z",
-  totals = list(n_tables = 1300, n_responses = 27000000000, n_participants = 65000000, n_items = 730000),
+  totals = list(n_tables = 1300, n_responses = 27000000000, n_participants = 65000000, n_items = 730000, n_tables_itemtext = 500),
   category_breakdown = list(
     list(n_categories = 2,    n_items = 148589, n_responses = 2112679586),
     list(n_categories = 3,    n_items = 11974,  n_responses = 28686057),
@@ -147,6 +147,7 @@ html`<style>
 }
 .irw-hero .stamp .stamp-number{ font-family:'Fredoka', sans-serif; font-weight:700; line-height:1; font-size:22px; }
 .irw-hero .stamp .stamp-label{ font-weight:800; letter-spacing:1px; margin-top:4px; font-size:11px; }
+.irw-hero .stamp .stamp-sub{ font-weight:700; margin-top:4px; font-size:9.5px; line-height:1.15; max-width:100px; opacity:.9; }
 .irw-hero #irw-hero-stamp-items{ background:var(--green); width:150px; height:150px; }
 .irw-hero #irw-hero-stamp-items .stamp-number{ font-size:26px; }
 .irw-hero #irw-hero-stamp-items .stamp-label{ font-size:12px; }
@@ -339,6 +340,9 @@ heroBadge = (key) => {
 // are illustrative only (see file header comment) and stay hand-written.
 CONFIG = ({
   tables: fmtInt(hero_stats.totals.n_tables),
+  // Optional: older hero_stats.json files predate this field, so it is not
+  // in required_totals and the stamp line is dropped when it is absent.
+  tablesItemtext: hero_stats.totals.n_tables_itemtext ? fmtInt(hero_stats.totals.n_tables_itemtext) : null,
   people: fmtAbbrev(hero_stats.totals.n_participants),
   items: fmtAbbrev(hero_stats.totals.n_items),
   responses: fmtWords(hero_stats.totals.n_responses),
@@ -392,6 +396,7 @@ heroRoot = {
             <div class="stamp bob" style="animation-delay:0s;">
               <div class="stamp-number">${CONFIG.tables}+</div>
               <div class="stamp-label">TABLES</div>
+              ${CONFIG.tablesItemtext ? `<div class="stamp-sub">${CONFIG.tablesItemtext} with item text</div>` : ''}
             </div>
             <div class="tag-cloud" id="irw-hero-table-domains"></div>
           </div>
