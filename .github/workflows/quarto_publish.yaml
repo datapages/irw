@@ -2,8 +2,7 @@ on:
   workflow_dispatch:
   # Checked every 3 hours, but rendered only when main has actually moved
   # since the last publish -- see the `decide` job. The render takes ~14
-  # minutes and every publish adds a commit to gh-pages, so rebuilding an
-  # unchanged site is not free; a check that finds nothing costs under a
+  # minutes, so rebuilding an unchanged site is not free; a check that finds nothing costs under a
   # minute, which is why checking often is cheap and rendering often is not.
   #
   # Every 3 hours (2026-09-19), not daily. The daily 14:30 cron was actually
@@ -16,14 +15,21 @@ on:
   schedule:
     - cron: "17 */3 * * *"
 
-# One publish at a time. Two renders finishing together would race on
-# gh-pages, and a manual dispatch can now easily land beside a scheduled run.
-# Queued rather than cancelled: cancelling a render mid-publish could leave
-# gh-pages half-written, and a queued run whose `decide` finds the site
-# current skips in seconds anyway.
+# One publish at a time, so two deployments can't race and a manual dispatch
+# landing beside a scheduled run just queues. Queued rather than cancelled: a
+# queued run whose `decide` finds the site current skips in seconds anyway.
 concurrency:
   group: publish-gh-pages
   cancel-in-progress: false
+
+# Deployed as a Pages artifact, not committed to a gh-pages branch
+# (ben-domingue/irw#1719, 17.1). The branch kept every build: 264 of them came
+# to ~270 MB, most of the repository's size, and grew with every publish. An
+# artifact has no history. To roll back, re-run an earlier successful run.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 name: Render and Publish
 
@@ -32,11 +38,10 @@ jobs:
   # asked for it, you meant it. A scheduled run renders only if main carries
   # work that the last publish does not.
   #
-  # The comparison is commit TIMESTAMPS, not SHAs, because gh-pages holds built
-  # output and never shares a commit with main, so there is no SHA to compare
-  # against. quarto publish commits to gh-pages at the END of a successful
-  # render, so its commit is always later than the main commit it rendered:
-  # gh-pages newer than main means the site is current.
+  # "The last publish" is the newest SUCCESSFUL github-pages deployment, and
+  # its sha is the main commit it was built from. Render if that differs from
+  # main's head. (Under gh-pages this had to compare timestamps, because the
+  # branch held built output and shared no commit with main.)
   #
   # This deliberately watches THIS repository only, which is what makes it
   # cheap and predictable. It does NOT notice a new irw_meta release in the
@@ -60,24 +65,23 @@ jobs:
             echo "Manual dispatch -- rendering."
             exit 0
           fi
-          main_at="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" \
-                       --jq '.commit.committer.date')"
-          # A repository that has never published has no gh-pages branch yet.
-          # Render in that case rather than skipping forever.
-          if ! pages_at="$(gh api "repos/$GITHUB_REPOSITORY/commits/gh-pages" \
-                             --jq '.commit.committer.date' 2>/dev/null)"; then
+          main_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq '.sha')"
+          # Newest deployment whose latest status is success. A failed or
+          # in-flight deployment is not a publish. Legacy gh-pages builds also
+          # show up here, with a gh-pages sha that never equals main's, so the
+          # first scheduled run after the switch renders once, which is right.
+          deployed_sha=""
+          for id_sha in $(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=github-pages&per_page=20" \
+                            --jq '.[] | "\(.id):\(.sha)"'); do
+            state="$(gh api "repos/$GITHUB_REPOSITORY/deployments/${id_sha%%:*}/statuses?per_page=1" \
+                       --jq '.[0].state // ""')"
+            if [ "$state" = "success" ]; then deployed_sha="${id_sha#*:}"; break; fi
+          done
+          echo "main head        : $main_sha"
+          echo "last deployed sha: ${deployed_sha:-(none)}"
+          if [ "$main_sha" != "$deployed_sha" ]; then
             echo "render=true" >> "$GITHUB_OUTPUT"
-            echo "No gh-pages branch yet -- rendering."
-            exit 0
-          fi
-          echo "main     last commit: $main_at"
-          echo "gh-pages last commit: $pages_at"
-          # Compare as epoch seconds. `[[ a > b ]]` on the ISO strings would
-          # be a locale-collated comparison, which is a needless dependency on
-          # the runner's LC_COLLATE for a question that is purely numeric.
-          if [ "$(date -d "$main_at" +%s)" -gt "$(date -d "$pages_at" +%s)" ]; then
-            echo "render=true" >> "$GITHUB_OUTPUT"
-            echo "main is ahead of the last publish -- rendering."
+            echo "main differs from the last publish -- rendering."
           else
             echo "render=false" >> "$GITHUB_OUTPUT"
             echo "Site is current -- skipping the render."
@@ -87,9 +91,25 @@ jobs:
     needs: decide
     if: needs.decide.outputs.render == 'true'
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+
+      # No tracked file over 5 MB (ben-domingue/irw#1719, 17.1). A vignette
+      # result that big goes to the `vignette-data` release and is fetched at
+      # render time -- see CLAUDE.md, "Vignette compute pattern". Failing here
+      # leaves the live site on its last good deployment.
+      - name: Refuse tracked files over 5 MB
+        run: |
+          big="$(git ls-files -z | xargs -0 stat -c '%s %n' | awk '$1 > 5000000')"
+          if [ -n "$big" ]; then
+            echo "::error::Tracked files over 5 MB -- move them to the vignette-data release:"
+            echo "$big"
+            exit 1
+          fi
 
       - name: Set up Quarto
         uses: quarto-dev/quarto-actions/setup@v2
@@ -122,10 +142,8 @@ jobs:
           pip install irw
           pip install mirt girth scipy matplotlib pandas jupyter
 
-      - name: Render and publish to GitHub Pages
-        uses: quarto-dev/quarto-actions/publish@v2
-        with:
-          target: gh-pages
+      - name: Render
+        uses: quarto-dev/quarto-actions/render@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Read-scoped Redivis token. The render only reads (irw_meta and table
@@ -134,3 +152,15 @@ jobs:
           # now FAILS rather than quietly publishing a site with no table landing
           # pages -- see landing/emit_landing_pages.R (ben-domingue/irw#2129).
           REDIVIS_API_TOKEN: ${{ secrets.REDIVIS_API_TOKEN }}
+
+      # _site/ carries CNAME (copied from the repo root), robots.txt, sitemap.xml
+      # and the landing pages emitted by the post-render step. The custom domain
+      # itself is the Pages setting, not this file.
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
