@@ -26,6 +26,25 @@ pages) source it, so the two cannot drift. The rules were settled by Ben on
   publish. The build log warns about any table on the live sitemap that is about
   to lose its page.
 
+## Non-core sources
+
+Tables in `irw_simsyn`, `irw_competitions` and `irw_nominal` get pages too
+(irw#2453, 2026-09-26), under the same flat `/tables/<slug>/`: table names are
+unique across all sources, which is why the 66 nominal tables were renamed to
+`*_nom`. Their facts come from irw_meta's `<prefix>_metadata` / `_biblio` (and
+`nominal_tags`) tables, and their columns from Redivis, since those tables have
+no `variables` column. The same licence, known-issue and tombstone rules apply.
+
+- **Simulated** (`sim`): a "Simulated data" notice, the source URL labelled as the
+  generating script and used as schema.org `isBasedOn`, and any `cov_true_*`
+  columns named as true generating values.
+- **Competitions** (`comp`): sized as comparisons among agents; the Croissant
+  record set is `agent_a`, `agent_b`, `winner` instead of `id`, `item`, `resp`.
+- **Nominal** (`nom`): the record set adds `text`. A `x_nom` table and core
+  table `x` link to each other when both have a page.
+
+The R and Python snippets pass `source =` for all three.
+
 ## The index at /tables/
 
 `build_index()` emits one flat list of every table that has a page: **Table,

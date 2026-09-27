@@ -29,6 +29,19 @@ SHARD_REF <- c(
   item_response_warehouse_6 = "item_response_warehouse_6:fpe6"
 )
 
+# The non-core sources get pages too (ben-domingue/irw#2453, decided 2026-09-26).
+# Their facts live in their own irw_meta tables (<prefix>_metadata, _biblio), not
+# in irw_meta's `metadata`, and each is fetched in the packages with `source =`.
+# Table names are unique across ALL sources -- the 66 nom tables were renamed to
+# *_nom for exactly this -- so every source shares the one flat /tables/<slug>/.
+NONCORE <- data.frame(
+  dataset = c("irw_simsyn",      "irw_competitions",      "irw_nominal"),
+  ref     = c("irw_simsyn:0btg", "irw_competitions:cmd7", "irw_nominal:614n"),
+  prefix  = c("simsyn",          "comps",                 "nominal"),
+  source  = c("sim",             "comp",                  "nom"),
+  stringsAsFactors = FALSE)
+PAGE_REF <- c(SHARD_REF, setNames(NONCORE$ref, NONCORE$dataset))
+
 # The dictionary Sheets are hand-edited, so "missing" arrives in several spellings:
 # a real NA, an empty cell, or the literal text "NA" / "N/A" / "NULL". All of them
 # must count as absent, or they end up rendered as facts -- an early run emitted
@@ -67,12 +80,13 @@ known_issues  <- function() read_landing_list("known_issues.tsv", c("table", "is
 withdrawn_tbl <- function() read_landing_list("withdrawn.tsv",    c("table", "date"))
 
 # The tables that get a full landing page. `md` is irw_meta's metadata table,
-# `bib` its biblio table; `live` is optionally the table names Redivis actually
+# `bib` its biblio table (the emitter appends the non-core sources' rows to both,
+# with `dataset` set; data.qmd passes the core tables alone); `live` is optionally the table names Redivis actually
 # lists, so a table still in metadata after it left Redivis gets no page.
 # Returns the true table names, sorted.
 page_tables <- function(md, bib, live = NULL) {
   md_names <- trimws(as.character(md$table))
-  in_shard <- as.character(md$dataset) %in% names(SHARD_REF)
+  in_shard <- as.character(md$dataset) %in% names(PAGE_REF)
   lic <- setNames(as.character(bib$Derived_License), tolower(trimws(as.character(bib$table))))
   has_lic <- vapply(tolower(md_names), function(k) !blank(lic[k]), logical(1))
   keep <- in_shard & has_lic & !(tolower(md_names) %in% tolower(withdrawn_tbl()$table))
