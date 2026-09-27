@@ -47,10 +47,10 @@ Inputs.table(search, {
   header: {
     table: "Table",
     instrument: "Instrument",
-    mean_word: "Mean words",
-    mean_character: "Mean characters (stem)",
-    mean_character_responses: "Mean characters (responses)",
-    FK_grade: "FK grade"
+    mean_word: "Mean words per item",
+    mean_character: "Mean characters per item",
+    mean_character_responses: "Mean characters per response option",
+    FK_grade: "Flesch-Kincaid grade"
   },
   format: {
     mean_word: x => x == null ? "—" : x.toFixed(1),
@@ -64,10 +64,21 @@ Inputs.table(search, {
 
 ## Item complexity
 
-The two scatterplots show item complexity across tables. Left: mean words vs. Flesch-Kincaid grade level. Right: mean stem characters vs. mean response-option characters (tables with no response options are omitted from the right panel). Hover for table and instrument details.
+The two scatterplots show item complexity across tables. Left: mean words per item vs. Flesch-Kincaid grade level. Right: mean characters per item vs. mean characters per response option (tables with no response options are omitted from the right panel). Hover for table and instrument details.
 
 ```{ojs}
 //| label: item-complexity
+
+// Labels are shared by the axes and the tooltips so the two cannot drift apart,
+// and every length is stated per unit (per item / per response option).
+lab = ({
+  mean_word: "Mean words per item",
+  mean_character: "Mean characters per item",
+  mean_character_responses: "Mean characters per response option",
+  FK_grade: "Flesch-Kincaid grade"
+})
+
+fmt1 = d3.format(".1f")
 
 scatterFK = Plot.plot({
   grid: true,
@@ -82,11 +93,12 @@ scatterFK = Plot.plot({
     Plot.tip(plotData, Plot.pointer({
       x: "mean_word",
       y: "FK_grade",
-      title: d => `${d.table}\n${d.instrument}\n${d.mean_word.toFixed(1)} words · FK ${d.FK_grade != null ? d.FK_grade.toFixed(1) : "n/a"}`
+      channels: {Table: "table", Instrument: "instrument"},
+      format: {Table: true, Instrument: true, x: fmt1, y: fmt1}
     }))
   ],
-  x: {label: "Mean words per item"},
-  y: {label: "FK grade level"}
+  x: {label: lab.mean_word},
+  y: {label: lab.FK_grade}
 })
 
 charData = plotData.filter(d => d.mean_character_responses != null)
@@ -104,16 +116,17 @@ scatterChar = Plot.plot({
     Plot.tip(charData, Plot.pointer({
       x: "mean_character",
       y: "mean_character_responses",
-      title: d => `${d.table}\n${d.instrument}\n${d.mean_character.toFixed(1)} stem chars · ${d.mean_character_responses.toFixed(1)} response chars`
+      channels: {Table: "table", Instrument: "instrument"},
+      format: {Table: true, Instrument: true, x: fmt1, y: fmt1}
     }))
   ],
-  x: {label: "Mean characters (stem)"},
-  y: {label: "Mean characters (responses)"}
+  x: {label: lab.mean_character},
+  y: {label: lab.mean_character_responses}
 })
 
-html`<div style="display:flex;gap:1.5rem;">
-  <div style="flex:1">${scatterFK}</div>
-  <div style="flex:1">${scatterChar}</div>
+html`<div style="display:flex;flex-wrap:wrap;gap:1.5rem;">
+  <div style="flex:1 1 320px;min-width:0">${scatterFK}</div>
+  <div style="flex:1 1 320px;min-width:0">${scatterChar}</div>
 </div>`
 ```
 
