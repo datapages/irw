@@ -48,7 +48,7 @@ Python, with the documented install line:
     REDIVIS_API_TOKEN=... ./venv/bin/python check_briefing.py
 
 R, with the documented install lines (it installs `irw`, `psych` and `mokken` itself if missing; the
-warehouse part needs `pak::pak("redivis/redivis-r")` and the token):
+warehouse part needs `install.packages("redivis", repos = c("https://redivis.r-universe.dev", getOption("repos")))` and the token):
 
     REDIVIS_API_TOKEN=... Rscript check_briefing.R
 
