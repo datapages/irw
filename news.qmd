@@ -14,6 +14,95 @@ This log begins in September 2026, when the page was created. The IRW is older
 than the log, and changes before then are recorded only in the repositories'
 commit history and in the versioned data itself.
 
+## 2026-09-28 — The MCP server can find the script that built a table
+
+Python package 0.3.1. The server's processing-notes tool now resolves a table
+to the script that produced it through a table-to-script index generated in the
+processing repo, instead of guessing at a path. If you use the local MCP server
+described on [Using an AI Assistant](agents.qmd), an assistant can now ask how
+a particular table was built and get the actual script.
+
+## 2026-09-27 — A wave of rebuilt tables, part released and part still staged
+
+Several dozen tables were rebuilt after real defects in the scripts that made
+them. Among them: `MEFSIRODGAS_Nileksela_2023_freq` had been written from the
+severity group, so it held the 499 severity respondents rather than the 501
+frequency ones. `fcupanas_cffsdas_reyna_2018` pooled PANAS items 11–20 across
+studies that printed them in different orders, and cut Study 3's 7-point
+responses to missing; those now ship as their own `_7pt` table.
+`iandolo_2021_asq` shipped three reverse-keyed items already reversed for Italy
+and Japan but raw for Spain, and is now raw throughout (627 rows changed).
+`quopl2_forster_2021_quop` had response times in milliseconds, not seconds. The
+18 `eammi_grahe_2018_*` tables were shipping Qualtrics' whole-survey duration
+as `rt` — one identical value for every item a respondent answered — which is
+now `cov_survey_duration` instead. `ds14_mokken` had item Si3 overwritten with
+Si1. `alsuhibani_2022_gcbs` mapped Study 2's items by position and was shifted
+by one. `opladen2025_*` had collapsed eight pairs of different people who
+shared an anonymised code, and now reports the 217 participants the deposit's
+own summary implies.
+
+Some of this is released and some is not, so check before assuming a fix
+reached you. The `iandolo_2021_asq` and `liu_2025_ydcy` corrections are
+confirmed live, at `item_response_warehouse_3` v10.0 and
+`item_response_warehouse_4` v9.0. Refs #2282.
+
+## 2026-09-27 — Congressional roll calls
+
+Released in corpus version 442. `rollcall_house` and `rollcall_senate` treat
+congressional votes from the 110th through 118th Congresses as item response
+data, with `resp` 1 for Yea and 0 for Nay and members linked across Congresses
+by bioguide ID. Item text for each vote is in the `irw_text_3` shard.
+
+## 2026-09-27 — The validator checks folders, and warns about rights
+
+`irw-validate` 1.3.0 accepts a directory and takes `-r`/`--recursive`, so you
+can check a whole folder of tables rather than one file at a time. It also
+names the dominant `resp` value rather than only flagging that one exists,
+adds `--verbose`, and warns with the rights-register row for an instrument
+before a table ships. Version 1.2.0, tagged on 2026-09-21, started checking
+what an `rt` column *means* rather than only that it parses as a number. Both
+went out as release tags, which is what publishes them to PyPI; the
+[browser validator](validate.qmd) and `pip install -U irw-validate` run the
+same checks.
+
+## 2026-09-26 — Nominal-response tables now end in `_nom`
+
+Corpus version 439 renamed 66 tables in the nominal source to carry a `_nom`
+suffix, so that no table name is shared across two IRW sources. 52 of them are
+ENEM tables. No response changed.
+
+This matters if you refer to a nominal table by name, and it bites in two
+different ways. For 59 of the 66, a core table of the same name still exists,
+so the old name still resolves — but to the core table, not the nominal one
+you may have meant. For the other seven, including `preference_inventory`,
+`persuade_learningagency`, `goldberg_2018_spa_computer_use` and
+`mthimkhulu_2023_pirls_reading_mc`, there was no core table of that name, so
+the old name now resolves to nothing. The renames point both ways in the
+change record. The uploader now refuses a table name another IRW source is
+already using, so this particular collision should not recur. See
+[the nominal data standard](nominal_standard.qmd) for what the nominal source
+holds.
+
+## 2026-09-25 — Project KIDS item names now carry the WJ-III form
+
+Corpus versions 435 and 436. Forms A and B of the Woodcock-Johnson III put
+different words and problems at the same position, and the ten Project KIDS WJ
+tables had been pooling the two forms under a single item name. Item names now
+carry the form, which roughly doubles the item count in each table, or more:
+`project_kids_wj_lwid_wave` goes from 76 items to 228, `project_kids_wj_ap`
+from 39 to 78, `project_kids_wj_mf` from 80 to 160, `project_kids_wj_pc_wave`
+from 44 to 130, and so on across all ten.
+
+If you have fit a model to one of these tables, it was treating two different
+stimuli as one item wherever respondents took different forms.
+
+## 2026-09-25 — A third item-text shard
+
+Item text now spans `irw_text`, `irw_text_2` and `irw_text_3`; the third shard
+went live in corpus version 422. Both the R and the Python package resolve all
+three for you. As before, querying `irw_text` directly gets you part of the
+collection, not all of it.
+
 ## 2026-09-24 — 4,495 tables, and item text for 1,589 of them
 
 The corpus has grown from 4,273 tables in mid-September to 4,495. Many of the
@@ -21,6 +110,20 @@ new tables came from systematic sweeps of open-access journals (PLOS ONE and
 Europe PMC) for articles that deposit item-level responses under an open
 licence. The homepage now also shows how many tables have item text alongside
 their responses: 1,589.
+
+## 2026-09-23 — What a collection actually searched
+
+The documented coverage of the `tagged-subset-only` collections was wrong, and
+in the optimistic direction. Those collections are built by reading the
+`construct name` tag — not merely "has a tags row", which is what the previous
+figure of roughly 62% counted. Most rows added by auto-tagging carry no
+construct name, so the real figure is about half the documented corpus: 2,467
+of 4,495 tables as of 2026-09-23, and far less in the newer warehouses (98% of
+the first, 77% of the second, 26% of the third, 27% of the fourth, 30% of the
+fifth, 52% of the sixth). Each collection definition now states the exact
+number of tables it searched, and `irw_collections()` says so in its
+documentation. As the [Browse IRW Collections](collections.qmd) page already
+noted, a collection is a starting point, not a census.
 
 ## 2026-09-21 — Two new vignettes
 
