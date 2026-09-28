@@ -75,6 +75,10 @@ SITE_URL     <- "https://itemresponsewarehouse.org"
 OUT_DIR      <- file.path("_site", "tables")
 MANIFEST_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
                        "metadata/version_manifest.tsv")
+# Collections the IRW found tables through (openESM, ...), keyed by biblio's
+# Source_via: each one's note and BibTeX (ben-domingue/irw#2421).
+AGGREGATORS_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
+                          "metadata/aggregators.csv")
 # Data defects are tracked in the data repo, not this one: a known-issue banner
 # and the index's flag both point here.
 ISSUE_URL    <- "https://github.com/ben-domingue/irw/issues/"
@@ -128,6 +132,26 @@ num_raw <- function(x) {
   m <- utils::read.delim(con, stringsAsFactors = FALSE, colClasses = "character")
   m$irw_version <- as.integer(m$irw_version)
   m
+}
+
+# key -> list(note, bibtex). A credit line must never cost a build its pages, so
+# any failure reads as no registry, and a page then names the source without
+# the collection's own note or citation.
+.read_aggregators <- function() {
+  tryCatch({
+    con <- url(AGGREGATORS_URL)
+    on.exit(try(close(con), silent = TRUE), add = TRUE)
+    a <- utils::read.csv(con, colClasses = "character", check.names = FALSE,
+                         encoding = "UTF-8")
+    a <- a[!is.na(a$key) & nzchar(trimws(a$key)), , drop = FALSE]
+    setNames(lapply(seq_len(nrow(a)), function(i)
+      list(note = chr(a[["note text"]][i]), bibtex = chr(a$BibTeX[i]))),
+      trimws(a$key))
+  }, error = function(e) {
+    message("aggregators.csv unreadable (", conditionMessage(e),
+            "); Source via pages get the plain note")
+    list()
+  })
 }
 
 as_df <- function(tbl) as.data.frame(tbl$to_tibble(), stringsAsFactors = FALSE)
@@ -452,6 +476,17 @@ build_page <- function(x) {
     list("Licence",     x$license, TRUE),
     list(if (x$src == "sim") "Generating script" else "Source data", x$source_url)))
 
+  # A table found through another collection says so in that collection's own
+  # words, linked to its record there (ben-domingue/irw#2421).
+  if (!blank(x$source_via)) {
+    via <- if (!blank(x$source_url)) paste0("<a href=\"", esc(x$source_url), "\">",
+                                            esc(x$source_via), "</a>") else esc(x$source_via)
+    note <- if (!blank(x$via_note))
+      sub(esc(x$source_via), via, esc(x$via_note), fixed = TRUE) else
+      paste0("These data were found via ", via, ".")
+    about <- paste0(about, "<p class=\"note\">", note, "</p>\n")
+  }
+
   tagbody <- ""
   if (length(x$tags)) {
     tagbody <- kv_rows(lapply(names(x$tags), function(k) list(k, x$tags[[k]])))
@@ -504,13 +539,18 @@ build_page <- function(x) {
   # what counts as a release is unsettled (irw#1870, irw#2317), and a citation
   # form invented on 4,000 pages would have to be withdrawn from all of them.
   # The button degrades to a selectable <pre> where clipboard access is refused.
-  cite <- if (!blank(x$bibtex)) paste0(
-    "<pre>", esc(x$bibtex), "</pre>\n",
+  copyable <- function(bib) paste0(
+    "<pre>", esc(bib), "</pre>\n",
     "<button class=\"copy\" type=\"button\" onclick=\"",
     "var b=this,t=b.previousElementSibling.textContent;",
     "navigator.clipboard.writeText(t).then(function(){",
     "b.textContent='Copied';setTimeout(function(){b.textContent='Copy BibTeX'},2000)})",
-    "\">Copy BibTeX</button>\n") else ""
+    "\">Copy BibTeX</button>\n")
+  cite <- if (!blank(x$bibtex)) copyable(x$bibtex) else ""
+  # The collection the table was found through asks to be cited too (#2421).
+  if (!blank(x$via_bibtex)) cite <- paste0(cite,
+    "<p class=\"note\">This table was found via ", esc(x$source_via),
+    "; please also cite:</p>\n", copyable(x$via_bibtex))
 
   access <- paste0(licnote,
 if (nzchar(x$rows_url)) paste0(
@@ -705,6 +745,7 @@ merge_sitemap <- function(urls) {
 
 main <- function() {
   manifest <- .read_manifest()
+  aggregators <- .read_aggregators()
   irw_version <- max(manifest$irw_version)
   pins <- manifest[manifest$irw_version == irw_version, ]
   pin_of <- setNames(pins$redivis_tag, pins$dataset)
@@ -874,6 +915,8 @@ main <- function() {
       license_terms = if (nrow(brow) && "Custom_License_Terms" %in% names(brow))
                         chr(brow[1, "Custom_License_Terms"]) else "",
       source_url  = if (nrow(brow)) chr(brow[1, "URL__for_data_"]) else "",
+      source_via  = if (nrow(brow) && "Source_via" %in% names(brow))
+                      chr(brow[1, "Source_via"]) else "",
       doi = doi, doi_url = doi_url,
       keywords = c(unname(unlist(tags)),
                    switch(src, sim = "simulated data", comp = "paired comparisons",
@@ -884,6 +927,9 @@ main <- function() {
       croissant_url = paste0(SITE_URL, "/tables/", slug, "/croissant.jsonld"),
       issue = if (is.na(issue_of[k])) "" else unname(issue_of[k])
     )
+    agg <- if (nzchar(x$source_via)) aggregators[[x$source_via]] else NULL
+    x$via_note   <- if (is.null(agg)) "" else agg$note
+    x$via_bibtex <- if (is.null(agg)) "" else agg$bibtex
     x$redivis_url <- if (nrow(lrow) && nzchar(lrow$url[1])) lrow$url[1] else si$url
     x$rows_url    <- rows_url_of(shard, si$version, x$table,
                                  if (nrow(lrow)) lrow$bytes[1] else NA)
