@@ -22,40 +22,6 @@ processing repo, instead of guessing at a path. If you use the local MCP server
 described on [Using an AI Assistant](agents.qmd), an assistant can now ask how
 a particular table was built and get the actual script.
 
-## 2026-09-27 — Wrong data withdrawn, and identifying covariates removed
-
-The 2026-09-27 release withdrew 21 published rows, each confirmed present at
-the previous shard tag and absent at the new one.
-
-Eight `sun_2025_morality` study-1 informant tables are gone. Their responses
-were never item responses: the source file has one row per target with one to
-four informants, and the `it.*` columns are informant *means*, which the
-build script then rounded — 4,962 of 16,185 cells (30.7%) were non-integer
-before rounding. No informant-level file exists to rebuild from, so the tables
-were withdrawn rather than corrected. Study 2 is rater-level and integer, and
-study 1's self-report tables are unaffected. The study-3 respectfulness table
-had already gone on 2026-09-25 for the same defect.
-
-Four `coh_goodman_2023` tables lost four covariates — `cov_hs_name`,
-`cov_hs_name_clean`, `cov_country_of_origin` and `cov_country_of_schooling` —
-because together they can re-identify people in what is a clinic sample. The
-responses themselves are untouched. Two `dvivdtws_ppmial_marcatto_2023` tables
-(`_ocb`, `_snaq`) were retired as byte copies of `_dtw`. Item text for
-`qi_2025_swls` was withdrawn because the wording is the SWLS, which its own
-licence does not let us redistribute. And two tables were withdrawn under
-names that described the wrong construct, and were reissued under names that
-describe the right one: `wang_2026_teaching_presence` is now
-`wang_2026_technology_perception`, and `weida_2020_financial_security` is now
-`weida_2020_cesd10`. Their item text is uploaded under the new names but still
-sits in a draft, so it is not fetchable yet.
-
-One caveat on the record itself: the [Corrections](corrections.qmd) page does
-not yet list any of this, because the corpus version manifest stops at version
-446 and does not yet carry the 2026-09-27 shard tags that these changes took
-effect at. The withdrawals are recorded in `itemtext/withdrawals.csv` in the
-processing repository in the meantime — an append-only file keyed by table,
-new this week.
-
 ## 2026-09-27 — A wave of rebuilt tables, part released and part still staged
 
 Several dozen tables were rebuilt after real defects in the scripts that made
