@@ -885,6 +885,11 @@ main <- function() {
     slug <- slug_of(tb)
     page_url <- paste0(SITE_URL, "/tables/", slug, "/")
     doi <- if (nrow(brow)) chr(brow[1, "DOI__for_paper_"]) else ""
+    # The dictionary's paper-DOI cell also holds placeholders ("No DOI",
+    # "Upcoming", "not yet published"), which were published as the DOI row and
+    # as a JSON-LD citation of "https://doi.org/No DOI" (ben-domingue/irw#2513).
+    # Keep only a DOI (10.<registrant>/...) or a URL; anything else is absent.
+    if (!grepl("^(https?://|(doi:\\s*)?10\\.[0-9]{4,}/)", doi, ignore.case = TRUE)) doi <- ""
     doi_url <- if (nzchar(doi)) {
       if (grepl("^https?://", doi)) doi else paste0("https://doi.org/", sub("^doi:\\s*", "", doi))
     } else ""
