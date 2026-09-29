@@ -20,6 +20,13 @@ pages) source it, so the two cannot drift. The rules were settled by Ben on
   with an open data defect. Their page names the issue and is kept out of search:
   `noindex`, no Dataset JSON-LD, no Croissant file, no sitemap entry. Delete the
   row in the PR that *releases* the fix.
+- **Caveats about a table's source are Notes, not issues.** A table that
+  faithfully reproduces a questionable source (a doubtful answer key, pooled
+  forms, a column whose meaning isn't obvious) gets a row in
+  `metadata/data_notes.csv` in ben-domingue/irw, not here. Its page shows a plain
+  Notes section and stays in search. The file is fetched at build time; in CI a
+  failed fetch stops the build rather than publish pages without their notes
+  (irw#2529).
 - **Withdrawn tables keep their URL as a tombstone.** `withdrawn.tsv` lists them;
   the page says "Withdrawn" and the date, nothing more, and is `noindex`. Add the
   row in the same PR that withdraws a table, or its URL becomes a 404 on the next

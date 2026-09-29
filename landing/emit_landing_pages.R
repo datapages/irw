@@ -7,6 +7,8 @@
 #   <slug>/croissant.jsonld a Croissant (MLCommons) description
 # plus a tombstone <slug>/index.html for each table in landing/withdrawn.tsv, and a
 # banner (and no search presence) for each table in landing/known_issues.tsv.
+# Caveats about a table's *source* (ben-domingue/irw metadata/data_notes.csv,
+# #2529) are a plain Notes section instead: no banner, and the page stays indexed.
 #
 # The directory form is deliberate: the public URL is /tables/<slug>/ with no
 # file extension. These URLs are meant to be cited, and to be what a release DOI
@@ -79,6 +81,9 @@ MANIFEST_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/
 # Source_via: each one's note and BibTeX (ben-domingue/irw#2421).
 AGGREGATORS_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
                           "metadata/aggregators.csv")
+# Caveats true of a table's source, not IRW defects (ben-domingue/irw#2529).
+DATA_NOTES_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
+                         "metadata/data_notes.csv")
 # Data defects are tracked in the data repo, not this one: a known-issue banner
 # and the index's flag both point here.
 ISSUE_URL    <- "https://github.com/ben-domingue/irw/issues/"
@@ -152,6 +157,33 @@ num_raw <- function(x) {
             "); Source via pages get the plain note")
     list()
   })
+}
+
+# tolower(table) -> data frame of that table's notes (note, issue), oldest
+# first. Unlike the aggregator registry, a note is information a user of the
+# table needs, and the pages are republished wholesale, so a fetch failure in CI
+# stops the build rather than silently strip every note from the live site.
+# Locally it reads as no notes, like the missing-token skip above.
+.read_data_notes <- function() {
+  n <- tryCatch({
+    con <- url(DATA_NOTES_URL)
+    on.exit(try(close(con), silent = TRUE), add = TRUE)
+    utils::read.csv(con, colClasses = "character", na.strings = character(0),
+                    encoding = "UTF-8")
+  }, error = function(e) {
+    if (nzchar(Sys.getenv("CI")))
+      stop("[landing] data_notes.csv unreadable (", conditionMessage(e), "); ",
+           "refusing to publish pages without their notes.", call. = FALSE)
+    message("[landing] data_notes.csv unreadable (", conditionMessage(e),
+            "); pages get no Notes section (local preview only)")
+    NULL
+  })
+  if (is.null(n) || !nrow(n)) return(list())
+  n$table <- trimws(n$table); n$note <- trimws(n$note)
+  n <- n[nzchar(n$table) & nzchar(n$note), , drop = FALSE]
+  # Rule 1: a fixed order, whatever order the file is in.
+  n <- n[order(tolower(n$table), n$date, n$note, method = "radix"), , drop = FALSE]
+  split(n[c("note", "issue")], tolower(n$table))
 }
 
 as_df <- function(tbl) as.data.frame(tbl$to_tibble(), stringsAsFactors = FALSE)
@@ -505,6 +537,20 @@ build_page <- function(x) {
         list("Flesch-Kincaid grade level",    num_fmt(x$it$FK_grade)))))
   }
 
+  # Source caveats (data_notes.csv): information, not a warning, so no banner.
+  notes <- ""
+  if (!is.null(x$notes) && nrow(x$notes)) {
+    notes <- paste0("<ul>\n", paste0(vapply(seq_len(nrow(x$notes)), function(i) {
+      iss <- trimws(x$notes$issue[i])
+      paste0("<li>", gsub("`([^`]+)`", "<code>\\1</code>", esc(x$notes$note[i])),
+             if (grepl("^#[0-9]+$", iss)) paste0(" (<a href=\"", esc(paste0(ISSUE_URL, sub("#", "", iss))),
+                                                "\">irw", esc(iss), "</a>)") else "",
+             "</li>")
+    }, character(1)), collapse = "\n"), "\n</ul>\n",
+    "<p>These notes describe the source data, which the IRW reproduces as released. ",
+    "All notes are listed on the <a href=\"", SITE_URL, "/data_notes.html\">Data Notes</a> page.</p>\n")
+  }
+
   vars <- ""
   if (length(x$variables)) {
     vars <- paste0("<p>",
@@ -597,6 +643,7 @@ if (!flagged) paste0("<script type=\"application/ld+json\">\n", jsonld, "\n</scr
 banner,
 twin,
 section("About this table", about),
+section("Notes", notes, id = "notes"),
 section("Size and shape", size),
 section("Classification", tagbody),
 section("Item text", itext),
@@ -746,6 +793,7 @@ merge_sitemap <- function(urls) {
 main <- function() {
   manifest <- .read_manifest()
   aggregators <- .read_aggregators()
+  notes_of <- .read_data_notes()
   irw_version <- max(manifest$irw_version)
   pins <- manifest[manifest$irw_version == irw_version, ]
   pin_of <- setNames(pins$redivis_tag, pins$dataset)
@@ -930,7 +978,8 @@ main <- function() {
       truth_cols = grep("^cov_true_", vars, value = TRUE),
       page_url = page_url,
       croissant_url = paste0(SITE_URL, "/tables/", slug, "/croissant.jsonld"),
-      issue = if (is.na(issue_of[k])) "" else unname(issue_of[k])
+      issue = if (is.na(issue_of[k])) "" else unname(issue_of[k]),
+      notes = notes_of[[k]]
     )
     agg <- if (nzchar(x$source_via)) aggregators[[x$source_via]] else NULL
     x$via_note   <- if (is.null(agg)) "" else agg$note

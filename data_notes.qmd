@@ -1,0 +1,105 @@
+---
+title: "Data Notes"
+---
+
+```{r}
+#| label: load-notes
+
+# Data notes are a tracked file in ben-domingue/irw (metadata/data_notes.csv,
+# irw#2529), appended by hand. Read at render time, like the change record on
+# corrections.qmd. A failed fetch prints a notice instead of an empty table: an
+# empty table would read as "nothing to know about any table".
+NOTES_URL <- paste0(
+  "https://raw.githubusercontent.com/ben-domingue/irw/main/",
+  "metadata/data_notes.csv"
+)
+
+notes <- tryCatch({
+  con <- url(NOTES_URL)
+  on.exit(try(close(con), silent = TRUE), add = TRUE)
+  utils::read.csv(con, stringsAsFactors = FALSE, colClasses = "character",
+                  na.strings = character(0), encoding = "UTF-8")
+}, error = function(e) NULL, warning = function(w) NULL)
+
+if (!is.null(notes)) {
+  notes <- notes[order(tolower(notes$table), notes$date, method = "radix"), ]
+}
+```
+
+Some things a user of a table should know cannot be expressed by the table
+itself: an answer key in the source that looks wrong, covariates the source
+filled with a mean, what a `wave` column counts, forms pooled under shared item
+names. IRW reproduces its sources as released
+([Corrections](corrections.qmd), rule 7), so these are recorded as notes rather
+than fixed. Each note also appears on the table's own page.
+
+A note is not a defect report. Tables with a known IRW error are flagged on
+their page until the fix is released, and released fixes are listed on
+[Corrections](corrections.qmd). Notes about item text are on
+[Known Issues](itemtext_issues.qmd).
+
+```{r}
+#| label: notes-summary
+#| results: asis
+
+if (is.null(notes)) {
+  cat("::: {.callout-warning}\nThe data notes could not be loaded when this",
+      "page was built. They are available directly at",
+      sprintf("[`metadata/data_notes.csv`](%s).\n:::\n",
+              "https://github.com/ben-domingue/irw/blob/main/metadata/data_notes.csv"))
+} else {
+  cat(sprintf("%d notes covering %d tables. Start typing to search.\n",
+              nrow(notes), length(unique(notes$table))))
+}
+```
+
+```{=html}
+<input type="text" id="noteSearch" placeholder="Search notes..." oninput="filterNotes()" style="width: 100%; padding: 10px; margin-bottom: 10px; font-size: 16px;">
+<p id="note-count" style="color: #888; margin-bottom: 20px;"></p>
+
+<style>
+#notes-table { overflow-x: auto; }
+#notes-table table { width: 100%; }
+#notes-table th, #notes-table td { vertical-align: top; padding: 8px; }
+#notes-table td:nth-child(2) { word-break: break-word; }
+</style>
+
+<script>
+function filterNotes() {
+  const filter = document.getElementById('noteSearch').value.toLowerCase().trim();
+  const rows = document.querySelectorAll('#notes-table tbody tr');
+  let shown = 0;
+  rows.forEach(r => {
+    const hit = filter === '' || (r.textContent || '').toLowerCase().includes(filter);
+    r.style.display = hit ? '' : 'none';
+    if (hit) shown++;
+  });
+  const count = document.getElementById('note-count');
+  count.textContent = filter === '' ? '' :
+    shown + (shown === 1 ? ' note matches "' : ' notes match "') + filter + '"';
+}
+</script>
+```
+
+::: {#notes-table}
+
+```{r}
+#| label: notes-table
+#| results: asis
+
+if (!is.null(notes) && nrow(notes) > 0) {
+  cell <- function(x) gsub("|", "\\|", gsub("\n", " ", x), fixed = TRUE)
+  issue <- ifelse(grepl("^#[0-9]+$", notes$issue),
+                  sprintf("[%s](https://github.com/ben-domingue/irw/issues/%s)",
+                          notes$issue, sub("#", "", notes$issue)),
+                  notes$issue)
+  cat("| Table | Note | Issue | Added |\n",
+      "|---|---|---|---|\n", sep = "")
+  cat(sprintf("| `%s` | %s | %s | %s |",
+              notes$table, cell(notes$note), issue, notes$date),
+      sep = "\n")
+  cat("\n")
+}
+```
+
+:::
