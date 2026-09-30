@@ -5,7 +5,8 @@
 # Emits, into _site/tables/, for every table landing/page_rules.R says gets a page:
 #   <slug>/index.html       a landing page carrying schema.org/Dataset JSON-LD
 #   <slug>/croissant.jsonld a Croissant (MLCommons) description
-# plus a tombstone <slug>/index.html for each table in landing/withdrawn.tsv, and a
+# plus a tombstone <slug>/index.html for each withdrawn table without a live page
+# (ben-domingue/irw itemtext/withdrawals.csv, plus landing/withdrawn.tsv), and a
 # banner (and no search presence) for each table in landing/known_issues.tsv.
 # Caveats about a table's *source* (ben-domingue/irw metadata/data_notes.csv,
 # #2529) are a plain Notes section instead: no banner, and the page stays indexed.
@@ -814,8 +815,9 @@ SORT_JS,
 
 # A withdrawn table keeps its URL: an indexed or cited address must not become a
 # 404. Deliberately vague (Ben, 2026-09-19): "Withdrawn" and the date, no reason.
-# noindex, no JSON-LD, no Croissant file, no sitemap entry.
-build_tombstone <- function(table, date) {
+# A renamed table also links its new name, when that has a page: a pointer, not a
+# reason. noindex, no JSON-LD, no Croissant file, no sitemap entry.
+build_tombstone <- function(table, date, renamed_to = "") {
   paste0(
 "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n",
 "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n",
@@ -826,7 +828,10 @@ build_tombstone <- function(table, date) {
 "<a href=\"", SITE_URL, "/tables/\">Tables</a> / ", esc(table), "</nav>\n",
 "<h1>", esc(table), "</h1>\n",
 "<div class=\"issue\"><p><strong>Withdrawn</strong>",
-if (!blank(date)) paste0(" on ", esc(date)) else "", ".</p></div>\n",
+if (!blank(date)) paste0(" on ", esc(date)) else "", ".",
+if (nzchar(renamed_to)) paste0(" It continues as <a href=\"", SITE_URL, "/tables/",
+  slug_of(renamed_to), "/\">", esc(renamed_to), "</a>.") else "",
+"</p></div>\n",
 "<footer><a href=\"", SITE_URL, "/tables/\">All IRW table pages</a></footer>\n",
 "</body>\n</html>\n")
 }
@@ -935,7 +940,15 @@ main <- function() {
   live_names <- unlist(lapply(listed, `[[`, ".k"), use.names = FALSE)
 
   tables <- page_tables(md, bib, live = live_names)
+  # A tombstone for every withdrawn name that has no page. A name withdrawn in
+  # one dataset but live in another keeps its page (page_tables), so no tombstone.
   withdrawn <- withdrawn_tbl()
+  withdrawn <- withdrawn[!(tolower(withdrawn$table) %in% tolower(tables)), , drop = FALSE]
+  withdrawn <- withdrawn[!duplicated(tolower(withdrawn$table)), , drop = FALSE]
+  # A rename links on only when the new name has a page.
+  withdrawn$renamed_to[!(tolower(withdrawn$renamed_to) %in% tolower(tables))] <- ""
+  withdrawn$renamed_to <- tables[match(tolower(withdrawn$renamed_to), tolower(tables))]
+  withdrawn$renamed_to[is.na(withdrawn$renamed_to)] <- ""
   issues <- known_issues()
   issue_of <- setNames(issues$issue, tolower(issues$table))
   .assert_no_slug_collisions(c(tables, withdrawn$table))
@@ -1125,7 +1138,7 @@ main <- function() {
   for (i in seq_len(nrow(withdrawn))) {
     page_dir <- file.path(OUT_DIR, slug_of(withdrawn$table[i]))
     dir.create(page_dir, recursive = TRUE, showWarnings = FALSE)
-    writeLines(build_tombstone(withdrawn$table[i], withdrawn$date[i]),
+    writeLines(build_tombstone(withdrawn$table[i], withdrawn$date[i], withdrawn$renamed_to[i]),
                file.path(page_dir, "index.html"))
   }
 
@@ -1156,7 +1169,7 @@ main <- function() {
 
 # A table that had a page on the live site and now has neither a page nor a
 # tombstone is about to become a 404 on an indexed URL. Warn loudly; the fix is a
-# row in landing/withdrawn.tsv. Reads the live sitemap, so it only ever affects
+# row in the data repo's withdrawals.csv (or, failing that, landing/withdrawn.tsv). Reads the live sitemap, so it only ever affects
 # the log, never the output (rule 1). Tables kept out of the sitemap -- flagged or
 # tombstoned -- cannot be checked this way, which is why withdrawn.tsv is a file.
 .warn_lost_pages <- function(emitted) {
@@ -1172,7 +1185,7 @@ main <- function() {
   lost <- setdiff(slugs, slug_of(emitted))
   if (length(lost))
     message("[landing] WARNING: these tables have a page on the live site but will ",
-            "not after this publish -- add them to landing/withdrawn.tsv: ",
+            "not after this publish -- record them in ben-domingue/irw itemtext/withdrawals.csv: ",
             paste(sort(lost), collapse = ", "))
 }
 
