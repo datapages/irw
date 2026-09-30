@@ -27,11 +27,17 @@ pages) source it, so the two cannot drift. The rules were settled by Ben on
   Notes section and stays in search. The file is fetched at build time; in CI a
   failed fetch stops the build rather than publish pages without their notes
   (irw#2529).
-- **Withdrawn tables keep their URL as a tombstone.** `withdrawn.tsv` lists them;
-  the page says "Withdrawn" and the date, nothing more, and is `noindex`. Add the
-  row in the same PR that withdraws a table, or its URL becomes a 404 on the next
-  publish. The build log warns about any table on the live sitemap that is about
-  to lose its page.
+- **Withdrawn tables keep their URL as a tombstone.** The list is the data
+  repo's withdrawal ledger, `itemtext/withdrawals.csv` in ben-domingue/irw, read at
+  build time (whole-table rows, not `irw_text`), plus `withdrawn.tsv` here for
+  anything the ledger lacks. The page says "Withdrawn" and the date, and is
+  `noindex`; a table the ledger notes as "renamed to X" also links X when X has a
+  page. The ledger wins even while Redivis still serves the table, since a
+  withdrawal is recorded before its release. A row applies only to the dataset it
+  names, so a name reused in another shard keeps its page. To reinstate a table,
+  remove or amend its ledger row. In CI an unreadable ledger stops the build. The
+  build log warns about any table on the live sitemap that is about to lose its
+  page with no tombstone.
 
 ## Non-core sources
 

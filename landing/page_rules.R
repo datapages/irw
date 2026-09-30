@@ -15,8 +15,14 @@
 #   Croissant file, not in the sitemap) until the fix ships. The list is
 #   landing/known_issues.tsv; delete a row when its fix is released.
 # - A withdrawn table keeps its URL as a tombstone that says "Withdrawn" and the
-#   date, and nothing else. The list is landing/withdrawn.tsv; add a row in the
-#   same PR that withdraws a table, or its page becomes a 404 on the next publish.
+#   date, and nothing else (a renamed table also links its new name). The list is
+#   the data repo's withdrawal ledger, ben-domingue/irw itemtext/withdrawals.csv,
+#   read at build time, plus landing/withdrawn.tsv for anything the ledger lacks.
+#   The ledger wins even while Redivis still serves the table (a withdrawal is
+#   recorded before its release): on 2026-09-30 that included nine tables withdrawn
+#   for publishing personal data. A ledger row applies to the dataset it names, so
+#   a name reused in another shard keeps its page. To reinstate a table, remove or
+#   amend its ledger row.
 
 # Shard name -> Redivis scoped reference. Mirrors the map in _load-data-explore.qmd;
 # authoritative source is IRW_CORE_DATASETS in ben-domingue/irw metadata/redivis_config.R.
@@ -77,19 +83,82 @@ read_landing_list <- function(file, cols) {
 }
 
 known_issues  <- function() read_landing_list("known_issues.tsv", c("table", "issue"))
-withdrawn_tbl <- function() read_landing_list("withdrawn.tsv",    c("table", "date"))
+
+# Withdrawals are recorded once, in the data repo's ledger, when a table is taken
+# down. Keeping a second hand-kept list here is how 112 withdrawn tables became
+# 404s in September 2026: none of them reached withdrawn.tsv. So the ledger is read,
+# not forked. Only whole-table withdrawals of response data count; irw_text rows
+# are item text, which has no page. A ledger note "renamed [to] <name>" gives the
+# table's new name.
+WITHDRAWALS_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
+                          "itemtext/withdrawals.csv")
+.ledger_cache <- NULL
+withdrawal_ledger <- function() {
+  if (!is.null(.ledger_cache)) return(.ledger_cache)
+  w <- tryCatch({
+    con <- url(WITHDRAWALS_URL)
+    on.exit(try(close(con), silent = TRUE), add = TRUE)
+    utils::read.csv(con, colClasses = "character", na.strings = character(0),
+                    encoding = "UTF-8")
+  }, error = function(e) {
+    # In CI a missing ledger would turn every tombstone it holds into a 404 on
+    # the live site, so it stops the build. Locally it reads as empty.
+    if (nzchar(Sys.getenv("CI")))
+      stop("[landing] withdrawals.csv unreadable (", conditionMessage(e), "); ",
+           "refusing to publish without the tombstones it lists.", call. = FALSE)
+    message("[landing] withdrawals.csv unreadable (", conditionMessage(e),
+            "); only landing/withdrawn.tsv is used (local preview only)")
+    NULL
+  })
+  out <- data.frame(table = character(0), dataset = character(0), date = character(0),
+                    renamed_to = character(0), stringsAsFactors = FALSE)
+  if (!is.null(w) && nrow(w)) {
+    w[] <- lapply(w, trimws)
+    w <- w[w$kind == "whole" & !startsWith(w$dataset, "irw_text") & nzchar(w$table), , drop = FALSE]
+    ren <- regmatches(w$note, regexec("renamed (?:to )?([A-Za-z0-9_-]+)", w$note, perl = TRUE))
+    out <- data.frame(table = w$table, dataset = w$dataset, date = substr(w$withdrawn, 1, 10),
+                      renamed_to = vapply(ren, function(m) if (length(m) > 1) m[2] else "",
+                                          character(1)),
+                      stringsAsFactors = FALSE)
+  }
+  assign(".ledger_cache", out, envir = globalenv())
+  out
+}
+
+# Every withdrawn table: the ledger, then withdrawn.tsv for any table the ledger
+# does not have. One row per table (case-folded, as the URL slug is), sorted.
+withdrawn_tbl <- function() {
+  local <- read_landing_list("withdrawn.tsv", c("table", "date"))
+  local$dataset <- rep("", nrow(local))      # "" = whichever dataset holds it
+  local$renamed_to <- rep("", nrow(local))
+  local <- local[c("table", "dataset", "date", "renamed_to")]
+  w <- rbind(withdrawal_ledger(), local)
+  w <- w[!duplicated(paste(tolower(w$table), w$dataset)), , drop = FALSE]
+  w[order(tolower(w$table)), , drop = FALSE]
+}
+
+# TRUE where table `tb` in dataset `ds` is withdrawn. A ledger dataset ending in
+# "*" (item_response_warehouse*) covers every dataset with that prefix.
+is_withdrawn <- function(tb, ds, w = withdrawn_tbl()) {
+  vapply(seq_along(tb), function(i) {
+    hit <- w[tolower(w$table) == tolower(tb[i]), , drop = FALSE]
+    any(!nzchar(hit$dataset) | hit$dataset == ds[i] |
+        (endsWith(hit$dataset, "*") & startsWith(ds[i], sub("\\*$", "", hit$dataset))))
+  }, logical(1))
+}
 
 # The tables that get a full landing page. `md` is irw_meta's metadata table,
 # `bib` its biblio table (the emitter appends the non-core sources' rows to both,
 # with `dataset` set; data.qmd passes the core tables alone); `live` is optionally the table names Redivis actually
-# lists, so a table still in metadata after it left Redivis gets no page.
+# lists, so a table still in metadata after it left Redivis gets no page, and a
+# withdrawn table (see withdrawn_tbl) never gets one.
 # Returns the true table names, sorted.
 page_tables <- function(md, bib, live = NULL) {
   md_names <- trimws(as.character(md$table))
   in_shard <- as.character(md$dataset) %in% names(PAGE_REF)
   lic <- setNames(as.character(bib$Derived_License), tolower(trimws(as.character(bib$table))))
   has_lic <- vapply(tolower(md_names), function(k) !blank(lic[k]), logical(1))
-  keep <- in_shard & has_lic & !(tolower(md_names) %in% tolower(withdrawn_tbl()$table))
+  keep <- in_shard & has_lic & !is_withdrawn(md_names, as.character(md$dataset))
   if (!is.null(live)) keep <- keep & tolower(md_names) %in% tolower(live)
   out <- unique(md_names[keep])
   out[order(tolower(out))]
