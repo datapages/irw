@@ -20,6 +20,8 @@ Same file names as the previous kit, so these drop straight in. Colors are the s
 | `reference/kit-navbar-test.png`, `reference/favicon-test.png` | Test renders at 1x (100% zoom). Not published. |
 | `reference/irw-brand-kit.png` | One-page overview. Not published. |
 
+The right wall runs the full height and the front column of boxes stacks in front of it; an SVG mask cuts a transparent gap in the wall around the boxes, so the layering reads on any background. The two yellow boxes sit inside the staircase (none in the corners, none floating).
+
 On dark backgrounds the flat icon's frame turns cream, and the outlined versions use cream outlines and shadow.
 
 ```html
