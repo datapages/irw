@@ -16,7 +16,8 @@
 # and GitHub Pages does not reliably serve /tables/<slug> for a <slug>.html file.
 # Same file count either way; only the path shape differs. Changing it after the
 # pages are indexed and cited is the expensive move, so it is made up front.
-# Also writes _site/tables/index.html and appends sitemap entries to _site/sitemap.xml.
+# Also writes _site/tables/index.html and _site/sitemap-tables.xml, which
+# landing/write_sitemaps.R (the next post-render step) lists in the sitemap index.
 #
 # Run as a Quarto post-render step. Skips itself (with a message, exit 0) when
 # REDIVIS_API_TOKEN is absent, so a local preview without credentials still works.
@@ -129,6 +130,15 @@ num_raw <- function(x) {
   if (is.na(v)) "-1" else sprintf("%.0f", v)
 }
 
+# The dictionary's paper-DOI cell also holds placeholders ("No DOI",
+# "Upcoming", "not yet published"), which were published as the DOI row and
+# as a JSON-LD citation of "https://doi.org/No DOI" (ben-domingue/irw#2513).
+# Keep only a DOI (10.<registrant>/...) or a URL; anything else is absent.
+clean_doi <- function(x) {
+  doi <- chr(x)
+  if (!grepl("^(https?://|(doi:\\s*)?10\\.[0-9]{4,}/)", doi, ignore.case = TRUE)) "" else doi
+}
+
 # ------------------------------------------------------------------ the inputs
 
 .read_manifest <- function() {
@@ -227,6 +237,72 @@ section <- function(title, body, id = NULL) {
   if (!nzchar(trimws(body))) return("")
   paste0("<section", if (!is.null(id)) paste0(" id=\"", id, "\"") else "", ">\n",
          "<h2>", esc(title), "</h2>\n", body, "</section>\n")
+}
+
+# Tables from the same source: the same paper DOI, or failing that the same data
+# URL. Most multi-table sources are one study released as a table per scale
+# (c19prc_uk_mcbride_2021_* is 70 of them), so their pages share most of their
+# text. Each page says what sets it apart and links its siblings. A large family
+# shows the RELATED_MAX siblings nearest in name order, a different window on each
+# page, so every page is still linked from its neighbours without every page in a
+# family carrying the same long list. `x$family` is a data frame (table, construct,
+# items) of the whole family including this table, sorted by name.
+RELATED_MAX <- 12
+
+source_key <- function(brow) {
+  if (!nrow(brow)) return(NA_character_)
+  d <- clean_doi(brow[1, "DOI__for_paper_"])
+  if (nzchar(d))
+    return(paste0("doi:", tolower(sub("^(https?://(dx\\.)?doi\\.org/|doi:\\s*)", "", d,
+                                      ignore.case = TRUE))))
+  u <- tolower(sub("/+$", "", chr(brow[1, "URL__for_data_"])))
+  if (nzchar(u)) paste0("url:", u) else NA_character_
+}
+
+related_parts <- function(x) {
+  fam <- x$family
+  if (is.null(fam) || nrow(fam) < 2) return(list(note = "", list = ""))
+  n <- nrow(fam)
+  self <- match(tolower(x$table), tolower(fam$table))
+  # A nom twin is the same responses coded differently, not a different measure,
+  # so sharing its construct does not make this table indistinguishable.
+  peers <- fam[-self, , drop = FALSE]
+  peers <- peers[tolower(peers$table) != tolower(x$twin), , drop = FALSE]
+  cn <- fam$construct[self]
+  what <- if (nzchar(cn) && !(tolower(cn) %in% tolower(peers$construct))) {
+    paste0("this one measures ", esc(cn))
+  } else {
+    # The part of the name the family does not share: enem_2020_1mil_mt in a
+    # family of enem_* tables is the "2020_1mil_mt" table.
+    tk <- strsplit(tolower(fam$table), "_", fixed = TRUE)
+    i <- 0
+    while (i < min(lengths(tk)) - 1 &&
+           length(unique(vapply(tk, `[`, character(1), i + 1))) == 1) i <- i + 1
+    if (i > 0) paste0("this one is the <code>",
+                      esc(paste(strsplit(x$table, "_", fixed = TRUE)[[1]][-(1:i)], collapse = "_")),
+                      "</code> table") else ""
+  }
+  note <- paste0("<p class=\"note\">One of ", n, " tables from the same source",
+                 if (nzchar(what)) paste0("; ", what) else "",
+                 ". The others are listed under <a href=\"#related\">Related tables</a>.</p>\n")
+
+  shown <- seq_len(n)[-self]
+  if (length(shown) > RELATED_MAX) {
+    half <- RELATED_MAX %/% 2
+    shown <- ((self - 1 + c(-half:-1, 1:half)) %% n) + 1
+    twin_i <- match(tolower(x$twin), tolower(fam$table))
+    shown <- sort(unique(c(shown, if (!is.na(twin_i)) twin_i)))
+  }
+  items <- vapply(shown, function(i) paste0(
+    "<li><a href=\"", SITE_URL, "/tables/", slug_of(fam$table[i]), "/\">", esc(fam$table[i]), "</a>",
+    if (nzchar(fam$construct[i])) paste0(" &mdash; ", esc(fam$construct[i])) else "",
+    if (grepl("_nom$", fam$table[i], ignore.case = TRUE)) " (nominal response coding)" else "",
+    if (nzchar(fam$items[i])) paste0(" &middot; ", fam$items[i], " items") else "",
+    "</li>"), character(1))
+  list(note = note, list = paste0(
+    if (length(shown) < n - 1) paste0("<p class=\"note\">", length(shown), " of the ", n - 1,
+      " other tables from this source, the nearest to this one by name.</p>\n") else "",
+    "<ul>\n", paste(items, collapse = "\n"), "\n</ul>\n"))
 }
 
 TAG_COLS <- c("age range", "child age (for child-focused studies)", "sample",
@@ -489,6 +565,8 @@ build_page <- function(x) {
       "<a href=\"", esc(href), "\">", esc(x$twin), "</a>.</p>\n")
   } else ""
 
+  related <- related_parts(x)
+
   size <- kv_rows(list(
     list(if (x$src == "comp") "Comparisons" else "Responses", num_fmt(x$m$n_responses)),
     list("Respondents",               num_fmt(x$m$n_participants)),
@@ -642,6 +720,7 @@ if (!flagged) paste0("<script type=\"application/ld+json\">\n", jsonld, "\n</scr
 "<p class=\"sub\">", esc(x$size_sentence), "</p>\n",
 banner,
 twin,
+related$note,
 section("About this table", about),
 section("Notes", notes, id = "notes"),
 section("Size and shape", size),
@@ -650,6 +729,7 @@ section("Item text", itext),
 section("Columns", vars),
 section("Get the data", access),
 section("How to cite", cite),
+section("Related tables", related$list, id = "related"),
 section("Version and provenance", prov),
 "<footer>Part of the <a href=\"", SITE_URL, "/\">Item Response Warehouse</a>, ",
 "IRW v", esc(x$irw_version), ". ",
@@ -751,29 +831,22 @@ if (!blank(date)) paste0(" on ", esc(date)) else "", ".</p></div>\n",
 "</body>\n</html>\n")
 }
 
-# ------------------------------------------------------------- sitemap merging
+# ------------------------------------------------------------------- sitemap
 
-# Quarto writes _site/sitemap.xml only when website.site-url is set. We append our
-# URLs to it rather than publishing a second sitemap, so there is one list for
-# crawlers. No <lastmod>: it would change on every render and break rule 1.
-merge_sitemap <- function(urls) {
-  sm <- file.path("_site", "sitemap.xml")
-  entries <- paste0(vapply(sort(urls), function(u)
-    paste0("  <url><loc>", u, "</loc></url>"), character(1)), collapse = "\n")
-  if (!file.exists(sm)) {
-    writeLines(c("<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
-                 "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">",
-                 entries, "</urlset>"), sm)
-    message("[landing] wrote a new sitemap.xml with ", length(urls), " URLs")
-    return(invisible(NULL))
-  }
-  txt <- paste(readLines(sm, warn = FALSE), collapse = "\n")
-  if (grepl("/tables/", txt, fixed = TRUE)) {
-    txt <- gsub("  <url><loc>[^<]*/tables/[^<]*</loc></url>\n?", "", txt)
-  }
-  txt <- sub("</urlset>", paste0(entries, "\n</urlset>"), txt, fixed = TRUE)
-  writeLines(txt, sm)
-  message("[landing] appended ", length(urls), " URLs to sitemap.xml")
+# The table pages' own sitemap, _site/sitemap-tables.xml. The site's sitemap.xml
+# is an index over it and Quarto's pages, written by landing/write_sitemaps.R,
+# which runs after this script.
+# No <lastmod>. Nothing this script reads dates a table's content: every table's
+# Redivis createdAt/updatedAt is the date of its shard's latest release (checked
+# 2026-09-30 -- all 982 tables in item_response_warehouse read that day, including
+# tables whose content hash had not changed since v60), so it would claim a whole
+# shard changed on every release. Omitting it is better than a date that lies.
+write_tables_sitemap <- function(urls) {
+  writeLines(c("<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+               "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">",
+               paste0("  <url><loc>", sort(urls), "</loc></url>"),
+               "</urlset>"), file.path("_site", "sitemap-tables.xml"))
+  message("[landing] wrote sitemap-tables.xml with ", length(urls), " URLs")
 }
 
 .assert_no_slug_collisions <- function(tables) {
@@ -900,6 +973,31 @@ main <- function() {
     }
   }
 
+  # Families of tables from the same source, for the Related tables section.
+  bi <- match(tk, bib$.k)
+  fam_key <- vapply(bi, function(i) if (is.na(i)) NA_character_ else
+                      source_key(bib[i, , drop = FALSE]), character(1))
+  cn_col <- names(tg)[gsub("[^a-z]", "", tolower(names(tg))) == "constructname"][1]
+  ti <- match(tk, tg$.k)
+  fam_df <- data.frame(
+    table = tables,
+    construct = if (is.na(cn_col)) "" else
+      vapply(ti, function(i) if (is.na(i)) "" else chr(tg[[cn_col]][i]), character(1)),
+    items = vapply(match(tk, md$.k), function(i) if (is.na(i)) "" else
+                     num_fmt(md$n_items[i]), character(1)),
+    stringsAsFactors = FALSE)
+  families <- split(seq_along(tables), fam_key)
+  families <- families[lengths(families) > 1]
+  family_of <- setNames(vector("list", length(tables)), tk)
+  for (f in families) {
+    df <- fam_df[f, , drop = FALSE]
+    df <- df[order(tolower(df$table), method = "radix"), , drop = FALSE]
+    rownames(df) <- NULL
+    for (j in f) family_of[[tk[j]]] <- df
+  }
+  message("[landing] ", sum(lengths(families)), " tables in ", length(families),
+          " multi-table sources get a Related tables section")
+
   for (tb in tables) {
     k <- tolower(tb)
     mrow <- md[md$.k == k, , drop = FALSE][1, ]
@@ -932,12 +1030,7 @@ main <- function() {
 
     slug <- slug_of(tb)
     page_url <- paste0(SITE_URL, "/tables/", slug, "/")
-    doi <- if (nrow(brow)) chr(brow[1, "DOI__for_paper_"]) else ""
-    # The dictionary's paper-DOI cell also holds placeholders ("No DOI",
-    # "Upcoming", "not yet published"), which were published as the DOI row and
-    # as a JSON-LD citation of "https://doi.org/No DOI" (ben-domingue/irw#2513).
-    # Keep only a DOI (10.<registrant>/...) or a URL; anything else is absent.
-    if (!grepl("^(https?://|(doi:\\s*)?10\\.[0-9]{4,}/)", doi, ignore.case = TRUE)) doi <- ""
+    doi <- if (nrow(brow)) clean_doi(brow[1, "DOI__for_paper_"]) else ""
     doi_url <- if (nzchar(doi)) {
       if (grepl("^https?://", doi)) doi else paste0("https://doi.org/", sub("^doi:\\s*", "", doi))
     } else ""
@@ -974,7 +1067,7 @@ main <- function() {
       keywords = c(unname(unlist(tags)),
                    switch(src, sim = "simulated data", comp = "paired comparisons",
                           nom = "nominal responses", NULL)),
-      src = src, twin = unname(twin_of[k]),
+      src = src, twin = unname(twin_of[k]), family = family_of[[k]],
       truth_cols = grep("^cov_true_", vars, value = TRUE),
       page_url = page_url,
       croissant_url = paste0(SITE_URL, "/tables/", slug, "/croissant.jsonld"),
@@ -1039,7 +1132,7 @@ main <- function() {
   rows <- rows[order(vapply(rows, function(r) tolower(r$table), character(1)))]
   writeLines(build_index(rows, irw_version), file.path(OUT_DIR, "index.html"))
   urls <- c(urls, paste0(SITE_URL, "/tables/"))
-  merge_sitemap(unique(urls))
+  write_tables_sitemap(unique(urls))
 
   flagged_n <- sum(tolower(tables) %in% names(issue_of))
   message("[landing] emitted ", length(rows), " pages (", flagged_n,
@@ -1067,8 +1160,13 @@ main <- function() {
 # the log, never the output (rule 1). Tables kept out of the sitemap -- flagged or
 # tombstoned -- cannot be checked this way, which is why withdrawn.tsv is a file.
 .warn_lost_pages <- function(emitted) {
-  live <- tryCatch(readLines(url(paste0(SITE_URL, "/sitemap.xml")), warn = FALSE),
-                   error = function(e) character(0))
+  get <- function(u) tryCatch(readLines(url(u), warn = FALSE), error = function(e) character(0))
+  live <- get(paste0(SITE_URL, "/sitemap.xml"))
+  # Since the sitemap became an index, the table URLs are one file further down.
+  if (any(grepl("<sitemapindex", live, fixed = TRUE))) {
+    kids <- regmatches(live, regexpr("https?://[^<]+\\.xml", live))
+    live <- unlist(lapply(kids, get))
+  }
   slugs <- regmatches(live, regexpr("/tables/[^/<]+/", live))
   slugs <- sub("^/tables/", "", sub("/$", "", slugs))
   lost <- setdiff(slugs, slug_of(emitted))

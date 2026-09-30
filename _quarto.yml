@@ -24,14 +24,18 @@ project:
   # REDIVIS_API_TOKEN is unset, so a credential-free local preview still renders --
   # but in CI a missing token is a hard error, because publishing without the
   # landing pages deletes them from the live site (ben-domingue/irw#2129).
+  # landing/write_sitemaps.R then turns Quarto's sitemap.xml into a sitemap index
+  # over sitemap-pages.xml (Quarto's pages, lastmod from git) and the
+  # sitemap-tables.xml the emitter wrote. Order matters: the emitter first.
   post-render:
     - Rscript landing/emit_landing_pages.R
+    - Rscript landing/write_sitemaps.R
 
 website:
   title: "Item Response Warehouse"
-  # Without this Quarto emits no sitemap.xml at all, for any page on the site.
-  # The landing-page emitter appends its URLs to that same file rather than
-  # publishing a second one.
+  # Without this Quarto emits no sitemap.xml at all, for any page on the site,
+  # and canonical-url below has no base to build from. The sitemap Quarto writes
+  # is rewritten by the post-render steps; see landing/write_sitemaps.R.
   site-url: https://itemresponsewarehouse.org
   google-analytics: G-NM0Y0TP4RY
   navbar:
@@ -131,6 +135,10 @@ format:
       body-width: 1200px
       margin-width: 0px
     callout-icon: false
+    # A <link rel="canonical"> on every page, from site-url. Directory index
+    # pages get their clean URL (/, /vignettes/), so /index.html is not a second
+    # page to a crawler. The table pages write their own.
+    canonical-url: true
     df-print: kable
     code-fold: true
 
