@@ -13,7 +13,12 @@ kit sheet.
 | `irw-wordmark.svg` | "IRW", where the full name is already on the page. |
 | `*-dark.svg` | The same, for dark backgrounds. |
 
-Generated from the SVGs above, not part of the designer's kit (re-export if the SVGs change):
-`favicon.ico` (16/32/48), `favicon-16.png`, `favicon-32.png`, `icon-192.png`, `icon-512.png`
-(icon, transparent); `apple-touch-icon.png` (icon on off-white, 180px); `og-image.png`
-(1200×630, two-line lockup on off-white, for link previews).
+| `irw-favicon-16.svg` | Simplified, pixel-aligned icon, drawn for 16px. |
+| `favicon.ico` | 16 (simplified) + 32 + 48. Also copied to the site root. |
+| `favicon-16.png`, `favicon-32.png` | Browser-tab icons. |
+| `apple-touch-icon.png` | 180×180, icon on off-white, for phone home screens. |
+| `icon-192.png`, `icon-512.png` | Web-app manifest icons (transparent). |
+| `og-image.png` | 1200×630 link-preview card (the one the site uses). |
+| `og-image-dark.png` | The same card on navy; not used by the site. |
+
+All files come from the designer's kit; none are generated here.
