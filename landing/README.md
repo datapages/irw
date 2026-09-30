@@ -81,6 +81,50 @@ where the column is blank. It says nothing about citing the IRW itself: what
 counts as a release is unsettled (irw#1870, irw#2317), and a citation form
 invented here would have to be withdrawn from every page later.
 
+## Related tables
+
+A table that shares its source with other tables -- the same paper DOI, or
+failing that the same data URL -- gets a sentence under its title saying what
+sets it apart, and a **Related tables** section linking its siblings. On
+2026-09-30 that was 3,938 of 4,592 pages, in 745 sources of up to 104 tables;
+most multi-table sources are one study released as a table per scale
+(`c19prc_uk_mcbride_2021_*`, `chile_2024_safety_*`), and those pages otherwise
+share most of their text.
+
+The sentence names the table's `construct_name` when no other sibling has the
+same one, and otherwise the part of the table name the family does not share
+(`enem_2019_1mil_mt` in a family of `enem_*` tables is the `2019_1mil_mt`
+table). A `_nom` twin does not count as a sibling with the same construct: it
+is the same responses coded differently, and the existing twin sentence says so.
+A source with more than 12 other tables lists the 12 nearest by name, so each
+page shows a different window and every page is still linked from its
+neighbours. Everything comes from `biblio`, `tags` and `metadata`; nothing new
+is recorded.
+
+A generic data URL groups loosely: `openpsychometrics.org/_rawdata` puts 21
+unrelated scales in one family, and a CRAN package page groups that package's
+example datasets. "From the same source" is still true of them.
+
+## Sitemaps
+
+`https://itemresponsewarehouse.org/sitemap.xml`, the URL `robots.txt` names and
+Search Console holds, is a sitemap index over two files:
+
+- `sitemap-tables.xml`, written by this emitter: `/tables/` and every page
+  except the flagged and tombstoned ones. No `<lastmod>`: nothing the emitter
+  reads dates a table's content. Redivis' `updatedAt` is the shard's latest
+  release date for every table in it, so it would claim hundreds of unchanged
+  tables changed on every release.
+- `sitemap-pages.xml`, written by `write_sitemaps.R` (the next post-render
+  step) from the sitemap Quarto just wrote. `<lastmod>` is the last commit to the
+  page's source or anything it `{{< include >}}`s, which needs full history
+  (the publish workflow checks out with `fetch-depth: 0`; a shallow clone gets no
+  lastmod at all). Directory index pages are listed as `/` and `/vignettes/`,
+  matching their canonical tags. Pages with a robots `noindex` are left out.
+
+`write_sitemaps.R` fails the build if either file passes the protocol's 50,000
+URLs or 50MB.
+
 ## URLs
 
 Pages live at `/tables/<slug>/`, served from `<slug>/index.html`, with the
