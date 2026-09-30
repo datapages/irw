@@ -1,21 +1,19 @@
-# IRW logos (draft — test run)
+# IRW logos
 
-The mark is a low-roofed warehouse holding a 5×14 response matrix. Purple cells are correct
-responses and they spell IRW, almost: two yellow cells are unexpected correct answers and two
-letter cells are missing. Colors come from the site palette (purple #8352ff, yellow #ffca3a,
-ink #1c1c22, cream #fff3e2).
+A warehouse holding a staircase of item responses, with a couple of surprises in gold.
+Colors: indigo #4B3FB8, gold #F7C948, off-white #FAF9F6, navy #0E2A40. Type: Montserrat
+(Bold for the logo), set as outlines in the SVGs. `reference/irw-brand-kit.png` is the full
+kit sheet.
 
 | File | Use |
 | --- | --- |
-| `irw-logo.svg` | Main logo on light backgrounds (site header, home page, slides, papers). ≥ 48px tall. |
-| `irw-logo-dark.svg` | Main logo on dark backgrounds (outlines and shadow in cream). |
-| `irw-icon.svg` | Icon for small spaces where the letters can't be read. |
-| `irw-icon-dark.svg` | Icon on dark backgrounds. |
-| `favicon.ico`, `favicon-16.png`, `favicon-32.png` | Browser tab icons. |
-| `apple-touch-icon.png` | 180×180, icon on cream, for iOS home screens. |
-| `icon-192.png`, `icon-512.png` | Web-app manifest icons (transparent). |
-| `irw-logo.png`, `irw-logo-dark.png` | 1200px-wide raster versions for places that can't take SVG. |
-| `og-image.png` | 1200×630 social-sharing card (logo on cream). |
+| `irw-lockup.svg` | Icon + two-line name. Site navbar (44px tall; 36px on phones). |
+| `irw-lockup-oneline.svg` | Icon + one-line name, for wide, short spaces. |
+| `irw-icon.svg` | Icon alone: favicons, avatars, anywhere space is tight. |
+| `irw-wordmark.svg` | "IRW", where the full name is already on the page. |
+| `*-dark.svg` | The same, for dark backgrounds. |
 
-Rules: keep at least 32px of clear space around the logo; don't recolor, stretch, or remove the
-outline/shadow; below ~48px tall use the icon instead of the logo.
+Generated from the SVGs above, not part of the designer's kit (re-export if the SVGs change):
+`favicon.ico` (16/32/48), `favicon-16.png`, `favicon-32.png`, `icon-192.png`, `icon-512.png`
+(icon, transparent); `apple-touch-icon.png` (icon on off-white, 180px); `og-image.png`
+(1200×630, two-line lockup on off-white, for link previews).
