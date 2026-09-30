@@ -21,8 +21,9 @@
 #   The ledger wins even while Redivis still serves the table (a withdrawal is
 #   recorded before its release): on 2026-09-30 that included nine tables withdrawn
 #   for publishing personal data. A ledger row applies to the dataset it names, so
-#   a name reused in another shard keeps its page. To reinstate a table, remove or
-#   amend its ledger row.
+#   a name reused in another shard keeps its page. A table rebuilt and re-released
+#   after its withdrawal is listed in landing/reinstated.tsv until the ledger can
+#   record that itself.
 
 # Shard name -> Redivis scoped reference. Mirrors the map in _load-data-explore.qmd;
 # authoritative source is IRW_CORE_DATASETS in ben-domingue/irw metadata/redivis_config.R.
@@ -132,7 +133,12 @@ withdrawn_tbl <- function() {
   local$dataset <- rep("", nrow(local))      # "" = whichever dataset holds it
   local$renamed_to <- rep("", nrow(local))
   local <- local[c("table", "dataset", "date", "renamed_to")]
-  w <- rbind(withdrawal_ledger(), local)
+  # A ledger row for a table since rebuilt and re-released (landing/reinstated.tsv)
+  # no longer counts. The ledger itself cannot say so yet.
+  back <- tolower(read_landing_list("reinstated.tsv", c("table", "ref"))$table)
+  ledger <- withdrawal_ledger()
+  ledger <- ledger[!(tolower(ledger$table) %in% back), , drop = FALSE]
+  w <- rbind(ledger, local)
   w <- w[!duplicated(paste(tolower(w$table), w$dataset)), , drop = FALSE]
   w[order(tolower(w$table)), , drop = FALSE]
 }
