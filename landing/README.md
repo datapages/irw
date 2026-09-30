@@ -34,8 +34,9 @@ pages) source it, so the two cannot drift. The rules were settled by Ben on
   `noindex`; a table the ledger notes as "renamed to X" also links X when X has a
   page. The ledger wins even while Redivis still serves the table, since a
   withdrawal is recorded before its release. A row applies only to the dataset it
-  names, so a name reused in another shard keeps its page. To reinstate a table,
-  remove or amend its ledger row. In CI an unreadable ledger stops the build. The
+  names, so a name reused in another shard keeps its page. A table rebuilt and
+  re-released after its withdrawal goes in `reinstated.tsv` (the ledger has no
+  field for it yet), which gives it its page back. In CI an unreadable ledger stops the build. The
   build log warns about any table on the live sitemap that is about to lose its
   page with no tombstone.
 
