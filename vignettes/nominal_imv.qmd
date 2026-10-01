@@ -206,6 +206,8 @@ How far orange gets toward grey varies a lot. The nested logit's gain is `r pct(
 
 ## Does it predict which option is chosen?
 
+Now the bet changes. Instead of right or wrong, the outcome on each held-out cell is the option chosen, scored with the multinomial IMV. The 2PL and Rasch enter with the "+ shares" rule: their P(key), with the rest split among the distractors by how popular each was on the training cells. Grey is again the yardstick, here the Rasch → 2PL gain on the same multinomial scale.
+
 ```{r}
 #| label: fig-option
 #| fig-cap: "Out-of-sample multinomial IMV, for the option chosen on held-out cells. The baseline for the option models is 2PL + shares. Points pool the five folds; bars span the fold-to-fold range."
@@ -216,6 +218,11 @@ dot_plot(c(cat_yard = "cat_rasch_to_2pl", cat_nom = "cat_twopl_to_nom", cat_nest
          c("Rasch + shares → 2PL + shares", "2PL + shares → nominal", "2PL + shares → nested logit"),
          c(col_yard, col_nom, col_nest), "IMV for the held-out option chosen")
 ```
+
+
+Judged on the option chosen, the option models beat 2PL + shares on every table. That is not guaranteed, because the baseline already knows how popular each distractor is. On `r length(cat_over_yard)` of the `r n_tab` tables (`r and_list(cat_over_yard)`), the nested logit's gain over 2PL + shares is larger than the gain from adding discrimination on the same scale.
+
+That gain mixes two things: predicting the key better, which the first section already measured, and predicting which distractor is chosen. @fig-wrong isolates the second. It keeps only the held-out cells answered wrongly and asks which wrong answer was chosen. The baseline is the distractors' shares alone, which know nothing about θ, so this IMV measures what knowing θ tells you about the choice of distractor.
 
 ```{r}
 #| label: fig-wrong
@@ -228,9 +235,8 @@ dot_plot(c(wr_nom = "wrong_shares_to_nom", wr_nest = "wrong_shares_to_nest"),
          c(col_nom, col_nest), "IMV for which wrong answer was chosen")
 ```
 
-Judged on the option chosen, the option models beat 2PL + shares on every table. That is not guaranteed: the baseline already knows each distractor's popularity, so the option models win only to the extent that θ shifts the choice among distractors. On `r length(cat_over_yard)` of the `r n_tab` tables (`r and_list(cat_over_yard)`), the nested logit's gain over 2PL + shares is larger than the gain from adding discrimination on the same scale.
 
-The last figure isolates the distractors. Among held-out wrong answers, θ predicts which one was chosen on every table, with IMVs from `r f4(min(summ$wr_nest))` to `r f4(max(summ$wr_nest))`. That is a median `r round(median(summ$wr_nest / summ$nest))` times the right/wrong gain on the same table. The two IMVs are for different outcomes, so the ratio is only a rough guide, but the gap is too large to be an artefact of scale. The nominal model and the nested logit are indistinguishable here, as expected, since both model the choice among distractors the same way. The wrong answers carry far more information about *which wrong answer* comes next than about *whether* the next answer is wrong. They enter a right/wrong prediction only through θ, and θ is already well estimated from the scores.
+Among held-out wrong answers, θ predicts which one was chosen on every table, with IMVs from `r f4(min(summ$wr_nest))` to `r f4(max(summ$wr_nest))`. That is a median `r round(median(summ$wr_nest / summ$nest))` times the right/wrong gain on the same table. The two IMVs are for different outcomes, so the ratio is only a rough guide, but the gap is too large to be an artefact of scale. The nominal model and the nested logit are indistinguishable here, as expected, since both model the choice among distractors the same way. The wrong answers carry far more information about *which wrong answer* comes next than about *whether* the next answer is wrong. They enter a right/wrong prediction only through θ, and θ is already well estimated from the scores.
 
 ## Who gains?
 
