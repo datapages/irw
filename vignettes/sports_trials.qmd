@@ -79,7 +79,12 @@ The punchline is that selection does not run in a single direction. In some sett
 
 ## Data
 
-- **NBA shots**: every field-goal attempt of the 2023-24 regular season, from NBA.com via [Samangy's collection](https://github.com/DomSamangy/NBA_Shots_04_23) [@samangy2024shots]. These files carry no licence, so they are not in the IRW. We read them at compute time and keep only the aggregates shown here. Shooters with at least 100 attempts are retained. The item is the court zone; we also have the distance, the kind of shot (`action`: dunk, layup, pull-up jumper and so on), the game clock and home court.
+::: {.callout-important}
+## The NBA shot data are not in the IRW
+The NBA.com shot files used here, as compiled in [Samangy's collection](https://github.com/DomSamangy/NBA_Shots_04_23), come with no clear licence. Without one, the IRW cannot redistribute them. We analyse them because they are the real version of the problem in [`nbashots_sim`](https://itemresponsewarehouse.org/tables/nbashots_sim/). This page and its cached results hold only aggregates (SDs, correlations, IMVs, decile averages), with no shots and no players. Anyone who wants to rerun the NBA analysis must download the files from the source. The other four tables are in the IRW.
+:::
+
+- **NBA shots**: every field-goal attempt of the 2023-24 regular season, from NBA.com via [Samangy's collection](https://github.com/DomSamangy/NBA_Shots_04_23) [@samangy2024shots]. Not in the IRW (see the note above): the analysis reads the files when it runs and keeps only aggregates. Shooters with at least 100 attempts are retained. The item is the court zone; we also have the distance, the kind of shot (`action`: dunk, layup, pull-up jumper and so on), the game clock and home court.
 - **NFL kicks**: field goals and extra points, 2015–2025, from [`nflverse_kicks`](https://itemresponsewarehouse.org/tables/nflverse_kicks/) [@nflverse]. 2015 is when the extra point moved back to 33 yards. Kickers with at least 20 attempts are retained. The item is the distance band (or extra point), plus exact distance, roof, wind, score and playoff. Kickers do not choose their kicks. A team usually has one kicker, and the coach decides whether to try a field goal at all, so a strong kicker gets to try kicks from distances where a coach with a weaker kicker would punt or go for it.
 - **NFL passes**: pass attempts, 2016–2025, from [`nflverse_passes`](https://itemresponsewarehouse.org/tables/nflverse_passes/) [@nflverse]. Passers with at least 100 throws are retained. The item is depth × direction (e.g., `deep_left`), plus air yards, down, distance to go, field position, shotgun and score.
 - **Soccer shots**: all shots in the 2017-18 seasons of five European leagues, the 2018 World Cup and Euro 2016, from [`wyscout_shots`](https://itemresponsewarehouse.org/tables/wyscout_shots/) [@pappalardo2019wyscout]. Players with at least 20 shots are retained. The item is foot, head, free kick or penalty, plus distance, the angle the goal mouth subtends, counter-attack, the clock and home side.
@@ -87,10 +92,10 @@ The punchline is that selection does not run in a single direction. In some sett
 
 ```{r}
 #| label: tbl-data
-#| tbl-cap: "The five tables as analysed."
+#| tbl-cap: "The five tables as analysed. The NBA shots are not in the IRW (no clear licence); the other four are IRW tables."
 
 tibble(
-  Domain = unname(domains),
+  Domain = ifelse(names(domains) == "nba", "NBA shots (not in the IRW)", unname(domains)),
   Person = c(nba = "shooter", kicks = "kicker", passes = "passer",
              soccer = "shooter", geo = "learner")[names(domains)],
   Item = c(nba = "court zone (5)", kicks = "distance band, or extra point (5)",
@@ -285,4 +290,4 @@ This is not to say that the adjusted estimates are the "true" skill. Every model
 
 ## Reproducing this
 
-The analysis script is `sports_trials_compute.R`. The four IRW tables are fetched with `irw::irw_fetch()`. The NBA shots are read from [Samangy's collection](https://github.com/DomSamangy/NBA_Shots_04_23) at run time; nothing from them is stored here except the aggregates shown on this page. Results were computed on `r date_run`.
+The analysis script is `sports_trials_compute.R`. The four IRW tables are fetched with `irw::irw_fetch()`. The NBA shots are not in the IRW, because the files have no clear licence. The script reads them from [Samangy's collection](https://github.com/DomSamangy/NBA_Shots_04_23) when it runs (set `NBA_DIR` to use a local copy), and nothing from them is stored here except the aggregates shown on this page. Results were computed on `r date_run`.
