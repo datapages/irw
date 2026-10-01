@@ -64,20 +64,13 @@ label_of <- function(tn) {
   }
   if (tn %in% names(LABELS)) LABELS[[tn]] else tn
 }
-short_of <- function(lab) {
-  lab <- sub("^ENEM 2013 ", "ENEM ", lab)
-  lab <- sub("Reading the Mind in the Eyes \\(RMET\\)", "RMET", lab)
-  lab <- sub("Vocabulary IQ test \\(VIQT\\)", "VIQT", lab)
-  lab <- sub("Residency exam \\((paper|computer)\\)", "Residency (\\1)", lab)
-  sub("natural sciences", "nat. sciences", lab)
-}
 family_of <- function(tn) ifelse(grepl("^enem_", tn), "ENEM", "Other tests")
 
 summ <- bind_rows(lapply(fitted, function(r) {
   f <- r$imv_by_fold
   tibble(
-    table = r$table, label = label_of(r$table), short = short_of(label_of(r$table)),
-    family = family_of(r$table), n = r$n_persons, n_full = r$n_full, items = r$n_items, p = r$p_correct,
+    table = r$table, label = label_of(r$table), family = family_of(r$table),
+    n = r$n_persons, n_full = r$n_full, items = r$n_items, p = r$p_correct,
     dense = !is.null(r$dense_block),
     yard = r$imv_all[["rasch_to_2pl"]], nom = r$imv_all[["twopl_to_nom"]],
     nest = r$imv_all[["twopl_to_nest"]],
@@ -183,9 +176,18 @@ A 2PL predicts only P(key), so to enter this comparison it needs a rule for the 
 
 ## Does knowing the wrong answers predict right/wrong better?
 
+All three comparisons in @fig-gains are the same bet: on each held-out cell, which model gave the better probability that the respondent chose the key? Each model makes that prediction from its own θ, estimated from the respondent's visible cells. The 2PL and Rasch read P(key) straight off their item curves. The nominal model and the nested logit predict a probability for every option, and we keep only the key's; all the wrong options together make up "incorrect". So the option models are scored on right/wrong exactly as the 2PL is.
+
+Moving from the 2PL to an option model changes two things at once:
+
+- **θ.** The option models estimate θ from which wrong answers a respondent chose, not just whether they were wrong, so two people with the same score can get different θs.
+- **The key's curve.** In the nominal model the key is one category of a softmax over all the options, so its curve depends on every distractor's slope and intercept and need not have the 2PL's shape. The nested logit keeps the 2PL's curve for the key and uses the distractors only below it.
+
+So the orange dot (2PL → nested logit) is close to the value of the better θ alone. The blue dot (2PL → nominal) is the better θ plus whatever re-drawing the key's curve adds or costs. The gap between them is the price, or payoff, of that new curve.
+
 ```{r}
 #| label: fig-gains
-#| fig-cap: "Out-of-sample binary IMV for three model comparisons. Points pool the five folds; bars span the fold-to-fold range."
+#| fig-cap: "Out-of-sample binary IMV for three model comparisons. Blue: the nominal model changes both θ and the key's curve. Orange: the nested logit changes θ but keeps the 2PL's curve for the key. Points pool the five folds; bars span the fold-to-fold range."
 #| fig-height: 8
 #| fig-width: 9
 
@@ -198,29 +200,9 @@ Knowing which wrong answers a respondent chose elsewhere always helps, but only 
 
 The bars show the spread across folds, which understates the uncertainty. Refitting with a different random split into folds moved some of these IMVs by up to about 0.001 (ENEM humanities, 2PL → nested, went from .0041 to .0035). Read differences smaller than that as ties.
 
-The nested logit also matches or beats the nominal model on `r sum(summ$nest >= summ$nom)` of the `r n_tab` tables`r if (length(nom_wins)) paste0(" (the exception", if (length(nom_wins) > 1) "s are " else " is ", and_list(nom_wins), ", by a hair)") else ""`, often by a wide margin. The nominal model gives the key its own slope and intercept, which lets the key's curve drift from the 2PL's shape. The nested logit keeps the 2PL curve for the key and models only the choice among distractors. For predicting right and wrong, that is the better way to use the extra information.
+The nested logit also matches or beats the nominal model on `r sum(summ$nest >= summ$nom)` of the `r n_tab` tables`r if (length(nom_wins)) paste0(" (the exception", if (length(nom_wins) > 1) "s are " else " is ", and_list(nom_wins), ", by a hair)") else ""`. Apart from that exception, blue sits at or left of orange, so re-drawing the key's curve mostly costs accuracy rather than adding it. The cost is clearest on EdNet listening and the computer-based residency exam, where the nominal model spends most of what the distractors add to θ on a noisier curve for the key. For predicting right and wrong, the better way to use the distractors is to let them inform θ and leave the key's curve alone.
 
-```{r}
-#| label: fig-share
-#| fig-cap: "The nested logit's gain as a share of the Rasch → 2PL gain, against the proportion of responses correct."
-#| fig-height: 5
-#| fig-width: 8.5
-
-ggplot(summ, aes(p, share, colour = family)) +
-  geom_hline(yintercept = 0, colour = "grey80") +
-  geom_point(size = 3) +
-  geom_text(aes(label = short), size = 3.2, colour = "grey25", hjust = 0, nudge_x = 0.008,
-            vjust = ifelse(summ$short %in% c("ENEM humanities", "Residency (paper)", "ICAR ability items",
-                                             "Multiracial RMET"), -0.6,
-                    ifelse(summ$short %in% c("ENEM languages", "Residency (computer)", "RMET"), 1.5, 0.5)),
-            show.legend = FALSE) +
-  scale_colour_manual(values = c(ENEM = col_nest, `Other tests` = col_nom), name = NULL) +
-  scale_y_continuous(labels = scales::percent, limits = c(0, NA)) +
-  scale_x_continuous(labels = scales::percent, limits = c(0.2, 0.95)) +
-  labs(x = "Responses correct", y = "Distractor gain ÷ discrimination gain")
-```
-
-Scaled by the yardstick, the wrong answers are worth between `r pct(low_share$share)` (`r low_share$label`) and `r pct(top_share$share)` (`r top_share$label`) of what item discrimination is worth. The share has no clear relation to how hard the test is. It is lowest on the two residency exams. These are the longest tests here, at around 100 items, so a likely reason is that θ is already well estimated from the right/wrong scores alone, leaving the distractors little to add.
+How far orange gets toward grey varies a lot. The nested logit's gain is `r pct(top_share$share)` of the Rasch → 2PL gain on `r top_share$label` but only `r pct(low_share$share)` on the `r low_share$label`. The "Nested ÷ yardstick" column of @tbl-results gives it for every table; it has no clear relation to how hard the test is. It is lowest on the two residency exams. These are the longest tests here, at around 100 items, so a likely reason is that θ is already well estimated from the right/wrong scores alone, leaving the distractors little to add.
 
 ## Does it predict which option is chosen?
 
@@ -296,7 +278,7 @@ summ |>
   arrange(family, desc(nest)) |>
   transmute(Table = paste0(label, ifelse(dense, " †", "")), N = format(n, big.mark = ","),
             Items = items, `% correct` = pct(p),
-            `Rasch → 2PL` = f4(yard), `2PL → nested` = f4(nest), `Share` = pct(share),
+            `Rasch → 2PL` = f4(yard), `2PL → nested` = f4(nest), `Nested ÷ yardstick` = pct(share),
             `Option: 2PL + shares → nested` = f4(cat_nest),
             `Wrong answer: shares → nested` = f4(wr_nest)) |>
   knitr::kable(align = "lrrrrrrrr")
