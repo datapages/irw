@@ -54,10 +54,12 @@ reason CI does not have, and a local pass is no guarantee either. Rendering a
 single page (`quarto render data.qmd`) is unaffected and is usually what you
 want while iterating.
 
-Note also that `_quarto.yml` declares a `post-render` step
-(`landing/emit_landing_pages.R`, which generates the per-table pages under
-`_site/tables/`). Post-render runs only after a **successful** render, so a
-broken vignette silently means no landing pages are emitted.
+Note also that `_quarto.yml` declares two `post-render` steps:
+`landing/emit_landing_pages.R`, which generates the per-table pages under
+`_site/tables/` and `sitemap-tables.xml`, then `landing/write_sitemaps.R`, which
+turns Quarto's `sitemap.xml` into a sitemap index (see `landing/README.md`).
+Post-render runs only after a **successful** render, so a broken vignette
+silently means no landing pages are emitted.
 
 ## Architecture
 

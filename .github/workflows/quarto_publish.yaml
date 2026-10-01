@@ -97,6 +97,12 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          # Full history: landing/write_sitemaps.R dates each page's sitemap
+          # <lastmod> by the last commit to its source. In the default depth-1
+          # clone every file's last commit is the same one, and it would omit
+          # lastmod rather than publish that.
+          fetch-depth: 0
 
       # No tracked file over 5 MB (ben-domingue/irw#1719, 17.1). A vignette
       # result that big goes to the `vignette-data` release and is fetched at
@@ -153,8 +159,9 @@ jobs:
           # pages -- see landing/emit_landing_pages.R (ben-domingue/irw#2129).
           REDIVIS_API_TOKEN: ${{ secrets.REDIVIS_API_TOKEN }}
 
-      # _site/ carries CNAME (copied from the repo root), robots.txt, sitemap.xml
-      # and the landing pages emitted by the post-render step. The custom domain
+      # _site/ carries CNAME (copied from the repo root), robots.txt, the
+      # sitemap index (sitemap.xml -> sitemap-pages.xml, sitemap-tables.xml) and
+      # the landing pages emitted by the post-render steps. The custom domain
       # itself is the Pages setting, not this file.
       - name: Upload the site
         uses: actions/upload-pages-artifact@v3

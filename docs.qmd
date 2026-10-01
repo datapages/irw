@@ -318,12 +318,18 @@ row <- function(ds) {
     )
   } else ""
 
+  # The data-URL column also holds non-URLs ("Author Permission"), which as an
+  # href became a relative link to a page that does not exist. Only a URL links.
+  src <- if (!is.na(ds$url) && grepl("^https?://", trimws(ds$url)))
+    glue('<a href="{trimws(ds$url)}" target="_blank">link</a>')
+  else if (!is.na(ds$url)) ds$url else ""
+
   glue(
     '
     <tr class="dataset-item">
       <td><strong>{ds$dataset}</strong></td>
       <td>{ds$description} {lic} <i>{ds$reference}</i></td>
-      <td><a href="{ds$url}" target="_blank">link</a></td>
+      <td>{src}</td>
       <td>{citation_button}</td>
     </tr>
     '
