@@ -1,0 +1,288 @@
+---
+title: "Who Takes the Hard Shot? Skill and Selection in Sports Trial Data"
+description: |
+  Shooters, kickers and quarterbacks choose their attempts, so a raw success
+  rate mixes skill with the difficulty of what was attempted. Using NBA shots,
+  NFL kicks and passes, soccer shots and an online map-practice system, we fit a
+  ladder of explanatory IRT models that add what is known about each attempt and
+  ask how much the picture of who is good changes.
+date: today
+bibliography: sports_trials_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+step_cols <- c(M0 = "#c6dbef", M1 = "#6baed6", M2 = "#2171b5", M3 = "#08306b")
+
+cache_path <- "sports_trials_data/results.rds"
+cache_ok   <- file.exists(cache_path)
+if (cache_ok) {
+  .cache   <- readRDS(cache_path)
+  res      <- .cache$results
+  date_run <- .cache$date_run
+} else {
+  res      <- list()
+  date_run <- Sys.Date()
+}
+domains <- c(nba = "NBA shots", kicks = "NFL kicks", passes = "NFL passes",
+             soccer = "Soccer shots", geo = "Map practice")
+domains <- domains[names(domains) %in% names(res)]
+
+ladder <- bind_rows(lapply(names(domains), function(k)
+  mutate(res[[k]]$ladder, domain = domains[[k]])))
+imv_tab <- bind_rows(lapply(names(domains), function(k)
+  mutate(res[[k]]$imv, domain = domains[[k]])))
+stab <- bind_rows(lapply(names(domains), function(k)
+  mutate(res[[k]]$stability, domain = domains[[k]])))
+sel <- bind_rows(lapply(names(domains), function(k) {
+  s <- res[[k]]$selection
+  tibble(domain = domains[[k]], r_skill_ease = s$cor_skill_easiness,
+         r_raw_ease = s$cor_raw_easiness, r_skill_raw = s$cor_skill_raw)
+}))
+deciles <- bind_rows(lapply(names(domains), function(k)
+  mutate(res[[k]]$selection$by_decile, domain = domains[[k]])))
+f2 <- function(x) formatC(x, format = "f", digits = 2)
+f3 <- function(x) formatC(x, format = "f", digits = 3)
+num <- function(x) format(x, big.mark = ",")
+pick <- function(tab, d, m, col) tab[[col]][tab$domain == domains[[d]] & tab$model == m]
+L <- function(d, m, col = "person_sd") f2(pick(ladder, d, m, col))
+S <- function(d, col) f2(sel[[col]][sel$domain == domains[[d]]])
+H <- function(d, m) f2(pick(stab, d, m, "split_half_r"))
+IM <- function(d, m, col = "imv_vs_prev") f3(pick(imv_tab, d, m, col))
+```
+
+A free throw is an item in the textbook sense: every shooter faces the same 15 feet, with no defender. Every other shot is not. A player chooses where to shoot from, and that choice depends on who the player is (a center lives near the rim), how good they are, and the game. So a shooting percentage mixes two things: how well someone shoots, and how hard the shots they chose were. This is but one example of a more general problem. Whenever respondents choose their own trials, or someone chooses for them, raw accuracy is a blend of skill and selection.
+
+The IRW has a simulated version of this problem, [`nbashots_sim`](https://itemresponsewarehouse.org/tables/nbashots_sim/), which the course's [trials lesson](https://ben-domingue.github.io/irw-course/lessons/trials.html) uses. There the true skills are known, so one can check how well an explanatory model recovers them. In that simulation, better shooters take harder shots by design, and adjusting for the shot widens the spread of skill. This vignette asks what the same analysis looks like in real data, where nobody hands us the truth. We use five sources: NBA shots, NFL kicks and passes, soccer shots and, as a non-sport case, slepemapy.cz, an online system for practising geography on maps that picks each learner's next question. In each one the `item` is a loose grouping of attempts (a court zone, a distance band, a body part), and each attempt comes with detailed information about where and when it happened.
+
+The punchline is that selection does not run in a single direction. In some settings the harder attempts go to the better performers, and raw rates understate how different people are. In others, raw rates mostly reward people for having taken easy attempts, and they overstate it.
+
+## Data
+
+- **NBA shots**: every field-goal attempt of the 2023-24 regular season, from NBA.com via [Samangy's collection](https://github.com/DomSamangy/NBA_Shots_04_23) [@samangy2024shots]. These files carry no licence, so they are not in the IRW. We read them at compute time and keep only the aggregates shown here. Shooters with at least 100 attempts are retained. The item is the court zone; we also have the distance, the kind of shot (`action`: dunk, layup, pull-up jumper and so on), the game clock and home court.
+- **NFL kicks**: field goals and extra points, 2015–2025, from [`nflverse_kicks`](https://itemresponsewarehouse.org/tables/nflverse_kicks/) [@nflverse]. 2015 is when the extra point moved back to 33 yards. Kickers with at least 20 attempts are retained. The item is the distance band (or extra point), plus exact distance, roof, wind, score and playoff. Kickers do not choose their kicks. A team usually has one kicker, and the coach decides whether to try a field goal at all, so a strong kicker gets to try kicks from distances where a coach with a weaker kicker would punt or go for it.
+- **NFL passes**: pass attempts, 2016–2025, from [`nflverse_passes`](https://itemresponsewarehouse.org/tables/nflverse_passes/) [@nflverse]. Passers with at least 100 throws are retained. The item is depth × direction (e.g., `deep_left`), plus air yards, down, distance to go, field position, shotgun and score.
+- **Soccer shots**: all shots in the 2017-18 seasons of five European leagues, the 2018 World Cup and Euro 2016, from [`wyscout_shots`](https://itemresponsewarehouse.org/tables/wyscout_shots/) [@pappalardo2019wyscout]. Players with at least 20 shots are retained. The item is foot, head, free kick or penalty, plus distance, the angle the goal mouth subtends, counter-attack, the clock and home side.
+- **Map practice**: answers from slepemapy.cz, a Czech website for practising geography (finding and naming places on maps), from [`geography`](https://itemresponsewarehouse.org/tables/geography/) [@papousek2016geography]. We use a random sample of 5,000 users with at least 20 answers. The item is the place asked (1,458 of them); we also have the number of options offered (2–6, or open) and the question type (find the place vs. name it). This is adaptive practice, not an adaptive test. The system updates its estimate of what the learner knows after each answer and picks the next question, including how many options to offer, to keep the learner succeeding most of the time without making the questions trivial. Its goal is learning rather than measurement, but the consequence is the same: learners it thinks are strong get harder questions (fewer options, or none). "I don't know" answers are missing in the IRW table and are dropped.
+
+```{r}
+#| label: tbl-data
+#| tbl-cap: "The five tables as analysed."
+
+tibble(
+  Domain = unname(domains),
+  Person = c(nba = "shooter", kicks = "kicker", passes = "passer",
+             soccer = "shooter", geo = "learner")[names(domains)],
+  Item = c(nba = "court zone (5)", kicks = "distance band, or extra point (5)",
+           passes = "depth × direction (12)", soccer = "foot, head, free kick, penalty",
+           geo = "place asked (random effect)")[names(domains)],
+  Persons = sapply(names(domains), function(k) num(res[[k]]$desc$n_persons)),
+  Attempts = sapply(names(domains), function(k) num(res[[k]]$desc$n_attempts)),
+  `Success rate` = sapply(names(domains), function(k) f2(res[[k]]$desc$rate))
+) |> knitr::kable()
+```
+
+## Models
+
+For each domain we fit a ladder of Rasch-style logistic mixed models with `lme4` [@bates2015lme4], with a random intercept for the person:
+
+- **M0**: person only. The person effect is, roughly, a shrunken success rate.
+- **M1**: adds the item, as fixed effects (a random effect for map practice, which has 1,458 places).
+- **M2**: adds a continuous description of the attempt's difficulty: a spline of distance (NBA, kicks), of air yards (passes), of distance and angle (soccer), or the number of options and question type (map practice).
+- **M3**: adds the context of the attempt: game situation, conditions and, for the NBA, the kind of shot. Map practice has no M3, since the IRW table records no context.
+
+From these we take four things. The person SD and the rank order of person effects say how the picture of who is good changes. A 5-fold out-of-sample InterModel Vigorish [IMV, @domingue2024imvirt] says how much each step improves prediction. A selection diagnostic says who takes the hard attempts. Split-half reliability says whether the person effect behaves like a trait.
+
+The selection diagnostic works as follows. We fit the M2 terms without a person effect and use the result to give each attempt an expected log-odds of success, its "easiness." We then average easiness within each person and correlate that average with the person effects from M0 and from the fullest model.
+
+```{r}
+#| label: tbl-formulas
+#| results: asis
+#| tbl-cap: "The fullest model in each domain. The models are nested: M0 is `resp ~ (1 | id)`, and each shaded block is the set of terms that step adds. `ns(x, k)` is a natural spline with k degrees of freedom."
+
+step_bg <- c(M1 = "#deebf7", M2 = "#9ecae1", M3 = "#4292c6")
+step_fg <- c(M1 = "#08306b", M2 = "#08306b", M3 = "#ffffff")
+rhs <- function(f) trimws(strsplit(sub("^.*~", "", gsub("\\s+", " ", f)), " \\+ ")[[1]])
+# show spline bases as the spline they came from
+tidy_terms <- function(tt) {
+  lab <- c(d = "ns(distance, %d)", a = "ns(air yards, %d)", g = "ns(angle, %d)")
+  for (b in names(lab)) {
+    hit <- grepl(paste0("^", b, "[0-9]+$"), tt)
+    if (any(hit)) tt <- c(tt[!hit], sprintf(lab[[b]], sum(hit)))
+  }
+  tt
+}
+chip <- function(tt, m) if (length(tt)) sprintf(
+  '<span style="background:%s;color:%s;padding:1px 5px;border-radius:3px;-webkit-box-decoration-break:clone;box-decoration-break:clone">%s</span>',
+  step_bg[[m]], step_fg[[m]], paste(tt, collapse = " + ")) else NULL
+legend <- paste(sapply(names(step_bg), function(m) chip(m, m)), collapse = " ")
+
+rows <- lapply(names(domains), function(k) {
+  fs <- res[[k]]$formulas
+  prev <- rhs(fs[["M0"]])
+  parts <- character()
+  for (m in setdiff(names(fs), "M0")) {
+    cur <- rhs(fs[[m]])
+    add <- setdiff(cur, prev)
+    if (m == "M1") add <- setdiff(add, "1")
+    parts <- c(parts, chip(tidy_terms(add), m))
+    prev <- cur
+  }
+  tibble(Domain = domains[[k]],
+         Model = paste0('<span style="font-family:SFMono-Regular,Menlo,Consolas,monospace;font-size:0.85em;line-height:1.9">resp ~ ',
+                        paste(parts, collapse = " + "), " + (1 | id)</span>"))
+})
+cat("<p style='margin-bottom:4px;font-size:0.9em'>Terms added at each step: ", legend, "</p>")
+bind_rows(rows) |> knitr::kable(format = "html", escape = FALSE)
+```
+
+## Results
+
+### Do better performers take harder attempts?
+
+Consider first the correlations in @tbl-selection. In the NBA, raw skill (the M0 effect) correlates `r S("nba","r_raw_ease")` with the easiness of a player's shots. A shooting percentage is, to a large extent, a record of where someone shoots from. The simulated table does not build this in. There, with the same models, the raw correlation is 0.11, and true skill correlates -0.54 with easiness. The 0.78 is a feature of real shot selection, not of the method. Once the shot is accounted for, the relationship reverses: adjusted skill correlates `r S("nba","r_skill_ease")` with easiness, so the better shooters, net of location, take the harder shots. Soccer looks similar on the raw side (`r S("soccer","r_raw_ease")`), but adjusted finishing skill is essentially unrelated to shot location (`r S("soccer","r_skill_ease")`).
+
+Kicks and map practice look different. Raw rates are unrelated to easiness (`r S("kicks","r_raw_ease")` and `r S("geo","r_raw_ease")`), but adjusted skill is negatively related (`r S("kicks","r_skill_ease")` and `r S("geo","r_skill_ease")`). Coaches let their kickers try longer field goals when they trust them to make them, and the map-practice system gives the learners it rates as strong harder questions. In these two settings, the selection hides skill rather than inflating it.
+
+@fig-selection shows the same comparisons by decile of adjusted skill. Map practice gives the cleanest picture: easiness falls steadily across all ten deciles, which is the practice system's question selection doing what it was built to do. The NBA panel falls too, though less evenly. The kicks panel is noisy (there are only 91 kickers, about nine per decile) but tilts downward.
+
+The U in the soccer panel is not about skill. Wyscout's player file, which is not part of the IRW table, gives each player's position. Forwards make up 60% of the bottom decile and 63% of the top one, against 27–39% in deciles 5–7, where midfielders dominate. Forwards shoot from closer in, so their attempts are easier. They also shoot more often: the top and bottom deciles average 65 and 48 shots, against about 40 in the middle. More shots mean less shrinkage, so forwards' estimates spread into both tails, while midfielders, who shoot less and from range, are pulled toward the middle. A decile plot of shrunken estimates sorts people partly by how much data they have. The soccer panel is the clearest case of this, but every panel is subject to it. Passes show little selection either way (`r S("passes","r_skill_ease")`).
+
+```{r}
+#| label: fig-selection
+#| fig-cap: "Average expected log-odds of success of a person's attempts (from the item and difficulty terms alone, no person effect), by decile of adjusted skill (the person effect from the fullest model). A downward slope means the more skilled take harder attempts. The y-axes differ across panels."
+#| fig-height: 3.6
+#| fig-width: 10
+
+ggplot(deciles, aes(decile, easiness)) +
+  geom_line(colour = irw_blue, linewidth = 0.7) +
+  geom_point(colour = irw_blue, size = 2) +
+  facet_wrap(~ factor(domain, unname(domains)), nrow = 1, scales = "free_y") +
+  scale_x_continuous(breaks = c(1, 5, 10)) +
+  labs(x = "Decile of adjusted skill", y = "Mean attempt easiness (logit)")
+```
+
+```{r}
+#| label: tbl-selection
+#| tbl-cap: "Correlations across persons. Easiness is the mean expected log-odds of a person's attempts; raw skill is the M0 person effect; adjusted skill is the fullest model's."
+
+sel |>
+  transmute(Domain = domain,
+            `Adjusted skill × easiness` = f2(r_skill_ease),
+            `Raw skill × easiness` = f2(r_raw_ease),
+            `Raw × adjusted skill` = f2(r_skill_raw)) |>
+  knitr::kable()
+```
+
+### How much does the picture of who is good change?
+
+The two kinds of selection have opposite consequences for the spread of skill (@fig-sd). Where the hard attempts go to the better performers (kicks and map practice), adjusting for the attempt *widens* the person SD: from `r L("kicks","M0")` to `r L("kicks","M3")` logits for kickers and from `r L("geo","M0")` to `r L("geo","M2")` for learners. This is what happens in `nbashots_sim`. Where raw rates reward easy attempts (NBA and soccer), adjusting *shrinks* it: from `r L("nba","M0")` to `r L("nba","M3")` for NBA shooters and from `r L("soccer","M0")` to `r L("soccer","M3")` for soccer players. The real NBA data do not behave like the simulation: shot location by role dominates the "better shooters take harder shots" pattern.
+
+The orderings move accordingly (@tbl-ladder). For kickers and passers the rank correlation with M0 stays above 0.9, so the adjustment changes the scale more than the order. For NBA shooters it falls to `r L("nba","M3","spearman_m0")`, and none of the raw top ten are still in the top ten under M3. Some care is needed here: M3 includes the kind of shot, and the ability to finish with a dunk is arguably part of shooting skill rather than a nuisance. M2 (zone and distance only) is the more conservative adjustment, and there the rank correlation is `r L("nba","M2","spearman_m0")`.
+
+```{r}
+#| label: fig-sd
+#| fig-cap: "Person SD (logits) as each model adds what is known about the attempt."
+#| fig-height: 3.6
+#| fig-width: 10
+
+ggplot(ladder, aes(model, person_sd, fill = model)) +
+  geom_col(width = 0.7) +
+  facet_wrap(~ factor(domain, unname(domains)), nrow = 1) +
+  scale_fill_manual(values = step_cols, guide = "none") +
+  labs(x = NULL, y = "Person SD (logits)")
+```
+
+```{r}
+#| label: tbl-ladder
+#| tbl-cap: "Person SD, rank correlation of person effects with M0, and how many of M0's top ten remain in the top ten."
+
+ladder |>
+  transmute(Domain = domain, Model = model, `Person SD` = f2(person_sd),
+            `Spearman with M0` = f2(spearman_m0), `Top 10 kept` = top10_kept) |>
+  knitr::kable()
+```
+
+### What does the attempt add to prediction?
+
+The item does a lot of predictive work for the NBA (an IMV of `r IM("nba","M1")` over shooters alone) and for passes (`r IM("passes","M1")`), and much less for kicks (`r IM("kicks","M1")`), where most attempts are near-certain extra points. Continuous difficulty adds most where the item is coarsest relative to the variation it hides. For soccer, foot vs. head says little, and distance and angle add `r IM("soccer","M2")`. For kicks, the bands already capture most of what distance knows (`r IM("kicks","M2")`). Context matters for NBA shots (`r IM("nba","M3")`, mostly the kind of shot) and passes (`r IM("passes","M3")`), and very little for kicks and soccer.
+
+Passes illustrate a point that merits emphasis: an attempt feature can matter a great deal for prediction while barely changing who looks good. Quarterbacks all throw a broadly similar mix of short and deep passes, so the zone predicts completions well but does not reorder passers.
+
+```{r}
+#| label: fig-imv
+#| fig-cap: "Out-of-sample IMV (5-fold over attempts) of each step over the step before it."
+#| fig-height: 3.6
+#| fig-width: 10
+
+ggplot(imv_tab, aes(model, imv_vs_prev, fill = model)) +
+  geom_col(width = 0.7) +
+  geom_hline(yintercept = 0, colour = irw_grey) +
+  facet_wrap(~ factor(domain, unname(domains)), nrow = 1) +
+  scale_fill_manual(values = step_cols, guide = "none") +
+  labs(x = NULL, y = "IMV over previous step")
+```
+
+```{r}
+#| label: tbl-imv
+#| tbl-cap: "Out-of-sample IMV of each model over M0 and over the step before it."
+
+imv_tab |>
+  transmute(Domain = domain, Model = model, `IMV vs M0` = f3(imv_vs_m0),
+            `IMV vs previous` = f3(imv_vs_prev)) |>
+  knitr::kable()
+```
+
+### Is skill a stable trait once selection is accounted for?
+
+If adjusting for selection isolates something like a skill, person effects estimated from one half of a person's attempts should predict those from the other half at least as well as the raw rates do. This is what happens where selection hides skill: split-half correlations rise from `r H("kicks","M0")` to `r H("kicks","M3")` for kickers and from `r H("geo","M0")` to `r H("geo","M2")` for learners. Where raw rates reward easy attempts, they fall: from `r H("nba","M0")` to `r H("nba","M3")` for NBA shooters and from `r H("soccer","M0")` to `r H("soccer","M3")` for soccer players. Much of what is stable about a raw shooting percentage is the player's shot diet, which is stable because it is tied to role. Net of shot location, soccer finishing skill is barely reproducible from one half of a player's shots to the other. This agrees with what the expected-goals literature has long suspected.
+
+```{r}
+#| label: tbl-stability
+#| tbl-cap: "Correlation of person effects estimated separately on alternating attempts (odd vs even in time; a random half for map practice, whose IRW table has no timestamp). The fullest model is M3, except for map practice, where it is M2."
+
+stab |>
+  group_by(domain) |>
+  summarise(raw = split_half_r[model == "M0"],
+            full_model = model[model != "M0"],
+            full = split_half_r[model != "M0"], .groups = "drop") |>
+  mutate(domain = factor(domain, unname(domains))) |>
+  arrange(domain) |>
+  transmute(Domain = domain, `Person only (M0)` = f2(raw),
+            `Fullest model` = paste0(f2(full), " (", full_model, ")"),
+            Change = sprintf("%+.2f", full - raw)) |>
+  knitr::kable()
+```
+
+## Discussion
+
+Where does this leave us? In all five settings, the attempt is not an item in the usual sense, and the analyst has to decide how much of what is known about it to adjust for. The adjustment can matter a great deal, and its direction depends on who did the selecting and on what basis.
+
+- When someone else decides which attempts a performer gets, and gives the harder ones to the stronger performers (a coach deciding whether to try a long field goal, a practice system choosing the next question), raw success rates understate differences. Adjusting widens the spread and makes the person effect more reliable. This is the same logic as adaptive testing, and the explanatory model behaves as one would hope.
+- When performers settle into attempts that suit their role (bigs at the rim, strikers in the six-yard box), raw rates are largely a record of that role. Adjusting removes most of it, and what remains is smaller and noisier, sometimes much noisier.
+
+This is not to say that the adjusted estimates are the "true" skill. Every model here conditions only on what was recorded, the attempts that were never taken are never observed, and some recorded features (the kind of shot) are partly skill themselves. Selection models in economics [@heckman1979] are one place to start, but we do not know of a satisfying answer for data like these. Scoring the attempts is fixable; selecting them is not.
+
+## Reproducing this
+
+The analysis script is `sports_trials_compute.R`. The four IRW tables are fetched with `irw::irw_fetch()`. The NBA shots are read from [Samangy's collection](https://github.com/DomSamangy/NBA_Shots_04_23) at run time; nothing from them is stored here except the aggregates shown on this page. Results were computed on `r date_run`.
