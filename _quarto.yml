@@ -6,6 +6,16 @@ project:
   # being copied.
   resources:
     - llms.txt
+    # Brand artwork. The app icons are named only in site.webmanifest, and
+    # the other variants are not referenced by any page, so Quarto's resource
+    # discovery would not copy them. logos/reference/ is deliberately left out.
+    - logos/*.svg
+    - logos/*.png
+    - logos/*.ico
+    - site.webmanifest
+    # Copy of logos/favicon.ico at the root, where browsers look by default.
+    # Covers the pages emitted into tables/, which have their own <head>.
+    - favicon.ico
   # Working notes live beside the vignettes and scouting data but are not pages:
   # rendering them put them in the sitemap and in Google's index. Everything
   # else renders as before.
@@ -17,6 +27,7 @@ project:
     - "!vignettes/continuous_scout_data/"
     - "!vignettes/*_NOTES.md"
     - "!LOCAL_DEV.md"
+    - "!logos/"
   preview:
     port: 4200
   # Per-table landing pages (ben-domingue/irw#1706). Runs after Quarto has
@@ -38,7 +49,23 @@ website:
   # is rewritten by the post-render steps; see landing/write_sitemaps.R.
   site-url: https://itemresponsewarehouse.org
   google-analytics: G-NM0Y0TP4RY
+  favicon: logos/favicon.ico
+  # Social-sharing cards. Quarto makes the image URL absolute from site-url.
+  # The description is the fallback for pages without their own; without it
+  # link previews show a blank line.
+  open-graph:
+    image: logos/og-image.png
+    description: "A free, open collection of harmonized item response data for psychometrics and measurement research."
+  twitter-card:
+    card-style: summary_large_image
+    image: logos/og-image.png
+    description: "A free, open collection of harmonized item response data for psychometrics and measurement research."
   navbar:
+    # The lockup carries the name, so the text title is hidden; logo-alt
+    # keeps it for screen readers.
+    title: false
+    logo: logos/irw-lockup.svg
+    logo-alt: "Item Response Warehouse"
     search: true
     left:
       - href: index.qmd
@@ -135,6 +162,7 @@ format:
       body-width: 1200px
       margin-width: 0px
     callout-icon: false
+    include-in-header: logos/_head.html
     # A <link rel="canonical"> on every page, from site-url. Directory index
     # pages get their clean URL (/, /vignettes/), so /index.html is not a second
     # page to a crawler. The table pages write their own.
