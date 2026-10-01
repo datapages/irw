@@ -39,14 +39,10 @@ rendered standalone.
 
 library(jsonlite)
 
-# Emergency fallback only: used if data/hero_stats.json is missing or fails
-# to parse at build time (e.g. accidental deletion, bad merge). This keeps
-# `quarto render` from failing rather than being a source of truth -- it is
-# NOT refreshed automatically by metadata/00_hero_totals.R or
-# metadata/00_hero_category_breakdown.R (those write the checked-in JSON
-# file), so it will drift stale over time. Update by hand only if the
-# checked-in JSON itself is broken and a rebuild is needed before a fix
-# lands.
+# Fallback only: data/hero_stats.json is written by the pre-render step
+# landing/hero_stats.R from published irw_meta (ben-domingue/irw#1940) and is
+# not tracked. It is missing only in a local render with no Redivis token; in
+# CI a failed read stops the render instead. These values are never refreshed.
 hero_stats_fallback <- list(
   generated_at = "2025-01-01T00:00:00Z",
   totals = list(n_tables = 1300, n_responses = 27000000000, n_participants = 65000000, n_items = 730000, n_tables_itemtext = 500),
