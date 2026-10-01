@@ -197,7 +197,10 @@ prep <- function(n) {
 #    option; sigma clips them as imv.binary() does. The left side is convex in w
 #    and smallest somewhere between 1/max(K) and 1/min(K) (the fair die when K is
 #    constant); w is the root above that minimum, and a model no better than the
-#    minimum gets the minimum.
+#    minimum gets the minimum. Kanopka (2023, ch. 3) extends the IMV to
+#    polytomous outcomes differently, through threshold (omega_t) and pairwise
+#    (omega_c) binary IMVs that stay on the dichotomous scale; see the .qmd for
+#    why this page uses the die instead.
 # ------------------------------------------------------------------------------
 
 imv_cat <- function(p0, p1, K, sigma = 1e-4) {
