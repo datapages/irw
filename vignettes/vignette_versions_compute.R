@@ -151,6 +151,7 @@ CACHES <- list(
                                "local_dependence_data/q3_demo_results.rds"),
   "lsirm_interaction_maps" = c("lsirmdata/lsirm_interaction_maps_results_full.rds",
                                "lsirmdata/lsirm_interaction_maps_results_scout.rds"),
+  "nominal_imv"            = "nominal_imv_data/nominal_imv_results.rds",
   "network_psych"          = c("network_psych_data/network_psych_results.rds",
                                "network_psych_data/network_psych_prior_sensitivity_results.rds",
                                "network_psych_data/network_psych_sbm_results.rds"),

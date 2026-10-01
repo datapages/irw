@@ -3,10 +3,12 @@ title: "What Is a Wrong Answer Worth?"
 description: |
   Multiple-choice data usually reach a model as right or wrong. The IRW's
   nominal tables keep the option chosen. Does knowing which wrong answer a
-  respondent picked help predict whether they get the next item right? We
+  respondent picked help predict how they answer items we have not seen? We
   compare a 2PL on the 0/1 scores with the nominal and nested logit models on
-  the options, out of sample, using the InterModel Vigorish (IMV).
+  the options, out of sample, using the InterModel Vigorish (IMV), first for
+  right/wrong and then for the option chosen.
 date: today
+bibliography: nominal_imv_data/references.bib
 format:
   html:
     toc: true
@@ -23,167 +25,317 @@ library(ggplot2)
 theme_set(theme_minimal(base_size = 13) +
             theme(panel.grid.minor = element_blank(), legend.position = "top"))
 col_yard <- "grey60"    # Rasch -> 2PL, the yardstick
-col_nom  <- "#2a78d6"   # 2PL -> nominal
-col_nest <- "#eb6834"   # 2PL -> nested logit
-MIN_N    <- 1000        # IMAK (N = 317) is too small to say anything
+col_nom  <- "#2a78d6"   # -> nominal
+col_nest <- "#eb6834"   # -> nested logit
 
-files <- list.files("nominal_imv_data", pattern = "_nom\\.rds$", full.names = TRUE)
-res   <- lapply(files, readRDS)
-fitted  <- Filter(function(r) is.na(r$skipped) && r$n_persons >= MIN_N, res)
-skipped <- Filter(function(r) !is.na(r$skipped) || r$n_persons < MIN_N, res)
+cache   <- readRDS("nominal_imv_data/nominal_imv_results.rds")
+res     <- cache$results
+fitted  <- Filter(function(r) is.na(r$skipped), res)
+skipped <- Filter(function(r) !is.na(r$skipped), res)
+date_run <- as.Date(cache$date_run)
 
+LABELS <- c(
+  `wilmer-rmet-normative-data-set-2022`  = "Reading the Mind in the Eyes (RMET)",
+  `wilmer-mrmet-normative-data-set-2022` = "Multiracial RMET",
+  borges_brazil_residency_2024_pbt       = "Residency exam (paper)",
+  borges_brazil_residency_2024_cbt       = "Residency exam (computer)",
+  choi_2020_ednet_listening              = "EdNet TOEIC listening",
+  choi_2020_ednet_reading                = "EdNet TOEIC reading",
+  vocabulary_iq                          = "Vocabulary IQ test (VIQT)",
+  zorowitz_2023_marsib                   = "Matrix reasoning (MaRs-IB)",
+  fitz_2024_numeracy                     = "Numeracy (Fitz)",
+  psychtools_ability                     = "ICAR ability items",
+  experimental_iq                        = "Experimental IQ items",
+  myszkowski_2018_spmls                  = "Raven's SPM (last series)",
+  suarez_2026_statistics                 = "Statistics exam (Suárez)",
+  voropaeva_2026_health_media            = "Health media literacy",
+  nomt_hooper_2024_study2                = "Novel object memory (NOMT)",
+  papousek_2017_anatomy                  = "Anatom practice",
+  geography_nom                          = "Geography practice",
+  cifar10h                               = "CIFAR-10H image labels",
+  blum_2018_imak                         = "IMAK"
+)
 label_of <- function(tn) {
   tn <- sub("_nom$", "", tn)
   if (grepl("^enem_", tn)) {
     p <- strsplit(tn, "_")[[1]]
-    area <- c(ch = "humanities", cn = "nat. sciences", lc = "languages", mt = "math")[p[4]]
+    area <- c(ch = "humanities", cn = "natural sciences", lc = "languages", mt = "math")[p[4]]
     return(paste("ENEM", p[2], area))
   }
-  c(`wilmer-rmet-normative-data-set-2022`  = "RMET",
-    `wilmer-mrmet-normative-data-set-2022` = "MRMET",
-    borges_brazil_residency_2024_pbt       = "Residency exam (paper)",
-    borges_brazil_residency_2024_cbt       = "Residency exam (computer)")[tn] %||% tn
+  if (tn %in% names(LABELS)) LABELS[[tn]] else tn
 }
+short_of <- function(lab) {
+  lab <- sub("^ENEM 2013 ", "ENEM ", lab)
+  lab <- sub("Reading the Mind in the Eyes \\(RMET\\)", "RMET", lab)
+  lab <- sub("Vocabulary IQ test \\(VIQT\\)", "VIQT", lab)
+  lab <- sub("Residency exam \\((paper|computer)\\)", "Residency (\\1)", lab)
+  sub("natural sciences", "nat. sciences", lab)
+}
+family_of <- function(tn) ifelse(grepl("^enem_", tn), "ENEM", "Other tests")
 
-summ <- bind_rows(lapply(fitted, function(r) tibble(
-  table = r$table, label = label_of(r$table),
-  family = ifelse(grepl("^enem_", r$table), "ENEM", "Other tests"),
-  n = r$n_persons, items = r$n_items, p = r$p_correct,
-  yard = r$imv_all["rasch_to_2pl"], nom = r$imv_all["twopl_to_nom"],
-  nest = r$imv_all["twopl_to_nest"],
-  nom_lo = min(r$imv_by_fold[, "twopl_to_nom"]),  nom_hi = max(r$imv_by_fold[, "twopl_to_nom"]),
-  nest_lo = min(r$imv_by_fold[, "twopl_to_nest"]), nest_hi = max(r$imv_by_fold[, "twopl_to_nest"]),
-  yard_lo = min(r$imv_by_fold[, "rasch_to_2pl"]),  yard_hi = max(r$imv_by_fold[, "rasch_to_2pl"])
-))) |> mutate(share = nest / yard)
+summ <- bind_rows(lapply(fitted, function(r) {
+  f <- r$imv_by_fold
+  tibble(
+    table = r$table, label = label_of(r$table), short = short_of(label_of(r$table)),
+    family = family_of(r$table), n = r$n_persons, n_full = r$n_full, items = r$n_items, p = r$p_correct,
+    dense = !is.null(r$dense_block),
+    yard = r$imv_all[["rasch_to_2pl"]], nom = r$imv_all[["twopl_to_nom"]],
+    nest = r$imv_all[["twopl_to_nest"]],
+    cat_yard = r$imv_all[["cat_rasch_to_2pl"]], cat_nom = r$imv_all[["cat_twopl_to_nom"]],
+    cat_nest = r$imv_all[["cat_twopl_to_nest"]],
+    wr_nom = r$imv_all[["wrong_shares_to_nom"]], wr_nest = r$imv_all[["wrong_shares_to_nest"]],
+    nest_folds_pos = sum(f[, "twopl_to_nest"] > 0),
+    cat_nest_folds_pos = sum(f[, "cat_twopl_to_nest"] > 0),
+    wr_nest_folds_pos = sum(f[, "wrong_shares_to_nest"] > 0)
+  )
+})) |> mutate(share = nest / yard)
+
+# Numbers quoted in the text.
+f4  <- function(x) sprintf("%.4f", x)
+pct <- function(x) scales::percent(x, 1)
+and_list <- function(x) if (length(x) < 2) x else paste(paste(x[-length(x)], collapse = ", "), "and", x[length(x)])
+n_tab     <- nrow(summ)
+n_folds   <- 5 * n_tab
+nom_wins  <- summ$label[summ$nom > summ$nest]
+top_share <- slice_max(summ, share, n = 1)
+low_share <- slice_min(summ, share, n = 1)
+cat_over_yard <- summ$label[summ$cat_nest > summ$cat_yard]
+
+folds <- bind_rows(lapply(fitted, function(r)
+  as_tibble(r$imv_by_fold) |>
+    mutate(fold = row_number(), label = label_of(r$table), family = family_of(r$table))))
 
 terc <- bind_rows(lapply(fitted, function(r) {
   as.data.frame(r$imv_by_tercile) |>
     tibble::rownames_to_column("tercile") |>
-    mutate(table = r$table, label = label_of(r$table),
-           family = ifelse(grepl("^enem_", r$table), "ENEM", "Other tests"))
-})) |> mutate(tercile = factor(tercile, c("low", "mid", "high"),
-                               c("Bottom third", "Middle third", "Top third")))
-date_run <- max(as.Date(sapply(fitted, `[[`, "date_run")))
-```
+    mutate(table = r$table, label = label_of(r$table), family = family_of(r$table))
+})) |> mutate(tercile = factor(tercile, c("low", "mid", "high"), c("Bottom", "Middle", "Top")))
 
-::: {.callout-note}
-**Draft skeleton, `r format(date_run, "%B %d, %Y")`.** Results cover `r nrow(summ)` tables: `r sum(summ$family == "ENEM")` ENEM tests (2013, plus 2014 humanities) and `r sum(summ$family != "ENEM")` others. The full run would add ENEM 2017, 2021 and 2025 for every area, and EdNet, VIQT and MaRs-IB once `irw_nominal` is released. Text in *italics* is a placeholder.
-:::
+# A dot per table with its fold-to-fold range, for any set of IMV columns.
+dot_plot <- function(cols, names, colours, xlab) {
+  pts <- summ |> select(label, family, all_of(names(cols))) |>
+    pivot_longer(-c(label, family), names_to = "cmp", values_to = "imv")
+  rng <- folds |> select(label, all_of(unname(cols))) |>
+    pivot_longer(-label, names_to = "col", values_to = "v") |>
+    group_by(label, col) |> summarise(lo = min(v), hi = max(v), .groups = "drop") |>
+    mutate(cmp = names(cols)[match(col, cols)])
+  d <- left_join(pts, rng, by = c("label", "cmp")) |>
+    mutate(cmp = factor(cmp, names(cols), names))
+  ord <- summ |> arrange(.data[[names(cols)[length(cols)]]]) |> pull(label)
+  d$label <- factor(d$label, ord)
+  ggplot(d, aes(imv, label, colour = cmp)) +
+    geom_vline(xintercept = 0, colour = "grey80") +
+    geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0, linewidth = 0.6,
+                   position = position_dodge(width = 0.6)) +
+    geom_point(size = 2.2, position = position_dodge(width = 0.6)) +
+    facet_grid(family ~ ., scales = "free_y", space = "free_y") +
+    scale_colour_manual(values = colours, name = NULL) +
+    labs(x = xlab, y = NULL)
+}
+```
 
 ## The question
 
-Score a multiple-choice item 0/1 and two respondents who both got it wrong look the same, though one may have chosen the answer a nearly-right reader would choose. The [course lesson on nominal models](https://ben-domingue.github.io/irw-course/lessons/nominal.html) shows that the wrong answers add *information* about the respondents who miss items. It leaves open whether they improve *prediction*. Here we ask that across every multiple-choice table in the IRW's nominal source.
+Score a multiple-choice item 0/1 and two respondents who both got it wrong look the same, though one may have chosen the answer a nearly-right reader would choose and the other an answer nobody who understood the item would pick. The [course lesson on nominal models](https://ben-domingue.github.io/irw-course/lessons/nominal.html) shows that the wrong answers carry *information* about the respondents who miss items. It leaves open whether that information improves *prediction*. This page asks that across the multiple-choice tables in the IRW's nominal source, in two forms:
 
-*[Placeholder: one paragraph on the models: Bock's nominal model, the nested logit (a 2PL for the key and a nominal model among the distractors), and the 2PL. Point to the course lesson rather than re-deriving them.]*
+1. **Right or wrong.** Does a model that has seen which wrong answers a respondent chose predict better whether they will get an unseen item right?
+2. **Which option.** Does it predict better *which option* they will choose, and in particular *which wrong answer*, given that they miss?
+
+## The models
+
+Three item response models are fitted to every table, with the Rasch model alongside as a reference point.
+
+- **2PL.** The usual model for right/wrong. It sees only the 0/1 scores.
+- **Nominal response model** [@bock1972]. Every option, the key included, gets its own slope and intercept on θ. The probability of option $k$ is a softmax over the options' linear predictors.
+- **Nested logit** [@suh2010]. A 2PL for the key, and a nominal model *among the distractors* for the respondents who miss. The key's curve keeps the 2PL's shape; the wrong answers only add information about who misses the item and how.
+
+The course lesson walks through both option models on one test; this page does not re-derive them.
 
 ## Design
 
-For each table, we draw up to 3,000 respondents and split their responses into five folds. Each fold in turn is hidden from four models:
+**Tables.** Four ENEM tests (2013, one per subject area) and every other table in `irw_nominal` with at least 10 items that is multiple choice: one keyed option per item and no more than 12 distinct answers. Each table is cut to 3,000 respondents at most.
 
-- the Rasch model and the 2PL, fitted to right/wrong;
-- the nominal model and the nested logit, fitted to the option chosen.
+**Rare options.** A wrong option chosen by fewer than 1% of respondents is pooled with the item's other rare options. If the pooled group is still under 1% (ENEM's blank and double-mark codes, about 0.5% of responses), those responses are dropped. Respondents left with fewer than half the items are dropped, and so is any table with fewer than 1,000 respondents remaining.
 
-Each model's estimate of a respondent's θ, taken from the visible responses only, predicts the probability of the keyed answer on the hidden ones. The outcome is therefore always right/wrong, so all four models are judged on the same thing. The option models get one extra piece of information: which wrong answers the respondent chose *elsewhere*. The IMV compares the predictions. Rasch → 2PL is the yardstick: it is the gain from letting items differ in discrimination, which most analysts already consider worth having.
+**Sparse tables.** Some tables come from adaptive or self-paced systems, where each respondent sees a small part of a large item bank: EdNet's TOEIC practice app, for example. There we keep a dense block: the 40 most-answered items, and the respondents who answered at least half of them. These items are not a random draw from the bank, so the result describes the block. Such tables are marked † below.
 
-## How much do the wrong answers buy?
+**Cross-validation.** The observed person-item cells are split into five folds. Each fold in turn is hidden from all four models. Each model's EAP estimate of θ, taken from the visible cells only, predicts the hidden ones. The models never see a hidden response, so the option models' only extra information is which wrong answers the respondent chose *elsewhere*.
+
+### Three versions of the IMV
+
+The [InterModel Vigorish](https://www.cambridge.org/core/journals/psychometrika/article/intermodel-vigorish-as-a-lens-for-understanding-and-quantifying-the-value-of-item-response-models-for-dichotomously-coded-items/F61C75F6F945A5B13F73C6128EB83998) compares two models' out-of-sample predictions. For binary outcomes it converts each model's mean log-likelihood on the held-out cells into a *weighted coin*: the coin whose own expected log-likelihood equals the model's. If a model's predictions are as good as betting on a coin that lands heads with probability $w$, the IMV of model 1 over model 0 is the relative gain in that weight, $(w_1 - w_0)/w_0$. The Rasch → 2PL gain on the same cells is our yardstick: the value of letting items differ in discrimination, which most analysts already consider worth having.
+
+**1. Right/wrong (binary IMV).** Every model predicts P(key) on the hidden cells, and `imv::imv.binary()` compares them. All four models are judged on the same outcome.
+
+**2. The option chosen (multinomial IMV).** Here the outcome is which of the item's $K$ options the respondent chose. The coin becomes a $K$-sided die that lands on the chosen option with probability $w$ and on each of the others with probability $(1 - w)/(K - 1)$. We solve for the $w$ whose expected log-likelihood matches the model's,
+
+$$
+\frac{1}{n}\sum_{i=1}^{n} \Big[\, w \log w + (1 - w) \log\frac{1 - w}{K_i - 1} \Big] \;=\; \frac{1}{n}\sum_{i=1}^{n} \log \hat p_i,
+$$
+
+where $\hat p_i$ is the probability the model gave the option actually chosen in held-out cell $i$ and $K_i$ is the number of options on that cell's item. The IMV is again $(w_1 - w_0)/w_0$. With two options everywhere this is exactly the binary IMV. Because $K$ differs between tests (four options on RMET, five on ENEM, fewer where rare options were pooled), the multinomial IMV is best compared across models within a table, not across tables.
+
+A 2PL predicts only P(key), so to enter this comparison it needs a rule for the wrong options. We use the simplest: **2PL + shares**. The 2PL gives P(key), and 1 − P(key) is split among the wrong options in the proportions in which they were chosen on that item's training cells. That baseline already knows which distractors are popular. What it lacks, and what the option models add, is any link between θ and the choice of distractor.
+
+**3. Which wrong answer.** The third version keeps only the held-out cells answered *wrongly* and asks which wrong option was chosen, among the $K - 1$. Each model's prediction is its probability of the chosen option divided by its P(wrong). For the 2PL + shares baseline that is just the share, so this IMV measures one thing: how much knowing θ tells you about *which* wrong answer someone picks.
+
+## Does knowing the wrong answers predict right/wrong better?
 
 ```{r}
 #| label: fig-gains
-#| fig-cap: "Out-of-sample IMV for three model comparisons. Points are the pooled estimate over five folds; bars span the fold-to-fold range."
-#| fig-height: 5.5
+#| fig-cap: "Out-of-sample binary IMV for three model comparisons. Points pool the five folds; bars span the fold-to-fold range."
+#| fig-height: 8
 #| fig-width: 9
 
-long <- summ |>
-  select(label, family, nest, yard, nom, nest_lo, nest_hi, yard_lo, yard_hi, nom_lo, nom_hi) |>
-  pivot_longer(c(yard, nom, nest), names_to = "cmp", values_to = "imv") |>
-  mutate(lo = case_when(cmp == "yard" ~ yard_lo, cmp == "nom" ~ nom_lo, TRUE ~ nest_lo),
-         hi = case_when(cmp == "yard" ~ yard_hi, cmp == "nom" ~ nom_hi, TRUE ~ nest_hi),
-         cmp = factor(cmp, c("yard", "nom", "nest"),
-                      c("Rasch → 2PL (yardstick)", "2PL → nominal", "2PL → nested logit")))
-ord <- summ |> arrange(nest) |> pull(label)
-long$label <- factor(long$label, ord)
-
-ggplot(long, aes(imv, label, colour = cmp)) +
-  geom_vline(xintercept = 0, colour = "grey80") +
-  geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0, linewidth = 0.6,
-                 position = position_dodge(width = 0.6)) +
-  geom_point(size = 2.4, position = position_dodge(width = 0.6)) +
-  facet_grid(family ~ ., scales = "free_y", space = "free_y") +
-  scale_colour_manual(values = c(col_yard, col_nom, col_nest), name = NULL) +
-  labs(x = "IMV (gain in predicting held-out right/wrong)", y = NULL)
+dot_plot(c(yard = "rasch_to_2pl", nom = "twopl_to_nom", nest = "twopl_to_nest"),
+         c("Rasch → 2PL (yardstick)", "2PL → nominal", "2PL → nested logit"),
+         c(col_yard, col_nom, col_nest), "IMV for held-out right/wrong")
 ```
 
-*[Placeholder findings, from this draft's numbers:]* The gain from the wrong answers is small but always positive: every fold of every table shows it. The nested logit matches or beats the nominal model on every table, and on ENEM by a clear margin. So the better way to use the distractors is to keep the key on a 2PL curve and model only which wrong answer was chosen.
+Knowing which wrong answers a respondent chose elsewhere always helps, but only a little. The nested logit beats the 2PL on all `r n_tab` tables and in `r sum(summ$nest_folds_pos)` of `r n_folds` folds, with IMVs from `r f4(min(summ$nest))` to `r f4(max(summ$nest))`. Every one of those is smaller than the Rasch → 2PL gain on the same cells.
+
+The bars show the spread across folds, which understates the uncertainty. Refitting with a different random split into folds moved some of these IMVs by up to about 0.001 (ENEM humanities, 2PL → nested, went from .0041 to .0035). Read differences smaller than that as ties.
+
+The nested logit also matches or beats the nominal model on `r sum(summ$nest >= summ$nom)` of the `r n_tab` tables`r if (length(nom_wins)) paste0(" (the exception", if (length(nom_wins) > 1) "s are " else " is ", and_list(nom_wins), ", by a hair)") else ""`, often by a wide margin. The nominal model gives the key its own slope and intercept, which lets the key's curve drift from the 2PL's shape. The nested logit keeps the 2PL curve for the key and models only the choice among distractors. For predicting right and wrong, that is the better way to use the extra information.
 
 ```{r}
 #| label: fig-share
 #| fig-cap: "The nested logit's gain as a share of the Rasch → 2PL gain, against the proportion of responses correct."
-#| fig-height: 4.2
-#| fig-width: 8
+#| fig-height: 5
+#| fig-width: 8.5
 
 ggplot(summ, aes(p, share, colour = family)) +
   geom_hline(yintercept = 0, colour = "grey80") +
   geom_point(size = 3) +
-  geom_text(aes(label = label,
-                vjust = case_when(label == "Residency exam (paper)" ~ -0.7,
-                                  label == "Residency exam (computer)" ~ 1.7,
-                                  label == "MRMET" ~ 1.6, TRUE ~ 0.5)),
-            nudge_x = 0.012, hjust = 0, size = 3.2, show.legend = FALSE, colour = "grey25") +
+  geom_text(aes(label = short), size = 3.2, colour = "grey25", hjust = 0, nudge_x = 0.008,
+            vjust = ifelse(summ$short %in% c("ENEM humanities", "Residency (paper)", "ICAR ability items",
+                                             "Multiracial RMET"), -0.6,
+                    ifelse(summ$short %in% c("ENEM languages", "Residency (computer)", "RMET"), 1.5, 0.5)),
+            show.legend = FALSE) +
   scale_colour_manual(values = c(ENEM = col_nest, `Other tests` = col_nom), name = NULL) +
   scale_y_continuous(labels = scales::percent, limits = c(0, NA)) +
-  scale_x_continuous(labels = scales::percent, limits = c(0.2, 0.9)) +
+  scale_x_continuous(labels = scales::percent, limits = c(0.2, 0.95)) +
   labs(x = "Responses correct", y = "Distractor gain ÷ discrimination gain")
 ```
 
-*[Placeholder:]* On the yardstick's scale, the wrong answers are worth between `r scales::percent(min(summ$share), 1)` and `r scales::percent(max(summ$share), 1)` of what item discrimination is worth. The ENEM areas differ more from each other than the two ENEM years do. *[Check against the full run: does the area ranking hold in 2017, 2021 and 2025?]*
+Scaled by the yardstick, the wrong answers are worth between `r pct(low_share$share)` (`r low_share$label`) and `r pct(top_share$share)` (`r top_share$label`) of what item discrimination is worth. The share has no clear relation to how hard the test is. It is lowest on the two residency exams. These are the longest tests here, at around 100 items, so a likely reason is that θ is already well estimated from the right/wrong scores alone, leaving the distractors little to add.
+
+## Does it predict which option is chosen?
+
+```{r}
+#| label: fig-option
+#| fig-cap: "Out-of-sample multinomial IMV, for the option chosen on held-out cells. The baseline for the option models is 2PL + shares. Points pool the five folds; bars span the fold-to-fold range."
+#| fig-height: 8
+#| fig-width: 9
+
+dot_plot(c(cat_yard = "cat_rasch_to_2pl", cat_nom = "cat_twopl_to_nom", cat_nest = "cat_twopl_to_nest"),
+         c("Rasch + shares → 2PL + shares", "2PL + shares → nominal", "2PL + shares → nested logit"),
+         c(col_yard, col_nom, col_nest), "IMV for the held-out option chosen")
+```
+
+```{r}
+#| label: fig-wrong
+#| fig-cap: "Which wrong answer: multinomial IMV over the held-out wrong answers only, against the wrong options' shares on the training cells."
+#| fig-height: 8
+#| fig-width: 9
+
+dot_plot(c(wr_nom = "wrong_shares_to_nom", wr_nest = "wrong_shares_to_nest"),
+         c("Shares → nominal", "Shares → nested logit"),
+         c(col_nom, col_nest), "IMV for which wrong answer was chosen")
+```
+
+Judged on the option chosen, the option models beat 2PL + shares on every table. That is not guaranteed: the baseline already knows each distractor's popularity, so the option models win only to the extent that θ shifts the choice among distractors. On `r length(cat_over_yard)` of the `r n_tab` tables (`r and_list(cat_over_yard)`), the nested logit's gain over 2PL + shares is larger than the gain from adding discrimination on the same scale.
+
+The last figure isolates the distractors. Among held-out wrong answers, θ predicts which one was chosen on every table, with IMVs from `r f4(min(summ$wr_nest))` to `r f4(max(summ$wr_nest))`. That is a median `r round(median(summ$wr_nest / summ$nest))` times the right/wrong gain on the same table. The two IMVs are for different outcomes, so the ratio is only a rough guide, but the gap is too large to be an artefact of scale. The nominal model and the nested logit are indistinguishable here, as expected, since both model the choice among distractors the same way. The wrong answers carry far more information about *which wrong answer* comes next than about *whether* the next answer is wrong. They enter a right/wrong prediction only through θ, and θ is already well estimated from the scores.
 
 ## Who gains?
 
 ```{r}
 #| label: fig-terciles
-#| fig-cap: "2PL → nested logit IMV within thirds of the 2PL θ, one panel per table."
-#| fig-height: 5.2
+#| fig-cap: "Binary IMV, 2PL → nested logit, within thirds of the 2PL θ, one panel per table."
+#| fig-height: 9
 #| fig-width: 10
 
 terc$label <- factor(terc$label, c(sort(unique(terc$label[terc$family == "ENEM"])),
                                    sort(unique(terc$label[terc$family != "ENEM"]))))
-levels(terc$tercile) <- c("Bottom", "Middle", "Top")
 ggplot(terc, aes(tercile, twopl_to_nest, group = label, colour = family)) +
   geom_hline(yintercept = 0, colour = "grey80") +
   geom_line(linewidth = 0.8) +
-  geom_point(size = 2.2) +
-  facet_wrap(~ label, nrow = 2, labeller = label_wrap_gen(18)) +
+  geom_point(size = 2) +
+  facet_wrap(~ label, ncol = 5, labeller = label_wrap_gen(20)) +
   scale_colour_manual(values = c(ENEM = col_nest, `Other tests` = col_nom), guide = "none") +
   labs(x = "Third of the 2PL θ", y = "IMV, 2PL → nested logit")
 ```
 
-*[Placeholder:]* Where the gain lands depends on the test. On RMET, MRMET and the residency exams it goes to the bottom third, as the course lesson's information curves predict: the respondents who miss items are the ones whose wrong answers there are to read. ENEM never shows that pattern. On humanities and languages the gain peaks in the middle third. On the two hardest tests (natural sciences and math, about a quarter of responses correct) it rises toward the top, and the bottom third gains least. Low scorers who guess close to at random would produce this pattern, because their wrong answers carry no signal. [Issue #284](https://github.com/datapages/irw/issues/284) tests this directly.
+For right/wrong, where the gain lands depends on the test. On most tables it goes to the bottom third, as the course lesson's information curves predict: low scorers are the respondents with wrong answers to read. ENEM never shows that pattern. On humanities and languages the gain peaks in the middle third. On the two hardest tests (natural sciences and math, about a quarter of responses correct), it rises toward the top, and the bottom third gains least. Low scorers who guess close to at random would produce this pattern, because their wrong answers carry no signal. [Issue #284](https://github.com/datapages/irw/issues/284) tests this directly.
+
+```{r}
+#| label: fig-terciles-wrong
+#| fig-cap: "Which wrong answer: multinomial IMV, shares → nested logit, over held-out wrong answers within thirds of the 2PL θ."
+#| fig-height: 9
+#| fig-width: 10
+
+ggplot(terc, aes(tercile, wrong_shares_to_nest, group = label, colour = family)) +
+  geom_hline(yintercept = 0, colour = "grey80") +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2) +
+  facet_wrap(~ label, ncol = 5, labeller = label_wrap_gen(20)) +
+  scale_colour_manual(values = c(ENEM = col_nest, `Other tests` = col_nom), guide = "none") +
+  labs(x = "Third of the 2PL θ", y = "IMV, shares → nested logit")
+```
+
+For which wrong answer, the middle third gains least on every table. On most tables both ends gain a lot. The exceptions are again the two hardest ENEM tests, natural sciences and math, where the top third gains most and the bottom third much less, as near-random guessing at the bottom would predict. The dip in the middle is partly built in. The shares are the distractors' popularity averaged over everyone who missed, so they describe a typical wrong answer, from the middle of the distribution, best. The rest is the nominal model's crossing option curves at work. If low scorers who miss are drawn to one distractor and high scorers who miss to another, then knowing which end of the scale a respondent sits at tells you which to expect. Which distractors those are, and why they pull, is the question of [issue #285](https://github.com/datapages/irw/issues/285).
 
 ## The tables
 
 ```{r}
 #| label: tbl-results
 summ |>
-  arrange(family, desc(share)) |>
-  transmute(Table = label, N = n, Items = items, `% correct` = scales::percent(p, 1),
-            `Rasch → 2PL` = round(yard, 4), `2PL → nominal` = round(nom, 4),
-            `2PL → nested` = round(nest, 4), `Share` = scales::percent(share, 1)) |>
-  knitr::kable(align = "lrrrrrrr")
+  arrange(family, desc(nest)) |>
+  transmute(Table = paste0(label, ifelse(dense, " †", "")), N = format(n, big.mark = ","),
+            Items = items, `% correct` = pct(p),
+            `Rasch → 2PL` = f4(yard), `2PL → nested` = f4(nest), `Share` = pct(share),
+            `Option: 2PL + shares → nested` = f4(cat_nest),
+            `Wrong answer: shares → nested` = f4(wr_nest)) |>
+  knitr::kable(align = "lrrrrrrrr")
 ```
 
-Not analysed: `r paste(sapply(skipped, function(r) paste0("\x60", r$table, "\x60 (", if (is.na(r$skipped)) paste0("N = ", r$n_persons, ", below ", MIN_N) else r$skipped, ")")), collapse = "; ")`. Tables with fewer than 10 items (Berlin numeracy, PIRLS) were not attempted.
+† A dense block of a sparse table: the 40 most-answered items and the respondents who answered at least half of them.
 
-## Decisions still open
-
-*[Not for the published page.]*
-
-1. **ENEM coverage:** all 52 tests, or four areas × {2013, 2017, 2021, 2025}?
-2. **Unreleased tables:** wait for the `irw_nominal` release, or ship now and add EdNet, VIQT and MaRs-IB later?
-3. **A multinomial IMV:** also compare how well the models predict *which option* is chosen (`imv.multinomial`), not only right/wrong? It answers a different question, about the distractors themselves, and the 2PL cannot enter it.
+```{r}
+#| label: not-analysed
+#| output: asis
+reason <- function(x) dplyr::case_when(
+  grepl("^N = ", x)                  ~ "Fewer than 1,000 respondents",
+  grepl("^sparse design", x)         ~ "Sparse design with no dense block (each respondent saw a small part of a large item bank)",
+  grepl("option set changes", x)     ~ "Option set changes from one presentation of an item to the next (adaptive practice)",
+  grepl("free text|not one keyed|resp is not 0/1|no resp/text", x) ~
+    "Not single-answer multiple choice (free text, typed numbers, multi-select, or unscored)",
+  grepl("MIN_ITEMS", x)              ~ "Fewer than 10 usable items (an item needs at least two wrong answers each chosen by 1% or more)",
+  TRUE ~ x)
+sk <- tibble(table = sapply(skipped, `[[`, "table"), why = reason(sapply(skipped, `[[`, "skipped")))
+cat("**Not analysed.** Four tables have fewer than 10 items and were not attempted (`cos101_2026`, ",
+    "`goldberg_2018_spa_computer_use`, `himmelstein-berlin_numeracy-2025`, `mthimkhulu_2023_pirls_reading`). ",
+    "The rest of the nominal source was tried and set aside:\n\n", sep = "")
+for (w in unique(sk$why)) cat("- ", w, ": ", paste0("`", sub("_nom$", "", sk$table[sk$why == w]), "`", collapse = ", "), "\n", sep = "")
+```
 
 ## Reproducibility
 
+Computed on `r format(date_run, "%B %d, %Y")`. Run the compute script from the repository root, then render the page:
+
 ```r
-Rscript --no-init-file vignettes/nominal_imv_compute.R
+Rscript vignettes/nominal_imv_compute.R
 quarto::quarto_render("vignettes/nominal_imv.qmd")
 ```
+
+The script writes one `.rds` per table to `vignettes/nominal_imv_data/` and skips tables that already have one, so an interrupted run resumes.
+
+{{< include ../components/_data-version.qmd >}}
+
+{{< include ../components/_source-links.qmd >}}
+
+## References
+
+::: {#refs}
+:::

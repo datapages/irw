@@ -13,6 +13,15 @@
 # judged on the same thing the 2PL predicts: they only get to use the extra
 # information, which wrong answer was chosen, on the training cells.
 #
+# A second, multinomial IMV judges the models on the option chosen. A 2PL has no
+# opinion about the wrong options, so it enters as "2PL + shares": P(key) from
+# the 2PL, with the rest split among the wrong options in the proportions they
+# were chosen on that item's training cells. The binary IMV's weighted coin
+# becomes a weighted K-sided die (see imv_cat() below). A third IMV looks only at
+# the held-out wrong answers and asks which one was chosen; there the baseline
+# is the shares alone, so it measures what theta says about the choice of
+# distractor.
+#
 # Output: vignettes/nominal_imv_data/<table>.rds (one per table, skipped if it
 # exists) and vignettes/nominal_imv_data/nominal_imv_results.rds (all tables).
 # Subsampled inputs are cached in ~/.cache/irw_nominal_imv (not committed).
@@ -28,25 +37,50 @@ set.seed(20260930)
 
 out_dir   <- "vignettes/nominal_imv_data"
 cache_dir <- file.path(Sys.getenv("HOME"), ".cache", "irw_nominal_imv")
+cells_dir <- file.path(cache_dir, "cells")   # held-out predictions, for re-scoring
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
-dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(cells_dir, recursive = TRUE, showWarnings = FALSE)
 
 SUBSAMPLE_N <- 3000   # respondents per table
+MIN_N       <- 1000   # respondents left after prep(); below this the IMV is noise
 N_FOLDS     <- 5
 RARE        <- 0.01   # a wrong option chosen by fewer than 1% is pooled
 MIN_ITEMS   <- 10
+DENSE_ITEMS <- 40     # sparse tables: the most-answered items kept (see fetch_one)
 WORKERS     <- 6
 
 # ------------------------------------------------------------------------------
-# 1. Candidate tables: every nominal table with at least MIN_ITEMS items. The
-#    metadata's n_categories is not used: it is stale for RMET/MRMET (77 and 40,
-#    counted when resp_raw held the option words). Essays and other free text
-#    fall out in prep(), as do tables without one keyed option per item.
+# 1. Candidate tables: four ENEM tests (2013, one per area) and every other
+#    table in irw_nominal v3.3 with at least MIN_ITEMS items. Listed by hand
+#    because nominal_metadata.csv lags releases. Essays and other free text fall
+#    out in prep(), as do tables without one keyed option per item. Not listed:
+#    cos101_2026, goldberg_2018_spa_computer_use, himmelstein-berlin_numeracy-2025
+#    and mthimkhulu_2023_pirls_reading, all under MIN_ITEMS items.
 # ------------------------------------------------------------------------------
 
-meta <- read.csv("https://raw.githubusercontent.com/ben-domingue/irw/main/metadata/nominal_metadata.csv")
-cands <- meta$table[meta$n_items >= MIN_ITEMS]
+cands <- c(
+  paste0("enem_2013_1mil_", c("ch", "cn", "lc", "mt"), "_nom"),
+  "wilmer-rmet-normative-data-set-2022_nom", "wilmer-mrmet-normative-data-set-2022_nom",
+  "borges_brazil_residency_2024_pbt_nom", "borges_brazil_residency_2024_cbt_nom",
+  "choi_2020_ednet_listening_nom", "choi_2020_ednet_reading_nom",
+  "vocabulary_iq_nom", "zorowitz_2023_marsib_nom", "fitz_2024_numeracy_nom",
+  "psychtools_ability_nom", "experimental_iq_nom", "myszkowski_2018_spmls_nom",
+  "sirota_2018_crt_nom", "suarez_2026_statistics_nom", "voropaeva_2026_health_media_nom",
+  "nomt_hooper_2024_study2_nom", "papousek_2017_anatomy_nom", "geography_nom",
+  "cifar10h_nom", "semeval2013_scientsbank_nom", "preference_inventory_nom",
+  "hachenberger_2025_stroop_main_nom", "hachenberger_2025_stroop_pilot_nom",
+  "much_tte_2025_matrixreasoning_nom", "much_tte_2025_concentrationtask_nom",
+  "blum_2018_imak_nom", "asap20train_nom", "persuade_learningagency_nom"
+)
 if (nzchar(Sys.getenv("TABLES"))) cands <- strsplit(Sys.getenv("TABLES"), ",")[[1]]
+
+# Not multiple choice in the nominal model's sense: both come from adaptive
+# practice systems that draw a new set of options each time a place or term is
+# asked, so an item has no fixed options for the model's categories to stand for.
+EXCLUDE <- c(
+  geography_nom             = "option set changes from one presentation of an item to the next",
+  papousek_2017_anatomy_nom = "option set changes from one presentation of an item to the next"
+)
 message("Candidates: ", length(cands))
 
 # ------------------------------------------------------------------------------
@@ -64,11 +98,34 @@ fetch_one <- function(tn) {
                  date_run = as.character(Sys.Date())), file.path(out_dir, paste0(tn, ".rds")))
     return(invisible(NULL))
   }
-  n <- n[!is.na(n$text) & !is.na(n$resp), c("id", "item", "resp", "text")]
+  n <- data.table::as.data.table(n)[!is.na(text) & !is.na(resp), .(id, item, resp, text)]
+  # Repeated attempts (EdNet, the adaptive practice systems): keep one per cell.
+  n <- unique(n, by = c("id", "item"))
+  n_full <- data.table::uniqueN(n$id)
+  # Sparse designs, where the typical respondent sees under half the items
+  # (EdNet, Anatom, CIFAR-10H), would lose everyone to prep()'s half-the-items
+  # rule. Keep a dense block instead: the DENSE_ITEMS most-answered items, and
+  # the respondents who answered at least half of them. These items are not a
+  # random draw from the bank, so a dense-block result describes that block.
+  n_bank <- data.table::uniqueN(n$item)
+  dense <- n[, .N, by = id][, median(N)] < 0.5 * n_bank
+  if (dense) {
+    top <- n[, .N, by = item][order(-N)][seq_len(min(DENSE_ITEMS, .N)), item]
+    n <- n[item %in% top]
+    keep <- n[, .N, by = id][N >= 0.5 * length(top), id]
+    n <- n[id %in% keep]
+    if (!length(keep)) {
+      saveRDS(list(table = tn, skipped = paste0("sparse design: no respondent answered half of the ",
+                                               length(top), " most-answered of ", n_bank, " items"),
+                   date_run = as.character(Sys.Date())), file.path(out_dir, paste0(tn, ".rds")))
+      return(invisible(NULL))
+    }
+  }
   ids <- unique(n$id)
-  n_full <- length(ids)
-  if (n_full > SUBSAMPLE_N) n <- n[n$id %in% sample(ids, SUBSAMPLE_N), ]
+  if (length(ids) > SUBSAMPLE_N) n <- n[id %in% sample(ids, SUBSAMPLE_N)]
+  n <- as.data.frame(n)
   attr(n, "n_full") <- n_full
+  attr(n, "dense_block") <- if (dense) c(bank = n_bank, block = length(top), persons = length(ids)) else NULL
   saveRDS(n, f)
   rm(n); gc()
   invisible(f)
@@ -84,8 +141,15 @@ prep <- function(n) {
   keys <- tapply(n$text[n$resp == 1], n$item[n$resp == 1], function(x) unique(x))
   if (any(lengths(keys) != 1)) return("not one keyed option per item")
   if (!all(n$resp %in% 0:1)) return("resp is not 0/1")
-  n_text <- tapply(n$text, n$item, function(x) length(unique(x)))
-  if (max(n_text) > 12) return("free text (more than 12 distinct answers to an item)")
+  # Free text: an item with more than 12 answers that each draw at least RARE of
+  # its responses, or whose rarer answers together make up over 10%. Counting
+  # all distinct answers instead would throw out VIQT, where respondents pick
+  # two of five words and most of the possible pairs are rare.
+  freeish <- tapply(n$text, n$item, function(x) {
+    sh <- table(x) / length(x)
+    sum(sh >= RARE) > 12 || sum(sh[sh < RARE]) > 0.10
+  })
+  if (any(freeish)) return("free text (more than 12 common answers to an item)")
   ids <- unique(n$id); items <- sort(names(keys))
   opt <- x01 <- matrix(NA_integer_, length(ids), length(items), dimnames = list(as.character(ids), items))
   n_pooled <- 0L; n_cells_dropped <- 0L
@@ -121,18 +185,56 @@ prep <- function(n) {
 }
 
 # ------------------------------------------------------------------------------
-# 4. Cross-validated comparison for one table.
+# 4. The multinomial IMV. The binary IMV turns a model's mean log-likelihood on
+#    the held-out cells into a weighted coin: the w whose entropy,
+#    -(w log w + (1 - w) log(1 - w)), matches it. Here the coin becomes a
+#    K-sided die that lands on the observed option with probability w and on
+#    each other side with (1 - w) / (K - 1). K varies by item, so w solves
+#        mean_i[ w log w + (1 - w) log((1 - w) / (K_i - 1)) ] = mean_i log p_i,
+#    where p_i is the probability the model gave the option chosen in cell i.
+#    The IMV is then (w1 - w0) / w0, as before. With K = 2 everywhere this is
+#    imv.binary(). p0 and p1 are the two models' probabilities of the observed
+#    option; sigma clips them as imv.binary() does. The left side is convex in w
+#    and smallest somewhere between 1/max(K) and 1/min(K) (the fair die when K is
+#    constant); w is the root above that minimum, and a model no better than the
+#    minimum gets the minimum.
+# ------------------------------------------------------------------------------
+
+imv_cat <- function(p0, p1, K, sigma = 1e-4) {
+  die <- function(p) {
+    ll <- mean(log(pmin(pmax(p, sigma), 1 - sigma)))
+    f <- function(w) mean(w * log(w) + (1 - w) * log((1 - w) / (K - 1))) - ll
+    lo <- if (min(K) == max(K)) 1 / K[1] else
+      optimize(f, c(1 / max(K), 1 / min(K)), tol = 1e-12)$minimum
+    if (f(lo) >= 0) return(lo)
+    uniroot(f, c(lo, 1 - 1e-12), tol = 1e-12)$root
+  }
+  w0 <- die(p0); w1 <- die(p1)
+  (w1 - w0) / w0
+}
+
+# ------------------------------------------------------------------------------
+# 5. Cross-validated comparison for one table.
 # ------------------------------------------------------------------------------
 
 fit_one <- function(tn) {
   out_file <- file.path(out_dir, paste0(tn, ".rds"))
   if (file.exists(out_file)) return(readRDS(out_file))
+  if (tn %in% names(EXCLUDE)) {
+    res <- list(table = tn, skipped = EXCLUDE[[tn]], date_run = as.character(Sys.Date()))
+    saveRDS(res, out_file); return(res)
+  }
   f <- file.path(cache_dir, paste0(tn, ".rds"))
   if (!file.exists(f)) return(NULL)
   n <- readRDS(f)
   P <- prep(n)
   if (is.character(P)) {
     res <- list(table = tn, skipped = P, date_run = as.character(Sys.Date()))
+    saveRDS(res, out_file); return(res)
+  }
+  if (nrow(P$opt) < MIN_N) {
+    res <- list(table = tn, skipped = paste0("N = ", nrow(P$opt), ", below ", MIN_N),
+                date_run = as.character(Sys.Date()))
     saveRDS(res, out_file); return(res)
   }
   opt <- P$opt; x01 <- P$x01
@@ -148,37 +250,67 @@ fit_one <- function(tn) {
     mods <- list(
       rasch   = mirt(x_tr, 1, "Rasch", verbose = FALSE),
       twopl   = mirt(x_tr, 1, "2PL", verbose = FALSE),
-      nominal = mirt(opt_tr, 1, "nominal", verbose = FALSE),
-      nested  = mirt(opt_tr, 1, "2PLNRM", key = ncat, verbose = FALSE)
+      # The option models need more than mirt's default 500 EM cycles on the
+      # long tests (the residency exams, ENEM math).
+      nominal = mirt(opt_tr, 1, "nominal", verbose = FALSE, technical = list(NCYCLES = 2000)),
+      nested  = mirt(opt_tr, 1, "2PLNRM", key = ncat, verbose = FALSE, technical = list(NCYCLES = 2000))
     )
     conv <- sapply(mods, function(m) extract.mirt(m, "converged"))
     rc <- arrayInd(ho, dim(opt))
-    preds <- sapply(names(mods), function(m) {
+    y_opt <- opt[ho]
+    # Wrong-option shares on this fold's training cells: how the 2PL and Rasch
+    # spread their P(wrong) when they are asked about options.
+    shares <- lapply(seq_len(ncol(opt)), function(j) {
+      z <- opt_tr[, j]; z <- z[!is.na(z) & z != ncat[j]]
+      tabulate(z, ncat[j]) / length(z)
+    })
+    preds <- lapply(names(mods), function(m) {
       th <- fscores(mods[[m]], method = "EAP")[, 1]
       binary <- m %in% c("rasch", "twopl")
-      out <- numeric(length(ho))
+      p_key <- p_obs <- numeric(length(ho))
       for (j in unique(rc[, 2])) {
         w <- which(rc[, 2] == j)
         pr <- probtrace(extract.item(mods[[m]], j), matrix(th[rc[w, 1]]))
+        if (binary) {
+          P <- outer(pr[, 2], numeric(ncat[j])) + outer(pr[, 1], shares[[j]])
+          P[, ncat[j]] <- pr[, 2]
+        } else P <- pr
         # The keyed option is always the last category of the option models.
-        out[w] <- pr[, if (binary) 2 else ncat[j]]
+        p_key[w] <- P[, ncat[j]]
+        p_obs[w] <- P[cbind(seq_along(w), y_opt[w])]
       }
-      out
+      setNames(data.frame(p_key, p_obs), paste0(c("", "obs_"), m))
     })
     th2 <- fscores(mods$twopl, method = "EAP")[, 1]
-    list(cells = data.frame(y = x01[ho], preds, theta_2pl = th2[rc[, 1]], fold = k), conv = conv)
+    list(cells = data.frame(y = x01[ho], K = ncat[rc[, 2]], do.call(cbind, preds),
+                            theta_2pl = th2[rc[, 1]], fold = k), conv = conv)
   })
   converged <- t(sapply(per_fold, `[[`, "conv"))
   cells <- do.call(rbind, lapply(per_fold, `[[`, "cells"))
   cuts <- quantile(cells$theta_2pl, c(0, 1/3, 2/3, 1))
   cells$tercile <- cut(cells$theta_2pl, cuts, include.lowest = TRUE, labels = c("low", "mid", "high"))
+  saveRDS(cells, file.path(cells_dir, paste0(tn, ".rds")))
 
-  imvs <- function(d) c(
-    rasch_to_2pl   = imv.binary(d$y, d$rasch, d$twopl),
-    twopl_to_nom   = imv.binary(d$y, d$twopl, d$nominal),
-    twopl_to_nest  = imv.binary(d$y, d$twopl, d$nested),
-    nest_to_nom    = imv.binary(d$y, d$nested, d$nominal)
-  )
+  imvs <- function(d) {
+    wr <- d[d$y == 0, ]
+    given_wrong <- function(m) wr[[paste0("obs_", m)]] / (1 - wr[[m]])
+    c(
+      # Binary: right/wrong on the held-out cells.
+      rasch_to_2pl   = imv.binary(d$y, d$rasch, d$twopl),
+      twopl_to_nom   = imv.binary(d$y, d$twopl, d$nominal),
+      twopl_to_nest  = imv.binary(d$y, d$twopl, d$nested),
+      nest_to_nom    = imv.binary(d$y, d$nested, d$nominal),
+      # Multinomial: the option chosen, K options per item.
+      cat_rasch_to_2pl  = imv_cat(d$obs_rasch, d$obs_twopl, d$K),
+      cat_twopl_to_nom  = imv_cat(d$obs_twopl, d$obs_nominal, d$K),
+      cat_twopl_to_nest = imv_cat(d$obs_twopl, d$obs_nested, d$K),
+      cat_nest_to_nom   = imv_cat(d$obs_nested, d$obs_nominal, d$K),
+      # Which wrong answer, among the held-out wrong answers (K - 1 options).
+      # The 2PL's given-wrong prediction is the shares alone.
+      wrong_shares_to_nom  = imv_cat(given_wrong("twopl"), given_wrong("nominal"), wr$K - 1),
+      wrong_shares_to_nest = imv_cat(given_wrong("twopl"), given_wrong("nested"), wr$K - 1)
+    )
+  }
   by_fold    <- t(sapply(split(cells, cells$fold), imvs))
   by_tercile <- t(sapply(split(cells, cells$tercile), imvs))
 
@@ -188,7 +320,7 @@ fit_one <- function(tn) {
     p_correct = mean(x01, na.rm = TRUE),
     n_options = table(ncat),
     n_items_dropped = P$n_items_dropped, n_persons_dropped = P$n_persons_dropped,
-    n_cells_dropped = P$n_cells_dropped,
+    n_cells_dropped = P$n_cells_dropped, dense_block = attr(n, "dense_block"),
     converged = converged,
     imv_all = imvs(cells), imv_by_fold = by_fold, imv_by_tercile = by_tercile,
     seconds = as.numeric(Sys.time() - t0, units = "secs"),
@@ -206,6 +338,7 @@ results <- future_map(cands, function(tn) tryCatch(fit_one(tn), error = function
   .options = furrr_options(seed = TRUE))
 plan(sequential)
 results <- Filter(Negate(is.null), results)
-saveRDS(results, file.path(out_dir, "nominal_imv_results.rds"))
+date_run <- max(sapply(results, function(r) r$date_run %||% NA_character_), na.rm = TRUE)
+saveRDS(list(date_run = date_run, results = results), file.path(out_dir, "nominal_imv_results.rds"))
 message("Done: ", sum(sapply(results, function(r) is.na(r$skipped))), " tables fitted, ",
         sum(sapply(results, function(r) !is.na(r$skipped))), " skipped")
