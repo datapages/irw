@@ -400,7 +400,9 @@ values_html <- function(labels, column) {
               paste(pairs, collapse = " &middot; "), "</details>")
 }
 # "the source's codebook, <a>file</a>" -- or "" when none was found, and the
-# caller keeps its deposit link. Two kinds are shown, in this order:
+# caller keeps its deposit link. Three kinds are shown, in this order:
+#   recorded_at_ingest    the codebook file whoever built the table named when
+#                         staging it (irw#2770): a person read it
 #   name_codebook         a file whose NAME says codebook / data dictionary / ...
 #   readme_names_columns  a README whose TEXT names at least three of this
 #                         table's own column or item names (irw#2766 follow-on;
@@ -415,11 +417,11 @@ values_html <- function(labels, column) {
 SOURCE_CODEBOOKS_MAX <- 3
 source_codebook_html <- function(links) {
   if (is.null(links) || !nrow(links)) return("")
-  for (kind in c("name_codebook", "readme_names_columns")) {
+  for (kind in c("recorded_at_ingest", "name_codebook", "readme_names_columns")) {
     l <- links[links$how_found == kind, , drop = FALSE]
     l <- l[!duplicated(l$url), , drop = FALSE]
     if (!nrow(l)) next
-    what <- if (kind == "name_codebook") c("codebook", "codebook files") else c("README", "READMEs")
+    what <- if (kind == "readme_names_columns") c("README", "READMEs") else c("codebook", "codebook files")
     if (nrow(l) > SOURCE_CODEBOOKS_MAX) {
       dep <- l$deposit_url[nzchar(l$deposit_url)][1]
       where <- if (!is.na(dep)) paste0("<a href=\"", esc(dep), "\">the source deposit</a>") else "the source deposit"
