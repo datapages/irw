@@ -130,6 +130,15 @@ stats_from <- function(pm, tri) {
 run_unit <- function(name, d, B = 200) {
   agents <- sort(unique(c(d$a, d$b)))
   f <- fit_model(d, agents)
+  if (f$shrink < .05) {
+    # as in lr_test: under separation the glm/polr SEs blow up and the shrink falls
+    # to 0; take strengths and shrink from the penalized fit instead
+    ia <- match(d$a, agents); ib <- match(d$b, agents)
+    f1 <- fit_ll(ia, ib, d$y, d$home, length(agents), FALSE)
+    th <- f1$par[-1] - mean(f1$par[-1])
+    s <- tryCatch(shrink_pen(th, f1$par[1], ia, ib, d$home, 0), error = function(e) 0)
+    f$theta_sim <- setNames(th * sqrt(s), agents); f$h <- f1$par[1]; f$shrink <- s
+  }
   tri <- t(combn(length(agents), 3))
   obs <- stats_from(pair_mats(d, d$y, agents), tri)
   sims <- t(replicate(B, stats_from(pair_mats(d, simulate_y(d, f), agents), tri)))

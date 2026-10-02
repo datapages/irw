@@ -48,6 +48,7 @@ fam_order <- c("MLB", "NBA", "NHL", "NFL", "Football: England and Italy", "Footb
                "Engines and bots", "UFC and padel", "Judgments")
 U <- U |> mutate(family = factor(family, fam_order), sig = lr_p <= .05)
 team <- filter(U, type == "team")
+bullet <- filter(U, grepl("^lichess .* bullet$", unit))
 f2 <- function(x) formatC(x, format = "f", digits = 2)
 f3 <- function(x) formatC(x, format = "f", digits = 3)
 pct <- function(x) paste0(formatC(100 * x, format = "f", digits = 1), "%")
@@ -68,9 +69,16 @@ if (preview) cat("::: {.callout-warning title=\"Preview\"}\nThese results were a
 
 Rock-paper-scissors is the textbook example of intransitivity. Rock beats scissors and scissors beats paper, so if wins were transitive, rock would beat paper. Instead paper beats rock: the three beat each other in a cycle. No ranking of the three is consistent with who beats whom, so it makes no sense to call any of them the strongest. Ranking, though, is what most models for pairwise data do. The Bradley-Terry model [@bradley1952], used in the course's [competitions lesson](https://ben-domingue.github.io/irw-course/lessons/competitions.html), gives each competitor a single strength and lets the difference in strengths set the odds of each game. It is transitive by construction: if A is likely to beat B and B is likely to beat C, then A is even more likely to beat C. That lesson sets intransitivity aside. This vignette picks it up.
 
-Cycles are not exotic. Psychologists have long found that people's preferences can cycle [@tversky1969], a mixture of transitive voters can produce a cyclic majority (Condorcet's paradox), and in games, a player can be beaten by one style and beat another. The question is empirical: in real competition data, are there more cycles than a transitive model produces by chance? The IRW's [competition collection](https://itemresponsewarehouse.org/comps_standard.html) holds a wide range of such data: more than a century of North American leagues and European football, cricket, chess on Lichess, engine and bot tournaments, and people judging which of two things is riskier, better written or more salient. We use all of it.
+Throughout, a **cycle** means three competitors who beat each other in a circle: A beats B, B beats C, and C beats A, as in rock-paper-scissors. (Longer cycles exist too, but when everyone has played everyone, any longer cycle implies a three-way one, so three is where we look.) The word can mean two different things, though, and the distinction runs through this whole page:
 
-The short answer: team sports are transitive, as far as these data can tell; fast online chess and game-playing bots are not; and human judgments mostly are. Getting there takes some care. Cycles show up everywhere, and nearly all of them are luck.
+- A cycle in the **observed results**: in the games actually played, A won most of its games against B, B most against C, and C most against A.
+- A cycle in the **underlying win probabilities**: A is more likely than not to beat B, B to beat C, and C to beat A. This is real intransitivity, of the rock-paper-scissors kind.
+
+The two come apart because of luck. Even when the probabilities are perfectly transitive, a short series can go the wrong way, so observed cycles appear in any competition data. The question is whether there are more of them than luck produces, and that excess is what reveals cycles in the probabilities.
+
+Cycles are not exotic. Psychologists have long found that people's preferences can cycle [@tversky1969], a mixture of transitive voters can produce a cyclic majority (Condorcet's paradox), and in games, a player can be beaten by one style and beat another. The question is empirical: in real competition data, is there cyclic structure beyond what a transitive model produces by chance? The IRW's [competition collection](https://itemresponsewarehouse.org/comps_standard.html) holds a wide range of such data: more than a century of North American leagues and European football, cricket, chess on Lichess, engine and bot tournaments, and people judging which of two things is riskier, better written or more salient. We use all of it.
+
+The short answer: team sports are transitive, as far as these data can tell; fast online chess and game-playing bots are not; and human judgments mostly are. Getting there takes some care, because observed cycles show up in every kind of data, and in team sports and most judgments they are no more common than luck makes them. Only in fast chess and among bots is there clearly more cyclic structure than luck produces.
 
 ---
 
@@ -158,7 +166,7 @@ With two or three games per pair, a team's head-to-head record against any one o
 
 ## Results
 
-### Cycles are everywhere, and they are mostly luck
+### Observed cycles are common, and mostly luck
 
 ```{r}
 #| label: fig-cycles
@@ -177,7 +185,9 @@ p <- ggplot(cy, aes(wst_null, wst, colour = type, text = text)) +
 show_plot(p)
 ```
 
-In a typical team-season, `r pct(median(team$wst, na.rm = TRUE))` of the triads whose three series were all decided are cyclic. Simulating the same schedules from a transitive model gives `r pct(median(team$wst_null, na.rm = TRUE))`. @fig-cycles shows that this holds unit by unit: the points sit on the diagonal. Many cycles, then, but nearly all of them are what luck produces. The few units well above the diagonal are one-on-one games, which we come back to below.
+In a typical team-season, `r pct(median(team$wst, na.rm = TRUE))` of the triads whose three series were all decided are cyclic in the observed results. Simulating the same schedules from a transitive model gives `r pct(median(team$wst_null, na.rm = TRUE))`. @fig-cycles shows that this holds unit by unit: the points sit along the diagonal. The points far from it are mostly small units, such as cricket leagues with a handful of decided triads, where a single cycle moves the share a lot.
+
+Counting also shows why a better test is needed. Where the likelihood test below does find intransitivity, as in bullet chess, the excess of observed cycles is small: `r pct(median(bullet$wst))` of triads are cyclic in a typical bullet month, against `r pct(median(bullet$wst_null))` under the transitive model. The count rejects in only `r sum(bullet$wst_p <= .05)` of the 12 bullet months, and HodgeRank's cyclic share in `r sum(bullet$curl_p <= .05)`. Even real intransitivity in the win probabilities changes the outcome of only a small fraction of triads, here about half a percentage point, and a count of triads, each decided by a short series, can barely see that.
 
 ### Team sports: no intransitivity
 
