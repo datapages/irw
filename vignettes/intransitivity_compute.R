@@ -309,10 +309,18 @@ cems <- calib("cems_students", {
                            sapply(split(xx, xx$rater), per_rater) })
   list(obs = obs, sims = sims, theta = f$theta)
 })
-# Example cycles: in a unit, the triad A > B > C > A whose three head-to-head records
-# are most lopsided (the smallest of the three winning shares is largest), among
-# pairs with at least min_n games. Agents are anonymised in the page.
-best_cycle <- function(d, min_n = 5) {
+# Example cycles, for illustration only (the tests do not rest on any one of them).
+#  - Lichess bullet months and Kaggle competitions: the observed cycle A > B > C > A
+#    whose three head-to-head records are most lopsided (the smallest of the three
+#    winning shares is largest), among pairs with at least 5 games. Agents are
+#    anonymised in the page.
+#  - The two risk-judgment tables that reject: triads that the fitted rank-2 model
+#    makes cyclic and that are also cyclic in the raw judgments (at least 3 per pair),
+#    the 3 with the most lopsided model probabilities.
+rec <- function(u, A, B, C, W, N, i, j, k, m = NA_real_)
+  data.table(unit = u, A = A, B = B, C = C, ab_w = W[i, j], ab_n = N[i, j], bc_w = W[j, k], bc_n = N[j, k],
+             ca_w = W[k, i], ca_n = N[k, i], model_min = m)
+best_cycle <- function(u, d, min_n = 5) {
   ag <- sort(unique(c(d$a, d$b))); pm <- pair_mats(d, d$y, ag); W <- pm$W; N <- pm$N
   P <- ifelse(N >= min_n, W / N, NA)
   best <- NULL; sc <- -1
@@ -320,13 +328,28 @@ best_cycle <- function(d, min_n = 5) {
     if (is.na(P[k, i]) || P[k, i] <= .5) next
     s <- min(P[i, j], P[j, k], P[k, i]); if (s > sc) { sc <- s; best <- c(i, j, k) } }
   if (is.null(best)) return(NULL)
-  ij <- rbind(best[1:2], best[2:3], best[c(3, 1)])
-  data.frame(winner = c("A", "B", "C"), loser = c("B", "C", "A"), wins = W[ij], games = N[ij])
+  rec(u, ag[best[1]], ag[best[2]], ag[best[3]], W, N, best[1], best[2], best[3])
+}
+model_cycles <- function(u, d, top = 3, min_n = 3) {
+  ag <- sort(unique(c(d$a, d$b))); n <- length(ag); ia <- match(d$a, ag); ib <- match(d$b, ag)
+  set.seed(1); f <- fit_ll(ia, ib, d$y, d$home, n, TRUE, starts = 5)
+  th <- f$par[2:(n + 1)]; uu <- f$par[(n + 2):(2 * n + 1)]; vv <- f$par[(2 * n + 2):(3 * n + 1)]
+  Pm <- plogis(outer(th, th, "-") + outer(uu, vv) - outer(vv, uu))
+  pm <- pair_mats(d, d$y, ag); W <- pm$W; N <- pm$N
+  out <- list()
+  for (i in 1:n) for (j in which(Pm[i, ] > .5)) for (k in which(Pm[j, ] > .5)) if (Pm[k, i] > .5 && i < j && i < k) {
+    if (min(N[i, j], N[j, k], N[k, i]) < min_n) next
+    if (!(W[i, j] / N[i, j] > .5 && W[j, k] / N[j, k] > .5 && W[k, i] / N[k, i] > .5)) next
+    out[[length(out) + 1]] <- rec(u, ag[i], ag[j], ag[k], W, N, i, j, k, min(Pm[i, j], Pm[j, k], Pm[k, i]))
+  }
+  r <- rbindlist(out); if (!nrow(r)) return(NULL)
+  r[order(-model_min)][seq_len(min(top, nrow(r)))]
 }
 examples <- calib("examples", {
   ex <- list()
-  for (u in c(grep("^lichess .* bullet$", meta$unit, value = TRUE), grep("^kaggle ", meta$unit, value = TRUE))) {
-    r <- best_cycle(units[[u]]); if (!is.null(r)) ex[[u]] <- cbind(unit = u, r) }
+  for (u in c(grep("^lichess .* bullet$", meta$unit, value = TRUE), grep("^kaggle ", meta$unit, value = TRUE)))
+    ex[[u]] <- best_cycle(u, units[[u]])
+  for (u in c("friedman harm", "friedman incidence")) ex[[u]] <- model_cycles(u, units[[u]])
   rbindlist(ex)
 })
 
