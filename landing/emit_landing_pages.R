@@ -718,13 +718,14 @@ if (!flagged) btn("croissant.jsonld", "Croissant metadata", "Hugging Face, Kaggl
 "<div class=\"btns\">",
 btn(x$redivis_url, "Browse on Redivis", "sign in to download"),
 "</div>\n",
-"<p class=\"note\">This table is larger than Redivis serves without a login, so ",
-"download it with one of the packages below or while signed in to Redivis.</p>\n"),
+"<p class=\"note\">This table is larger than Redivis serves as a CSV without a login. ",
+"The R package below downloads it with no account; the Python package and the ",
+"Redivis website need you to sign in to Redivis.</p>\n"),
 "<p class=\"note\">Or load it directly in R or Python:</p>\n",
-"<pre># R\ninstall.packages(\"remotes\")\nremotes::install_github(\"itemresponsewarehouse/Rpkg\")\n",
+"<pre># R (no account needed)\ninstall.packages(\"remotes\")\nremotes::install_github(\"itemresponsewarehouse/Rpkg\")\n",
 "library(irw)\ndf &lt;- irw_fetch(\"", esc(x$table), "\"",
 if (x$src != "core") paste0(", source = \"", x$src, "\"") else "", ")</pre>\n",
-"<pre># Python\npip install irw\n\n",
+"<pre># Python (needs a free Redivis account)\npip install irw\n\n",
 "import irw\ndf = irw.fetch(\"", esc(x$table), "\"",
 if (x$src != "core") paste0(", source=\"", x$src, "\"") else "", ")</pre>\n")
 

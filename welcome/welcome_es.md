@@ -178,7 +178,7 @@ El IRW contiene **cientos de conjuntos de datos** ("tablas"), cada uno una colec
 Cada conjunto de datos del IRW está diseñado para ser:
 
 - **Encontrable (Findable).** Cada conjunto de datos viene con metadatos precalculados —número de participantes, número de ítems, densidad de respuestas, área temática y otras etiquetas descriptivas— para que los conjuntos de datos puedan localizarse y filtrarse sin necesidad de descargarlos primero.
-- **Accesible.** Cada conjunto de datos puede obtenerse a través del navegador web o del paquete `irw`, usando una cuenta gratuita.
+- **Accesible.** Cada conjunto de datos puede obtenerse a través del navegador web o del paquete `irw`, y la mayoría no requiere ninguna cuenta.
 - **Interoperable.** Cada conjunto de datos se reformatea según la misma estructura simple (descrita más abajo), de modo que el mismo código de análisis pueda ejecutarse en muchos conjuntos de datos con poca o ninguna modificación.
 - **Reutilizable.** Cada conjunto de datos tiene una licencia abierta, su origen está documentado, y el código usado para convertirlo al formato del IRW es público.
 
@@ -215,7 +215,7 @@ La especificación técnica completa del estándar está disponible en [itemresp
 Hay tres formas de obtener datos del IRW, según cuánto quieras automatizar.
 
 **1. Explorar en el navegador web**
-Explora los conjuntos de datos y sus metadatos directamente en el [navegador de datos del IRW](/data.qmd) — no se necesita cuenta. Descargar un conjunto de datos completo requiere una cuenta gratuita de [Redivis](https://redivis.com), ya que es la plataforma que aloja los datos subyacentes.
+Explora los conjuntos de datos y sus metadatos directamente en el [navegador de datos del IRW](/data.qmd) — no se necesita cuenta. La mayoría de las tablas también pueden descargarse como CSV desde su página sin cuenta; las pocas que superan los 100 MB requieren el paquete de R o una cuenta gratuita de [Redivis](https://redivis.com), la plataforma que aloja los datos subyacentes.
 
 **2. Usar el paquete `irw` (recomendado)**
 El paquete `irw`, disponible tanto para **R** como para **Python**, ofrece funciones simples para buscar, filtrar y descargar datos.
@@ -242,7 +242,7 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-La primera vez que uses el paquete, se te pedirá que inicies sesión con una cuenta gratuita de Redivis. Después de eso, una sola línea de código descarga cualquier conjunto de datos directamente en R o Python. A partir de ahí, los datos están listos para el análisis con software estándar —por ejemplo, paquetes de teoría de respuesta al ítem o de análisis factorial.
+El paquete de R funciona sin cuenta; la primera vez que uses el paquete de Python, se te pedirá que inicies sesión con una cuenta gratuita de Redivis. Después de eso, una sola línea de código descarga cualquier conjunto de datos directamente en R o Python. A partir de ahí, los datos están listos para el análisis con software estándar —por ejemplo, paquetes de teoría de respuesta al ítem o de análisis factorial.
 
 **3. Usar directamente las bibliotecas cliente de Redivis**
 Para flujos de trabajo de más bajo nivel o fuera de R/Python, los datos también se pueden acceder mediante las propias bibliotecas cliente de R y Python de Redivis. Consulta la [guía de introducción](/getstarted.qmd) para más detalles.

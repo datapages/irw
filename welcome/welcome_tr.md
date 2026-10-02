@@ -178,7 +178,7 @@ IRW, her biri bireysel tepkilerden oluşan bir koleksiyon olan **yüzlerce veri 
 IRW'deki her veri kümesi şu şekilde tasarlanmıştır:
 
 - **Bulunabilir (Findable).** Her veri kümesi, önceden hesaplanmış meta verilerle birlikte gelir — katılımcı sayısı, madde sayısı, tepki yoğunluğu, konu alanı ve diğer açıklayıcı etiketler — böylece veri kümeleri önce indirilmeden bulunabilir ve filtrelenebilir.
-- **Erişilebilir (Accessible).** Her veri kümesine, ücretsiz bir hesapla, web tarayıcısı veya `irw` paketi üzerinden erişilebilir.
+- **Erişilebilir (Accessible).** Her veri kümesine web tarayıcısı veya `irw` paketi üzerinden erişilebilir ve çoğu için hiç hesap gerekmez.
 - **Birlikte çalışabilir (Interoperable).** Her veri kümesi aynı basit yapıya (aşağıda açıklanmıştır) dönüştürülür, böylece aynı analiz kodu birçok veri kümesinde çok az değişiklikle veya hiç değişiklik yapılmadan çalıştırılabilir.
 - **Yeniden kullanılabilir (Reusable).** Her veri kümesi açık lisanslıdır, kökeni belgelenmiştir ve onu IRW biçimine dönüştürmek için kullanılan kod herkese açıktır.
 
@@ -215,7 +215,7 @@ Standardın tam teknik özellikleri [itemresponsewarehouse.org/standard.html](/s
 Ne kadar otomatikleştirmek istediğinize bağlı olarak IRW verisini almanın üç yolu vardır.
 
 **1. Web tarayıcısında gözden geçirin**
-[IRW veri tarayıcısı](/data.qmd) üzerinde veri kümelerini ve meta verilerini doğrudan keşfedin — hesap gerekmez. Tam bir veri kümesini indirmek için ücretsiz bir [Redivis](https://redivis.com) hesabı gerekir, çünkü temel verileri barındıran platform budur.
+[IRW veri tarayıcısı](/data.qmd) üzerinde veri kümelerini ve meta verilerini doğrudan keşfedin — hesap gerekmez. Çoğu tablo, sayfasından hesap gerektirmeden CSV olarak da indirilebilir; 100 MB'tan büyük olan az sayıdaki tablo için ya R paketi ya da temel verileri barındıran platform olan [Redivis](https://redivis.com) üzerinde ücretsiz bir hesap gerekir.
 
 **2. `irw` paketini kullanın (önerilir)**
 Hem **R** hem de **Python** için mevcut olan `irw` paketi, veri bulma, filtreleme ve indirme için basit fonksiyonlar sunar.
@@ -242,7 +242,7 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-Paketi ilk kullandığınızda, ücretsiz bir Redivis hesabıyla giriş yapmanız istenir. Bundan sonra, tek bir kod satırı herhangi bir veri kümesini doğrudan R veya Python'a indirir. Bu noktadan itibaren veri, standart yazılımlarla — örneğin madde tepki kuramı veya faktör analizi paketleriyle — analiz edilmeye hazırdır.
+R paketi hesap olmadan çalışır; Python paketini ilk kullandığınızda ise ücretsiz bir Redivis hesabıyla giriş yapmanız istenir. Bundan sonra, tek bir kod satırı herhangi bir veri kümesini doğrudan R veya Python'a indirir. Bu noktadan itibaren veri, standart yazılımlarla — örneğin madde tepki kuramı veya faktör analizi paketleriyle — analiz edilmeye hazırdır.
 
 **3. Redivis istemci kütüphanelerini doğrudan kullanın**
 Daha düşük seviyeli veya R/Python dışı iş akışları için veriye, Redivis'in kendi R ve Python istemci kütüphaneleri aracılığıyla da erişilebilir. Ayrıntılar için [Başlangıç Kılavuzu](/getstarted.qmd)'na bakın.
