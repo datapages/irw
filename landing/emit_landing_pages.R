@@ -96,6 +96,11 @@ COLUMN_DOCS_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/ma
 # table is uploaded from.
 COVARIATE_LABELS_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
                                "metadata/covariate_labels.csv")
+# The source's own codebook files, found by NAME in each deposit's file list
+# (ben-domingue/irw#2766, metadata/find_codebook_links.py): table, url,
+# file_name, host, how_found, n_same_kind_in_deposit, deposit_url, checked_at.
+CODEBOOK_LINKS_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
+                             "metadata/codebook_links.csv")
 STANDARD_RAW_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
                            "datastandard.md")
 # Filled by main() from .read_standard(); empty until then, so a page built
@@ -247,6 +252,23 @@ clean_doi <- function(x) {
   split(d, tolower(d$table))
 }
 
+# tolower(table) -> that table's source-codebook links. Help, not fact: a
+# failed fetch leaves the page pointing at the deposit, as before (irw#2766).
+.read_codebook_links <- function() {
+  d <- tryCatch({
+    con <- url(CODEBOOK_LINKS_URL)
+    on.exit(try(close(con), silent = TRUE), add = TRUE)
+    utils::read.csv(con, colClasses = "character", na.strings = character(0),
+                    encoding = "UTF-8")
+  }, error = function(e) {
+    message("[landing] codebook_links.csv unreadable (", conditionMessage(e),
+            "); pages point at the source deposit")
+    NULL
+  })
+  if (is.null(d) || !nrow(d)) return(list())
+  split(d, tolower(d$table))
+}
+
 # The data standard's schema table: list(exact = name -> first sentence,
 # family = prefix -> first sentence). Same parsing rules as stage 14 and the
 # MCP: a backticked `name*` or `nameN` is a family.
@@ -338,7 +360,8 @@ columns_note <- function(x) {
     if (nzchar(url)) paste0("The other columns are set by the <a href=\"", esc(url),
                             "\">generating script</a>.") else ""
   } else paste0(others, ", including what item codes and covariate values stand for, ",
-    if (nzchar(url)) paste0("any codebook is the one released with the <a href=\"", esc(url),
+    if (nzchar(cbl <- source_codebook_html(x$cblinks))) paste0("see ", cbl, ".")
+    else if (nzchar(url)) paste0("any codebook is the one released with the <a href=\"", esc(url),
                             "\">source data</a>.")
     else "see the source cited above.")
   if (!nzchar(first) && !nzchar(rest)) return("")
@@ -376,6 +399,30 @@ values_html <- function(labels, column) {
   else paste0("<details class=\"vals\"><summary>", nrow(v), " labelled values</summary>",
               paste(pairs, collapse = " &middot; "), "</details>")
 }
+# "the source's codebook, <a>file</a>" -- or "" when none was found, and the
+# caller keeps its deposit link. Only files whose NAME says codebook count
+# (how_found = name_codebook); README hits and Dataverse DDI exports are in the
+# CSV but not shown until Ben rules on them (irw#2766). A deposit with more
+# than SOURCE_CODEBOOKS_MAX of them -- one per scale, say -- gets one line
+# pointing at the deposit: picking the right one would mean decoding
+# abbreviations, which is a guess.
+SOURCE_CODEBOOK_KINDS <- c("name_codebook")
+SOURCE_CODEBOOKS_MAX <- 3
+source_codebook_html <- function(links) {
+  if (is.null(links) || !nrow(links)) return("")
+  l <- links[links$how_found %in% SOURCE_CODEBOOK_KINDS, , drop = FALSE]
+  l <- l[!duplicated(l$url), , drop = FALSE]
+  if (!nrow(l)) return("")
+  if (nrow(l) > SOURCE_CODEBOOKS_MAX) {
+    dep <- l$deposit_url[nzchar(l$deposit_url)][1]
+    where <- if (!is.na(dep)) paste0("<a href=\"", esc(dep), "\">the source deposit</a>") else "the source deposit"
+    return(paste0("one of the ", nrow(l), " codebook files in ", where))
+  }
+  files <- paste0("<a href=\"", vapply(l$url, esc, character(1)), "\"><code>",
+                  vapply(basename(l$file_name), esc, character(1)), "</code></a>")
+  paste0("the source&rsquo;s codebook, ", paste(files, collapse = ", "))
+}
+
 codebook_html <- function(x, standard) {
   d <- x$coldocs
   if (is.null(d) || !nrow(d) || !length(x$variables)) return("")
@@ -440,8 +487,11 @@ codebook_html <- function(x, standard) {
     "<p class=\"note\">",
     if (labelled) "Covariate value labels are the source&rsquo;s own, as the IRW recorded them. " else "",
     "What item codes", if (labelled) " and any unlabelled values" else " and covariate values",
-    " stand for is in the codebook released with the ",
-    if (nzchar(url)) paste0("<a href=\"", esc(url), "\">source data</a>") else "source data", ".</p>\n")
+    " stand for is in ",
+    if (nzchar(cbl <- source_codebook_html(x$cblinks))) cbl
+    else paste0("the codebook released with the ",
+                if (nzchar(url)) paste0("<a href=\"", esc(url), "\">source data</a>") else "source data"),
+    ".</p>\n")
   paste0(caveat,
          "<div class=\"scroll\"><table class=\"cb\">\n",
          "<thead><tr><th>Column</th><th>What it is</th><th>Source column</th></tr></thead>\n",
@@ -1110,6 +1160,7 @@ main <- function() {
   notes_of <- .read_data_notes()
   coldocs_of <- .read_column_docs()
   covlabels_of <- .read_covariate_labels()
+  cblinks_of <- .read_codebook_links()
   STANDARD <<- .read_standard()
   irw_version <- max(manifest$irw_version)
   pins <- manifest[manifest$irw_version == irw_version, ]
@@ -1326,7 +1377,8 @@ main <- function() {
       issue = if (is.na(issue_of[k])) "" else unname(issue_of[k]),
       notes = notes_of[[k]],
       coldocs = coldocs_of[[k]],
-      covlabels = covlabels_of[[k]]
+      covlabels = covlabels_of[[k]],
+      cblinks = cblinks_of[[k]]
     )
     agg <- if (nzchar(x$source_via)) aggregators[[x$source_via]] else NULL
     x$via_note   <- if (is.null(agg)) "" else agg$note
