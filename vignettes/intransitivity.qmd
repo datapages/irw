@@ -1,0 +1,336 @@
+---
+title: "Are Competitions Transitive? Cycles and Luck in Pairwise Data"
+description: |
+  If A beats B and B beats C, does A beat C? Using every table in the IRW's
+  competition collection (team sports, chess, game-playing bots and human
+  judgments), we test whether cycles are more common than a transitive
+  Bradley-Terry model produces by chance, and show why the obvious ways of
+  checking are misleading.
+date: today
+bibliography: intransitivity_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(plotly)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+# Interactive figures on the site; STATIC_FIGS=1 gives plain images (for
+# previews outside the site, where the plotly scripts cannot load)
+show_plot <- function(p) if (Sys.getenv("STATIC_FIGS") == "1") p else ggplotly(p, tooltip = "text")
+
+cache <- readRDS("intransitivity_data/results.rds")
+preview <- isTRUE(cache$preview)
+U        <- as_tibble(cache$units)
+date_run <- cache$date_run
+
+fam_order <- c("MLB", "NBA", "NHL", "NFL", "Football: England and Italy", "Football: other leagues",
+               "Football: club cups and internationals", "US college football", "Cricket",
+               "Lichess 2013 bullet", "Lichess 2013 blitz", "Lichess 2013 classical",
+               "Engines and bots", "UFC and padel", "Judgments")
+U <- U |> mutate(family = factor(family, fam_order), sig = lr_p <= .05)
+team <- filter(U, type == "team")
+f2 <- function(x) formatC(x, format = "f", digits = 2)
+f3 <- function(x) formatC(x, format = "f", digits = 3)
+pct <- function(x) paste0(formatC(100 * x, format = "f", digits = 1), "%")
+num <- function(x) format(x, big.mark = ",")
+P <- function(u) { p <- U$lr_p[U$unit == u]; if (p <= 1 / 101 + 1e-9) "≤ .01" else sub("^0", "", f2(p)) }
+n_sig <- function(pattern) sum(U$sig[grepl(pattern, U$unit)])
+n_of  <- function(pattern) sum(grepl(pattern, U$unit))
+```
+
+```{r}
+#| label: preview-note
+#| echo: false
+#| results: asis
+if (preview) cat("::: {.callout-warning title=\"Preview\"}\nThese results were assembled from the analysis that preceded this page's compute script. The script's own run will replace them; numbers may move slightly, and the power table is still to come.\n:::\n")
+```
+
+## Motivation
+
+Rock beats scissors, scissors beats paper, paper beats rock. No one would try to rank the three, and yet ranking is what most models for pairwise data do. The Bradley-Terry model [@bradley1952], used in the course's [competitions lesson](https://ben-domingue.github.io/irw-course/lessons/competitions.html), gives each competitor a single strength and lets the difference in strengths set the odds of each game. It is transitive by construction: if A is likely to beat B and B is likely to beat C, then A is even more likely to beat C. That lesson sets intransitivity aside. This vignette picks it up.
+
+Cycles are not exotic. Psychologists have long found that people's preferences can cycle [@tversky1969], a mixture of transitive voters can produce a cyclic majority (Condorcet's paradox), and in games, a player can be beaten by one style and beat another. The question is empirical: in real competition data, are there more cycles than a transitive model produces by chance? The IRW's [competition collection](https://itemresponsewarehouse.org/comps_standard.html) holds a wide range of such data: more than a century of North American leagues and European football, cricket, chess on Lichess, engine and bot tournaments, and people judging which of two things is riskier, better written or more salient. We use all of it.
+
+The short answer: team sports are transitive, as far as these data can tell; fast online chess and game-playing bots are not; and human judgments mostly are. Getting there takes some care. Cycles show up everywhere, and nearly all of them are luck.
+
+---
+
+## Data and methods
+
+### Data
+
+```{r}
+#| label: tbl-data
+#| tbl-cap: "The analysis units by family. Agents and games per pair are medians across units."
+
+U |>
+  group_by(Family = family) |>
+  summarise(Units = n(), Games = num(sum(games)), `Agents (median)` = median(agents),
+            `Games per pair (median)` = f2(median(games_per_pair)), .groups = "drop") |>
+  knitr::kable()
+```
+
+We use `r length(cache$tables) - 1` of the `r length(cache$tables)` tables of the IRW's competition collection, `r num(sum(U$games))` games in all, split into `r num(nrow(U))` *units*: sets of games among which one transitive strength per agent would be a sensible model. Most units are one league-season. Divisions that never meet within a season (England's four divisions, the NBA and ABA before 1976) are split into separate units. The table left out is `t20_hyper`, a subset of the cricsheet IPL data. Where two tables cover the same season (538's NFL games and nflverse's; 538's soccer leagues and the footbayes and eufootball tables), each season is used once.
+
+- **Team sports.** One unit per league-season, regular season only: [MLB](https://itemresponsewarehouse.org/tables/mlb_through2023/) since 1871; 538's [NBA](https://itemresponsewarehouse.org/tables/fivethirtyeight_nba_1946_2023/), [NHL](https://itemresponsewarehouse.org/tables/fivethirtyeight_nhl_1917_2023/) and [NFL](https://itemresponsewarehouse.org/tables/fivethirtyeight_nfl_1920_2023/) games (NFL from [nflverse](https://itemresponsewarehouse.org/tables/nflverse_nfl_1999_2025/) since 1999); English and Italian football since 1888 and 1929 ([footbayes](https://itemresponsewarehouse.org/tables/footbayes_england/)); other European, American and Australian leagues; MLS; club cups and men's and women's internationals (by decade, teams with at least five games); US college football; and cricket leagues and internationals from [cricsheet](https://itemresponsewarehouse.org/tables/cricsheet_domestic_men_2008_2026/). The home side gets a home-advantage term; neutral venues get none.
+- **Chess on Lichess.** The [Lichess 2013](https://itemresponsewarehouse.org/tables/lichess_2013_bullet/) tables hold every rated game played on the site that year [@lichessdb], split by time control: bullet (under 3 minutes per player), blitz and classical. In 2013 the site was small, so its regulars played each other again and again. A unit is one month of one time control, restricted to a dense core: players who met at least 5 opponents at least twice each, then the 80 most active of them, with games among those 80 only. Each pair is capped at its first 10 games that month, so that a pair of friends playing 60 games in a night, or one account farming another, cannot drive the result. White's first move is the "home" advantage. The pre-game rating difference enters as a fixed offset, so the strengths estimated are strengths *beyond* each player's rating, and a player who improves during the month cannot pass for a cycle.
+- **Engines and bots.** The [TCEC](https://itemresponsewarehouse.org/tables/tcec_engines_2010_2026/) computer-chess championships, and `r n_of("^kaggle ")` game-playing competitions from [Meta Kaggle](https://itemresponsewarehouse.org/tables/metakaggle_rock_paper_scissors_2020_2021/) [@metakaggle], where every agent is one submitted bot. A bot is a fixed program, so it cannot improve during a competition. Each gets the same dense core as Lichess, without an offset. The IRW has one more Kaggle table, Connect-4 (2023–24), but few of its pairs of bots met more than once, so it has no dense core.
+- **UFC and padel.** All [UFC](https://itemresponsewarehouse.org/tables/ufc_1993_2026/) fights, and the [World Padel Tour](https://itemresponsewarehouse.org/tables/costa_gine_2023_wpt_matches/) by category, with the same dense core (one meeting per pair is enough here).
+- **Judgments.** People comparing two things: which of six European business schools a student prefers, in [CEMS](https://itemresponsewarehouse.org/tables/bradleyterry2_cems/) [@dittrich1998cems; @turner2012bt2]; which of two public risks is worse, on eight criteria such as how common it is, how harmful and how worrying [@friedman2019risks]; which of two movie reviews is more positive, which of two 2008 Senate campaign ads is more negative, which of two human-rights report passages describes more torture, and which of two survey answers expresses more worry about immigration [@carlson2017pairwise]; which of two ministries is more salient [@zucco2019data]; which of two German legislators is further left [@guinaudeau2024data]; and [EloChoice](https://itemresponsewarehouse.org/tables/elochoice_physical/) ratings of physical attractiveness. Each table is one unit.
+
+A draw counts as half a win for each side. One caveat on "games per pair": with about one game per pair (cricket leagues, NFL seasons, most judgment tables), the data hold very little information about any one matchup, which matters for everything below.
+
+### Counting cycles, and why the count needs a null
+
+The obvious check is to count cycles. For every three agents that have all played each other, look at who won the head-to-head majority in each pair. The triad is *transitive* if one agent beat both others, and *cyclic* if each agent beat one and lost to one. With noise, though, a transitive world produces cycles too: if A is only a little better than B, B will win their series often enough. So the share of cyclic triads has to be compared with what a transitive model produces on the same schedule, not with zero.
+
+We do that with a parametric bootstrap. Fit Bradley-Terry to the unit (an ordinal version when there are draws), simulate every game again from the fitted model on the same schedule (same pairs, same home sides), recount, and repeat 200 times. Besides the share of cyclic triads, we compute two sharper statistics. One counts violations of *strong stochastic transitivity*: whenever A beats B and B beats C, A should beat C at least as often as either. The other is HodgeRank's *cyclic share* [@jiang2011hodge]: the share of the pairwise log-odds that no ranking can explain.
+
+There is one subtlety in the simulation. The fitted strengths are more spread out than the true ones, because they include estimation noise. A null simulated from them makes games too predictable, and so too few cycles. We therefore rescale the strengths by the square root of an empirical-Bayes shrinkage factor (estimated true variance over observed variance) before simulating.
+
+### A likelihood test
+
+The triad statistics turn out to have very little power (see below), so the main test is a likelihood ratio. The alternative model adds a rank-2 skew-symmetric term to Bradley-Terry:
+
+$$
+\operatorname{logit} P(a \text{ beats } b) = h \cdot \text{home} + \theta_a - \theta_b + (u_a v_b - u_b v_a).
+$$
+
+Each agent has a strength $\theta$ and a position $(u, v)$ in a plane. The extra term is positive when $b$ sits counter-clockwise of $a$ (as seen from the origin), so three agents spread around the origin can beat each other in a circle. This is the "blade-chest" idea of @chen2016intransitivity in its simplest form. The likelihood-ratio statistic compares the two models, and its null distribution again comes from a parametric bootstrap on the same schedule (50 draws for team-seasons, 100 elsewhere). Both models carry a small ridge penalty, which keeps the fits finite when one agent wins or loses nearly every game.
+
+The rescaling matters even more here. A natural way to simulate the null is from the fitted Bradley-Terry strengths as they are, and with many games per pair that works. With about one game per pair, the fitted strengths are far too spread out, and so the simulated games are too predictable. A rank-2 term then improves the fit to the real data by more than it ever does to the simulated data, even when there is nothing cyclic to find. @tbl-size shows this on simulated data. We took the schedules of 40 cricket leagues and 20 NFL seasons, simulated every game from a transitive model, and ran the test with the null simulated each way.
+
+```{r}
+#| label: tbl-size
+#| tbl-cap: "How often the LR test rejects when there is no cycle at all. Each row tests the same simulated no-cycle data with two versions of the bootstrap null. Lichess: the 12 bullet months, with their rating offsets."
+
+ss <- cache$size_sparse; so <- cache$size_offset
+tibble(
+  `Simulated data` = c(sprintf("Sparse schedules: %d cricket leagues and NFL seasons", nrow(ss)),
+                       sprintf("Lichess bullet: %d months, with rating offsets", nrow(so))),
+  `Games per pair (median)` = c(f2(median(ss$games_per_pair)), f2(median(U$games_per_pair[grepl("^lichess .* bullet$", U$unit)]))),
+  `Null from fitted strengths` = c(pct(mean(ss$p_fitted <= .05)), "—"),
+  `Null from shrunk strengths` = c(pct(mean(ss$lr_p <= .05)), pct(mean(so$lr_p <= .05)))
+) |> knitr::kable(align = "lrrr")
+```
+
+The same problem arises with Lichess's rating offset in a different form. Strengths beyond a player's rating are mostly noise: their shrinkage factor is between `r f2(min(U$null_shrink[grepl("^lichess", U$unit)]))` and `r f2(max(U$null_shrink[grepl("^lichess", U$unit)]))` across the 36 Lichess units. With the rescaled null, the test holds its level in both settings, so every result below uses it.
+
+### Power
+
+```{r}
+#| label: tbl-power
+#| tbl-cap: "Share of 40 simulated leagues in which each test rejects at .05. Each league has 30 teams and 1,230 games (an NBA regular season), home advantage, strengths with SD 0.7, and a rank-2 cyclic term of the given scale (0 means no cycles)."
+
+if (is.null(cache$power)) {
+  knitr::asis_output("*The power simulation has not been run for this build of the page.*")
+} else cache$power |>
+  group_by(c) |>
+  summarise(`Likelihood ratio` = mean(lr_p <= .05), `Cyclic triads` = mean(wst_p <= .05),
+            `SST violations` = mean(sst_p <= .05), `HodgeRank cyclic share` = mean(curl_p <= .05), .groups = "drop") |>
+  mutate(across(-c, f2)) |>
+  rename(`Cyclic scale` = c) |>
+  knitr::kable(align = "lrrrr")
+```
+
+With two or three games per pair, a team's head-to-head record against any one opponent is mostly noise, and the triad statistics, which are built from those records, barely move when cycles are present. The likelihood test pools all the games into one comparison of two models and does much better. For scale: a cyclic term of 0.5 means that the typical pair's odds are off by about as much as the spread in team strength.
+
+---
+
+## Results
+
+### Cycles are everywhere, and they are mostly luck
+
+```{r}
+#| label: fig-cycles
+#| fig-cap: "Share of decided triads that are cyclic, observed vs. simulated from a transitive model on the same schedule, one point per unit (units with at most 150 agents). Points near the diagonal have about as many cycles as luck produces."
+#| fig-height: 6
+
+cy <- U |> filter(!is.na(wst), !is.na(wst_null), triads > 0) |>
+  mutate(text = sprintf("%s<br>observed %.3f, simulated %.3f<br>p = %.3f", unit, wst, wst_null, wst_p))
+p <- ggplot(cy, aes(wst_null, wst, colour = type, text = text)) +
+  geom_abline(colour = irw_grey, linetype = 2) +
+  geom_point(alpha = .6, size = 1.6) +
+  scale_colour_manual(values = c(team = irw_blue, `1v1` = irw_red, judg = "#1b7837"),
+                      labels = c(team = "Team sports", `1v1` = "One-on-one", judg = "Judgments"), name = NULL) +
+  labs(x = "Cyclic share, simulated (no cycles)", y = "Cyclic share, observed") +
+  coord_equal()
+show_plot(p)
+```
+
+In a typical team-season, `r pct(median(team$wst, na.rm = TRUE))` of the triads whose three series were all decided are cyclic. Simulating the same schedules from a transitive model gives `r pct(median(team$wst_null, na.rm = TRUE))`. @fig-cycles shows that this holds unit by unit: the points sit on the diagonal. Many cycles, then, but nearly all of them are what luck produces. The few units well above the diagonal are one-on-one games, which we come back to below.
+
+### Team sports: no intransitivity
+
+```{r}
+#| label: tbl-team
+#| tbl-cap: "Team-seasons where the likelihood test rejects at .05. With no cycles anywhere, about 5% would reject by chance."
+
+team |>
+  group_by(Family = family) |>
+  summarise(Units = n(), `p ≤ .05` = sum(sig), Share = pct(mean(sig)),
+            `Games per pair` = f2(median(games_per_pair)), .groups = "drop") |>
+  bind_rows(tibble(Family = "All team sports", Units = nrow(team), `p ≤ .05` = sum(team$sig),
+                   Share = pct(mean(team$sig)), `Games per pair` = f2(median(team$games_per_pair)))) |>
+  knitr::kable(align = "lrrrr")
+```
+
+Across `r num(nrow(team))` team-seasons, `r sum(team$sig)` (`r pct(mean(team$sig))`) reject at .05, fewer than the 5% that luck alone would give. No sport stands out. This is not for lack of power: MLB teams meet about 16 times a season, and a cyclic term even a third the size of the spread in strengths would show up in most seasons (@tbl-power).
+
+College football is the exception, but probably not a real one. Its two seasons have `r num(U$agents[U$unit == "collegefb 2021"])` and `r num(U$agents[U$unit == "collegefb 2022"])` teams, mostly in conferences that rarely play each other, and about one game per pair. The rank-2 term can then capture group structure the single strength misses, such as conferences of different quality whose teams meet in only a few games. That is a misfit of Bradley-Terry, but not a cycle.
+
+### Judgments: individuals are transitive
+
+```{r}
+#| label: tbl-judg
+#| tbl-cap: "Judgment tables: likelihood test of a rank-2 cyclic term."
+
+U |> filter(type == "judg") |>
+  arrange(unit) |>
+  transmute(Table = unit, Items = agents, Comparisons = num(games),
+            `Comparisons per pair` = f2(games_per_pair), p = sapply(unit, P)) |>
+  knitr::kable(align = "lrrrr")
+```
+
+Pooled across respondents, `r sum(U$sig[U$type == "judg"])` of `r sum(U$type == "judg")` judgment tables reject: the incidence and harm criteria of the risk study, one of the six text-coding tasks (which of two campaign ads is more negative), and the ministry-salience survey.
+
+A pooled table can be cyclic even if every person in it is perfectly transitive. If one group of respondents ranks A > B > C, another B > C > A, and a third C > A > B, the majority in every pair runs in a circle. This is Condorcet's paradox. CEMS lets us look at individuals directly, because each of its `r length(cache$cems$obs)` students compared all 15 pairs of the six schools, so each student's own answers form a complete little tournament with 20 triads.
+
+```{r}
+#| label: fig-cems
+#| fig-cap: "Cyclic triads per CEMS student (out of 20), observed and in 100 simulations in which every student draws their answers from one shared preference (the pooled ordinal Bradley-Terry model)."
+
+ce <- cache$cems
+cc <- bind_rows(
+  tibble(cycles = as.numeric(ce$obs), source = "Observed"),
+  tibble(cycles = as.numeric(ce$sims), source = "One shared noisy preference")) |>
+  count(source, cycles) |> group_by(source) |> mutate(share = n / sum(n)) |> ungroup() |>
+  mutate(text = sprintf("%s<br>%d cyclic triads: %.1f%% of students", source, cycles, 100 * share))
+p <- ggplot(cc, aes(cycles, share, fill = source, text = text)) +
+  geom_col(position = position_dodge(width = .8), width = .75) +
+  scale_fill_manual(values = c(Observed = irw_blue, `One shared noisy preference` = "grey70"), name = NULL) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Cyclic triads per student", y = "Share of students")
+show_plot(p)
+```
+
+`r pct(mean(ce$obs == 0))` of students have no cycle at all, against `r pct(mean(ce$sims == 0))` if each were a noisy draw from one shared preference. Students differ from each other in what they prefer, but each is strikingly consistent. Where pooled judgments do show cyclic structure, a mixture of different, internally transitive respondents is the natural first explanation, and it predicts exactly the pattern in @tbl-judg: weak, scattered rejections in some tables and not others.
+
+### Fast chess: yes
+
+```{r}
+#| label: fig-lichess
+#| fig-cap: "Lichess 2013, one point per month and time control: the likelihood-ratio statistic minus its mean under the bootstrap null (positive means more cyclic structure than chance). Filled points reject at .05. All tests include the pre-game rating difference."
+#| fig-height: 4.5
+
+li <- U |> filter(grepl("^lichess", unit)) |>
+  mutate(month = as.integer(sub("lichess 2013-(\\d+) .*", "\\1", unit)),
+         tc = factor(sub(".* ", "", unit), c("bullet", "blitz", "classical")),
+         excess = lr - lr_null,
+         text = sprintf("%s<br>LR %.0f vs %.0f under the null<br>p = %.2f<br>%s games, %.1f per pair", unit, lr, lr_null, lr_p, num(games), games_per_pair))
+p <- ggplot(li, aes(month, excess, colour = tc, shape = sig, text = text)) +
+  geom_hline(yintercept = 0, colour = irw_grey) +
+  geom_line(aes(group = tc), alpha = .4) +
+  geom_point(size = 2.6) +
+  scale_shape_manual(values = c(`TRUE` = 16, `FALSE` = 1), guide = "none") +
+  scale_colour_manual(values = c(bullet = irw_red, blitz = "#f4a582", classical = irw_blue), name = NULL) +
+  scale_x_continuous(breaks = 1:12, labels = month.abb) +
+  labs(x = NULL, y = "LR minus its null mean")
+show_plot(p)
+```
+
+Bullet chess, at under three minutes per player per game, rejects in `r n_sig("^lichess .* bullet$")` of 12 months. That is after allowing for each player's rating going into each game, and with no pair contributing more than 10 games. Classical rejects in `r n_sig("^lichess .* classical$")` and blitz in `r n_sig("^lichess .* blitz$")`. With 80 players and about five games per pair, a bullet month has enough data for this to be a pattern rather than an accident, and it recurs month after month. One reading is style: a player who thrives on fast tactics can beat a solid player who beats someone else, and a three-minute game leaves little time to adapt. We cannot test that reading here; the rank-2 term picks up any matchup-specific advantage, and there is no data on style to check it against.
+
+### Bots: mostly yes
+
+```{r}
+#| label: tbl-bots
+#| tbl-cap: "Engines and bots: the 80 most active agents of each competition, each pair capped at 10 games."
+
+U |> filter(family == "Engines and bots") |>
+  arrange(lr_p, unit) |>
+  transmute(Competition = sub("^kaggle ", "Kaggle: ", unit), Games = num(games),
+            `Games per pair` = f2(games_per_pair), p = sapply(unit, P)) |>
+  knitr::kable(align = "lrrr")
+```
+
+`r n_sig("^kaggle ")` of `r n_of("^kaggle ")` Kaggle competitions reject, from ConnectX and chess to rock-paper-scissors and the Lux AI strategy games. Bots are fixed programs, so nothing like a player improving through the month is possible. What a bot can have is a strategy that exploits some opponents and is exploited by others, which is the textbook source of a cycle. Rock-paper-scissors is the purest case, since every strategy is beatable. In the chess engines of TCEC, by contrast, there is no sign of cycles (p = `r P("tcec engines (all seasons)")`): the strongest engines seem to be simply stronger. Orbit Wars, the densest Kaggle competition, does not reject either.
+
+What does a cycle look like? @tbl-examples shows the most lopsided cyclic triad in the bullet month and in the Kaggle competition where one is most lopsided: each agent beat the next in their head-to-head meetings, among pairs that met at least five times.
+
+```{r}
+#| label: tbl-examples
+#| tbl-cap: "The most lopsided cycle in one bullet month and one Kaggle competition. Players and bots are labelled A, B and C. The likelihood test does not rest on any single cycle; these are illustrations."
+
+ex <- as_tibble(cache$examples)
+# per unit, the weakest of the three winning shares; show the bullet month and the
+# Kaggle competition whose cycle is most lopsided
+strength <- ex |> group_by(unit) |> summarise(s = min(wins / games), .groups = "drop")
+pick_best <- function(pat) { x <- filter(strength, grepl(pat, unit)); x$unit[which.max(x$s)] }
+show_u <- c(pick_best("^lichess"), pick_best("^kaggle "))
+ex |> filter(unit %in% show_u) |>
+  transmute(Unit = sub("^kaggle ", "Kaggle: ", unit), Result = paste(winner, "beat", loser),
+            Record = sprintf("%g of %d", wins, games)) |>
+  knitr::kable()
+```
+
+---
+
+## Discussion
+
+Where does this leave the Bradley-Terry model? For team sports it holds up well: across more than a century of leagues, a single strength per team captures the structure of who beats whom, and what looks like a cycle is the noise of a short series. For fast one-on-one chess and for bots it does not: some matchups are consistently better or worse than the two strengths predict, and those deviations line up into cycles. Judgments sit in between. Individuals are transitive; pooled judgments occasionally are not, in the way a mixture of transitive people predicts.
+
+There are also two lessons about method. First, counting cycles answers the wrong question, because noise alone produces plenty of them. Second, the right comparison is with a transitive model simulated on the same schedule, and that simulation has to use realistic strengths. Fitted strengths are too spread out whenever there is little data per pair, which is common in real competition data, and a null built from them finds cycles that are not there.
+
+---
+
+## Limitations
+
+**The rank-2 term catches more than cycles.** It improves the fit whenever some pairs systematically do better or worse than their strengths predict: groups of agents of different quality that rarely meet, styles that match up well or badly, home advantage that varies by team. A rejection says that one strength per agent is not enough, and a cycle is one way, but not the only way, for that to happen. College football is the clearest case where it is probably something else.
+
+**Dense cores are selected.** For Lichess and the bots, the units are the 80 most active agents among those who met each other repeatedly. That is the part of the data where a test has power, but it is not a random sample of players or bots. Lichess in 2013 was a small site with mostly amateur players, and ratings lag skill, so the rating offset controls for improvement only in part.
+
+**Matchmaking is adaptive.** Kaggle pairs bots with others of similar rating, and Lichess players choose their opponents. The bootstrap conditions on the observed schedule, which is the right comparison for the question asked, but who plays whom is not random.
+
+**Few games per pair limit what can be found.** Much of the data has one or two games per pair. The rescaled null keeps the test honest there, but its power is low, so "no rejection" in sparse units is weak evidence of transitivity.
+
+**Many tests.** About `r num(nrow(U))` units are tested; at .05, about `r round(nrow(U) * .05)` would reject by chance. The conclusions above rest on patterns across many units (the share of team-seasons, `r n_sig("^lichess .* bullet$")` of 12 bullet months), not on any single p-value.
+
+---
+
+## Reproducibility
+
+{{< include ../components/_source-links.qmd >}}
+
+{{< include ../components/_data-version.qmd >}}
+
+Results computed `r format(date_run, "%B %d, %Y")`. All tables are fetched with `irw::irw_fetch(source = "comp")`. The full computation is long: about two days on two cores, mostly the likelihood tests for the Lichess months, the Kaggle competitions and the largest judgment tables. The compute script caches every fetched table and every unit's result, so it can be stopped and resumed. To regenerate:
+
+```r
+# from the site root; IRW_CORES sets the number of worker processes
+IRW_CORES=2 nice -n 19 Rscript vignettes/intransitivity_compute.R
+quarto::quarto_render("vignettes/intransitivity.qmd")
+```
+
+---
+
+## References
