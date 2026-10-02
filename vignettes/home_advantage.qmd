@@ -1,0 +1,540 @@
+---
+title: "Home Advantage: A Century and a Half of It, and a Season Without Crowds"
+description: |
+  Teams win more often at home. Using the IRW's competition tables, we estimate
+  home advantage net of team strength in every season of baseball, basketball,
+  hockey, American football and English and Italian football back to the
+  nineteenth century, ask how it has changed, and then use the 2020-21 seasons
+  played in empty stadiums to ask how much of it the crowd supplies.
+date: today
+bibliography: home_advantage_data/references.bib
+nocite: |
+  @*
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(plotly)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+cache_path <- "home_advantage_data/home_advantage_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache           <- readRDS(cache_path)
+  summary_df       <- .cache$summary
+  nocrowd_df       <- .cache$nocrowd
+  nba_bubble       <- .cache$nba_bubble
+  excluded_df      <- .cache$excluded
+  nocrowd_window   <- .cache$nocrowd_window
+  min_games        <- .cache$min_games %||% 50
+  candidate_tables <- .cache$candidate_tables
+  date_run         <- .cache$date_run
+  is_pilot         <- isTRUE(.cache$pilot)
+  r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
+  r_n_tables_run   <- length(candidate_tables)
+} else {
+  summary_df <- tibble(
+    sport = character(), league = character(), table = character(),
+    period = numeric(), first_date = as.Date(character()), h = numeric(),
+    h_se = numeric(), method = character(), n_games = integer(),
+    n_agents = integer(), n_components = integer(), draw_rate = numeric(),
+    home_share = numeric()
+  )
+  nocrowd_df <- tibble(
+    league = character(), sport = character(), definition = character(),
+    h = numeric(), h_se = numeric(), delta = numeric(), delta_se = numeric(),
+    n_nocrowd = integer(), n_games = integer()
+  )
+  nba_bubble       <- NULL
+  excluded_df      <- tibble(table = character(), reason = character())
+  nocrowd_window   <- as.Date(c("2020-03-13", "2021-05-31"))
+  min_games        <- 50
+  candidate_tables <- character()
+  date_run         <- Sys.Date()
+  is_pilot         <- FALSE
+  r_all_candidates <- 0L
+  r_n_tables_run   <- 0L
+}
+
+knitr::opts_chunk$set(eval = cache_ok)
+
+# the six series with one estimate per season
+season_series <- c("Baseball (MLB)", "Basketball (NBA)", "Ice hockey (NHL)",
+                   "American football (NFL)", "England (all divisions)", "Italy (Serie A)")
+covid <- c(2020, 2021)
+fmt <- function(x, d = 2) formatC(x, format = "f", digits = d)
+# inline values: evaluated only when the cache exists (arguments are lazy)
+iv <- function(x) if (cache_ok) x else "\u2014"
+```
+
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (!cache_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Cache not found** — figures and tables will not appear. Generate results ",
+  "by running the compute script, then re-render:\n\n",
+  "```r\nRscript vignettes/home_advantage_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+```{r}
+#| label: pilot-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (cache_ok && is_pilot) cat(
+  "::: {.callout-warning}\n",
+  "**Draft preview, partial run.** This render uses ",
+  r_n_tables_run, " of the ", r_all_candidates, " competition tables chosen for ",
+  "this page, to validate the pipeline and page layout. All numbers here are real ",
+  "computed results, but sports missing from the pilot are missing from every ",
+  "figure. Re-run `home_advantage_compute.R` with `PILOT <- FALSE` for the full set.\n",
+  ":::\n", sep = ""
+)
+```
+
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the
+analysis design, and the writing below — was produced largely by Claude
+(Anthropic), working from a task specification and with human review.
+Treat the methodological choices and interpretations accordingly, and
+check the compute script (`home_advantage_compute.R`) directly if you're relying
+on the numbers here.
+:::
+
+## Motivation
+
+Home teams win more often than away teams. This is among the oldest and best
+documented regularities in sport: @pollard1986home documented it for English
+football, @pollard2005long traced it across professional team sports in North
+America and England back to 1876, and @jamieson2010home's meta-analysis found it
+across every sport and era studied. Two questions about it remain live.
+
+1. **Is it shrinking?** It is widely believed to have declined, but a raw
+   home-win percentage mixes home advantage with who happened to host whom. A
+   strong team that plays more home games, or a season with lopsided schedules,
+   moves the raw number without any change in what playing at home is worth.
+2. **Where does it come from?** The usual suspects are the crowd, travel,
+   familiarity with the venue, and referees responding to the crowd. In 2020 and
+   2021 most professional leagues played without spectators, which separated the
+   crowd from the rest for the first time on a large scale. Studies of German
+   [@fischer2021crowd], European [@mccarrick2021home] and North American
+   [@higgs2021bayesian] leagues have used that natural experiment.
+
+The IRW's [competition tables](../comps_standard.qmd) are well suited to both. They
+store one row per game between two agents, with a common coding of which side was
+at home, across sports and back as far as 1871. Home advantage is then a single
+parameter in a paired-comparison model, estimated net of the strength of the two
+sides. In IRW terms it is something like an item parameter that every game shares,
+estimated across hundreds of tables, and the question is whether it is stable.
+
+## Data and methods
+
+### Dataset selection
+
+```{r}
+#| label: filter-datasets
+#| eval: false
+
+library(irw)
+# every comp table with a real home side and a long run of seasons
+tables <- c(
+  "retrosheet_mlb_1871_2025", "fivethirtyeight_nba_1946_2023",
+  "fivethirtyeight_nhl_1917_2023", "fivethirtyeight_nfl_1920_2023",
+  "nflverse_nfl_1999_2025", "footbayes_england", "footbayes_italy",
+  "fivethirtyeight_soccer_2016_2023", "rugby_union_tier1_1871_2026",
+  "intlfootball_men_1872-2026", "intlfootball_women_1956-2026"
+)
+games <- lapply(tables, irw_fetch, source = "comp")
+```
+
+The IRW's competition collection has over a hundred tables, from professional
+leagues and esports to animal dominance encounters and pairwise judgments. Most
+have no home side. We used the `r r_all_candidates` tables that have one and that
+run over many seasons. Each table codes the home side the same way: `homefield` is
+`"agent_a"` when `agent_a` is at home and missing at a neutral venue. Tables left
+out, and why:
+
+```{r}
+#| label: tbl-excluded
+#| echo: false
+
+knitr::kable(excluded_df, col.names = c("Table(s)", "Why left out"))
+```
+
+### The model
+
+The analysis unit is a league-season (for rugby and internationals, which have too
+few games per year, a decade). Within each unit we fit a Bradley-Terry model
+[@bradley1952rank] with a home term:
+
+$$
+\text{logit}\, P(a \text{ beats } b) = h \cdot \text{home}_{ab} + \theta_a - \theta_b,
+$$
+
+where $\text{home}_{ab}$ is 1 if $a$ is at home, $-1$ if $b$ is, and 0 at a neutral
+venue. The $\theta$s are team strengths, so $h$ is the home advantage in logits,
+*net of who played whom*. For a sense of scale, $h = 0.4$ means two evenly matched
+teams would see the home side win about `r round(100 * plogis(0.4))`% of decided
+games. Where a sport has draws, we fit the ordinal version of the model
+[@agresti1992analysis], in which a draw sits between a win and a loss on the same
+latent scale, so $h$ keeps the same meaning.
+
+```{r}
+#| label: fit-function
+#| eval: false
+
+# Every second game is written from the away side's point of view, so that the
+# home column is not constant (and so not absorbed by the ordinal cutpoints).
+fit_h <- function(a, b, y, home, nocrowd = NULL) {
+  flip <- seq_along(a) %% 2 == 0
+  a2 <- ifelse(flip, b, a); b2 <- ifelse(flip, a, b)
+  y <- ifelse(flip, 1 - y, y); home <- ifelse(flip, -home, home)
+  # team-strength design, one reference team per connected component
+  cmp <- components(a2, b2)
+  keep <- setdiff(sort(unique(c(a2, b2))), tapply(names(cmp), cmp, `[`, 1))
+  X <- matrix(0, length(a2), length(keep))
+  ia <- match(a2, keep); ib <- match(b2, keep)
+  X[cbind(which(!is.na(ia)), ia[!is.na(ia)])] <- 1
+  X[cbind(which(!is.na(ib)), ib[!is.na(ib)])] <- -1
+  H <- cbind(home = home)
+  if (!is.null(nocrowd)) H <- cbind(H, home_nocrowd = home * nocrowd)
+  Z <- cbind(H, X)
+  if (any(y == 0.5)) {   # draws: ordinal Bradley-Terry
+    m <- MASS::polr(factor(y, levels = c(0, 0.5, 1)) ~ Z, Hess = TRUE)
+  } else {
+    m <- glm(y ~ Z - 1, family = binomial)
+  }
+  # ... returns h, its SE, and delta (below) when nocrowd is given
+}
+```
+
+A few details matter for what follows:
+
+- **Regular season only.** Playoff games are left out of the season fits: there
+  are few of them, and home order in a playoff series is earned by the better
+  record, not scheduled.
+- **Divisions.** In English football a season has up to four divisions that never
+  meet. They go in one fit, each with its own reference team, and share a single
+  $h$.
+- **Sparse or one-sided agents.** Teams with fewer than five games in a unit, and
+  teams that won or lost every game, are dropped before fitting; their strength
+  cannot be estimated (it is infinite for a perfect record). This matters mostly
+  for the internationals.
+- **NFL sources.** 538's table supplies seasons to 1998 and nflverse's from 1999,
+  where the two overlap.
+- Units with fewer than `r min_games` games are skipped.
+
+**The no-crowd test.** For each league we pool the 2016-2023 seasons into one fit,
+with a strength for every team-season and a second home term for games played in
+the no-crowd window, `r format(nocrowd_window[1], "%d %B %Y")` to
+`r format(nocrowd_window[2], "%d %B %Y")`:
+
+$$
+\text{logit}\, P(a \text{ beats } b) = (h + \delta \cdot \text{nocrowd}) \cdot \text{home}_{ab} + \theta_{a,s} - \theta_{b,s}.
+$$
+
+$\delta$ is the change in home advantage when the stands were empty. One window is
+used for every league; for MLB, whose Retrosheet table records attendance, we also
+define "no crowd" directly as a 2020 game with no recorded attendance.
+
+Of the units built, `r iv(nrow(summary_df))` produced estimates; the season fits used
+the ordinal model in `r iv(sum(summary_df$method == "ordinal"))` and the binary model
+in `r iv(sum(summary_df$method == "binary"))`.
+
+::: {.callout-note}
+To reproduce with current IRW holdings, re-run `home_advantage_compute.R`
+and commit the updated `home_advantage_data/home_advantage_results.rds`.
+:::
+
+## Results
+
+### How big is home advantage?
+
+```{r}
+#| label: tbl-size
+#| echo: false
+
+wmean <- function(x, se) sum(x / se^2) / sum(1 / se^2)
+size_df <- summary_df |>
+  filter(sport != "Football (538 leagues)", !period %in% covid) |>
+  mutate(era = cut(period, c(-Inf, 1949, 1989, 2019), labels = c("before 1950", "1950-1989", "1990-2019"))) |>
+  filter(!is.na(era)) |>
+  group_by(league, era) |>
+  summarise(h = wmean(h, h_se), .groups = "drop") |>
+  pivot_wider(names_from = era, values_from = h) |>
+  arrange(desc(`1990-2019`))
+size_538 <- summary_df |> filter(sport == "Football (538 leagues)", !period %in% covid)
+knitr::kable(size_df, digits = 2, col.names = c("Series", "Before 1950", "1950-1989", "1990-2019"),
+             caption = "Home advantage h (logits), precision-weighted mean over the seasons (or decades) in each era. 2020 and 2021 are left out.")
+```
+
+Home advantage is real in every sport here, and it differs a great deal between
+them. In 1990-2019 it was largest in Italian and English football and in
+international matches, and smallest in baseball, where
+`r iv(fmt(size_df$"1990-2019"[size_df$league == "Baseball (MLB)"]))` logits means the
+home side of an even game wins only about
+`r iv(round(100 * plogis(size_df$"1990-2019"[size_df$league == "Baseball (MLB)"])))`% of
+the time. Across the `r iv(n_distinct(size_538$league))` leagues in 538's club-football
+table (seasons other than 2020 and 2021), the median league-season had $h$ =
+`r iv(fmt(median(size_538$h)))`.
+
+### Has it declined?
+
+```{r}
+#| label: fig-trend
+#| fig-height: 8
+#| fig-cap: "Home advantage h by season, with ±2 SE bars. 2020 and 2021, the seasons played largely without crowds, are in red. Rugby and internationals are estimated by decade."
+
+trend_df <- summary_df |>
+  filter(sport != "Football (538 leagues)") |>
+  mutate(covid = period %in% covid & league %in% season_series,
+         year = if_else(league %in% season_series, period, period + 5),
+         text = paste0(league, " ", period, if_else(league %in% season_series, "", "s"),
+                       "<br>h = ", fmt(h), " (SE ", fmt(h_se), ")<br>", n_games, " games, ",
+                       n_agents, " teams<br>", table))
+p <- ggplot(trend_df, aes(year, h, text = text)) +
+  geom_hline(yintercept = 0, colour = irw_grey, linewidth = 0.3) +
+  geom_linerange(aes(ymin = h - 2 * h_se, ymax = h + 2 * h_se, colour = covid), alpha = 0.4) +
+  geom_point(aes(colour = covid), size = 0.9) +
+  geom_smooth(data = filter(trend_df, !covid), mapping = aes(year, h, weight = 1 / h_se^2),
+              method = "loess", span = 0.5, se = FALSE, colour = irw_blue, linewidth = 0.6,
+              inherit.aes = FALSE) +
+  scale_colour_manual(values = c(`FALSE` = "grey30", `TRUE` = irw_red), guide = "none") +
+  facet_wrap(~ league, ncol = 3) +
+  labs(x = NULL, y = "home advantage h (logits)")
+ggplotly(p, tooltip = "text")
+```
+
+```{r}
+#| label: tbl-slopes
+#| echo: false
+
+slope <- function(d) {
+  m <- lm(h ~ I(period / 10), data = d, weights = 1 / h_se^2)
+  co <- summary(m)$coefficients
+  tibble(slope = co[2, 1], se = co[2, 2], n = nrow(d))
+}
+slopes <- summary_df |>
+  filter(league %in% season_series, !period %in% covid) |>
+  group_by(league) |>
+  group_modify(~ bind_rows(
+    slope(.x) |> mutate(span = "whole series"),
+    slope(filter(.x, period >= 1990, period < 2020)) |> mutate(span = "1990-2019")
+  )) |>
+  ungroup() |>
+  mutate(est = paste0(fmt(slope, 3), " (", fmt(se, 3), ")")) |>
+  select(league, span, est) |>
+  pivot_wider(names_from = span, values_from = est)
+first_season <- summary_df |> filter(league %in% season_series) |> group_by(league) |> summarise(from = min(period))
+slopes <- left_join(slopes, first_season, by = "league") |> select(league, from, everything())
+knitr::kable(slopes, col.names = c("Series", "From", "Whole series", "1990-2019"),
+             caption = "Change in h per decade (SE), from a precision-weighted regression of season estimates on year. 2020 and 2021 are left out of both.")
+```
+
+```{r}
+#| label: slope-numbers
+#| include: false
+sl <- summary_df |>
+  filter(league %in% season_series, !period %in% covid) |>
+  group_by(league) |>
+  group_modify(~ bind_cols(slope(.x), slope(filter(.x, period >= 1990, period < 2020)) |> rename_with(~ paste0(.x, "_90")))) |>
+  ungroup()
+n_down <- sum(sl$slope + 2 * sl$se < 0)
+n_down90 <- sum(sl$slope_90 + 2 * sl$se_90 < 0)
+```
+
+Over the whole of each series, home advantage has fallen in `r iv(n_down)` of the
+`r iv(nrow(sl))` leagues measured season by season, by more than twice its standard
+error. The steepest declines are in European football: in English football $h$ has
+roughly halved since before 1950, and in Serie A it has fallen by about 40%. Among
+the North American sports the decline is clearest in hockey and in basketball,
+where $h$ rose to a peak in the middle of the century before falling. Baseball's
+small advantage has drifted down slowly, and has been essentially flat since 1990.
+American football shows no long-run trend. Since 1990 the decline is significant
+in `r iv(n_down90)` series (basketball, hockey and both football leagues); the NFL's
+estimate points the same way but is too noisy to say.
+
+This is the familiar result, and it is worth seeing that it survives conditioning
+on team strength: the decline is not an artefact of who hosted whom. What the
+model cannot say is *why*. Better travel, standardised stadiums, and changes in
+officiating are all candidates, and all of them moved over the same decades.
+
+Rugby and international football, estimated by decade, show no such decline. The
+estimates are noisy, but they are also a different kind of home advantage: a
+national side playing at home has often travelled less far, in a stadium it chose,
+in front of a crowd that is almost entirely its own.
+
+### Did empty stadiums shrink it?
+
+```{r}
+#| label: fig-nocrowd
+#| fig-height: 9
+#| fig-cap: "Change in home advantage (δ, logits) in games played without crowds, by league, ±2 SE. Negative means home advantage shrank. Each estimate is net of team-season strength, from the 2016-2023 seasons."
+
+nc <- nocrowd_df |>
+  mutate(label = if_else(definition == "attendance column", paste(league, "(attendance)"), league),
+         group = if_else(sport == "Football (538 leagues)", "Club football", "North American leagues"),
+         text = paste0(label, "<br>δ = ", fmt(delta), " (SE ", fmt(delta_se), ")<br>h with crowds = ",
+                       fmt(h), "<br>", n_nocrowd, " home games without a crowd")) |>
+  arrange(delta) |>
+  mutate(label = factor(label, levels = label))
+p <- ggplot(nc, aes(delta, label, text = text, colour = group)) +
+  geom_vline(xintercept = 0, colour = irw_grey) +
+  geom_linerange(aes(xmin = delta - 2 * delta_se, xmax = delta + 2 * delta_se), alpha = 0.6) +
+  geom_point(size = 1.5) +
+  scale_colour_manual(values = c("Club football" = irw_blue, "North American leagues" = irw_red)) +
+  labs(x = "change in home advantage without crowds (δ, logits)", y = NULL, colour = NULL)
+ggplotly(p, tooltip = "text") |> layout(legend = list(orientation = "h", y = -0.08))
+```
+
+```{r}
+#| label: nocrowd-numbers
+#| include: false
+foot <- filter(nocrowd_df, sport == "Football (538 leagues)")
+w <- 1 / foot$delta_se^2
+pooled <- sum(w * foot$delta) / sum(w); pooled_se <- sqrt(1 / sum(w))
+Q <- sum(w * (foot$delta - pooled)^2); Q_df <- nrow(foot) - 1
+pooled_h <- sum(foot$h / foot$h_se^2) / sum(1 / foot$h_se^2)
+na <- function(lg, def = "date window") filter(nocrowd_df, league == lg, definition == def)
+```
+
+In club football the answer is yes. Home advantage fell in
+`r iv(sum(foot$delta < 0))` of the `r iv(nrow(foot))` leagues, and the precision-weighted
+average change is `r iv(fmt(pooled))` logits (SE `r iv(fmt(pooled_se))`), against a typical
+advantage with crowds of about `r iv(fmt(pooled_h))`: about
+`r iv(round(-100 * pooled / pooled_h))`% of it went with the crowd. The leagues differ by more than chance would explain (heterogeneity
+$Q$ = `r iv(fmt(Q, 1))` on `r iv(Q_df)` df). Several of the largest drops were in top divisions
+(the Premier League, Ligue 1, the Bundesliga), while two second divisions, Ligue 2
+and the 2. Bundesliga, show none (England's lower divisions did lose some). @fischer2021crowd found exactly this
+pattern for Germany and traced it to occupancy: a stadium that is usually half
+empty loses less when it is fully empty.
+
+The North American leagues split. Basketball lost home advantage
+($\delta$ = `r iv(fmt(na("Basketball (NBA)")$delta))`, SE `r iv(fmt(na("Basketball (NBA)")$delta_se))`),
+as did American football, more noisily. Hockey barely moved. Baseball did not lose
+any: the estimate is positive whether "no crowd" is read from the calendar
+($\delta$ = `r iv(fmt(na("Baseball (MLB)")$delta))`) or from the attendance column
+($\delta$ = `r iv(fmt(na("Baseball (MLB)", "attendance column")$delta))`, SE
+`r iv(fmt(na("Baseball (MLB)", "attendance column")$delta_se))`). @higgs2021bayesian,
+with a different model, found home advantage fell in the NBA's and NHL's 2020
+playoffs, played in bubbles, and changed little in MLB and the NFL. We agree on
+basketball and baseball. Our hockey and American football estimates come from the
+regular season, not the bubble playoffs, which may be why they differ. Baseball's
+advantage was small to begin with, and the sport has a structural home edge (the home side bats last)
+that does not depend on anyone watching.
+
+### Crowd or travel? The NBA bubble
+
+```{r}
+#| label: tbl-bubble
+#| echo: false
+
+if (!is.null(nba_bubble)) {
+  tm <- nba_bubble$terms
+  bub <- tibble(
+    Setting = c("Normal seasons (crowd and travel)",
+                "2020 bubble (no crowd, no travel)",
+                "2020-21 season (travel, no crowd)"),
+    `Home games` = c(NA, tm$n_games[tm$term == "bubble"], tm$n_games[tm$term == "season_2021"]),
+    h = c(nba_bubble$h, nba_bubble$h + tm$delta),
+    `Change from normal` = c(NA, tm$delta),
+    SE = c(nba_bubble$h_se, tm$delta_se)
+  )
+  knitr::kable(bub, digits = 2, caption = "NBA home advantage, 2016-2023 seasons with playoffs; the 2021 playoffs, when crowds were partly back, are left out. The SE is for h in the first row and for the change in the others.")
+}
+```
+
+The NBA gives one more contrast. Its 2020 restart was played in a bubble at Walt
+Disney World: no crowd, and no travel either, since every team lived on site. The
+season that followed was played in home arenas, with travel but with few or no
+fans. 538 flags the bubble games as neutral, but its `agent_a` is still the
+designated home team (in the 2020 Finals, the Lakers in games 1, 2 and 5 and the
+Heat in 3, 4 and 6, as scheduled), so we can estimate a nominal home advantage for
+them. It nearly vanished in the bubble and about halved in 2020-21. With only
+`r iv(if (!is.null(nba_bubble)) nba_bubble$terms$n_games[1] else NA)` bubble games the
+first estimate is imprecise, and the two do not differ significantly, but the
+ordering is what you would expect if both the crowd and travel contribute.
+
+## Limitations
+
+- **One no-crowd window for every league.** Leagues closed and reopened at
+  different times: some readmitted limited crowds in autumn 2020, MLB from April
+  2021, while Brazil stayed closed into late 2021. Misclassified games pull
+  $\delta$ toward zero, so the estimates understate any effect rather than invent
+  one. The MLB attendance check, which needs no window, gives the same answer as
+  the window does.
+- **Neither design isolates the crowd.** The no-crowd seasons also changed
+  schedules, travel restrictions, quarantines and, in some leagues, venues. The
+  bubble comparison separates crowd from travel only for the NBA and only on 172
+  games.
+- **Strengths are fixed within a unit.** Teams improve and decline within a season,
+  and much more within the decade used for rugby and the internationals. That
+  matters little for $h$ in a balanced league schedule, more for the
+  internationals, where who hosts is not balanced.
+- **Dropped teams.** Teams with fewer than five games, or a perfect record, are
+  dropped before fitting. For the internationals this removes the weakest
+  sides, and in the 2000s the remaining women's schedule still separates, so that
+  decade has no estimate.
+- **The trend is descriptive.** A straight line per series summarises a decline;
+  it does not say when or why it happened, and the per-season estimates are
+  correlated within a series, so the slope SEs are optimistic.
+- **Home advantage is averaged over teams.** Some venues (altitude, artificial
+  pitches, long travel) carry more than others; one $h$ per league ignores that.
+
+## Reproducibility
+
+{{< include ../components/_data-version.qmd >}}
+
+Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+# 1. Re-run the compute script (from the project root)
+source("vignettes/home_advantage_compute.R")
+
+# 2. Re-render this page
+quarto::quarto_render("vignettes/home_advantage.qmd")
+```
+
+{{< include ../components/_source-links.qmd >}}
+
+::: {.callout-tip}
+To cite the datasets used, run:
+
+```r
+irw_save_bibtex(unique(summary_df$table), output_file = "home_advantage_data/references.bib",
+                source = "comp")
+```
+:::
+
+---
+
+## References
