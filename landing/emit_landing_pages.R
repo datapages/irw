@@ -91,6 +91,11 @@ DATA_NOTES_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/mai
 # (ben-domingue/irw#2763).
 COLUMN_DOCS_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
                           "metadata/column_docs.csv")
+# Covariate value labels (ben-domingue/irw#1775), verbatim from each source:
+# table, covariate, code, label. The same file irw_meta's covariate_labels
+# table is uploaded from.
+COVARIATE_LABELS_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
+                               "metadata/covariate_labels.csv")
 STANDARD_RAW_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
                            "datastandard.md")
 # Filled by main() from .read_standard(); empty until then, so a page built
@@ -225,6 +230,23 @@ clean_doi <- function(x) {
   split(d, tolower(d$table))
 }
 
+# tolower(table) -> that table's covariate labels. Help, not fact, like the
+# codebook rows: a failed fetch leaves covariates unlabelled (irw#2763 step 3).
+.read_covariate_labels <- function() {
+  d <- tryCatch({
+    con <- url(COVARIATE_LABELS_URL)
+    on.exit(try(close(con), silent = TRUE), add = TRUE)
+    utils::read.csv(con, colClasses = "character", na.strings = character(0),
+                    encoding = "UTF-8")
+  }, error = function(e) {
+    message("[landing] covariate_labels.csv unreadable (", conditionMessage(e),
+            "); codebook covariates carry no value labels")
+    NULL
+  })
+  if (is.null(d) || !nrow(d)) return(list())
+  split(d, tolower(d$table))
+}
+
 # The data standard's schema table: list(exact = name -> first sentence,
 # family = prefix -> first sentence). Same parsing rules as stage 14 and the
 # MCP: a backticked `name*` or `nameN` is a family.
@@ -331,6 +353,29 @@ columns_note <- function(x) {
 # source says it is not documented. Returns "" when there are no rows, and the
 # page keeps the plain column list.
 SCRIPT_BLOB <- "https://github.com/ben-domingue/irw/blob/main/"
+
+# A covariate's value labels, in code order: "1 = Rural · 2 = Urban". More
+# than eight fold into a <details>. Labels are the source's own words; when
+# every code shares the withheld-institution label, decoding would only merge
+# distinct groups, so the row says what the codes are instead.
+VALUES_INLINE_MAX <- 8
+WITHHELD_LABEL <- "[institution name withheld]"
+values_html <- function(labels, column) {
+  if (is.null(labels) || !nrow(labels)) return("")
+  v <- labels[labels$covariate == column, , drop = FALSE]
+  if (!nrow(v)) return("")
+  num <- suppressWarnings(as.numeric(v$code))
+  v <- v[order(is.na(num), num, v$code, method = "radix"), , drop = FALSE]
+  if (all(v$label == WITHHELD_LABEL))
+    return(paste0("<span class=\"vals\">", nrow(v),
+                  " codes, each an institution; names withheld.</span>"))
+  pairs <- paste0("<span class=\"val\"><code>", vapply(v$code, esc, character(1)),
+                  "</code>&nbsp;=&nbsp;", vapply(v$label, esc, character(1)), "</span>")
+  if (nrow(v) <= VALUES_INLINE_MAX)
+    paste0("<span class=\"vals\">", paste(pairs, collapse = " &middot; "), "</span>")
+  else paste0("<details class=\"vals\"><summary>", nrow(v), " labelled values</summary>",
+              paste(pairs, collapse = " &middot; "), "</details>")
+}
 codebook_html <- function(x, standard) {
   d <- x$coldocs
   if (is.null(d) || !nrow(d) || !length(x$variables)) return("")
@@ -362,6 +407,7 @@ codebook_html <- function(x, standard) {
       else if (startsWith(r$column, "cov_")) ""
       else if (r$documented == "true") "Not defined by the IRW standard; the source column&rsquo;s codebook entry gives its meaning."
       else "Not documented by the IRW; see the source&rsquo;s codebook."
+    what <- paste0(what, values_html(x$covlabels, r$column))
     paste0("<tr><td><code class=\"col\">", esc(r$column), "</code></td>",
            "<td><span class=\"chip ", chip[1], "\">", chip[2], "</span> ", what, "</td>",
            "<td>", src, "</td></tr>")
@@ -389,8 +435,12 @@ codebook_html <- function(x, standard) {
     if (nzchar(url)) paste0("<a href=\"", esc(url), "\">source data</a>") else "source data",
     " are the authority. If you find an error, please ",
     "<a href=\"", ISSUE_URL, "new\">tell us</a>.</p>\n")
+  labelled <- !is.null(x$covlabels) && nrow(x$covlabels) > 0
   values <- if (x$src == "sim") "" else paste0(
-    "<p class=\"note\">What item codes and covariate values stand for is in the codebook released with the ",
+    "<p class=\"note\">",
+    if (labelled) "Covariate value labels are the source&rsquo;s own, as the IRW recorded them. " else "",
+    "What item codes", if (labelled) " and any unlabelled values" else " and covariate values",
+    " stand for is in the codebook released with the ",
     if (nzchar(url)) paste0("<a href=\"", esc(url), "\">source data</a>") else "source data", ".</p>\n")
   paste0(caveat,
          "<div class=\"scroll\"><table class=\"cb\">\n",
@@ -688,6 +738,9 @@ PAGE_CSS <- paste0(
 ".chip.src{color:#6b4a12;border-color:#e3cd9b;background:#fbf6ea}",
 ".chip.none{color:#8c1515;border-color:#e6b9b9;background:#fbefef}",
 ".muted{color:#777;font-style:italic}",
+".vals{display:block;font-size:.84rem;color:#444;margin-top:.15rem}",
+".val{white-space:nowrap}",
+"details.vals summary{cursor:pointer;color:#8c1515}",
 "th.s{cursor:pointer;user-select:none}th.s:hover{color:#8c1515}",
 "td.restrict{background:#fff6e5}",
 ".flag{display:inline-block;font-size:.76rem;background:#fff6e5;border:1px solid #f0c987;",
@@ -1056,6 +1109,7 @@ main <- function() {
   aggregators <- .read_aggregators()
   notes_of <- .read_data_notes()
   coldocs_of <- .read_column_docs()
+  covlabels_of <- .read_covariate_labels()
   STANDARD <<- .read_standard()
   irw_version <- max(manifest$irw_version)
   pins <- manifest[manifest$irw_version == irw_version, ]
@@ -1271,7 +1325,8 @@ main <- function() {
       croissant_url = paste0(SITE_URL, "/tables/", slug, "/croissant.jsonld"),
       issue = if (is.na(issue_of[k])) "" else unname(issue_of[k]),
       notes = notes_of[[k]],
-      coldocs = coldocs_of[[k]]
+      coldocs = coldocs_of[[k]],
+      covlabels = covlabels_of[[k]]
     )
     agg <- if (nzchar(x$source_via)) aggregators[[x$source_via]] else NULL
     x$via_note   <- if (is.null(agg)) "" else agg$note

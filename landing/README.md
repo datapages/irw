@@ -34,6 +34,9 @@ pages) source it, so the two cannot drift. The rules were settled by Ben on
   caveat that it is the IRW's best reading, not the source's codebook (Ben,
   irw#2763). Unlike Notes, a failed fetch is not fatal: the page falls back to
   the plain column list.
+  Covariates also show their value labels from `metadata/covariate_labels.csv`
+  (irw#1775), in the source's own words; codes that all carry the withheld
+  institution label are described, not listed.
 - **Withdrawn tables keep their URL as a tombstone.** The list is the data
   repo's withdrawal ledger, `itemtext/withdrawals.csv` in ben-domingue/irw, read at
   build time (whole-table rows, not `irw_text`), plus `withdrawn.tsv` here for
