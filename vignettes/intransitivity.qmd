@@ -321,11 +321,11 @@ U |> filter(family == "Engines and bots") |>
 
 ### What the cycles look like
 
-@tbl-examples shows some cycles from the data. Each row is a loop of three. An arrow means "won most of their meetings": for players and bots, the head-to-head games; for the risks, the respondents who were shown that pair.
+@tbl-examples shows some cycles from the data. Each row is three competitors (or three risks) that beat each other in a circle, like rock, paper and scissors. "Beat" means won most of their meetings: for players and bots, their head-to-head games; for the risks, the judgments of the respondents who were shown that pair.
 
 ```{r}
 #| label: tbl-examples
-#| tbl-cap: "Examples of cycles. Risks: triads that the fitted cyclic model makes into a loop and that are also loops in the raw judgments. Players and bots: the most lopsided loop in any bullet month and any Kaggle competition, among pairs that met at least five times; players and bots are numbered rather than named. Each example could be chance on its own; the tests above rest on all the games, not on these."
+#| tbl-cap: "Examples of cycles. Risks: triples that the fitted cyclic model makes into a loop and that also loop in the raw judgments. Players and bots: the most lopsided loop in any bullet month and any Kaggle competition, among pairs that met at least five times; players and bots are numbered rather than named. Each example could be chance on its own; the tests above rest on all the games, not on these."
 
 ex <- as_tibble(cache$examples) |> mutate(s = pmin(ab_w / ab_n, bc_w / bc_n, ca_w / ca_n))
 rec <- function(w, n) sprintf("%g of %d", w, n)
@@ -342,9 +342,11 @@ bind_rows(lapply(rows, function(z) {
     if (grepl("^lichess", r$unit)) paste0("Lichess bullet, ", month.name[as.integer(sub("lichess 2013-(\\d+) .*", "\\1", r$unit))], " 2013")
     else paste("Kaggle:", sub("^kaggle ", "", r$unit))
   } else z$data
-  tibble(Data = d, Cycle = paste(l[1], "→", l[2], "→", l[3], "→", l[1]),
-         `Records around the loop` = paste(rec(r$ab_w, r$ab_n), rec(r$bc_w, r$bc_n), rec(r$ca_w, r$ca_n), sep = "; "))
-})) |> knitr::kable()
+  tibble(Data = d, `The three` = paste(l, collapse = ", "),
+         `Who beat whom` = paste0(l[1], " beat ", l[2], " (", rec(r$ab_w, r$ab_n), ")<br>",
+                                  l[2], " beat ", l[3], " (", rec(r$bc_w, r$bc_n), ")<br>",
+                                  l[3], " beat ", l[1], " (", rec(r$ca_w, r$ca_n), ")"))
+})) |> knitr::kable(escape = FALSE)
 ```
 
 The bots' loop is what strong intransitivity looks like: each bot beats the next almost every time, so no ordering of the three makes sense. The chess loop is milder, though each player still won most of their games against the next. The risk loops are the weakest. Each rests on a few judgments per pair, and the fitted cyclic model puts the win probabilities around these loops at only about `r f2(min(ex$model_min, na.rm = TRUE))`–`r f2(max(ex$model_min, na.rm = TRUE))`. In the judgment data, cycles nudge preferences slightly away from a single ranking; they do not overturn it.
