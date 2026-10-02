@@ -178,7 +178,7 @@ IRW zawiera **setki zbiorów danych** ("tabel"), z których każdy jest zbiorem 
 Każdy zbiór danych w IRW jest zaprojektowany tak, aby był:
 
 - **Możliwy do odnalezienia (Findable).** Każdy zbiór danych zawiera wstępnie obliczone metadane — liczbę uczestników, liczbę zadań, gęstość odpowiedzi, dziedzinę tematyczną oraz inne opisowe etykiety — dzięki czemu zbiory danych można znaleźć i filtrować bez konieczności ich wcześniejszego pobrania.
-- **Dostępny (Accessible).** Każdy zbiór danych można pobrać przez przeglądarkę internetową lub pakiet `irw`, korzystając z bezpłatnego konta.
+- **Dostępny (Accessible).** Każdy zbiór danych można pobrać przez przeglądarkę internetową lub pakiet `irw`, a większość nie wymaga żadnego konta.
 - **Interoperacyjny (Interoperable).** Każdy zbiór danych jest przekształcany do tej samej prostej struktury (opisanej poniżej), dzięki czemu ten sam kod analityczny może działać na wielu zbiorach danych przy niewielkiej modyfikacji lub bez żadnej.
 - **Możliwy do ponownego wykorzystania (Reusable).** Każdy zbiór danych jest udostępniony na otwartej licencji, jego pochodzenie jest udokumentowane, a kod użyty do przekształcenia go do formatu IRW jest publicznie dostępny.
 
@@ -215,7 +215,7 @@ Pełna specyfikacja techniczna standardu jest dostępna pod adresem [itemrespons
 Istnieją trzy sposoby pozyskania danych IRW, w zależności od tego, ile chcesz zautomatyzować.
 
 **1. Przeglądaj w przeglądarce internetowej**
-Przeglądaj zbiory danych i ich metadane bezpośrednio w [przeglądarce danych IRW](/data.qmd) — bez konieczności zakładania konta. Pobranie pełnego zbioru danych wymaga bezpłatnego konta [Redivis](https://redivis.com), ponieważ to ta platforma przechowuje bazowe dane.
+Przeglądaj zbiory danych i ich metadane bezpośrednio w [przeglądarce danych IRW](/data.qmd) — bez konieczności zakładania konta. Większość tabel można też pobrać jako plik CSV z ich strony bez konta; nieliczne większe niż 100 MB wymagają pakietu R albo bezpłatnego konta w serwisie [Redivis](https://redivis.com), czyli platformie, która przechowuje bazowe dane.
 
 **2. Użyj pakietu `irw` (zalecane)**
 Pakiet `irw`, dostępny zarówno dla **R**, jak i **Pythona**, oferuje proste funkcje do wyszukiwania, filtrowania i pobierania danych.
@@ -242,7 +242,7 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-Przy pierwszym użyciu pakietu zostaniesz poproszony o zalogowanie się za pomocą bezpłatnego konta Redivis. Od tego momentu jedna linijka kodu pobiera dowolny zbiór danych bezpośrednio do R lub Pythona. Od tego etapu dane są gotowe do analizy za pomocą standardowego oprogramowania — na przykład pakietów do teorii odpowiedzi na zadania (IRT) lub analizy czynnikowej.
+Pakiet R działa bez konta; przy pierwszym użyciu pakietu dla Pythona zostaniesz poproszony o zalogowanie się za pomocą bezpłatnego konta Redivis. Od tego momentu jedna linijka kodu pobiera dowolny zbiór danych bezpośrednio do R lub Pythona. Od tego etapu dane są gotowe do analizy za pomocą standardowego oprogramowania — na przykład pakietów do teorii odpowiedzi na zadania (IRT) lub analizy czynnikowej.
 
 **3. Użyj bezpośrednio bibliotek klienckich Redivis**
 W przypadku bardziej niskopoziomowych przepływów pracy lub przepływów spoza R/Python dane można również uzyskać za pomocą własnych bibliotek klienckich R i Python firmy Redivis. Szczegóły znajdziesz w [Przewodniku dla początkujących](/getstarted.qmd).
