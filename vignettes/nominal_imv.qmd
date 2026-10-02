@@ -11,28 +11,53 @@ date: today
 bibliography: nominal_imv_data/references.bib
 format:
   html:
+    code-fold: true
     toc: true
     toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
 ---
 
 ```{r}
 #| label: setup
+#| echo: false
 
 library(dplyr)
 library(tidyr)
+library(tibble)
 library(ggplot2)
+library(plotly)
 
 theme_set(theme_minimal(base_size = 13) +
             theme(panel.grid.minor = element_blank(), legend.position = "top"))
-col_yard <- "grey60"    # Rasch -> 2PL, the yardstick
-col_nom  <- "#2a78d6"   # -> nominal
-col_nest <- "#eb6834"   # -> nested logit
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+col_yard <- irw_grey   # Rasch -> 2PL, the yardstick
+col_nom  <- irw_blue   # -> nominal
+col_nest <- irw_red    # -> nested logit
 
-cache   <- readRDS("nominal_imv_data/nominal_imv_results.rds")
-res     <- cache$results
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+cache_path <- "nominal_imv_data/nominal_imv_results.rds"
+cache_ok   <- file.exists(cache_path)
+if (cache_ok) {
+  .cache           <- readRDS(cache_path)
+  res              <- .cache$results
+  candidate_tables <- .cache$candidate_tables
+  date_run         <- as.Date(.cache$date_run)
+  is_pilot         <- isTRUE(.cache$pilot)
+  r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
+  r_n_tables_run   <- length(candidate_tables)
+} else {
+  res <- list(); candidate_tables <- character()
+  date_run <- Sys.Date(); is_pilot <- FALSE
+  r_all_candidates <- 0L; r_n_tables_run <- 0L
+}
 fitted  <- Filter(function(r) is.na(r$skipped), res)
 skipped <- Filter(function(r) !is.na(r$skipped), res)
-date_run <- as.Date(cache$date_run)
 
 LABELS <- c(
   `wilmer-rmet-normative-data-set-2022`  = "Reading the Mind in the Eyes (RMET)",
@@ -66,7 +91,13 @@ label_of <- function(tn) {
 }
 family_of <- function(tn) ifelse(grepl("^enem_", tn), "ENEM", "Other tests")
 
-summ <- bind_rows(lapply(fitted, function(r) {
+empty_summ <- tibble(table = character(), label = character(), family = character(),
+                     n = integer(), n_full = integer(), items = integer(), p = numeric(),
+                     dense = logical(), yard = numeric(), nom = numeric(), nest = numeric(),
+                     cat_yard = numeric(), cat_nom = numeric(), cat_nest = numeric(),
+                     wr_nom = numeric(), wr_nest = numeric(), nest_folds_pos = integer(),
+                     cat_nest_folds_pos = integer(), wr_nest_folds_pos = integer())
+summ <- bind_rows(empty_summ, lapply(fitted, function(r) {
   f <- r$imv_by_fold
   tibble(
     table = r$table, label = label_of(r$table), family = family_of(r$table),
@@ -94,15 +125,18 @@ top_share <- slice_max(summ, share, n = 1)
 low_share <- slice_min(summ, share, n = 1)
 cat_over_yard <- summ$label[summ$cat_nest > summ$cat_yard]
 
-folds <- bind_rows(lapply(fitted, function(r)
-  as_tibble(r$imv_by_fold) |>
-    mutate(fold = row_number(), label = label_of(r$table), family = family_of(r$table))))
+folds <- terc <- tibble()
+if (length(fitted)) {
+  folds <- bind_rows(lapply(fitted, function(r)
+    as_tibble(r$imv_by_fold) |>
+      mutate(fold = row_number(), label = label_of(r$table), family = family_of(r$table))))
 
-terc <- bind_rows(lapply(fitted, function(r) {
-  as.data.frame(r$imv_by_tercile) |>
-    tibble::rownames_to_column("tercile") |>
-    mutate(table = r$table, label = label_of(r$table), family = family_of(r$table))
-})) |> mutate(tercile = factor(tercile, c("low", "mid", "high"), c("Bottom", "Middle", "Top")))
+  terc <- bind_rows(lapply(fitted, function(r) {
+    as.data.frame(r$imv_by_tercile) |>
+      tibble::rownames_to_column("tercile") |>
+      mutate(table = r$table, label = label_of(r$table), family = family_of(r$table))
+  })) |> mutate(tercile = factor(tercile, c("low", "mid", "high"), c("Bottom", "Middle", "Top")))
+}
 
 # A dot per table with its fold-to-fold range, for any set of IMV columns.
 dot_plot <- function(cols, names, colours, xlab) {
@@ -125,16 +159,82 @@ dot_plot <- function(cols, names, colours, xlab) {
     scale_colour_manual(values = colours, name = NULL) +
     labs(x = xlab, y = NULL)
 }
+knitr::opts_chunk$set(eval = cache_ok)
 ```
 
-## The question
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (!cache_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Cache not found** — figures and tables will not appear. Generate results ",
+  "by running the compute script, then re-render:\n\n",
+  "```r\nRscript vignettes/nominal_imv_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+```{r}
+#| label: pilot-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (cache_ok && is_pilot) cat(
+  "::: {.callout-warning}\n",
+  "**Draft preview, partial run.** This render uses ", r_n_tables_run,
+  " pilot tables out of ", r_all_candidates, " candidates, to check the ",
+  "pipeline and page layout. The numbers are real computed results, but treat ",
+  "them as a small preview. Re-run `nominal_imv_compute.R` with ",
+  "`PILOT <- FALSE` to analyse every candidate.\n",
+  ":::\n", sep = ""
+)
+```
+
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the
+analysis design, and the writing below — was produced largely by Claude
+(Anthropic), working from a task specification and with human review.
+Treat the methodological choices and interpretations accordingly, and
+check the compute script (`nominal_imv_compute.R`) directly if you're relying
+on the numbers here.
+:::
+
+## Motivation
 
 Score a multiple-choice item 0/1 and two respondents who both got it wrong look the same, though one may have chosen the answer a nearly-right reader would choose and the other an answer nobody who understood the item would pick. The [course lesson on nominal models](https://ben-domingue.github.io/irw-course/lessons/nominal.html) shows that the wrong answers carry *information* about the respondents who miss items. It leaves open whether that information improves *prediction*. This page asks that across the multiple-choice tables in the IRW's nominal source, in two forms:
 
 1. **Right or wrong.** Does a model that has seen which wrong answers a respondent chose predict better whether they will get an unseen item right?
 2. **Which option.** Does it predict better *which option* they will choose, and in particular *which wrong answer*, given that they miss?
 
-## The models
+The IMV has been used on this site to ask the same kind of question about other information beyond the 0/1 scores. [Response time and accuracy](rt_imv.qmd) asks how much response times add to predictions of correctness over ability alone, and [Guessing in multiple-choice data](guessing.qmd) asks, on several of the same ENEM tests, whether modelling guessing helps out of sample. [Calculating IMV values](imv.qmd) walks through the basic computation.
+
+## Data and methods
+
+### Dataset selection
+
+```{r}
+#| label: candidate-tables
+#| eval: false
+
+cands <- c(
+  paste0("enem_2013_1mil_", c("ch", "cn", "lc", "mt"), "_nom"),  # one ENEM test per area
+  "wilmer-rmet-normative-data-set-2022_nom", "borges_brazil_residency_2024_pbt_nom",
+  "choi_2020_ednet_listening_nom", "vocabulary_iq_nom", "psychtools_ability_nom"
+  # ... and every other irw_nominal table with at least 10 items
+)
+```
+
+The candidates are four ENEM tests, one per subject area from 2013, and every other table in `irw_nominal` with at least 10 items: `r r_all_candidates` tables in all, listed by hand in the compute script because the nominal metadata lags behind releases. A table is analysed if it is single-answer multiple choice: one keyed option per item, and no item with more than 12 answers each chosen by at least 1% of respondents or with its rarer answers together making up more than 10% of responses. Each table is cut to 3,000 respondents at most.
+
+**Rare options.** A wrong option chosen by fewer than 1% of respondents is pooled with the item's other rare options. If the pooled group is still under 1% (ENEM's blank and double-mark codes, about 0.5% of responses), those responses are dropped. Respondents left with fewer than half the items are dropped, and so is any table with fewer than 1,000 respondents remaining.
+
+**Sparse tables.** Some tables come from adaptive or self-paced systems, where each respondent sees a small part of a large item bank: EdNet's TOEIC practice app, for example. There we keep a dense block: the 40 most-answered items, and the respondents who answered at least half of them. These items are not a random draw from the bank, so the result describes the block. Such tables are marked † below.
+
+### Models
 
 Three item response models are fitted to every table, with the Rasch model alongside as a reference point.
 
@@ -144,15 +244,45 @@ Three item response models are fitted to every table, with the Rasch model along
 
 The course lesson walks through both option models on one test; this page does not re-derive them.
 
-## Design
+### Per-table computation
 
-**Tables.** Four ENEM tests (2013, one per subject area) and every other table in `irw_nominal` with at least 10 items that is multiple choice: one keyed option per item and no more than 12 distinct answers. Each table is cut to 3,000 respondents at most.
+For each candidate table, `fit_one()` in the compute script:
 
-**Rare options.** A wrong option chosen by fewer than 1% of respondents is pooled with the item's other rare options. If the pooled group is still under 1% (ENEM's blank and double-mark codes, about 0.5% of responses), those responses are dropped. Respondents left with fewer than half the items are dropped, and so is any table with fewer than 1,000 respondents remaining.
+1. Fetches the table with `irw_fetch(source = "nom")`, keeps one response per person and item, keeps a dense block if the table is sparse, and draws up to 3,000 respondents.
+2. Builds two person × item matrices, one holding the option chosen (with the key coded as the last category) and one holding the 0/1 score. Rare options are pooled, and thin items and respondents are dropped, as described above.
+3. Splits the observed person-item cells at random into five folds. For each fold, it fits the Rasch model and the 2PL to the 0/1 scores, and the nominal model and the nested logit to the options, using `mirt` with all the fold's cells hidden.
+4. Takes each model's EAP θ, estimated from the visible cells, and predicts every hidden cell. It records two probabilities: P(key), and the probability of the option actually chosen.
+5. Computes the three IMVs described below, pooled over all held-out cells, fold by fold, and within thirds of the 2PL θ.
 
-**Sparse tables.** Some tables come from adaptive or self-paced systems, where each respondent sees a small part of a large item bank: EdNet's TOEIC practice app, for example. There we keep a dense block: the 40 most-answered items, and the respondents who answered at least half of them. These items are not a random draw from the bank, so the result describes the block. Such tables are marked † below.
+```{r}
+#| label: fit-function
+#| eval: false
 
-**Cross-validation.** The observed person-item cells are split into five folds. Each fold in turn is hidden from all four models. Each model's EAP estimate of θ, taken from the visible cells only, predicts the hidden ones. The models never see a hidden response, so the option models' only extra information is which wrong answers the respondent chose *elsewhere*.
+fit_one <- function(tn) {
+  P <- prep(readRDS(cache_file(tn)))            # options (key last) and 0/1 matrices
+  fold <- sample(rep_len(1:5, length(obs)))     # folds over observed person-item cells
+  per_fold <- lapply(1:5, function(k) {
+    opt_tr <- opt; opt_tr[obs[fold == k]] <- NA # hide this fold
+    x_tr   <- x01; x_tr[obs[fold == k]]   <- NA
+    mods <- list(
+      rasch   = mirt(x_tr, 1, "Rasch"),
+      twopl   = mirt(x_tr, 1, "2PL"),
+      nominal = mirt(opt_tr, 1, "nominal", technical = list(NCYCLES = 2000)),
+      nested  = mirt(opt_tr, 1, "2PLNRM", key = ncat, technical = list(NCYCLES = 2000))
+    )
+    # Each model's EAP theta -> P(key) and P(option chosen) on the hidden cells.
+    # Rasch and the 2PL split 1 - P(key) by the training-cell distractor shares.
+  })
+  # imv.binary() on right/wrong; imv_cat() on the option chosen and on which wrong answer
+}
+```
+
+Of the `r r_all_candidates` candidate tables, `r n_tab` produced usable results. The rest are listed, with the reason, under @tbl-results. `r if (all(sapply(fitted, function(r) all(r$converged)))) "Every fold's fit converged for all four models on every analysed table." else paste0("Some fold fits did not converge: ", paste(sapply(Filter(function(r) !all(r$converged), fitted), function(r) label_of(r$table)), collapse = ", "), ".")`
+
+::: {.callout-note}
+To reproduce with current IRW holdings, re-run `nominal_imv_compute.R`
+and commit the updated `nominal_imv_data/nominal_imv_results.rds`.
+:::
 
 ### Three versions of the IMV
 
@@ -174,7 +304,9 @@ A 2PL predicts only P(key), so to enter this comparison it needs a rule for the 
 
 **3. Which wrong answer.** The third version keeps only the held-out cells answered *wrongly* and asks which wrong option was chosen, among the $K - 1$. Each model's prediction is its probability of the chosen option divided by its P(wrong). For the 2PL + shares baseline that is just the share, so this IMV measures one thing: how much knowing θ tells you about *which* wrong answer someone picks.
 
-## Does knowing the wrong answers predict right/wrong better?
+## Results
+
+### Does knowing the wrong answers predict right/wrong better?
 
 All three comparisons in @fig-gains are the same bet: on each held-out cell, which model gave the better probability that the respondent chose the key? Each model makes that prediction from its own θ, estimated from the respondent's visible cells. The 2PL and Rasch read P(key) straight off their item curves. The nominal model and the nested logit predict a probability for every option, and we keep only the key's; all the wrong options together make up "incorrect". So the option models are scored on right/wrong exactly as the 2PL is.
 
@@ -204,7 +336,7 @@ The nested logit also matches or beats the nominal model on `r sum(summ$nest >= 
 
 How far orange gets toward grey varies a lot. The nested logit's gain is `r pct(top_share$share)` of the Rasch → 2PL gain on `r top_share$label` but only `r pct(low_share$share)` on the `r low_share$label`. The "Nested ÷ yardstick" column of @tbl-results gives it for every table; it has no clear relation to how hard the test is. It is lowest on the two residency exams. These are the longest tests here, at around 100 items, so a likely reason is that θ is already well estimated from the right/wrong scores alone, leaving the distractors little to add.
 
-## Does it predict which option is chosen?
+### Does it predict which option is chosen?
 
 Now the bet changes. Instead of right or wrong, the outcome on each held-out cell is the option chosen, scored with the multinomial IMV. The 2PL and Rasch enter with the "+ shares" rule: their P(key), with the rest split among the distractors by how popular each was on the training cells. Grey is again the yardstick, here the Rasch → 2PL gain on the same multinomial scale. The left panel of @fig-option scores every held-out cell; the right panel, described below, scores only the wrong answers.
 
@@ -250,73 +382,52 @@ That gain mixes two things: predicting the key better, which the first section a
 
 Among held-out wrong answers, θ predicts which one was chosen on every table, with IMVs from `r f4(min(summ$wr_nest))` to `r f4(max(summ$wr_nest))`. That is a median `r round(median(summ$wr_nest / summ$nest))` times the right/wrong gain on the same table. The two IMVs are for different outcomes, so the ratio is only a rough guide, but the gap is too large to be an artefact of scale. The nominal model and the nested logit are indistinguishable here, as expected, since both model the choice among distractors the same way. The wrong answers carry far more information about *which wrong answer* comes next than about *whether* the next answer is wrong. They enter a right/wrong prediction only through θ, and θ is already well estimated from the scores.
 
-## Who gains?
+### Who gains?
 
-The next two figures split the held-out cells into thirds of the 2PL θ and compute each IMV within each third. Each line is one table. Choose a table from the menu to pick it out from the rest, or hover over a point to see its table and value.
+The next two figures split the held-out cells into thirds of the 2PL θ and compute each IMV within each third. Each line is one table. Click a line, or choose a table from the menu above the figure, to pick it out from the rest; double-click to clear. Hover over a point for its table and value.
 
 ```{r}
-#| label: terciles-to-ojs
-ojs_define(terc_js = terc |>
-  transmute(label, family, tercile = as.character(tercile),
-            bin = twopl_to_nest, wrong = wrong_shares_to_nest))
-```
+#| label: terc-plot-fn
+#| echo: false
 
-```{ojs}
-//| echo: false
-tercData = transpose(terc_js)
-tercLabels = Array.from(new Set(tercData.map(d => d.label))).sort()
-
-// One line per table across the thirds of theta. The emphasised table is drawn
-// thick and labelled; the others drop to light grey ("None" leaves all in colour).
-function tercPlot(y, emph, ylab) {
-  const on = d => emph === "None" || d.label === emph;
-  const one = emph !== "None";
-  return Plot.plot({
-    width: 860, height: 460, marginLeft: 60, marginRight: one ? 250 : 20, marginBottom: 45,
-    style: {fontSize: "14px"},
-    x: {type: "point", domain: ["Bottom", "Middle", "Top"], label: "Third of the 2PL θ", padding: 0.3},
-    y: {label: ylab, grid: true},
-    color: {domain: ["ENEM", "Other tests"], range: ["#eb6834", "#2a78d6"], legend: true},
-    marks: [
-      Plot.ruleY([0], {stroke: "#bbb"}),
-      Plot.line(tercData.filter(d => !on(d)), {x: "tercile", y, z: "label", stroke: "#ddd", strokeWidth: 1.2}),
-      Plot.line(tercData.filter(on), {x: "tercile", y, z: "label", stroke: "family", strokeWidth: one ? 3 : 1.5}),
-      Plot.dot(tercData, {x: "tercile", y, fill: d => on(d) ? d.family : "#ccc", r: one ? 3 : 3.5,
-                          tip: true, title: d => `${d.label}\n${d.tercile} third: ${d[y].toFixed(4)}`}),
-      one ? Plot.text(tercData.filter(d => on(d) && d.tercile === "Top"),
-                      {x: "tercile", y, text: "label", dx: 10, textAnchor: "start", fill: "family", fontSize: 13}) : null
-    ]
-  })
+# One line per table across the thirds of theta, with a menu (and click) to
+# pick out one table; the others fade.
+terc_plot <- function(ycol, ylab, group) {
+  d <- terc |> mutate(y = .data[[ycol]],
+                      text = sprintf("%s<br>%s third: %.4f", label, tercile, y))
+  sd <- highlight_key(d, ~label, group = group)
+  p <- ggplot(sd, aes(tercile, y, group = label, colour = family, text = text)) +
+    geom_hline(yintercept = 0, colour = "grey80") +
+    geom_line(linewidth = 0.8) +
+    geom_point(size = 2) +
+    scale_colour_manual(values = c(ENEM = irw_red, `Other tests` = irw_blue), name = NULL) +
+    labs(x = "Third of the 2PL θ", y = ylab)
+  ggplotly(p, tooltip = "text") |>
+    highlight(on = "plotly_click", off = "plotly_doubleclick", selectize = TRUE,
+              persistent = FALSE, opacityDim = 0.12) |>
+    layout(legend = list(orientation = "h", y = 1.08))
 }
 ```
 
-```{ojs}
-//| echo: false
-viewof emphBin = Inputs.select(["None", ...tercLabels], {label: "Pick out a table", value: "None"})
-```
+```{r}
+#| label: fig-terciles
+#| fig-cap: "Binary IMV, 2PL → nested logit, within thirds of the 2PL θ. One line per table."
 
-```{ojs}
-//| label: fig-terciles
-//| fig-cap: "Binary IMV, 2PL → nested logit, within thirds of the 2PL θ. One line per table."
-tercPlot("bin", emphBin, "IMV, 2PL → nested logit")
+terc_plot("twopl_to_nest", "IMV, 2PL → nested logit", "Pick out a table")
 ```
 
 For right/wrong, where the gain lands depends on the test. On most tables it goes to the bottom third, as the course lesson's information curves predict: low scorers are the respondents with wrong answers to read. ENEM never shows that pattern. On humanities and languages the gain peaks in the middle third. On the two hardest tests (natural sciences and math, about a quarter of responses correct), it rises toward the top, and the bottom third gains least. Low scorers who guess close to at random would produce this pattern, because their wrong answers carry no signal. [Issue #284](https://github.com/datapages/irw/issues/284) tests this directly.
 
-```{ojs}
-//| echo: false
-viewof emphWrong = Inputs.select(["None", ...tercLabels], {label: "Pick out a table", value: "None"})
-```
+```{r}
+#| label: fig-terciles-wrong
+#| fig-cap: "Which wrong answer: multinomial IMV, shares → nested logit, over held-out wrong answers within thirds of the 2PL θ. One line per table."
 
-```{ojs}
-//| label: fig-terciles-wrong
-//| fig-cap: "Which wrong answer: multinomial IMV, shares → nested logit, over held-out wrong answers within thirds of the 2PL θ. One line per table."
-tercPlot("wrong", emphWrong, "IMV, shares → nested logit")
+terc_plot("wrong_shares_to_nest", "IMV, shares → nested logit", "Pick out a table ")
 ```
 
 For which wrong answer, the middle third gains least on every table. On most tables both ends gain a lot. The exceptions are again the two hardest ENEM tests, natural sciences and math, where the top third gains most and the bottom third much less, as near-random guessing at the bottom would predict. The dip in the middle is partly built in. The shares are the distractors' popularity averaged over everyone who missed, so they describe a typical wrong answer, from the middle of the distribution, best. The rest is the nominal model's crossing option curves at work. If low scorers who miss are drawn to one distractor and high scorers who miss to another, then knowing which end of the scale a respondent sits at tells you which to expect. Which distractors those are, and why they pull, is the question of [issue #285](https://github.com/datapages/irw/issues/285).
 
-## The tables
+### Every table
 
 ```{r}
 #| label: tbl-results
@@ -350,20 +461,53 @@ cat("**Not analysed.** Four tables have fewer than 10 items and were not attempt
 for (w in unique(sk$why)) cat("- ", w, ": ", paste0("`", sub("_nom$", "", sk$table[sk$why == w]), "`", collapse = ", "), "\n", sep = "")
 ```
 
+## Limitations
+
+**One sample of respondents, one split into folds.** Each table is cut to 3,000 respondents, and the folds are drawn once. Refitting with a different split moved some IMVs by up to about 0.001, more than the fold-to-fold bars suggest. Differences smaller than that are ties.
+
+**Four ENEM tests stand in for 52.** We used one 2013 test per subject area. The differences between areas are large here; whether they hold in other years is untested.
+
+**Dense blocks are not random samples of items.** For EdNet, the 40 most-answered questions and the learners who answered at least half of them are a particular slice of the app's use. The EdNet results describe that block, not the whole item bank.
+
+**Rare answers are pooled or dropped.** Options chosen by fewer than 1% of respondents are pooled, and ENEM's blanks and double marks are dropped. An unusual distractor may be exactly where a wrong answer says the most, and these IMVs never score it.
+
+**The which-wrong-answer baseline knows nothing about θ.** The large IMVs in the right panel of @fig-option show that θ is informative about which distractor is chosen. They do not show that the nominal model beats other ways of using ability, such as distractor shares computed separately by score band.
+
+**The multinomial IMV depends on the number of options.** Its scale changes with $K$, so compare models within a table rather than tables with each other. It is also not the polytomous IMV of @kanopka2023; see above for how the two differ.
+
+**"Who gains" groups respondents by the 2PL θ.** Grouping by an option model's θ would move some respondents between thirds and could change the shape of the curves at the margins.
+
+**Only unidimensional models, and no guessing.** We did not fit a 3PL or any other guessing model; the [guessing vignette](guessing.qmd) covers those on ENEM.
+
+**Cross-validation is over cells, not people.** The held-out cells belong to respondents whose other answers the models have seen, so these IMVs measure predicting a missing response from a known respondent. Scoring new respondents from a few items could show a different gain.
+
 ## Reproducibility
 
-Computed on `r format(date_run, "%B %d, %Y")`. Run the compute script from the repository root, then render the page:
-
-```r
-Rscript vignettes/nominal_imv_compute.R
-quarto::quarto_render("vignettes/nominal_imv.qmd")
-```
-
-The script writes one `.rds` per table to `vignettes/nominal_imv_data/` and skips tables that already have one, so an interrupted run resumes.
+{{< include ../components/_source-links.qmd >}}
 
 {{< include ../components/_data-version.qmd >}}
 
-{{< include ../components/_source-links.qmd >}}
+Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+# 1. Re-run the compute script (from the project root). It caches fetched
+#    tables in ~/.cache/irw_nominal_imv and per-table results in
+#    vignettes/nominal_imv_data/fits/, so an interrupted run resumes.
+source("vignettes/nominal_imv_compute.R")
+
+# 2. Re-render this page
+quarto::quarto_render("vignettes/nominal_imv.qmd")
+```
+
+::: {.callout-tip}
+To cite the datasets used, run:
+
+```r
+irw_save_bibtex(summ$table, output_file = "nominal_imv_data/references.bib", source = "nom")
+```
+:::
+
+---
 
 ## References
 

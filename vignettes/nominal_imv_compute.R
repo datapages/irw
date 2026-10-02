@@ -22,9 +22,11 @@
 # is the shares alone, so it measures what theta says about the choice of
 # distractor.
 #
-# Output: vignettes/nominal_imv_data/<table>.rds (one per table, skipped if it
-# exists) and vignettes/nominal_imv_data/nominal_imv_results.rds (all tables).
-# Subsampled inputs are cached in ~/.cache/irw_nominal_imv (not committed).
+# Output: vignettes/nominal_imv_data/nominal_imv_results.rds (all tables) and
+# vignettes/nominal_imv_data/references.bib. Per-table results go to
+# vignettes/nominal_imv_data/fits/<table>.rds (gitignored resume cache; a table
+# with a file there is skipped). Subsampled inputs and held-out predictions are
+# cached in ~/.cache/irw_nominal_imv (not committed).
 #
 # Usage: Rscript vignettes/nominal_imv_compute.R   # from project root
 
@@ -32,13 +34,16 @@ library(irw)
 library(mirt)
 library(imv)
 library(furrr)
+library(dplyr)
 
 set.seed(20260930)
 
 out_dir   <- "vignettes/nominal_imv_data"
+fits_dir  <- file.path(out_dir, "fits")
+bib_file  <- file.path(out_dir, "references.bib")
 cache_dir <- file.path(Sys.getenv("HOME"), ".cache", "irw_nominal_imv")
 cells_dir <- file.path(cache_dir, "cells")   # held-out predictions, for re-scoring
-dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(fits_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(cells_dir, recursive = TRUE, showWarnings = FALSE)
 
 SUBSAMPLE_N <- 3000   # respondents per table
@@ -47,7 +52,11 @@ N_FOLDS     <- 5
 RARE        <- 0.01   # a wrong option chosen by fewer than 1% is pooled
 MIN_ITEMS   <- 10
 DENSE_ITEMS <- 40     # sparse tables: the most-answered items kept (see fetch_one)
-WORKERS     <- 6
+WORKERS     <- min(4, parallel::detectCores() %/% 2)
+PILOT       <- FALSE  # TRUE: only PILOT_TABLES, to check the pipeline and page
+# Known answers: RMET is easy and its gain sits at the bottom of theta; ENEM
+# math is hard and its gain sits at the top (near-random guessing at the bottom).
+PILOT_TABLES <- c("wilmer-rmet-normative-data-set-2022_nom", "enem_2013_1mil_mt_nom")
 
 # ------------------------------------------------------------------------------
 # 1. Candidate tables: four ENEM tests (2013, one per area) and every other
@@ -72,6 +81,8 @@ cands <- c(
   "much_tte_2025_matrixreasoning_nom", "much_tte_2025_concentrationtask_nom",
   "blum_2018_imak_nom", "asap20train_nom", "persuade_learningagency_nom"
 )
+all_cands <- cands
+if (PILOT) cands <- PILOT_TABLES
 if (nzchar(Sys.getenv("TABLES"))) cands <- strsplit(Sys.getenv("TABLES"), ",")[[1]]
 
 # Not multiple choice in the nominal model's sense: both come from adaptive
@@ -95,7 +106,7 @@ fetch_one <- function(tn) {
   n <- irw_fetch(tn, source = "nom")
   if (!all(c("resp", "text") %in% names(n))) {
     saveRDS(list(table = tn, skipped = "no resp/text columns (unscored free text)",
-                 date_run = as.character(Sys.Date())), file.path(out_dir, paste0(tn, ".rds")))
+                 date_run = as.character(Sys.Date())), file.path(fits_dir, paste0(tn, ".rds")))
     return(invisible(NULL))
   }
   n <- data.table::as.data.table(n)[!is.na(text) & !is.na(resp), .(id, item, resp, text)]
@@ -117,7 +128,7 @@ fetch_one <- function(tn) {
     if (!length(keep)) {
       saveRDS(list(table = tn, skipped = paste0("sparse design: no respondent answered half of the ",
                                                length(top), " most-answered of ", n_bank, " items"),
-                   date_run = as.character(Sys.Date())), file.path(out_dir, paste0(tn, ".rds")))
+                   date_run = as.character(Sys.Date())), file.path(fits_dir, paste0(tn, ".rds")))
       return(invisible(NULL))
     }
   }
@@ -221,7 +232,7 @@ imv_cat <- function(p0, p1, K, sigma = 1e-4) {
 # ------------------------------------------------------------------------------
 
 fit_one <- function(tn) {
-  out_file <- file.path(out_dir, paste0(tn, ".rds"))
+  out_file <- file.path(fits_dir, paste0(tn, ".rds"))
   if (file.exists(out_file)) return(readRDS(out_file))
   if (tn %in% names(EXCLUDE)) {
     res <- list(table = tn, skipped = EXCLUDE[[tn]], date_run = as.character(Sys.Date()))
@@ -341,7 +352,65 @@ results <- future_map(cands, function(tn) tryCatch(fit_one(tn), error = function
   .options = furrr_options(seed = TRUE))
 plan(sequential)
 results <- Filter(Negate(is.null), results)
-date_run <- max(sapply(results, function(r) r$date_run %||% NA_character_), na.rm = TRUE)
-saveRDS(list(date_run = date_run, results = results), file.path(out_dir, "nominal_imv_results.rds"))
-message("Done: ", sum(sapply(results, function(r) is.na(r$skipped))), " tables fitted, ",
-        sum(sapply(results, function(r) !is.na(r$skipped))), " skipped")
+date_run <- as.Date(max(sapply(results, function(r) r$date_run %||% NA_character_), na.rm = TRUE))
+fitted <- Filter(function(r) is.na(r$skipped), results)
+summary_df <- bind_rows(lapply(fitted, function(r) tibble::tibble(
+  table = r$table, n_full = r$n_full, n_persons = r$n_persons, n_items = r$n_items,
+  p_correct = r$p_correct, dense_block = !is.null(r$dense_block),
+  !!!as.list(r$imv_all)
+)))
+saveRDS(list(
+  summary          = summary_df,
+  results          = results,   # per-table detail: folds, terciles, convergence, skips
+  candidate_tables = cands,
+  n_all_candidates = length(all_cands),
+  pilot            = PILOT,
+  date_run         = date_run,
+  session          = sessionInfo()
+), file.path(out_dir, "nominal_imv_results.rds"))
+message("Done: ", length(fitted), " tables fitted, ", length(results) - length(fitted), " skipped")
+
+# ------------------------------------------------------------------------------
+# 6. Citations: the tables analysed, then the methods papers the page cites.
+# ------------------------------------------------------------------------------
+
+tryCatch(irw_save_bibtex(summary_df$table, output_file = bib_file, source = "nom"),
+         error = function(e) message("bibtex generation failed: ", conditionMessage(e)))
+
+manual_entries <- c(
+"@article{bock1972,
+  author  = {Bock, R. Darrell},
+  title   = {Estimating Item Parameters and Latent Ability when Responses Are Scored in Two or More Nominal Categories},
+  journal = {Psychometrika},
+  year    = {1972},
+  volume  = {37},
+  number  = {1},
+  pages   = {29--51},
+  doi     = {10.1007/BF02291411}
+}",
+"@article{suh2010,
+  author  = {Suh, Youngsuk and Bolt, Daniel M.},
+  title   = {Nested Logit Models for Multiple-Choice Item Response Data},
+  journal = {Psychometrika},
+  year    = {2010},
+  volume  = {75},
+  number  = {3},
+  pages   = {454--473},
+  doi     = {10.1007/s11336-010-9163-7}
+}",
+"@phdthesis{kanopka2023,
+  author = {Kanopka, Klint},
+  title  = {Computational Validity},
+  school = {Stanford University},
+  year   = {2023},
+  note   = {Chapter 3, with Benjamin W. Domingue: Bookmaking for Categorical Responses: Extending the InterModel Vigorish to Quantify the Performance of Polytomous Item Response Models},
+  url    = {https://purl.stanford.edu/tr545td7650}
+}"
+)
+entry_key <- function(entry) sub("^@\\w+\\{([^,]+),.*$", "\\1", trimws(entry))
+existing_keys <- if (file.exists(bib_file)) {
+  key_lines <- grep("^@\\w+\\{", readLines(bib_file), value = TRUE)
+  vapply(key_lines, entry_key, character(1), USE.NAMES = FALSE)
+} else character(0)
+new_entries <- manual_entries[!vapply(manual_entries, entry_key, character(1)) %in% existing_keys]
+if (length(new_entries)) cat(paste0(new_entries, "\n"), file = bib_file, append = TRUE, sep = "\n")
