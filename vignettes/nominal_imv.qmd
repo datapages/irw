@@ -252,38 +252,66 @@ Among held-out wrong answers, θ predicts which one was chosen on every table, w
 
 ## Who gains?
 
-```{r}
-#| label: fig-terciles
-#| fig-cap: "Binary IMV, 2PL → nested logit, within thirds of the 2PL θ, one panel per table."
-#| fig-height: 9
-#| fig-width: 10
+The next two figures split the held-out cells into thirds of the 2PL θ and compute each IMV within each third. Each line is one table. Choose a table from the menu to pick it out from the rest, or hover over a point to see its table and value.
 
-terc$label <- factor(terc$label, c(sort(unique(terc$label[terc$family == "ENEM"])),
-                                   sort(unique(terc$label[terc$family != "ENEM"]))))
-ggplot(terc, aes(tercile, twopl_to_nest, group = label, colour = family)) +
-  geom_hline(yintercept = 0, colour = "grey80") +
-  geom_line(linewidth = 0.8) +
-  geom_point(size = 2) +
-  facet_wrap(~ label, ncol = 5, labeller = label_wrap_gen(20)) +
-  scale_colour_manual(values = c(ENEM = col_nest, `Other tests` = col_nom), guide = "none") +
-  labs(x = "Third of the 2PL θ", y = "IMV, 2PL → nested logit")
+```{r}
+#| label: terciles-to-ojs
+ojs_define(terc_js = terc |>
+  transmute(label, family, tercile = as.character(tercile),
+            bin = twopl_to_nest, wrong = wrong_shares_to_nest))
+```
+
+```{ojs}
+//| echo: false
+tercData = transpose(terc_js)
+tercLabels = Array.from(new Set(tercData.map(d => d.label))).sort()
+
+// One line per table across the thirds of theta. The emphasised table is drawn
+// thick and labelled; the others drop to light grey ("None" leaves all in colour).
+function tercPlot(y, emph, ylab) {
+  const on = d => emph === "None" || d.label === emph;
+  const one = emph !== "None";
+  return Plot.plot({
+    width: 860, height: 460, marginLeft: 60, marginRight: one ? 250 : 20, marginBottom: 45,
+    style: {fontSize: "14px"},
+    x: {type: "point", domain: ["Bottom", "Middle", "Top"], label: "Third of the 2PL θ", padding: 0.3},
+    y: {label: ylab, grid: true},
+    color: {domain: ["ENEM", "Other tests"], range: ["#eb6834", "#2a78d6"], legend: true},
+    marks: [
+      Plot.ruleY([0], {stroke: "#bbb"}),
+      Plot.line(tercData.filter(d => !on(d)), {x: "tercile", y, z: "label", stroke: "#ddd", strokeWidth: 1.2}),
+      Plot.line(tercData.filter(on), {x: "tercile", y, z: "label", stroke: "family", strokeWidth: one ? 3 : 1.5}),
+      Plot.dot(tercData, {x: "tercile", y, fill: d => on(d) ? d.family : "#ccc", r: one ? 3 : 3.5,
+                          tip: true, title: d => `${d.label}\n${d.tercile} third: ${d[y].toFixed(4)}`}),
+      one ? Plot.text(tercData.filter(d => on(d) && d.tercile === "Top"),
+                      {x: "tercile", y, text: "label", dx: 10, textAnchor: "start", fill: "family", fontSize: 13}) : null
+    ]
+  })
+}
+```
+
+```{ojs}
+//| echo: false
+viewof emphBin = Inputs.select(["None", ...tercLabels], {label: "Pick out a table", value: "None"})
+```
+
+```{ojs}
+//| label: fig-terciles
+//| fig-cap: "Binary IMV, 2PL → nested logit, within thirds of the 2PL θ. One line per table."
+tercPlot("bin", emphBin, "IMV, 2PL → nested logit")
 ```
 
 For right/wrong, where the gain lands depends on the test. On most tables it goes to the bottom third, as the course lesson's information curves predict: low scorers are the respondents with wrong answers to read. ENEM never shows that pattern. On humanities and languages the gain peaks in the middle third. On the two hardest tests (natural sciences and math, about a quarter of responses correct), it rises toward the top, and the bottom third gains least. Low scorers who guess close to at random would produce this pattern, because their wrong answers carry no signal. [Issue #284](https://github.com/datapages/irw/issues/284) tests this directly.
 
-```{r}
-#| label: fig-terciles-wrong
-#| fig-cap: "Which wrong answer: multinomial IMV, shares → nested logit, over held-out wrong answers within thirds of the 2PL θ."
-#| fig-height: 9
-#| fig-width: 10
+```{ojs}
+//| echo: false
+viewof emphWrong = Inputs.select(["None", ...tercLabels], {label: "Pick out a table", value: "None"})
+```
 
-ggplot(terc, aes(tercile, wrong_shares_to_nest, group = label, colour = family)) +
-  geom_hline(yintercept = 0, colour = "grey80") +
-  geom_line(linewidth = 0.8) +
-  geom_point(size = 2) +
-  facet_wrap(~ label, ncol = 5, labeller = label_wrap_gen(20)) +
-  scale_colour_manual(values = c(ENEM = col_nest, `Other tests` = col_nom), guide = "none") +
-  labs(x = "Third of the 2PL θ", y = "IMV, shares → nested logit")
+```{ojs}
+//| label: fig-terciles-wrong
+//| fig-cap: "Which wrong answer: multinomial IMV, shares → nested logit, over held-out wrong answers within thirds of the 2PL θ. One line per table."
+tercPlot("wrong", emphWrong, "IMV, shares → nested logit")
 ```
 
 For which wrong answer, the middle third gains least on every table. On most tables both ends gain a lot. The exceptions are again the two hardest ENEM tests, natural sciences and math, where the top third gains most and the bottom third much less, as near-random guessing at the bottom would predict. The dip in the middle is partly built in. The shares are the distractors' popularity averaged over everyone who missed, so they describe a typical wrong answer, from the middle of the distribution, best. The rest is the nominal model's crossing option curves at work. If low scorers who miss are drawn to one distractor and high scorers who miss to another, then knowing which end of the scale a respondent sits at tells you which to expect. Which distractors those are, and why they pull, is the question of [issue #285](https://github.com/datapages/irw/issues/285).
