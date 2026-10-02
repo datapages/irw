@@ -78,7 +78,7 @@ The two come apart because of luck. Even when the probabilities are perfectly tr
 
 Cycles are not exotic. Psychologists have long found that people's preferences can cycle [@tversky1969], a mixture of transitive voters can produce a cyclic majority (Condorcet's paradox), and in games, a player can be beaten by one style and beat another. The question is empirical: in real competition data, is there cyclic structure beyond what a transitive model produces by chance? The IRW's [competition collection](https://itemresponsewarehouse.org/comps_standard.html) holds a wide range of such data: more than a century of North American leagues and European football, cricket, chess on Lichess, engine and bot tournaments, and people judging which of two things is riskier, better written or more salient. We use all of it.
 
-The short answer: team sports are transitive, as far as these data can tell; fast online chess and game-playing bots are not; and human judgments mostly are. Getting there takes some care, because observed cycles show up in every kind of data, and in team sports and most judgments they are no more common than luck makes them. Only in fast chess and among bots is there clearly more cyclic structure than luck produces.
+The short answer: team sports are transitive, as far as these data can tell; online chess and game-playing bots are not; and human judgments mostly are. Getting there takes some care, because observed cycles show up in every kind of data, and in team sports and most judgments they are no more common than luck makes them. Only in online chess and among bots is there clearly more cyclic structure than luck produces.
 
 ---
 
@@ -245,7 +245,37 @@ show_plot(p)
 
 `r pct(mean(ce$obs == 0))` of students have no cycle at all, against `r pct(mean(ce$sims == 0))` if each were a noisy draw from one shared preference. Students differ from each other in what they prefer, but each is strikingly consistent. Where pooled judgments do show cyclic structure, a mixture of different, internally transitive respondents is the natural first explanation, and it predicts exactly the pattern in @tbl-judg: weak, scattered rejections in some tables and not others.
 
-### Fast chess: yes
+### Chess: cycles at every time control, seen most clearly in bullet
+
+Lichess sorts games by time control, using the expected length of the game with any increment counted: in 2013, **bullet** (under about 3 minutes per player), **blitz** (under about 8) and **classical** (anything longer; there was no separate rapid category yet). @tbl-lichess compares the three, pooling the 12 months of 2013.
+
+```{r}
+#| label: tbl-lichess
+#| tbl-cap: "Lichess 2013 by time control: medians across the 12 months, except the count of months. Each month's unit is the 80 most active players, with the pre-game rating difference as an offset. The likelihood-ratio excess is the LR statistic minus its mean under the bootstrap null: how much better the cyclic model fits than chance would allow."
+
+li_sum <- U |> filter(grepl("^lichess", unit)) |>
+  mutate(tc = factor(sub(".* ", "", unit), c("bullet", "blitz", "classical"))) |>
+  group_by(tc) |>
+  summarise(months = sum(sig), games = median(games), gpp = median(games_per_pair),
+            obs = median(wst), null = median(wst_null),
+            excess = median(lr - lr_null), per1000 = median(1000 * (lr - lr_null) / games), .groups = "drop")
+L <- function(t, col) li_sum[[col]][li_sum$tc == t]
+li_sum |>
+  transmute(`Time control` = as.character(tc), `Months with p ≤ .05` = paste(months, "of 12"),
+            `Games per month` = num(round(games)), `Games per pair` = f2(gpp),
+            `Cyclic triads: observed vs. no-cycle model` = paste(pct(obs), "vs.", pct(null)),
+            `LR excess` = sprintf("%.0f", excess), `LR excess per 1,000 games` = sprintf("%.1f", per1000)) |>
+  knitr::kable(align = "lrrrrrr")
+```
+
+The key findings:
+
+- **All three time controls show intransitivity.** The cyclic model fits better than chance in `r L("bullet", "months")` of 12 bullet months, `r L("classical", "months")` of 12 classical months and `r L("blitz", "months")` of 12 blitz months. With no cycles at all, about 0.6 of 12 would reject by chance.
+- **The evidence is strongest and most consistent in bullet,** but bullet also has by far the most data: about `r num(round(L("bullet", "games")))` games a month and `r f2(L("bullet", "gpp"))` per pair, against `r num(round(L("classical", "games")))` and `r f2(L("classical", "gpp"))` in classical. More games per pair make any test more likely to reject.
+- **Per game, the cyclic structure is not weaker in slower chess.** The likelihood-ratio excess per 1,000 games is about the same in bullet (`r sprintf("%.1f", L("bullet", "per1000"))`) and blitz (`r sprintf("%.1f", L("blitz", "per1000"))`), and larger in classical (`r sprintf("%.1f", L("classical", "per1000"))`). So these data do not show cycles fading as players get more time to think. Bullet is where there are enough games to see them every month.
+- **Counting cycles barely shows any of this.** Observed cyclic shares sit within about a percentage point of the no-cycle model at every time control (@tbl-lichess). The intransitivity is real, but it changes the outcome of only a small fraction of triads.
+
+These results allow for each player's rating going into each game, so a player improving during the month cannot pass for a cycle, and no pair contributes more than 10 games. @fig-lichess shows the month-by-month results.
 
 ```{r}
 #| label: fig-lichess
@@ -268,7 +298,7 @@ p <- ggplot(li, aes(month, excess, colour = tc, shape = sig, text = text)) +
 show_plot(p)
 ```
 
-Bullet chess, at under three minutes per player per game, rejects in `r n_sig("^lichess .* bullet$")` of 12 months. That is after allowing for each player's rating going into each game, and with no pair contributing more than 10 games. Classical rejects in `r n_sig("^lichess .* classical$")` and blitz in `r n_sig("^lichess .* blitz$")`. With 80 players and about five games per pair, a bullet month has enough data for this to be a pattern rather than an accident, and it recurs month after month. One reading is style: a player who thrives on fast tactics can beat a solid player who beats someone else, and a three-minute game leaves little time to adapt. We cannot test that reading here; the rank-2 term picks up any matchup-specific advantage, and there is no data on style to check it against.
+What produces the cycles? One reading is style. A player who thrives on sharp tactics can beat a solid positional player who in turn beats someone else, and an opening specialist can trouble some opponents more than others. We cannot test that reading here: the rank-2 term picks up any matchup-specific advantage, and the data say nothing about style.
 
 ### Bots: mostly yes
 
@@ -307,7 +337,7 @@ ex |> filter(unit %in% show_u) |>
 
 ## Discussion
 
-Where does this leave the Bradley-Terry model? For team sports it holds up well: across more than a century of leagues, a single strength per team captures the structure of who beats whom, and what looks like a cycle is the noise of a short series. For fast one-on-one chess and for bots it does not: some matchups are consistently better or worse than the two strengths predict, and those deviations line up into cycles. Judgments sit in between. Individuals are transitive; pooled judgments occasionally are not, in the way a mixture of transitive people predicts.
+Where does this leave the Bradley-Terry model? For team sports it holds up well: across more than a century of leagues, a single strength per team captures the structure of who beats whom, and what looks like a cycle is the noise of a short series. For online chess and for bots it does not: some matchups are consistently better or worse than the two strengths predict, and those deviations line up into cycles. Judgments sit in between. Individuals are transitive; pooled judgments occasionally are not, in the way a mixture of transitive people predicts.
 
 There are also two lessons about method. First, counting cycles answers the wrong question, because noise alone produces plenty of them. Second, the right comparison is with a transitive model simulated on the same schedule, and that simulation has to use realistic strengths. Fitted strengths are too spread out whenever there is little data per pair, which is common in real competition data, and a null built from them finds cycles that are not there.
 
