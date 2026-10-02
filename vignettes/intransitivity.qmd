@@ -78,7 +78,7 @@ The two come apart because of luck. Even when the probabilities are perfectly tr
 
 Cycles are not exotic. Psychologists have long found that people's preferences can cycle [@tversky1969], a mixture of transitive voters can produce a cyclic majority (Condorcet's paradox), and in games, a player can be beaten by one style and beat another. The question is empirical: in real competition data, is there cyclic structure beyond what a transitive model produces by chance? The IRW's [competition collection](https://itemresponsewarehouse.org/comps_standard.html) holds a wide range of such data: more than a century of North American leagues and European football, cricket, chess on Lichess, engine and bot tournaments, and people judging which of two things is riskier, better written or more salient. We use all of it.
 
-The short answer: team sports are transitive, as far as these data can tell; online chess and game-playing bots are not; and human judgments mostly are. Getting there takes some care, because observed cycles show up in every kind of data, and in team sports and most judgments they are no more common than luck makes them. Only in online chess and among bots is there clearly more cyclic structure than luck produces.
+The short answer: team sports show no detectable intransitivity; online chess and game-playing bots are not; and human judgments mostly are. Getting there takes some care, because observed cycles show up in every kind of data, and in team sports and most judgments they are no more common than luck makes them. Only in online chess and among bots is there clearly more cyclic structure than luck produces.
 
 ---
 
@@ -189,7 +189,7 @@ In a typical team-season, `r pct(median(team$wst, na.rm = TRUE))` of the triads 
 
 Counting also shows why a better test is needed. Where the likelihood test below does find intransitivity, as in bullet chess, the excess of observed cycles is small: `r pct(median(bullet$wst))` of triads are cyclic in a typical bullet month, against `r pct(median(bullet$wst_null))` under the transitive model. The count rejects in only `r sum(bullet$wst_p <= .05)` of the 12 bullet months, and HodgeRank's cyclic share in `r sum(bullet$curl_p <= .05)`. Even real intransitivity in the win probabilities changes the outcome of only a small fraction of triads, here about half a percentage point, and a count of triads, each decided by a short series, can barely see that.
 
-### Team sports: no intransitivity
+### Team sports: no detectable intransitivity
 
 ```{r}
 #| label: tbl-team
@@ -204,7 +204,11 @@ team |>
   knitr::kable(align = "lrrrr")
 ```
 
-Across `r num(nrow(team))` team-seasons, `r sum(team$sig)` (`r pct(mean(team$sig))`) reject at .05, fewer than the 5% that luck alone would give. No sport stands out. This is not for lack of power: MLB teams meet about 16 times a season, and a cyclic term even a third the size of the spread in strengths would show up in most seasons (@tbl-power).
+Across `r num(nrow(team))` team-seasons, `r sum(team$sig)` (`r pct(mean(team$sig))`) reject at .05, fewer than the 5% that luck alone would give. No sport stands out.
+
+How strong is this evidence? Within any one season, the test can miss a modest cyclic term: in simulated NBA-sized seasons it catches one a third the size of the spread in team strength only about half the time (@tbl-power), and NFL seasons and cricket leagues, with about one game per pair, have far less data than that. Across all the seasons together the evidence is much stronger: if moderate cycles were common in team sports, far more than 2% of more than a thousand seasons would reject. So a single strength per team misses no cyclic structure that these data can detect.
+
+That is not the same as saying one strength is all you need. The test compares one strength per team with one strength plus a cyclic matchup term, and nothing else. A single fixed strength can fail in other ways this test does not look for: strengths that change during a season (injuries, trades, form), home advantage that differs by team, or information in the margin of victory, since we use only who won. And a better fit is not the same as better predictions of games not yet played; that would need an out-of-sample comparison.
 
 College football is the exception, but probably not a real one. Its two seasons have `r num(U$agents[U$unit == "collegefb 2021"])` and `r num(U$agents[U$unit == "collegefb 2022"])` teams, mostly in conferences that rarely play each other, and about one game per pair. The rank-2 term can then capture group structure the single strength misses, such as conferences of different quality whose teams meet in only a few games. That is a misfit of Bradley-Terry, but not a cycle.
 
@@ -355,7 +359,7 @@ The bots' loop is what strong intransitivity looks like: each bot beats the next
 
 ## Discussion
 
-Where does this leave the Bradley-Terry model? For team sports it holds up well: across more than a century of leagues, a single strength per team captures the structure of who beats whom, and what looks like a cycle is the noise of a short series. For online chess and for bots it does not: some matchups are consistently better or worse than the two strengths predict, and those deviations line up into cycles. Judgments sit in between. Individuals are transitive where we can check; pooled judgments occasionally are not, perhaps because people who differ are pooled together, though that is untested here.
+Where does this leave the Bradley-Terry model? For team sports it holds up against the cyclic alternative: across more than a century of leagues, we find no matchup structure beyond a single strength per team, and what looks like a cycle is the noise of a short series. Other departures from a single fixed strength, such as strengths that change within a season, were not tested. For online chess and for bots it does not: some matchups are consistently better or worse than the two strengths predict, and those deviations line up into cycles. Judgments sit in between. Individuals are transitive where we can check; pooled judgments occasionally are not, perhaps because people who differ are pooled together, though that is untested here.
 
 There are also two lessons about method. First, counting cycles answers the wrong question, because noise alone produces plenty of them. Second, the right comparison is with a transitive model simulated on the same schedule, and that simulation has to use realistic strengths. Fitted strengths are too spread out whenever there is little data per pair, which is common in real competition data, and a null built from them finds cycles that are not there.
 
