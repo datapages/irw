@@ -27,11 +27,15 @@ library(dplyr)
 library(tidyr)
 library(tibble)
 library(ggplot2)
+library(plotly)
 
 theme_set(theme_minimal(base_size = 13))
 irw_blue <- "#2166ac"
 irw_red  <- "#d73027"
 irw_grey <- "grey50"
+# Interactive figures on the site; STATIC_FIGS=1 gives plain images (for
+# previews outside the site, where the plotly scripts cannot load)
+show_plot <- function(p) if (Sys.getenv("STATIC_FIGS") == "1") p else ggplotly(p, tooltip = "text")
 step_cols <- c(M0 = "#c6dbef", M1 = "#6baed6", M2 = "#2171b5", M3 = "#08306b")
 
 cache_path <- "sports_trials_data/results.rds"
@@ -71,16 +75,21 @@ H <- function(d, m) f2(pick(stab, d, m, "split_half_r"))
 IM <- function(d, m, col = "imv_vs_prev") f3(pick(imv_tab, d, m, col))
 ```
 
+## Motivation
+
 A free throw is an item in the textbook sense: every shooter faces the same 15 feet, with no defender. Every other shot is not. A player chooses where to shoot from, and that choice depends on who the player is (a center lives near the rim), how good they are, and the game. So a shooting percentage mixes two things: how well someone shoots, and how hard the shots they chose were. This is but one example of a more general problem. Whenever respondents choose their own trials, or someone chooses for them, raw accuracy is a blend of skill and selection.
 
 The IRW has a simulated version of this problem, [`nbashots_sim`](https://itemresponsewarehouse.org/tables/nbashots_sim/), which the course's [trials lesson](https://ben-domingue.github.io/irw-course/lessons/trials.html) uses. There the true skills are known, so one can check how well an explanatory model recovers them. In that simulation, better shooters take harder shots by design, and adjusting for the shot widens the spread of skill. This vignette asks what the same analysis looks like in real data, where nobody hands us the truth. We use five sources: NBA shots, NFL kicks and passes, soccer shots and, as a non-sport case, slepemapy.cz, an online system for practising geography on maps that picks each learner's next question. In each one the `item` is a loose grouping of attempts (a court zone, a distance band, a body part), and each attempt comes with detailed information about where and when it happened.
 
 The punchline is that selection does not run in a single direction. In some settings the harder attempts go to the better performers, and raw rates understate how different people are. In others, raw rates mostly reward people for having taken easy attempts, and they overstate it.
 
-## Data
+---
 
-::: {.callout-important}
-## The NBA shot data are not in the IRW
+## Data and methods
+
+### Data
+
+::: {.callout-important title="The NBA shot data are not in the IRW"}
 The NBA.com shot files used here, as compiled in [Samangy's collection](https://github.com/DomSamangy/NBA_Shots_04_23), come with no clear licence. Without one, the IRW cannot redistribute them. We analyse them because they are the real version of the problem in [`nbashots_sim`](https://itemresponsewarehouse.org/tables/nbashots_sim/). This page and its cached results hold only aggregates (SDs, correlations, IMVs, decile averages), with no shots and no players. Anyone who wants to rerun the NBA analysis must download the files from the source. The other four tables are in the IRW.
 :::
 
@@ -107,7 +116,7 @@ tibble(
 ) |> knitr::kable()
 ```
 
-## Models
+### Models
 
 For each domain we fit a ladder of Rasch-style logistic mixed models with `lme4` [@bates2015lme4], with a random intercept for the person:
 
@@ -161,6 +170,8 @@ cat("<p style='margin-bottom:4px;font-size:0.9em'>Terms added at each step: ", l
 bind_rows(rows) |> knitr::kable(format = "html", escape = FALSE)
 ```
 
+---
+
 ## Results
 
 ### Do better performers take harder attempts?
@@ -179,12 +190,16 @@ The U in the soccer panel is not about skill. Wyscout's player file, which is no
 #| fig-height: 3.6
 #| fig-width: 10
 
-ggplot(deciles, aes(decile, easiness)) +
+p <- ggplot(deciles, aes(decile, easiness, group = domain,
+                         text = paste0(domain, "<br>Decile: ", decile,
+                                       "<br>Mean easiness: ", f2(easiness),
+                                       "<br>Raw success rate: ", f2(rate)))) +
   geom_line(colour = irw_blue, linewidth = 0.7) +
   geom_point(colour = irw_blue, size = 2) +
   facet_wrap(~ factor(domain, unname(domains)), nrow = 1, scales = "free_y") +
   scale_x_continuous(breaks = c(1, 5, 10)) +
   labs(x = "Decile of adjusted skill", y = "Mean attempt easiness (logit)")
+show_plot(p)
 ```
 
 ```{r}
@@ -211,11 +226,14 @@ The orderings move accordingly (@tbl-ladder). For kickers and passers the rank c
 #| fig-height: 3.6
 #| fig-width: 10
 
-ggplot(ladder, aes(model, person_sd, fill = model)) +
+p <- ggplot(ladder, aes(model, person_sd, fill = model,
+                        text = paste0(domain, ", ", model, "<br>Person SD: ", f2(person_sd),
+                                      "<br>Spearman with M0: ", f2(spearman_m0)))) +
   geom_col(width = 0.7) +
   facet_wrap(~ factor(domain, unname(domains)), nrow = 1) +
   scale_fill_manual(values = step_cols, guide = "none") +
   labs(x = NULL, y = "Person SD (logits)")
+show_plot(p)
 ```
 
 ```{r}
@@ -240,12 +258,15 @@ Passes illustrate a point that merits emphasis: an attempt feature can matter a 
 #| fig-height: 3.6
 #| fig-width: 10
 
-ggplot(imv_tab, aes(model, imv_vs_prev, fill = model)) +
+p <- ggplot(imv_tab, aes(model, imv_vs_prev, fill = model,
+                         text = paste0(domain, ", ", model, "<br>IMV over previous step: ", f3(imv_vs_prev),
+                                       "<br>IMV over M0: ", f3(imv_vs_m0)))) +
   geom_col(width = 0.7) +
   geom_hline(yintercept = 0, colour = irw_grey) +
   facet_wrap(~ factor(domain, unname(domains)), nrow = 1) +
   scale_fill_manual(values = step_cols, guide = "none") +
   labs(x = NULL, y = "IMV over previous step")
+show_plot(p)
 ```
 
 ```{r}
@@ -279,6 +300,8 @@ stab |>
   knitr::kable()
 ```
 
+---
+
 ## Discussion
 
 Where does this leave us? In all five settings, the attempt is not an item in the usual sense, and the analyst has to decide how much of what is known about it to adjust for. The adjustment can matter a great deal, and its direction depends on who did the selecting and on what basis.
@@ -286,8 +309,38 @@ Where does this leave us? In all five settings, the attempt is not an item in th
 - When someone else decides which attempts a performer gets, and gives the harder ones to the stronger performers (a coach deciding whether to try a long field goal, a practice system choosing the next question), raw success rates understate differences. Adjusting widens the spread and makes the person effect more reliable. This is the same logic as adaptive testing, and the explanatory model behaves as one would hope.
 - When performers settle into attempts that suit their role (bigs at the rim, strikers in the six-yard box), raw rates are largely a record of that role. Adjusting removes most of it, and what remains is smaller and noisier, sometimes much noisier.
 
-This is not to say that the adjusted estimates are the "true" skill. Every model here conditions only on what was recorded, the attempts that were never taken are never observed, and some recorded features (the kind of shot) are partly skill themselves. Selection models in economics [@heckman1979] are one place to start, but we do not know of a satisfying answer for data like these. Scoring the attempts is fixable; selecting them is not.
+This is not to say that the adjusted estimates are the "true" skill; the limitations below say why. Scoring the attempts is fixable; selecting them is not.
 
-## Reproducing this
+---
 
-The analysis script is `sports_trials_compute.R`. The four IRW tables are fetched with `irw::irw_fetch()`. The NBA shots are not in the IRW, because the files have no clear licence. The script reads them from [Samangy's collection](https://github.com/DomSamangy/NBA_Shots_04_23) when it runs (set `NBA_DIR` to use a local copy), and nothing from them is stored here except the aggregates shown on this page. Results were computed on `r date_run`.
+## Limitations
+
+**The attempts not taken are never observed.** Every model here conditions only on attempts that were made and recorded. A kick the coach declined, or a shot a player passed up, leaves no row. Selection models in economics [@heckman1979] are one place to start, but we do not know of a satisfying answer for data like these.
+
+**Some attempt features are partly skill.** The NBA M3 includes the kind of shot (dunk, layup, pull-up jumper). Being able to finish at the rim with a dunk is arguably part of shooting skill, so M3 may over-adjust; M2 (zone and distance only) is the more conservative comparison. Shot location raises the same question in a milder form: getting open close to the goal is a skill too.
+
+**The selection diagnostic is descriptive.** Easiness comes from a model with no person effect, and both raw and adjusted skill are estimated from the same attempts, so the correlations in @tbl-selection are not clean estimates of how selection works. The decile plots also sort people partly by how many attempts they have, since estimates from fewer attempts are shrunk more (the soccer panel shows this most clearly).
+
+**Choices of window and sample.** One NBA season (2023-24); NFL kicks from 2015 (the extra-point change) and passes from 2016; minimum attempt counts that differ by domain (100 for NBA shooters and passers, 20 elsewhere); and a random sample of 5,000 map-practice users. The IRW's `geography` table has no timestamp, so its split-half check uses a random half rather than alternating attempts, and "I don't know" answers (missing in the table) are dropped.
+
+**Two numbers in the text are not in the cached results.** The `nbashots_sim` comparison in the selection section and the soccer players' positions (from Wyscout's player file, which is not part of the IRW table) come from `sports_trials_checks.R`.
+
+---
+
+## Reproducibility
+
+{{< include ../components/_source-links.qmd >}}
+
+{{< include ../components/_data-version.qmd >}}
+
+Results computed `r format(date_run, "%B %d, %Y")`. The four IRW tables are fetched with `irw::irw_fetch()`. The NBA shots are not in the IRW, because the files have no clear licence. The compute script downloads the 2023-24 file from [Samangy's collection](https://github.com/DomSamangy/NBA_Shots_04_23) when it runs (set `NBA_DIR` to use a local copy), and nothing from them is stored here except the aggregates shown on this page. To regenerate (about 40 minutes):
+
+```r
+Rscript vignettes/sports_trials_compute.R
+Rscript vignettes/sports_trials_checks.R   # the two typed-in checks
+quarto::quarto_render("vignettes/sports_trials.qmd")
+```
+
+---
+
+## References
