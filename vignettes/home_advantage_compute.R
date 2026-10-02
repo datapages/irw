@@ -158,15 +158,20 @@ fit_h <- function(a, b, y, home, nocrowd = NULL, mods = NULL) {
     cf <- coef(m); V <- solve(m$Hessian)[seq_along(cf), seq_along(cf)]
     names(cf) <- colnames(Z)
     method <- "ordinal"
+    # cutpoints: P(loss) = plogis(cut1 - eta), P(win) = 1 - plogis(cut2 - eta), so for
+    # two equal teams (eta = h) the draw rate is plogis(cut2 - h) - plogis(cut1 - h)
+    cuts <- unname(m$zeta)
   } else {
     m <- glm(y ~ Z - 1, family = binomial)
     cf <- coef(m); V <- vcov(m); names(cf) <- colnames(Z)
     method <- "binary"
+    cuts <- c(NA_real_, NA_real_)
   }
   se <- sqrt(diag(V))[seq_len(ncol(H))]
   out <- list(h = unname(cf["home"]), h_se = unname(se[1]), method = method,
               n_games = length(a), n_agents = length(agents), n_components = length(ref),
-              draw_rate = mean(y == 0.5), home_share = mean(home != 0))
+              draw_rate = mean(y == 0.5), home_share = mean(home != 0),
+              cut1 = cuts[1], cut2 = cuts[2])
   if (!is.null(nocrowd)) {
     out$delta <- unname(cf["home_nocrowd"]); out$delta_se <- unname(se[2])
     out$n_nocrowd <- sum(nocrowd & home != 0)
