@@ -145,6 +145,7 @@ CACHES <- list(
                                "guessingdata/guessing_m_check.rds",
                                "guessingdata/guessing_imv_benchmark.rds"),
   "hf_reliability_paradox" = "hf_reliability/hf_reliability_results.rds",
+  "home_advantage"         = "home_advantage_data/home_advantage_results.rds",
   "intransitivity"         = "intransitivity_data/results.rds",
   "il_hte"                 = "ilhtedata/il_hte_results.rds",
   "item_text_difficulty"   = "itemtextdata/item_text_difficulty_results.rds",
