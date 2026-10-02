@@ -206,35 +206,47 @@ How far orange gets toward grey varies a lot. The nested logit's gain is `r pct(
 
 ## Does it predict which option is chosen?
 
-Now the bet changes. Instead of right or wrong, the outcome on each held-out cell is the option chosen, scored with the multinomial IMV. The 2PL and Rasch enter with the "+ shares" rule: their P(key), with the rest split among the distractors by how popular each was on the training cells. Grey is again the yardstick, here the Rasch → 2PL gain on the same multinomial scale.
+Now the bet changes. Instead of right or wrong, the outcome on each held-out cell is the option chosen, scored with the multinomial IMV. The 2PL and Rasch enter with the "+ shares" rule: their P(key), with the rest split among the distractors by how popular each was on the training cells. Grey is again the yardstick, here the Rasch → 2PL gain on the same multinomial scale. The left panel of @fig-option scores every held-out cell; the right panel, described below, scores only the wrong answers.
 
 ```{r}
 #| label: fig-option
-#| fig-cap: "Out-of-sample multinomial IMV, for the option chosen on held-out cells. The baseline for the option models is 2PL + shares. Points pool the five folds; bars span the fold-to-fold range."
+#| fig-cap: "Out-of-sample multinomial IMV. Left: the option chosen on every held-out cell, with 2PL + shares as the baseline for the option models. Right: which wrong answer was chosen, over held-out wrong answers only, with the distractors' training shares as the baseline. Points pool the five folds; bars span the fold-to-fold range. The two panels have different scales."
 #| fig-height: 8
-#| fig-width: 9
+#| fig-width: 11
 
-dot_plot(c(cat_yard = "cat_rasch_to_2pl", cat_nom = "cat_twopl_to_nom", cat_nest = "cat_twopl_to_nest"),
-         c("Rasch + shares → 2PL + shares", "2PL + shares → nominal", "2PL + shares → nested logit"),
-         c(col_yard, col_nom, col_nest), "IMV for the held-out option chosen")
+panels <- list(
+  `Option chosen`      = c(yard = "cat_rasch_to_2pl", nom = "cat_twopl_to_nom", nest = "cat_twopl_to_nest"),
+  `Which wrong answer` = c(nom = "wrong_shares_to_nom", nest = "wrong_shares_to_nest")
+)
+d <- bind_rows(lapply(names(panels), function(pn) {
+  cols <- panels[[pn]]
+  rng <- folds |> select(label, family, all_of(unname(cols))) |>
+    pivot_longer(-c(label, family), names_to = "col", values_to = "v") |>
+    group_by(label, family, col) |>
+    summarise(lo = min(v), hi = max(v), .groups = "drop")
+  pts <- bind_rows(lapply(fitted, function(r) tibble(
+    label = label_of(r$table), col = unname(cols), imv = r$imv_all[unname(cols)])))
+  left_join(rng, pts, by = c("label", "col")) |>
+    mutate(panel = pn, cmp = names(cols)[match(col, cols)])
+})) |>
+  mutate(panel = factor(panel, names(panels)),
+         cmp = factor(cmp, c("yard", "nom", "nest"),
+                      c("Rasch → 2PL (yardstick)", "→ nominal", "→ nested logit")),
+         label = factor(label, summ |> arrange(wr_nest) |> pull(label)))
+
+ggplot(d, aes(imv, label, colour = cmp)) +
+  geom_vline(xintercept = 0, colour = "grey80") +
+  geom_errorbarh(aes(xmin = lo, xmax = hi), height = 0, linewidth = 0.6,
+                 position = position_dodge(width = 0.6)) +
+  geom_point(size = 2.2, position = position_dodge(width = 0.6)) +
+  facet_grid(family ~ panel, scales = "free", space = "free_y") +
+  scale_colour_manual(values = c(col_yard, col_nom, col_nest), name = NULL) +
+  labs(x = "IMV", y = NULL)
 ```
-
 
 Judged on the option chosen, the option models beat 2PL + shares on every table. That is not guaranteed, because the baseline already knows how popular each distractor is. On `r length(cat_over_yard)` of the `r n_tab` tables (`r and_list(cat_over_yard)`), the nested logit's gain over 2PL + shares is larger than the gain from adding discrimination on the same scale.
 
-That gain mixes two things: predicting the key better, which the first section already measured, and predicting which distractor is chosen. @fig-wrong isolates the second. It keeps only the held-out cells answered wrongly and asks which wrong answer was chosen. The baseline is the distractors' shares alone, which know nothing about θ, so this IMV measures what knowing θ tells you about the choice of distractor.
-
-```{r}
-#| label: fig-wrong
-#| fig-cap: "Which wrong answer: multinomial IMV over the held-out wrong answers only, against the wrong options' shares on the training cells."
-#| fig-height: 8
-#| fig-width: 9
-
-dot_plot(c(wr_nom = "wrong_shares_to_nom", wr_nest = "wrong_shares_to_nest"),
-         c("Shares → nominal", "Shares → nested logit"),
-         c(col_nom, col_nest), "IMV for which wrong answer was chosen")
-```
-
+That gain mixes two things: predicting the key better, which the first section already measured, and predicting which distractor is chosen. The right panel of @fig-option isolates the second. It keeps only the held-out cells answered wrongly and asks which wrong answer was chosen. The baseline is the distractors' shares alone, which know nothing about θ, so this IMV measures what knowing θ tells you about the choice of distractor.
 
 Among held-out wrong answers, θ predicts which one was chosen on every table, with IMVs from `r f4(min(summ$wr_nest))` to `r f4(max(summ$wr_nest))`. That is a median `r round(median(summ$wr_nest / summ$nest))` times the right/wrong gain on the same table. The two IMVs are for different outcomes, so the ratio is only a rough guide, but the gap is too large to be an artefact of scale. The nominal model and the nested logit are indistinguishable here, as expected, since both model the choice among distractors the same way. The wrong answers carry far more information about *which wrong answer* comes next than about *whether* the next answer is wrong. They enter a right/wrong prediction only through θ, and θ is already well estimated from the scores.
 
