@@ -234,6 +234,37 @@ kv_rows <- function(pairs) {
     "\n</table>\n")
 }
 
+# What the columns mean (ben-domingue/irw#2755). A user asked where the codebook
+# for gilbert_meta_10's cluster_id and block_id was; the page listed the names
+# and nothing else. Columns the data standard defines mean the same thing in
+# every table, so they link there; for everything else -- item codes, cov_
+# values -- the codebook is the source's, and the page says so rather than
+# implying the IRW holds one.
+STANDARD_URL  <- "https://github.com/ben-domingue/irw/blob/main/datastandard.md"
+STANDARD_COLS <- c("id", "item", "resp", "resp_raw", "wave", "treat", "rt", "date",
+                   "rater", "item_family", "cluster_id", "block_id", "std_baseline")
+columns_note <- function(x) {
+  # A competitions table's agent_a/agent_b/winner are the IRW's own layout.
+  if (identical(x$src, "comp")) return("")
+  std <- x$variables[x$variables %in% STANDARD_COLS | startsWith(x$variables, "std_baseline")]
+  first <- if (length(std)) paste0(
+    paste0("<code>", vapply(std, esc, character(1)), "</code>", collapse = ", "),
+    if (length(std) == 1) " is" else " are",
+    " defined in the <a href=\"", STANDARD_URL, "\">IRW data standard</a> and mean the same in every table. ") else ""
+  # The data URL field also holds "NA" and "Author Permission"; link only a URL.
+  url <- if (!blank(x$source_url) && grepl("^https?://", x$source_url)) x$source_url else ""
+  others <- if (nzchar(first)) "For the other columns" else "For what these columns mean"
+  rest <- if (x$src == "sim") {
+    if (nzchar(url)) paste0("The other columns are set by the <a href=\"", esc(url),
+                            "\">generating script</a>.") else ""
+  } else paste0(others, ", including what item codes and covariate values stand for, ",
+    if (nzchar(url)) paste0("any codebook is the one released with the <a href=\"", esc(url),
+                            "\">source data</a>.")
+    else "see the source cited above.")
+  if (!nzchar(first) && !nzchar(rest)) return("")
+  paste0("<p class=\"note\">", first, rest, "</p>\n")
+}
+
 section <- function(title, body, id = NULL) {
   if (!nzchar(trimws(body))) return("")
   paste0("<section", if (!is.null(id)) paste0(" id=\"", id, "\"") else "", ">\n",
@@ -634,7 +665,7 @@ build_page <- function(x) {
   if (length(x$variables)) {
     vars <- paste0("<p>",
       paste0("<span class=\"pill\">", vapply(x$variables, esc, character(1)),
-             "</span>", collapse = ""), "</p>\n")
+             "</span>", collapse = ""), "</p>\n", columns_note(x))
   }
 
   btn <- function(href, label, hint, cls = "btn")
