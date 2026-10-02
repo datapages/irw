@@ -86,6 +86,16 @@ AGGREGATORS_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/ma
 # Caveats true of a table's source, not IRW defects (ben-domingue/irw#2529).
 DATA_NOTES_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
                          "metadata/data_notes.csv")
+# Per-column codebook rows, built weekly by the data repo's stage 14, and the
+# data standard whose schema table defines the IRW's own columns
+# (ben-domingue/irw#2763).
+COLUMN_DOCS_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
+                          "metadata/column_docs.csv")
+STANDARD_RAW_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
+                           "datastandard.md")
+# Filled by main() from .read_standard(); empty until then, so a page built
+# without it shows codebook rows with no definitions rather than failing.
+STANDARD <- list(exact = list(), family = list())
 # Data defects are tracked in the data repo, not this one: a known-issue banner
 # and the index's flag both point here.
 ISSUE_URL    <- "https://github.com/ben-domingue/irw/issues/"
@@ -197,6 +207,54 @@ clean_doi <- function(x) {
   split(n[c("note", "issue")], tolower(n$table))
 }
 
+# tolower(table) -> that table's rows of column_docs.csv. A codebook is help,
+# not a fact the page would be wrong without, so any failure reads as no rows
+# and the page falls back to the plain column list (ben-domingue/irw#2763).
+.read_column_docs <- function() {
+  d <- tryCatch({
+    con <- url(COLUMN_DOCS_URL)
+    on.exit(try(close(con), silent = TRUE), add = TRUE)
+    utils::read.csv(con, colClasses = "character", na.strings = character(0),
+                    encoding = "UTF-8")
+  }, error = function(e) {
+    message("[landing] column_docs.csv unreadable (", conditionMessage(e),
+            "); pages show the plain column list")
+    NULL
+  })
+  if (is.null(d) || !nrow(d)) return(list())
+  split(d, tolower(d$table))
+}
+
+# The data standard's schema table: list(exact = name -> first sentence,
+# family = prefix -> first sentence). Same parsing rules as stage 14 and the
+# MCP: a backticked `name*` or `nameN` is a family.
+.read_standard <- function() {
+  lines <- tryCatch(readLines(url(STANDARD_RAW_URL), warn = FALSE, encoding = "UTF-8"),
+    error = function(e) {
+      message("[landing] datastandard.md unreadable (", conditionMessage(e),
+              "); codebook rows carry no definitions")
+      character(0)
+    })
+  exact <- list(); family <- list()
+  for (ln in grep("^\\| `", lines, value = TRUE)) {
+    cells <- trimws(strsplit(sub("^\\|", "", sub("\\|\\s*$", "", ln)), "|", fixed = TRUE)[[1]])
+    if (length(cells) < 3) next
+    rule <- gsub("\\*\\*|`", "", paste(cells[-(1:2)], collapse = " | "))
+    first <- regmatches(rule, regexpr("^.+?[.](?=\\s|$)", rule, perl = TRUE))
+    first <- if (length(first)) first else rule
+    names_ <- regmatches(cells[1], gregexpr("`[^`]+`", cells[1]))[[1]]
+    for (nm in gsub("`", "", names_)) {
+      if (grepl("\\*$", nm) || grepl("^[A-Za-z_]+N$", nm)) {
+        key <- sub(".$", "", nm)
+        if (is.null(family[[key]])) family[[key]] <- first
+      } else if (!grepl("^[A-Za-z_]+1$", nm) && is.null(exact[[nm]])) {
+        exact[[nm]] <- first
+      }
+    }
+  }
+  list(exact = exact, family = family)
+}
+
 as_df <- function(tbl) as.data.frame(tbl$to_tibble(), stringsAsFactors = FALSE)
 
 # rbind for frames whose columns differ (the non-core metadata tables each carry
@@ -263,6 +321,81 @@ columns_note <- function(x) {
     else "see the source cited above.")
   if (!nzchar(first) && !nzchar(rest)) return("")
   paste0("<p class=\"note\">", first, rest, "</p>\n")
+}
+
+# The Codebook section (ben-domingue/irw#2763): one row per column, from
+# column_docs.csv and the data standard. It is a reconstruction -- what the
+# standard says the column is, and the source column the build script renamed
+# it from -- and opens by saying so (Ben, 2026-10-02). Nothing here infers a
+# meaning from a column's name: a column with neither a definition nor a traced
+# source says it is not documented. Returns "" when there are no rows, and the
+# page keeps the plain column list.
+SCRIPT_BLOB <- "https://github.com/ben-domingue/irw/blob/main/"
+codebook_html <- function(x, standard) {
+  d <- x$coldocs
+  if (is.null(d) || !nrow(d) || !length(x$variables)) return("")
+  d <- d[match(x$variables, d$column, nomatch = 0), , drop = FALSE]  # the table's own order
+  if (!nrow(d)) return("")
+  meaning_of <- function(col, defined_by) {
+    if (defined_by == "standard") return(standard$exact[[col]] %||% "")
+    if (defined_by == "standard_family" && !startsWith(col, "cov_")) {
+      fam <- names(standard$family)[startsWith(col, names(standard$family))]
+      if (length(fam)) return(standard$family[[fam[which.max(nchar(fam))]]])
+    }
+    ""
+  }
+  row_html <- function(i) {
+    r <- d[i, ]
+    line_url <- if (nzchar(r$script) && nzchar(r$script_line))
+      paste0(SCRIPT_BLOB, r$script, "#L", r$script_line) else ""
+    src <- if (r$basis == "renamed")
+      paste0("<a href=\"", esc(line_url), "\"><code>", esc(r$source_column), "</code></a>")
+    else if (r$basis == "built")
+      paste0("<a href=\"", esc(line_url), "\">made in the build script</a>")
+    else "<span class=\"muted\">not traced</span>"
+    meaning <- meaning_of(r$column, r$defined_by)
+    chip <- if (r$defined_by == "standard") c("std", "IRW standard")
+      else if (startsWith(r$column, "cov_")) c("cov", "Covariate")
+      else if (r$documented == "true") c("src", "From source")
+      else c("none", "Not documented")
+    what <- if (nzchar(meaning)) esc(meaning)
+      else if (startsWith(r$column, "cov_")) ""
+      else if (r$documented == "true") "Not defined by the IRW standard; the source column&rsquo;s codebook entry gives its meaning."
+      else "Not documented by the IRW; see the source&rsquo;s codebook."
+    paste0("<tr><td><code class=\"col\">", esc(r$column), "</code></td>",
+           "<td><span class=\"chip ", chip[1], "\">", chip[2], "</span> ", what, "</td>",
+           "<td>", src, "</td></tr>")
+  }
+  group <- ifelse(d$defined_by == "standard", "std",
+                  ifelse(startsWith(d$column, "cov_"), "cov", "other"))
+  labels <- c(std = "IRW standard columns", cov = "Respondent covariates", other = "Other columns")
+  body <- paste(unlist(lapply(names(labels), function(g) {
+    idx <- which(group == g)
+    if (!length(idx)) return(NULL)
+    c(paste0("<tr class=\"grp\"><th colspan=\"3\">", labels[[g]], "</th></tr>"),
+      vapply(idx, row_html, character(1)))
+  })), collapse = "\n")
+  scripts <- unique(d$script[nzchar(d$script)])
+  script_link <- if (length(scripts) == 1)
+    paste0(" and the script that built it, <a href=\"", SCRIPT_BLOB, esc(scripts), "\"><code>",
+           esc(basename(scripts)), "</code></a>") else if (length(scripts) > 1)
+    " and the scripts that built it" else ""
+  url <- if (!blank(x$source_url) && grepl("^https?://", x$source_url)) x$source_url else ""
+  caveat <- paste0(
+    "<p class=\"cbnote\">This codebook is reconstructed by the IRW from the ",
+    "<a href=\"", STANDARD_URL, "\">IRW data standard</a>", script_link, ". ",
+    "It is our best reading, not the source&rsquo;s own codebook, and it may contain mistakes. ",
+    "Where the two disagree, the ",
+    if (nzchar(url)) paste0("<a href=\"", esc(url), "\">source data</a>") else "source data",
+    " are the authority. If you find an error, please ",
+    "<a href=\"", ISSUE_URL, "new\">tell us</a>.</p>\n")
+  values <- if (x$src == "sim") "" else paste0(
+    "<p class=\"note\">What item codes and covariate values stand for is in the codebook released with the ",
+    if (nzchar(url)) paste0("<a href=\"", esc(url), "\">source data</a>") else "source data", ".</p>\n")
+  paste0(caveat,
+         "<div class=\"scroll\"><table class=\"cb\">\n",
+         "<thead><tr><th>Column</th><th>What it is</th><th>Source column</th></tr></thead>\n",
+         "<tbody>\n", body, "\n</tbody></table></div>\n", values)
 }
 
 section <- function(title, body, id = NULL) {
@@ -538,6 +671,23 @@ PAGE_CSS <- paste0(
 ".btn.primary{background:#8c1515;color:#fff}",
 ".btn:hover{background:#f7eded}.btn.primary:hover{background:#6f1010}",
 ".note{font-size:.88rem;color:#555}",
+".cbnote{font-size:.88rem;color:#444;background:#f6f7f9;border-left:4px solid #9aa3b2;",
+"padding:.5rem .8rem;margin:.2rem 0 .8rem}",
+".scroll{overflow-x:auto}",
+"table.cb{border-collapse:collapse;width:100%;font-size:.88rem;min-width:34rem}",
+"table.cb thead th{text-align:left;font-weight:600;color:#444;padding:.35rem .6rem .35rem 0;",
+"border-bottom:1px solid #e3e3e3}",
+"table.cb td{padding:.38rem .6rem .38rem 0;vertical-align:top;border-top:1px solid #f0f0f0}",
+"table.cb tr.grp th{text-align:left;font-size:.74rem;text-transform:uppercase;letter-spacing:.06em;",
+"color:#777;padding:.9rem 0 .2rem;font-weight:600}",
+"code.col{background:#f2f2f4;border-radius:3px;padding:.05rem .35rem;font-size:.84rem;white-space:nowrap}",
+".chip{display:inline-block;font-size:.7rem;border-radius:3px;padding:0 .35rem;margin-right:.25rem;",
+"border:1px solid;white-space:nowrap}",
+".chip.std{color:#1d5e3a;border-color:#a9d3b8;background:#eef8f1}",
+".chip.cov{color:#3e4a6b;border-color:#c3cbe0;background:#f1f3f9}",
+".chip.src{color:#6b4a12;border-color:#e3cd9b;background:#fbf6ea}",
+".chip.none{color:#8c1515;border-color:#e6b9b9;background:#fbefef}",
+".muted{color:#777;font-style:italic}",
 "th.s{cursor:pointer;user-select:none}th.s:hover{color:#8c1515}",
 "td.restrict{background:#fff6e5}",
 ".flag{display:inline-block;font-size:.76rem;background:#fff6e5;border:1px solid #f0c987;",
@@ -758,7 +908,8 @@ section("Notes", notes, id = "notes"),
 section("Size and shape", size),
 section("Classification", tagbody),
 section("Item text", itext),
-section("Columns", vars),
+{ cb <- codebook_html(x, STANDARD)
+  if (nzchar(cb)) section("Codebook", cb, id = "codebook") else section("Columns", vars) },
 section("Get the data", access),
 section("How to cite", cite),
 section("Related tables", related$list, id = "related"),
@@ -903,6 +1054,8 @@ main <- function() {
   manifest <- .read_manifest()
   aggregators <- .read_aggregators()
   notes_of <- .read_data_notes()
+  coldocs_of <- .read_column_docs()
+  STANDARD <<- .read_standard()
   irw_version <- max(manifest$irw_version)
   pins <- manifest[manifest$irw_version == irw_version, ]
   pin_of <- setNames(pins$redivis_tag, pins$dataset)
@@ -1116,7 +1269,8 @@ main <- function() {
       page_url = page_url,
       croissant_url = paste0(SITE_URL, "/tables/", slug, "/croissant.jsonld"),
       issue = if (is.na(issue_of[k])) "" else unname(issue_of[k]),
-      notes = notes_of[[k]]
+      notes = notes_of[[k]],
+      coldocs = coldocs_of[[k]]
     )
     agg <- if (nzchar(x$source_via)) aggregators[[x$source_via]] else NULL
     x$via_note   <- if (is.null(agg)) "" else agg$note
