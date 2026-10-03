@@ -240,11 +240,6 @@ richer model predicts held-out responses *worse*.
 
 ## Results
 
-Each large dot below is one matrix: a benchmark's full item set (diamond), a
-300-item draw from it (circle), or a human table subsampled to the benchmark's
-size (square). Its value is the IMV averaged over the `r settings$nfold`
-cross-validation folds. The small faint dots are the individual folds.
-
 ```{r}
 #| label: plot-fn
 
@@ -291,7 +286,58 @@ imv_figure <- function(benches, legend_y = -0.08) {
 }
 ```
 
-### Primary panel
+### Overview
+
+```{r}
+#| label: fig-overview
+#| fig-cap: "IMV for every primary-panel matrix, AI models against people. One dot per matrix (a benchmark's full item set, a 300-item draw, or a human draw of the same size); the black line is each group's median. The dashed line is no gain."
+#| fig-height: 3.6
+
+ov <- results |>
+  filter(benchmark %in% primary) |>
+  mutate(who = factor(if_else(source == "ai", "AI models", "People"),
+                      levels = c("People", "AI models"))) |>
+  pivot_longer(c(imv_rasch_2pl, imv_2pl_2f), names_to = "comparison", values_to = "imv") |>
+  mutate(comparison = factor(comparison_levels[comparison], levels = comparison_levels),
+         tip = paste0(benchmark, ": ", src, " (", matrix, ")<br>IMV ", sgn(imv, 4)))
+ov_med <- ov |> group_by(comparison, who) |> summarise(imv = median(imv), .groups = "drop")
+
+set.seed(2)
+p_ov <- ggplot(ov, aes(x = imv, y = who, colour = who)) +
+  geom_vline(xintercept = 0, colour = irw_grey, linetype = "dashed") +
+  geom_point(aes(text = tip), size = 2.6, alpha = 0.75,
+             position = position_jitter(width = 0, height = 0.18)) +
+  geom_segment(data = ov_med, colour = "black", linewidth = 1.2,
+               aes(x = imv, xend = imv, y = as.numeric(who) - 0.32, yend = as.numeric(who) + 0.32)) +
+  scale_colour_manual(values = c("AI models" = irw_red, "People" = irw_blue), guide = "none") +
+  facet_wrap(~ comparison, scales = "free_x") +
+  labs(x = "IMV (richer model vs simpler model)", y = NULL) +
+  theme(panel.grid.major.y = element_blank(), panel.grid.minor = element_blank(),
+        panel.spacing.x = unit(2, "lines"))
+
+plotly::ggplotly(p_ov, tooltip = "text") |> plotly::config(displayModeBar = FALSE)
+```
+
+```{r}
+#| label: ov-numbers
+ov_n <- function(w) sum(ov$who == w & ov$comparison == comparison_levels[["imv_2pl_2f"]])
+ov_m <- function(w, cmp) sgn(ov_med$imv[ov_med$who == w & ov_med$comparison == comparison_levels[[cmp]]])
+```
+
+Across the `r ov_n("AI models")` AI matrices and `r ov_n("People")` human draws
+in the primary panel, the median gain from a second factor is
+`r ov_m("AI models", "imv_2pl_2f")` for AI models and
+`r ov_m("People", "imv_2pl_2f")` for people. For Rasch → 2PL the two
+distributions largely overlap (medians `r ov_m("AI models", "imv_rasch_2pl")`
+and `r ov_m("People", "imv_rasch_2pl")`); GPQA's three matrices are the AI
+points far to the right.
+
+### Primary panel by benchmark
+
+Each large dot below is one matrix: a benchmark's full item set (diamond), a
+300-item draw from it (circle), or a human table subsampled to the benchmark's
+size (square). Its value is the IMV averaged over the `r settings$nfold`
+cross-validation folds. The small faint dots are the individual folds.
 
 ```{r}
 #| label: fig-primary
