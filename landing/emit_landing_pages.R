@@ -413,6 +413,12 @@ values_html <- function(labels, column) {
 #                         a sample of README-only hits split about half
 #                         describing the variables, half install steps and
 #                         folder layouts, so the name alone is not enough)
+#   doc_names_columns     a journal supplementary document (PLOS, Europe PMC;
+#                         .docx/.pdf/.txt, never the data) whose TEXT names at
+#                         least three of this table's names (irw#2792)
+#   questionnaire         a supplementary file the authors caption as the
+#                         questionnaire or instrument: it shows the items, so
+#                         it is worded softly (irw#2792)
 # A README is shown only when no codebook-named file was found. Other README
 # hits and Dataverse DDI exports stay in the CSV for the MCP. A deposit with
 # more than SOURCE_CODEBOOKS_MAX of a kind -- one per scale, say -- gets one
@@ -422,23 +428,28 @@ SOURCE_CODEBOOKS_MAX <- 3
 source_codebook_html <- function(links) {
   if (is.null(links) || !nrow(links)) return("")
   for (kind in c("recorded_at_ingest", "typed_codebook", "package_doc", "name_codebook",
-                 "readme_names_columns")) {
+                 "readme_names_columns", "doc_names_columns", "questionnaire")) {
     l <- links[links$how_found == kind, , drop = FALSE]
     l <- l[!duplicated(l$url), , drop = FALSE]
     if (!nrow(l)) next
     what <- switch(kind, readme_names_columns = c("README", "READMEs"),
                    package_doc = c("package documentation", "package help pages"),
+                   doc_names_columns = c("documentation", "documents"),
+                   questionnaire = c("questionnaire", "questionnaires"),
                    c("codebook", "codebook files"))
     if (nrow(l) > SOURCE_CODEBOOKS_MAX) {
       dep <- l$deposit_url[nzchar(l$deposit_url)][1]
-      where <- if (!is.na(dep)) paste0("<a href=\"", esc(dep), "\">the source deposit</a>") else "the source deposit"
+      place <- if (all(l$host %in% c("plos", "epmc"))) "the article" else "the source deposit"
+      where <- if (!is.na(dep)) paste0("<a href=\"", esc(dep), "\">", place, "</a>") else place
       return(paste0("one of the ", nrow(l), " ", what[2], " in ", where))
     }
     files <- paste0("<a href=\"", vapply(l$url, esc, character(1)), "\"><code>",
                     vapply(basename(l$file_name), esc, character(1)), "</code></a>")
     whose <- if (kind == "package_doc") "the package&rsquo;s " else "the source&rsquo;s "
     return(paste0(whose, if (kind == "package_doc") "documentation" else what[1], ", ",
-                  paste(files, collapse = ", ")))
+                  paste(files, collapse = ", "),
+                  if (kind == "questionnaire") paste0(", which ", if (nrow(l) > 1) "show" else "shows",
+                                                       " the item wording") else ""))
   }
   ""
 }
