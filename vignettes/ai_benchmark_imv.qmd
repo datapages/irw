@@ -290,13 +290,15 @@ imv_figure <- function(benches, legend_y = -0.08) {
 
 ```{r}
 #| label: fig-overview
-#| fig-cap: "IMV for every primary-panel matrix, AI models against people. One dot per matrix (a benchmark's full item set, a 300-item draw, or a human draw of the same size); the black line is each group's median. The dashed line is no gain."
-#| fig-height: 3.6
+#| fig-cap: "IMV for every primary-panel matrix. One dot per matrix: human draws matched to each benchmark's size, AI draws of 300 items, and AI fits on a benchmark's full item set (HarmBench's 223 items, which its human draws also use, counts as a full set). The black line is each row's median. The dashed line is no gain."
+#| fig-height: 4.4
 
 ov <- results |>
   filter(benchmark %in% primary) |>
-  mutate(who = factor(if_else(source == "ai", "AI models", "People"),
-                      levels = c("People", "AI models"))) |>
+  mutate(who = factor(case_when(source == "human" ~ "People",
+                                draw == 0 ~ "AI: full item set",
+                                TRUE ~ "AI: 300-item draws"),
+                      levels = c("People", "AI: 300-item draws", "AI: full item set"))) |>
   pivot_longer(c(imv_rasch_2pl, imv_2pl_2f), names_to = "comparison", values_to = "imv") |>
   mutate(comparison = factor(comparison_levels[comparison], levels = comparison_levels),
          tip = paste0(benchmark, ": ", src, " (", matrix, ")<br>IMV ", sgn(imv, 4)))
@@ -309,7 +311,8 @@ p_ov <- ggplot(ov, aes(x = imv, y = who, colour = who)) +
              position = position_jitter(width = 0, height = 0.18)) +
   geom_segment(data = ov_med, colour = "black", linewidth = 1.2,
                aes(x = imv, xend = imv, y = as.numeric(who) - 0.32, yend = as.numeric(who) + 0.32)) +
-  scale_colour_manual(values = c("AI models" = irw_red, "People" = irw_blue), guide = "none") +
+  scale_colour_manual(values = c("AI: full item set" = irw_red, "AI: 300-item draws" = irw_red,
+                                 "People" = irw_blue), guide = "none") +
   facet_wrap(~ comparison, scales = "free_x") +
   labs(x = "IMV (richer model vs simpler model)", y = NULL) +
   theme(panel.grid.major.y = element_blank(), panel.grid.minor = element_blank(),
@@ -324,12 +327,15 @@ ov_n <- function(w) sum(ov$who == w & ov$comparison == comparison_levels[["imv_2
 ov_m <- function(w, cmp) sgn(ov_med$imv[ov_med$who == w & ov_med$comparison == comparison_levels[[cmp]]])
 ```
 
-Across the `r ov_n("AI models")` AI matrices and `r ov_n("People")` human draws
-in the primary panel, the median gain from a second factor is
-`r ov_m("AI models", "imv_2pl_2f")` for AI models and
-`r ov_m("People", "imv_2pl_2f")` for people. For Rasch → 2PL the two
-distributions largely overlap (medians `r ov_m("AI models", "imv_rasch_2pl")`
-and `r ov_m("People", "imv_rasch_2pl")`); GPQA's three matrices are the AI
+The median gain from a second factor is `r ov_m("People", "imv_2pl_2f")` across
+the `r ov_n("People")` human draws, `r ov_m("AI: 300-item draws", "imv_2pl_2f")`
+across the `r ov_n("AI: 300-item draws")` AI draws of 300 items, and
+`r ov_m("AI: full item set", "imv_2pl_2f")` across the
+`r ov_n("AI: full item set")` full-item-set fits. So the gap does not come from
+the AI matrices being larger: the size-matched draws show it too. For
+Rasch → 2PL the rows largely overlap (medians
+`r ov_m("People", "imv_rasch_2pl")`, `r ov_m("AI: 300-item draws", "imv_rasch_2pl")`
+and `r ov_m("AI: full item set", "imv_rasch_2pl")`). GPQA's matrices are the AI
 points far to the right.
 
 ### Primary panel by benchmark
