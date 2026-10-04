@@ -443,7 +443,9 @@ source_codebook_html <- function(links) {
                    doc_names_columns = c("documentation", "documents"),
                    questionnaire = c("questionnaire", "questionnaires"),
                    c("codebook", "codebook files"))
-    if (nrow(l) > SOURCE_CODEBOOKS_MAX) {
+    # the cap stops the page choosing among a deposit's per-scale files; a
+    # reviewed row was chosen for this table (one per wave it pools, say)
+    if (nrow(l) > SOURCE_CODEBOOKS_MAX && kind != "recorded_by_review") {
       dep <- l$deposit_url[nzchar(l$deposit_url)][1]
       place <- if (all(l$host %in% c("plos", "epmc"))) "the article" else "the source deposit"
       where <- if (!is.na(dep)) paste0("<a href=\"", esc(dep), "\">", place, "</a>") else place
