@@ -51,11 +51,13 @@ if (cache_ok) {
   is_pilot         <- isTRUE(.cache$pilot)
   r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
   r_n_tables_run   <- length(candidate_tables)
+  n_draws          <- .cache$n_draws %||% 1L   # results from before draws had one
 } else {
   res <- list(); candidate_tables <- character()
   date_run <- Sys.Date(); is_pilot <- FALSE
-  r_all_candidates <- 0L; r_n_tables_run <- 0L
+  r_all_candidates <- 0L; r_n_tables_run <- 0L; n_draws <- 1L
 }
+draws_txt <- if (n_draws == 1) "a single draw" else paste(n_draws, "independent draws")
 fitted  <- Filter(function(r) is.na(r$skipped), res)
 skipped <- Filter(function(r) !is.na(r$skipped), res)
 
@@ -96,7 +98,14 @@ empty_summ <- tibble(table = character(), label = character(), family = characte
                      dense = logical(), yard = numeric(), nom = numeric(), nest = numeric(),
                      cat_yard = numeric(), cat_nom = numeric(), cat_nest = numeric(),
                      wr_nom = numeric(), wr_nest = numeric(), nest_folds_pos = integer(),
-                     cat_nest_folds_pos = integer(), wr_nest_folds_pos = integer())
+                     cat_nest_folds_pos = integer(), wr_nest_folds_pos = integer(),
+                     yard_se = numeric(), nom_se = numeric(), nest_se = numeric(),
+                     cat_yard_se = numeric(), cat_nom_se = numeric(), cat_nest_se = numeric(),
+                     wr_nom_se = numeric(), wr_nest_se = numeric())
+# Standard error of one comparison over draws; NA for single-draw results.
+se_of <- function(r, col) (r$imv_se %||% c())[col] %||% NA_real_
+# One significant digit: many SEs are under 0.00005 and would print as 0.0000.
+se_fmt <- function(x) formatC(x, format = "fg", digits = 1)
 summ <- bind_rows(empty_summ, lapply(fitted, function(r) {
   f <- r$imv_by_fold
   tibble(
@@ -110,7 +119,12 @@ summ <- bind_rows(empty_summ, lapply(fitted, function(r) {
     wr_nom = r$imv_all[["wrong_shares_to_nom"]], wr_nest = r$imv_all[["wrong_shares_to_nest"]],
     nest_folds_pos = sum(f[, "twopl_to_nest"] > 0),
     cat_nest_folds_pos = sum(f[, "cat_twopl_to_nest"] > 0),
-    wr_nest_folds_pos = sum(f[, "wrong_shares_to_nest"] > 0)
+    wr_nest_folds_pos = sum(f[, "wrong_shares_to_nest"] > 0),
+    yard_se = se_of(r, "rasch_to_2pl"), nom_se = se_of(r, "twopl_to_nom"),
+    nest_se = se_of(r, "twopl_to_nest"),
+    cat_yard_se = se_of(r, "cat_rasch_to_2pl"), cat_nom_se = se_of(r, "cat_twopl_to_nom"),
+    cat_nest_se = se_of(r, "cat_twopl_to_nest"),
+    wr_nom_se = se_of(r, "wrong_shares_to_nom"), wr_nest_se = se_of(r, "wrong_shares_to_nest")
   )
 })) |> mutate(share = nest / yard)
 
@@ -119,7 +133,7 @@ f4  <- function(x) sprintf("%.4f", x)
 pct <- function(x) scales::percent(x, 1)
 and_list <- function(x) if (length(x) < 2) x else paste(paste(x[-length(x)], collapse = ", "), "and", x[length(x)])
 n_tab     <- nrow(summ)
-n_folds   <- 5 * n_tab
+n_folds   <- sum(vapply(fitted, function(r) nrow(r$imv_by_fold), integer(1)))  # five per draw
 nom_wins  <- summ$label[summ$nom > summ$nest]
 top_share <- slice_max(summ, share, n = 1)
 low_share <- slice_min(summ, share, n = 1)
@@ -131,23 +145,27 @@ if (length(fitted)) {
     as_tibble(r$imv_by_fold) |>
       mutate(fold = row_number(), label = label_of(r$table), family = family_of(r$table))))
 
+  # Means over draws, with each third's standard error in a matching *_se column.
   terc <- bind_rows(lapply(fitted, function(r) {
-    as.data.frame(r$imv_by_tercile) |>
+    m <- as.data.frame(r$imv_by_tercile)
+    s <- as.data.frame(r$imv_by_tercile_se %||% (r$imv_by_tercile * NA))
+    names(s) <- paste0(names(s), "_se")
+    cbind(m, s) |>
       tibble::rownames_to_column("tercile") |>
       mutate(table = r$table, label = label_of(r$table), family = family_of(r$table))
   })) |> mutate(tercile = factor(tercile, c("low", "mid", "high"), c("Bottom", "Middle", "Top")))
 }
 
-# A dot per table with its fold-to-fold range, for any set of IMV columns.
+# A dot per table with bars of +/- 2 standard errors across draws, for any set
+# of summ columns (each with a matching *_se column).
 dot_plot <- function(cols, names, colours, xlab) {
   pts <- summ |> select(label, family, all_of(names(cols))) |>
     pivot_longer(-c(label, family), names_to = "cmp", values_to = "imv")
-  rng <- folds |> select(label, all_of(unname(cols))) |>
-    pivot_longer(-label, names_to = "col", values_to = "v") |>
-    group_by(label, col) |> summarise(lo = min(v), hi = max(v), .groups = "drop") |>
-    mutate(cmp = names(cols)[match(col, cols)])
-  d <- left_join(pts, rng, by = c("label", "cmp")) |>
-    mutate(cmp = factor(cmp, names(cols), names))
+  ses <- summ |> select(label, all_of(paste0(names(cols), "_se"))) |>
+    pivot_longer(-label, names_to = "cmp", values_to = "se") |>
+    mutate(cmp = sub("_se$", "", cmp))
+  d <- left_join(pts, ses, by = c("label", "cmp")) |>
+    mutate(lo = imv - 2 * se, hi = imv + 2 * se, cmp = factor(cmp, names(cols), names))
   ord <- summ |> arrange(.data[[names(cols)[length(cols)]]]) |> pull(label)
   d$label <- factor(d$label, ord)
   ggplot(d, aes(imv, label, colour = cmp)) +
@@ -228,9 +246,9 @@ cands <- c(
 )
 ```
 
-The candidates are four ENEM tests, one per subject area from 2013, and every other table in `irw_nominal` with at least 10 items: `r r_all_candidates` tables in all, listed by hand in the compute script because the nominal metadata lags behind releases. A table is analysed if it is single-answer multiple choice: one keyed option per item, and no item with more than 12 answers each chosen by at least 1% of respondents or with its rarer answers together making up more than 10% of responses. Each table is cut to 3,000 respondents at most.
+The candidates are four ENEM tests, one per subject area from 2013, and every other table in `irw_nominal` with at least 10 items: `r r_all_candidates` tables in all, listed by hand in the compute script because the nominal metadata lags behind releases. A table is analysed if it is single-answer multiple choice: one keyed option per item, and no item with more than 12 answers each chosen by at least 1% of respondents or with its rarer answers together making up more than 10% of responses. Each table is fitted on `r draws_txt` of up to 3,000 respondents.
 
-**Rare options.** A wrong option chosen by fewer than 1% of respondents is pooled with the item's other rare options. If the pooled group is still under 1% (ENEM's blank and double-mark codes, about 0.5% of responses), those responses are dropped. Respondents left with fewer than half the items are dropped, and so is any table with fewer than 1,000 respondents remaining.
+**Blanks and rare options.** ENEM codes a blank as `.` and a double mark as `*`. These are not options, so those responses are dropped first. A wrong option chosen by fewer than 1% of respondents is then pooled with the item's other rare options, and if the pooled group is still under 1%, those responses are dropped too. Left to that rule, blanks and double marks would enter the option models as a distractor, alone or pooled with rare options, on any item where they reach 1% of responses. On some recent ENEM tests they do on many items: 14 of the 44 in the IRW's 2023 math table, across all its respondents. Respondents left with fewer than half the items are dropped, and so is any table with fewer than 1,000 respondents remaining.
 
 **Sparse tables.** Some tables come from adaptive or self-paced systems, where each respondent sees a small part of a large item bank: EdNet's TOEIC practice app, for example. There we keep a dense block: the 40 most-answered items, and the respondents who answered at least half of them. These items are not a random draw from the bank, so the result describes the block. Such tables are marked † below.
 
@@ -248,18 +266,20 @@ The course lesson walks through both option models on one test; this page does n
 
 For each candidate table, `fit_one()` in the compute script:
 
-1. Fetches the table with `irw_fetch(source = "nom")`, keeps one response per person and item, keeps a dense block if the table is sparse, and draws up to 3,000 respondents.
-2. Builds two person × item matrices, one holding the option chosen (with the key coded as the last category) and one holding the 0/1 score. Rare options are pooled, and thin items and respondents are dropped, as described above.
+1. Fetches the table with `irw_fetch(source = "nom")`, keeps one response per person and item, keeps a dense block if the table is sparse, and takes `r draws_txt` of up to 3,000 respondents. Steps 2 to 5 run once per draw.
+2. Builds two person × item matrices, one holding the option chosen (with the key coded as the last category) and one holding the 0/1 score. Blanks are dropped, rare options are pooled, and thin items and respondents are dropped, as described above.
 3. Splits the observed person-item cells at random into five folds. For each fold, it fits the Rasch model and the 2PL to the 0/1 scores, and the nominal model and the nested logit to the options, using `mirt` with all the fold's cells hidden.
 4. Takes each model's EAP θ, estimated from the visible cells, and predicts every hidden cell. It records two probabilities: P(key), and the probability of the option actually chosen.
 5. Computes the three IMVs described below, pooled over all held-out cells, fold by fold, and within thirds of the 2PL θ.
+
+The results are then averaged over draws, with standard errors from the draw-to-draw spread.
 
 ```{r}
 #| label: fit-function
 #| eval: false
 
-fit_one <- function(tn) {
-  P <- prep(readRDS(cache_file(tn)))            # options (key last) and 0/1 matrices
+fit_draw <- function(n, d) {                    # one draw of up to 3,000 respondents
+  P <- prep(n)                                  # options (key last) and 0/1 matrices, blanks dropped
   fold <- sample(rep_len(1:5, length(obs)))     # folds over observed person-item cells
   per_fold <- lapply(1:5, function(k) {
     opt_tr <- opt; opt_tr[obs[fold == k]] <- NA # hide this fold
@@ -274,6 +294,11 @@ fit_one <- function(tn) {
     # Rasch and the 2PL split 1 - P(key) by the training-cell distractor shares.
   })
   # imv.binary() on right/wrong; imv_cat() on the option chosen and on which wrong answer
+}
+fit_one <- function(tn) {
+  draws <- readRDS(draws_file(cache_dir, tn))  # N_DRAWS samples, taken in fetch_one()
+  per_draw <- lapply(seq_along(draws), function(d) fit_draw(draws[[d]], d))
+  # means over draws, and standard errors from the draw-to-draw spread
 }
 ```
 
@@ -319,7 +344,7 @@ So the orange dot (2PL → nested logit) is close to the value of the better θ 
 
 ```{r}
 #| label: fig-gains
-#| fig-cap: "Out-of-sample binary IMV for three model comparisons. Blue: the nominal model changes both θ and the key's curve. Orange: the nested logit changes θ but keeps the 2PL's curve for the key. Points pool the five folds; bars span the fold-to-fold range."
+#| fig-cap: "Out-of-sample binary IMV for three model comparisons. Blue: the nominal model changes both θ and the key's curve. Orange: the nested logit changes θ but keeps the 2PL's curve for the key. Points are means over draws; bars are ±2 standard errors across draws."
 #| fig-height: 8
 #| fig-width: 9
 
@@ -328,9 +353,9 @@ dot_plot(c(yard = "rasch_to_2pl", nom = "twopl_to_nom", nest = "twopl_to_nest"),
          c(col_yard, col_nom, col_nest), "IMV for held-out right/wrong")
 ```
 
-Knowing which wrong answers a respondent chose elsewhere always helps, but only a little. The nested logit beats the 2PL on all `r n_tab` tables and in `r sum(summ$nest_folds_pos)` of `r n_folds` folds, with IMVs from `r f4(min(summ$nest))` to `r f4(max(summ$nest))`. Every one of those is smaller than the Rasch → 2PL gain on the same cells.
+Knowing which wrong answers a respondent chose elsewhere always helps, but only a little. The nested logit beats the 2PL on all `r n_tab` tables and in `r sum(summ$nest_folds_pos)` of the `r n_folds` folds across all draws, with IMVs from `r f4(min(summ$nest))` to `r f4(max(summ$nest))`. Every one of those is smaller than the Rasch → 2PL gain on the same cells.
 
-The bars show the spread across folds, which understates the uncertainty. Refitting with a different random split into folds moved some of these IMVs by up to about 0.001 (ENEM humanities, 2PL → nested, went from .0041 to .0035). Read differences smaller than that as ties.
+Points are means over the draws and bars are ±2 standard errors across them. Each draw has its own sample of respondents and its own random split into folds, so the bars reflect both. A table with fewer than 3,000 respondents uses all of them in every draw, so its bars reflect the split alone.`r if (n_draws > 1) paste0(" The median standard error of 2PL → nested is ", se_fmt(median(summ$nest_se, na.rm = TRUE)), ". Where the bars of two tables overlap, read the difference between them as a tie. Two models on the same table share draws and folds, so the difference between them is usually more precise than their bars suggest.") else ""`
 
 The nested logit also matches or beats the nominal model on `r sum(summ$nest >= summ$nom)` of the `r n_tab` tables`r if (length(nom_wins)) paste0(" (the exception", if (length(nom_wins) > 1) "s are " else " is ", and_list(nom_wins), ", by a hair)") else ""`. Apart from that exception, blue sits at or left of orange, so re-drawing the key's curve mostly costs accuracy rather than adding it. The cost is clearest on EdNet listening and the computer-based residency exam, where the nominal model spends most of what the distractors add to θ on a noisier curve for the key. For predicting right and wrong, the better way to use the distractors is to let them inform θ and leave the key's curve alone.
 
@@ -342,7 +367,7 @@ Now the bet changes. Instead of right or wrong, the outcome on each held-out cel
 
 ```{r}
 #| label: fig-option
-#| fig-cap: "Out-of-sample multinomial IMV. Left: the option chosen on every held-out cell, with 2PL + shares as the baseline for the option models. Right: which wrong answer was chosen, over held-out wrong answers only, with the distractors' training shares as the baseline. Points pool the five folds; bars span the fold-to-fold range. The two panels have different scales."
+#| fig-cap: "Out-of-sample multinomial IMV. Left: the option chosen on every held-out cell, with 2PL + shares as the baseline for the option models. Right: which wrong answer was chosen, over held-out wrong answers only, with the distractors' training shares as the baseline. Points are means over draws; bars are ±2 standard errors across draws. The two panels have different scales."
 #| fig-height: 8
 #| fig-width: 11
 
@@ -352,14 +377,10 @@ panels <- list(
 )
 d <- bind_rows(lapply(names(panels), function(pn) {
   cols <- panels[[pn]]
-  rng <- folds |> select(label, family, all_of(unname(cols))) |>
-    pivot_longer(-c(label, family), names_to = "col", values_to = "v") |>
-    group_by(label, family, col) |>
-    summarise(lo = min(v), hi = max(v), .groups = "drop")
-  pts <- bind_rows(lapply(fitted, function(r) tibble(
-    label = label_of(r$table), col = unname(cols), imv = r$imv_all[unname(cols)])))
-  left_join(rng, pts, by = c("label", "col")) |>
-    mutate(panel = pn, cmp = names(cols)[match(col, cols)])
+  bind_rows(lapply(fitted, function(r) tibble(
+    label = label_of(r$table), family = family_of(r$table), col = unname(cols),
+    imv = r$imv_all[unname(cols)], se = se_of(r, unname(cols))))) |>
+    mutate(lo = imv - 2 * se, hi = imv + 2 * se, panel = pn, cmp = names(cols)[match(col, cols)])
 })) |>
   mutate(panel = factor(panel, names(panels)),
          cmp = factor(cmp, c("yard", "nom", "nest"),
@@ -393,11 +414,13 @@ The next two figures split the held-out cells into thirds of the 2PL θ and comp
 # One line per table across the thirds of theta, with a menu (and click) to
 # pick out one table; the others fade.
 terc_plot <- function(ycol, ylab, group) {
-  d <- terc |> mutate(y = .data[[ycol]],
-                      text = sprintf("%s<br>%s third: %.4f", label, tercile, y))
+  d <- terc |> mutate(y = .data[[ycol]], se = .data[[paste0(ycol, "_se")]],
+                      text = sprintf("%s<br>%s third: %.4f%s", label, tercile, y,
+                                     ifelse(is.na(se), "", paste0(" (SE ", se_fmt(se), ")"))))
   sd <- highlight_key(d, ~label, group = group)
   p <- ggplot(sd, aes(tercile, y, group = label, colour = family, text = text)) +
     geom_hline(yintercept = 0, colour = "grey80") +
+    geom_errorbar(aes(ymin = y - 2 * se, ymax = y + 2 * se), width = 0.08, linewidth = 0.5) +
     geom_line(linewidth = 0.8) +
     geom_point(size = 2) +
     scale_colour_manual(values = c(ENEM = irw_red, `Other tests` = irw_blue), name = NULL) +
@@ -411,7 +434,7 @@ terc_plot <- function(ycol, ylab, group) {
 
 ```{r}
 #| label: fig-terciles
-#| fig-cap: "Binary IMV, 2PL → nested logit, within thirds of the 2PL θ. One line per table."
+#| fig-cap: "Binary IMV, 2PL → nested logit, within thirds of the 2PL θ. One line per table: means over draws, with bars of ±2 standard errors across draws."
 
 terc_plot("twopl_to_nest", "IMV, 2PL → nested logit", "Pick out a table")
 ```
@@ -420,7 +443,7 @@ For right/wrong, where the gain lands depends on the test. On most tables it goe
 
 ```{r}
 #| label: fig-terciles-wrong
-#| fig-cap: "Which wrong answer: multinomial IMV, shares → nested logit, over held-out wrong answers within thirds of the 2PL θ. One line per table."
+#| fig-cap: "Which wrong answer: multinomial IMV, shares → nested logit, over held-out wrong answers within thirds of the 2PL θ. One line per table: means over draws, with bars of ±2 standard errors across draws."
 
 terc_plot("wrong_shares_to_nest", "IMV, shares → nested logit", "Pick out a table ")
 ```
@@ -435,13 +458,15 @@ summ |>
   arrange(family, desc(nest)) |>
   transmute(Table = paste0(label, ifelse(dense, " †", "")), N = format(n, big.mark = ","),
             Items = items, `% correct` = pct(p),
-            `Rasch → 2PL` = f4(yard), `2PL → nested` = f4(nest), `Nested ÷ yardstick` = pct(share),
+            `Rasch → 2PL` = f4(yard),
+            `2PL → nested (SE)` = ifelse(is.na(nest_se), f4(nest), sprintf("%s (%s)", f4(nest), se_fmt(nest_se))),
+            `Nested ÷ yardstick` = pct(share),
             `Option: 2PL + shares → nested` = f4(cat_nest),
             `Wrong answer: shares → nested` = f4(wr_nest)) |>
   knitr::kable(align = "lrrrrrrrr")
 ```
 
-† A dense block of a sparse table: the 40 most-answered items and the respondents who answered at least half of them.
+† A dense block of a sparse table: the 40 most-answered items and the respondents who answered at least half of them. Every IMV is a mean over draws; the standard error over draws is in parentheses.
 
 ```{r}
 #| label: not-analysed
@@ -463,7 +488,7 @@ for (w in unique(sk$why)) cat("- ", w, ": ", paste0("`", sub("_nom$", "", sk$tab
 
 ## Limitations
 
-**One sample of respondents, one split into folds.** Each table is cut to 3,000 respondents, and the folds are drawn once. Refitting with a different split moved some IMVs by up to about 0.001, more than the fold-to-fold bars suggest. Differences smaller than that are ties.
+**Draws of 3,000 respondents.** Each draw takes up to 3,000 respondents, and the results average `r draws_txt`, each with its own split into folds. On tables much larger than 3,000 the draws barely overlap, so the spread between them is close to what fresh samples would give. On smaller tables the draws share respondents, so the standard errors mostly reflect the split and understate the uncertainty from sampling respondents.
 
 **Four ENEM tests stand in for 52.** We used one 2013 test per subject area. The differences between areas are large here; whether they hold in other years is untested.
 
@@ -493,6 +518,9 @@ Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
 # 1. Re-run the compute script (from the project root). It caches fetched
 #    tables in ~/.cache/irw_nominal_imv and per-table results in
 #    vignettes/nominal_imv_data/fits/, so an interrupted run resumes.
+#    N_DRAWS (default 10) sets the draws per table. Each draw refits all four
+#    models, so the run takes about N_DRAWS times as long as a single draw.
+Sys.setenv(N_DRAWS = 10)
 source("vignettes/nominal_imv_compute.R")
 
 # 2. Re-render this page

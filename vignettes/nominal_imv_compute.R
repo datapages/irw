@@ -22,11 +22,18 @@
 # is the shares alone, so it measures what theta says about the choice of
 # distractor.
 #
+# Uncertainty: every table is fitted on N_DRAWS independent draws of up to
+# SUBSAMPLE_N respondents, each with its own split into folds. The IMVs are
+# averaged over draws and their standard errors come from the draw-to-draw
+# spread, which covers both which respondents were sampled and how their cells
+# were split. With N_DRAWS = 1 the first draw is exactly the single draw the
+# script used to make.
+#
 # Output: vignettes/nominal_imv_data/nominal_imv_results.rds (all tables) and
 # vignettes/nominal_imv_data/references.bib. Per-table results go to
-# vignettes/nominal_imv_data/fits/<table>.rds (gitignored resume cache; a table
-# with a file there is skipped). Subsampled inputs and held-out predictions are
-# cached in ~/.cache/irw_nominal_imv (not committed).
+# vignettes/nominal_imv_data/fits/<table>_draws<N_DRAWS>.rds (gitignored resume
+# cache; a table with a file there is skipped). Subsampled inputs and held-out
+# predictions are cached in ~/.cache/irw_nominal_imv (not committed).
 #
 # Usage: Rscript vignettes/nominal_imv_compute.R   # from project root
 
@@ -46,8 +53,15 @@ cells_dir <- file.path(cache_dir, "cells")   # held-out predictions, for re-scor
 dir.create(fits_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(cells_dir, recursive = TRUE, showWarnings = FALSE)
 
-SUBSAMPLE_N <- 3000   # respondents per table
+SUBSAMPLE_N <- 3000   # respondents per draw
+N_DRAWS     <- as.integer(Sys.getenv("N_DRAWS", "10"))  # independent draws per table
 MIN_N       <- 1000   # respondents left after prep(); below this the IMV is noise
+# Codes that mark a non-response, not an option (ENEM's blank and double mark).
+# They are dropped before rare options are pooled: left to the RARE rule, they
+# enter the option models as a distractor, alone or pooled with rare options,
+# on any item where they reach 1% of responses (14 of the 44 items in
+# enem_2023_1mil_mt_nom).
+NONRESPONSE <- c(".", "*")
 N_FOLDS     <- 5
 RARE        <- 0.01   # a wrong option chosen by fewer than 1% is pooled
 MIN_ITEMS   <- 10
@@ -99,14 +113,18 @@ message("Candidates: ", length(cands))
 #    each while in memory, so this pass is sequential).
 # ------------------------------------------------------------------------------
 
+# Cache and result files carry N_DRAWS in their names, so a resumed run never
+# mixes draws from runs with a different number of them.
+draws_file <- function(dir, tn, ext = ".rds") file.path(dir, sprintf("%s_draws%d%s", tn, N_DRAWS, ext))
+
 fetch_one <- function(tn) {
-  f <- file.path(cache_dir, paste0(tn, ".rds"))
+  f <- draws_file(cache_dir, tn)
   if (file.exists(f)) return(invisible(f))
   message("fetch ", tn)
   n <- irw_fetch(tn, source = "nom")
   if (!all(c("resp", "text") %in% names(n))) {
     saveRDS(list(table = tn, skipped = "no resp/text columns (unscored free text)",
-                 date_run = as.character(Sys.Date())), file.path(fits_dir, paste0(tn, ".rds")))
+                 date_run = as.character(Sys.Date())), draws_file(fits_dir, tn))
     return(invisible(NULL))
   }
   n <- data.table::as.data.table(n)[!is.na(text) & !is.na(resp), .(id, item, resp, text)]
@@ -128,17 +146,22 @@ fetch_one <- function(tn) {
     if (!length(keep)) {
       saveRDS(list(table = tn, skipped = paste0("sparse design: no respondent answered half of the ",
                                                length(top), " most-answered of ", n_bank, " items"),
-                   date_run = as.character(Sys.Date())), file.path(fits_dir, paste0(tn, ".rds")))
+                   date_run = as.character(Sys.Date())), draws_file(fits_dir, tn))
       return(invisible(NULL))
     }
   }
+  # N_DRAWS independent draws of up to SUBSAMPLE_N respondents. With N_DRAWS = 1
+  # this is the single draw the script used to take. A table with no more than
+  # SUBSAMPLE_N respondents gives the same people in every draw, so its draws
+  # differ only in the split into folds.
   ids <- unique(n$id)
-  if (length(ids) > SUBSAMPLE_N) n <- n[id %in% sample(ids, SUBSAMPLE_N)]
-  n <- as.data.frame(n)
-  attr(n, "n_full") <- n_full
-  attr(n, "dense_block") <- if (dense) c(bank = n_bank, block = length(top), persons = length(ids)) else NULL
-  saveRDS(n, f)
-  rm(n); gc()
+  draws <- lapply(seq_len(N_DRAWS), function(d) {
+    as.data.frame(if (length(ids) > SUBSAMPLE_N) n[id %in% sample(ids, SUBSAMPLE_N)] else n)
+  })
+  attr(draws, "n_full") <- n_full
+  attr(draws, "dense_block") <- if (dense) c(bank = n_bank, block = length(top), persons = length(ids)) else NULL
+  saveRDS(draws, f)
+  rm(n, draws); gc()
   invisible(f)
 }
 for (tn in cands) tryCatch(fetch_one(tn), error = function(e) message("  fetch failed: ", tn, ": ", conditionMessage(e)))
@@ -149,6 +172,14 @@ for (tn in cands) tryCatch(fetch_one(tn), error = function(e) message("  fetch f
 
 prep <- function(n) {
   n$text <- as.character(n$text)
+  # Respondents in their order of first appearance, taken before any cell is
+  # dropped: the folds are drawn over the matrix cells in this order.
+  ids <- unique(n$id)
+  # Non-response codes are not options: drop those cells before anything is
+  # counted, so they reach neither the option models nor the 0/1 matrix.
+  nonresp <- n$text %in% NONRESPONSE
+  n_cells_nonresponse <- sum(nonresp)
+  n <- n[!nonresp, ]
   keys <- tapply(n$text[n$resp == 1], n$item[n$resp == 1], function(x) unique(x))
   if (any(lengths(keys) != 1)) return("not one keyed option per item")
   if (!all(n$resp %in% 0:1)) return("resp is not 0/1")
@@ -161,7 +192,7 @@ prep <- function(n) {
     sum(sh >= RARE) > 12 || sum(sh[sh < RARE]) > 0.10
   })
   if (any(freeish)) return("free text (more than 12 common answers to an item)")
-  ids <- unique(n$id); items <- sort(names(keys))
+  items <- sort(names(keys))
   opt <- x01 <- matrix(NA_integer_, length(ids), length(items), dimnames = list(as.character(ids), items))
   n_pooled <- 0L; n_cells_dropped <- 0L
   for (it in items) {
@@ -171,8 +202,8 @@ prep <- function(n) {
     rare <- setdiff(names(share)[share < RARE], k)
     if (length(rare) > 1) n_pooled <- n_pooled + 1L
     d$opt <- ifelse(d$text %in% rare, "_rare", d$text)
-    # A pooled category that is itself under RARE (e.g. ENEM's blank and
-    # double-mark codes, ~0.5% between them) is too thin to estimate: drop it.
+    # A pooled category that is itself under RARE is too thin to estimate:
+    # drop it.
     if (any(d$opt == "_rare") && mean(d$opt == "_rare") < RARE) {
       n_cells_dropped <- n_cells_dropped + sum(d$opt == "_rare")
       d <- d[d$opt != "_rare", ]
@@ -192,7 +223,7 @@ prep <- function(n) {
   if (ncol(opt) < MIN_ITEMS) return("fewer than MIN_ITEMS usable items")
   list(opt = opt[keep, , drop = FALSE], x01 = x01[keep, , drop = FALSE],
        n_items_dropped = sum(!ok), n_persons_dropped = sum(!keep),
-       n_cells_dropped = n_cells_dropped)
+       n_cells_dropped = n_cells_dropped, n_cells_nonresponse = n_cells_nonresponse)
 }
 
 # ------------------------------------------------------------------------------
@@ -231,31 +262,39 @@ imv_cat <- function(p0, p1, K, sigma = 1e-4) {
 # 5. Cross-validated comparison for one table.
 # ------------------------------------------------------------------------------
 
-fit_one <- function(tn) {
-  out_file <- file.path(fits_dir, paste0(tn, ".rds"))
-  if (file.exists(out_file)) return(readRDS(out_file))
-  if (tn %in% names(EXCLUDE)) {
-    res <- list(table = tn, skipped = EXCLUDE[[tn]], date_run = as.character(Sys.Date()))
-    saveRDS(res, out_file); return(res)
-  }
-  f <- file.path(cache_dir, paste0(tn, ".rds"))
-  if (!file.exists(f)) return(NULL)
-  n <- readRDS(f)
+# The three IMVs for a set of held-out cells (see section 4 and the .qmd).
+imvs <- function(d) {
+  wr <- d[d$y == 0, ]
+  given_wrong <- function(m) wr[[paste0("obs_", m)]] / (1 - wr[[m]])
+  c(
+    # Binary: right/wrong on the held-out cells.
+    rasch_to_2pl   = imv.binary(d$y, d$rasch, d$twopl),
+    twopl_to_nom   = imv.binary(d$y, d$twopl, d$nominal),
+    twopl_to_nest  = imv.binary(d$y, d$twopl, d$nested),
+    nest_to_nom    = imv.binary(d$y, d$nested, d$nominal),
+    # Multinomial: the option chosen, K options per item.
+    cat_rasch_to_2pl  = imv_cat(d$obs_rasch, d$obs_twopl, d$K),
+    cat_twopl_to_nom  = imv_cat(d$obs_twopl, d$obs_nominal, d$K),
+    cat_twopl_to_nest = imv_cat(d$obs_twopl, d$obs_nested, d$K),
+    cat_nest_to_nom   = imv_cat(d$obs_nested, d$obs_nominal, d$K),
+    # Which wrong answer, among the held-out wrong answers (K - 1 options).
+    # The 2PL's given-wrong prediction is the shares alone.
+    wrong_shares_to_nom  = imv_cat(given_wrong("twopl"), given_wrong("nominal"), wr$K - 1),
+    wrong_shares_to_nest = imv_cat(given_wrong("twopl"), given_wrong("nested"), wr$K - 1)
+  )
+}
+
+# One draw: prep, five-fold cross-validation and the IMVs. This is the body the
+# script ran once per table before draws were added; it returns a reason string
+# when the draw cannot be fitted.
+fit_draw <- function(n, d) {
   P <- prep(n)
-  if (is.character(P)) {
-    res <- list(table = tn, skipped = P, date_run = as.character(Sys.Date()))
-    saveRDS(res, out_file); return(res)
-  }
-  if (nrow(P$opt) < MIN_N) {
-    res <- list(table = tn, skipped = paste0("N = ", nrow(P$opt), ", below ", MIN_N),
-                date_run = as.character(Sys.Date()))
-    saveRDS(res, out_file); return(res)
-  }
+  if (is.character(P)) return(P)
+  if (nrow(P$opt) < MIN_N) return(paste0("N = ", nrow(P$opt), ", below ", MIN_N))
   opt <- P$opt; x01 <- P$x01
   ncat <- apply(opt, 2, max, na.rm = TRUE)
   obs <- which(!is.na(opt))
   fold <- sample(rep_len(seq_len(N_FOLDS), length(obs)))
-  t0 <- Sys.time()
 
   per_fold <- lapply(seq_len(N_FOLDS), function(k) {
     ho <- obs[fold == k]
@@ -303,40 +342,69 @@ fit_one <- function(tn) {
   cells <- do.call(rbind, lapply(per_fold, `[[`, "cells"))
   cuts <- quantile(cells$theta_2pl, c(0, 1/3, 2/3, 1))
   cells$tercile <- cut(cells$theta_2pl, cuts, include.lowest = TRUE, labels = c("low", "mid", "high"))
-  saveRDS(cells, file.path(cells_dir, paste0(tn, ".rds")))
-
-  imvs <- function(d) {
-    wr <- d[d$y == 0, ]
-    given_wrong <- function(m) wr[[paste0("obs_", m)]] / (1 - wr[[m]])
-    c(
-      # Binary: right/wrong on the held-out cells.
-      rasch_to_2pl   = imv.binary(d$y, d$rasch, d$twopl),
-      twopl_to_nom   = imv.binary(d$y, d$twopl, d$nominal),
-      twopl_to_nest  = imv.binary(d$y, d$twopl, d$nested),
-      nest_to_nom    = imv.binary(d$y, d$nested, d$nominal),
-      # Multinomial: the option chosen, K options per item.
-      cat_rasch_to_2pl  = imv_cat(d$obs_rasch, d$obs_twopl, d$K),
-      cat_twopl_to_nom  = imv_cat(d$obs_twopl, d$obs_nominal, d$K),
-      cat_twopl_to_nest = imv_cat(d$obs_twopl, d$obs_nested, d$K),
-      cat_nest_to_nom   = imv_cat(d$obs_nested, d$obs_nominal, d$K),
-      # Which wrong answer, among the held-out wrong answers (K - 1 options).
-      # The 2PL's given-wrong prediction is the shares alone.
-      wrong_shares_to_nom  = imv_cat(given_wrong("twopl"), given_wrong("nominal"), wr$K - 1),
-      wrong_shares_to_nest = imv_cat(given_wrong("twopl"), given_wrong("nested"), wr$K - 1)
-    )
-  }
-  by_fold    <- t(sapply(split(cells, cells$fold), imvs))
-  by_tercile <- t(sapply(split(cells, cells$tercile), imvs))
-
-  res <- list(
-    table = tn, skipped = NA_character_,
-    n_full = attr(n, "n_full"), n_persons = nrow(opt), n_items = ncol(opt),
-    p_correct = mean(x01, na.rm = TRUE),
+  cells$draw <- d
+  list(
+    cells = cells, converged = converged,
+    n_persons = nrow(opt), n_items = ncol(opt), p_correct = mean(x01, na.rm = TRUE),
     n_options = table(ncat),
     n_items_dropped = P$n_items_dropped, n_persons_dropped = P$n_persons_dropped,
-    n_cells_dropped = P$n_cells_dropped, dense_block = attr(n, "dense_block"),
-    converged = converged,
-    imv_all = imvs(cells), imv_by_fold = by_fold, imv_by_tercile = by_tercile,
+    n_cells_dropped = P$n_cells_dropped, n_cells_nonresponse = P$n_cells_nonresponse,
+    imv_all = imvs(cells),
+    by_fold = t(sapply(split(cells, cells$fold), imvs)),
+    by_tercile = t(sapply(split(cells, cells$tercile), imvs))
+  )
+}
+
+fit_one <- function(tn) {
+  out_file <- draws_file(fits_dir, tn)
+  if (file.exists(out_file)) return(readRDS(out_file))
+  if (tn %in% names(EXCLUDE)) {
+    res <- list(table = tn, skipped = EXCLUDE[[tn]], date_run = as.character(Sys.Date()))
+    saveRDS(res, out_file); return(res)
+  }
+  f <- draws_file(cache_dir, tn)
+  if (!file.exists(f)) return(NULL)
+  draws <- readRDS(f)
+  t0 <- Sys.time()
+
+  # The first draw decides whether the table is fitted at all, with the same
+  # skip reasons as before. A later draw that cannot be fitted (rare: prep()
+  # leaves too few items or respondents) is left out, and n_draws says so.
+  per_draw <- list()
+  for (d in seq_along(draws)) {
+    fd <- fit_draw(draws[[d]], d)
+    if (is.character(fd)) {
+      if (d > 1) next
+      res <- list(table = tn, skipped = fd, date_run = as.character(Sys.Date()))
+      saveRDS(res, out_file); return(res)
+    }
+    per_draw[[length(per_draw) + 1]] <- fd
+  }
+  D <- length(per_draw)
+  cells <- do.call(rbind, lapply(per_draw, `[[`, "cells"))
+  saveRDS(cells, draws_file(cells_dir, tn))
+
+  # Means over draws, and standard errors from the draw-to-draw spread.
+  se <- function(x) if (D > 1) sd(x) / sqrt(D) else NA_real_
+  per <- function(field) sapply(per_draw, `[[`, field)
+  imv_draws  <- do.call(rbind, lapply(per_draw, `[[`, "imv_all"))         # draws x comparisons
+  terc_draws <- simplify2array(lapply(per_draw, `[[`, "by_tercile"))      # thirds x comparisons x draws
+
+  res <- list(
+    table = tn, skipped = NA_character_, n_draws = D,
+    n_full = attr(draws, "n_full"), n_persons = round(mean(per("n_persons"))),
+    n_items = per_draw[[1]]$n_items, p_correct = mean(per("p_correct")),
+    n_options = per_draw[[1]]$n_options,
+    # Per-draw counts, one value per draw.
+    n_persons_by_draw = per("n_persons"), n_items_by_draw = per("n_items"),
+    n_items_dropped = per("n_items_dropped"), n_persons_dropped = per("n_persons_dropped"),
+    n_cells_dropped = per("n_cells_dropped"), n_cells_nonresponse = per("n_cells_nonresponse"),
+    dense_block = attr(draws, "dense_block"),
+    converged = do.call(rbind, lapply(per_draw, `[[`, "converged")),      # (draws x folds) x models
+    imv_all = colMeans(imv_draws), imv_se = apply(imv_draws, 2, se), imv_draws = imv_draws,
+    imv_by_fold = do.call(rbind, lapply(per_draw, `[[`, "by_fold")),      # (draws x folds) x comparisons
+    imv_by_tercile = apply(terc_draws, c(1, 2), mean),
+    imv_by_tercile_se = apply(terc_draws, c(1, 2), se),
     seconds = as.numeric(Sys.time() - t0, units = "secs"),
     date_run = as.character(Sys.Date()),
     irw_pkg = as.character(packageVersion("irw")),
@@ -347,23 +415,28 @@ fit_one <- function(tn) {
 }
 
 plan(multisession, workers = WORKERS)
+# scheduling = Inf hands out one table at a time, so the slow tables (the four
+# ENEM tests and the residency exams sit next to each other in cands) do not
+# queue on one worker. Each table keeps its own seed, so results are unchanged.
 results <- future_map(cands, function(tn) tryCatch(fit_one(tn), error = function(e)
   list(table = tn, skipped = paste("error:", conditionMessage(e)))),
-  .options = furrr_options(seed = TRUE))
+  .options = furrr_options(seed = TRUE, scheduling = Inf))
 plan(sequential)
 results <- Filter(Negate(is.null), results)
 date_run <- as.Date(max(sapply(results, function(r) r$date_run %||% NA_character_), na.rm = TRUE))
 fitted <- Filter(function(r) is.na(r$skipped), results)
 summary_df <- bind_rows(lapply(fitted, function(r) tibble::tibble(
   table = r$table, n_full = r$n_full, n_persons = r$n_persons, n_items = r$n_items,
-  p_correct = r$p_correct, dense_block = !is.null(r$dense_block),
-  !!!as.list(r$imv_all)
+  p_correct = r$p_correct, dense_block = !is.null(r$dense_block), n_draws = r$n_draws,
+  !!!as.list(r$imv_all),
+  !!!setNames(as.list(r$imv_se), paste0(names(r$imv_se), "_se"))
 )))
 saveRDS(list(
   summary          = summary_df,
-  results          = results,   # per-table detail: folds, terciles, convergence, skips
+  results          = results,   # per-table detail: draws, folds, terciles, convergence, skips
   candidate_tables = cands,
   n_all_candidates = length(all_cands),
+  n_draws          = N_DRAWS,
   pilot            = PILOT,
   date_run         = date_run,
   session          = sessionInfo()
