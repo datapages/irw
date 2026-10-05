@@ -334,6 +334,12 @@ CONFIG = ({
   // Optional: older hero_stats.json files predate this field, so it is not
   // in required_totals and the stamp line is dropped when it is absent.
   tablesItemtext: hero_stats.totals.n_tables_itemtext ? fmtInt(hero_stats.totals.n_tables_itemtext) : null,
+  // Optional too: the other branches' counts. hero_stats.R omits either one
+  // when its read fails, and the line then names only what it has.
+  tablesBranches: [
+    hero_stats.totals.n_tables_comp ? `${fmtInt(hero_stats.totals.n_tables_comp)} competition` : null,
+    hero_stats.totals.n_tables_nom ? `${fmtInt(hero_stats.totals.n_tables_nom)} nominal` : null
+  ].filter(Boolean).join(" · ") || null,
   people: fmtAbbrev(hero_stats.totals.n_participants),
   items: fmtAbbrev(hero_stats.totals.n_items),
   responses: fmtWords(hero_stats.totals.n_responses),
@@ -387,6 +393,7 @@ heroRoot = {
               <div class="stamp-number">${CONFIG.tables}+</div>
               <div class="stamp-label">TABLES</div>
               ${CONFIG.tablesItemtext ? `<div class="stamp-sub">${CONFIG.tablesItemtext} with item text</div>` : ''}
+              ${CONFIG.tablesBranches ? `<div class="stamp-sub">plus ${CONFIG.tablesBranches}</div>` : ''}
             </div>
             <div class="tag-cloud" id="irw-hero-table-domains"></div>
           </div>
