@@ -17,6 +17,11 @@
 # rule (earliest wave, then the control arm), no repeated id-item rows,
 # response density >= 0.8, and no ENEM tables (left out for now).
 #
+# Note on the summary columns: for the 2PL, I_X - I_S (the "sum-score gap") is
+# the conditional mutual information I(theta; X | S), by the chain rule
+# I(theta; X) = I(theta; S) + I(theta; X | S): information about theta in which
+# items were answered correctly beyond how many. Under Rasch it is zero.
+#
 # Output: bits_per_item_data/bits_per_item_results.rds
 #         bits_per_item_data/references.bib
 #
@@ -228,3 +233,10 @@ saveRDS(results, results_file)
 message("Saved ", results_file, ": ", length(ok), " of ", length(tables), " tables")
 
 irw_save_bibtex(names(ok), output_file = bib_file)
+
+# ==============================================================================
+# 5. Sufficiency in information terms ("Is the sum score enough?")
+#    Separate block, own output file (sufficiency_results.rds); see that script.
+# ==============================================================================
+
+source("vignettes/bits_per_item_sufficiency.R")

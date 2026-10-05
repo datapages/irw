@@ -125,6 +125,69 @@ record("9 grid 81 vs 161 nodes < 0.001 bits", all(res9 < 0.001, na.rm = TRUE),
        sprintf("max |diff| %.2e over I_S, H(X|theta), and exact I_X where n <= 16 (%s)",
                max(res9, na.rm = TRUE), paste(colnames(res9), collapse = ", ")))
 
+# ------------------------------------------------------------------------------
+# Sufficiency checks (sufficiency_results.rds from bits_per_item_sufficiency.R)
+# ------------------------------------------------------------------------------
+sf <- "vignettes/bits_per_item_data/sufficiency_results.rds"
+if (file.exists(sf)) {
+  suff <- readRDS(sf)$showcases
+  sw <- do.call(rbind, lapply(suff, `[[`, "sweep"))
+  r <- sw[sw$model == "Rasch", ]; t2 <- sw[sw$model == "2PL", ]
+  record("S1 Rasch I(theta;X|S) = 0 under every prior", all(abs(r$I_X_given_S) < 1e-10),
+         sprintf("%d model-prior cases, max |I(X|S)| %.1e bits", nrow(r), max(abs(r$I_X_given_S))))
+  record("S2 2PL I(theta;X|S) > 0 and I_S <= I_X under every prior",
+         all(t2$I_X_given_S > 0) && all(sw$I_S <= sw$I_X + 1e-12),
+         sprintf("2PL I(X|S) from %.4f to %.4f bits over %d cases", min(t2$I_X_given_S), max(t2$I_X_given_S), nrow(t2)))
+  wt <- do.call(rbind, lapply(suff, `[[`, "weighted_score"))
+  record("S3 2PL weighted score sum a_j x_j: I(theta;T) = I(theta;X)", all(abs(wt$I_T - wt$I_X) < 1e-10),
+         paste(sprintf("%s |diff| %.1e (%d T levels / %d patterns)", wt$table, abs(wt$I_T - wt$I_X),
+                       wt$n_levels, wt$n_patterns), collapse = "; "))
+  tot <- do.call(rbind, lapply(suff, function(x) {
+    lad <- x$ladder
+    do.call(rbind, lapply(c("Rasch", "2PL"), function(m) {
+      b <- x$by_s[x$by_s$model == m, ]
+      data.frame(table = x$table, model = m, from_s = sum(b$p_s * b$I_X_given_s),
+                 overall = lad$I_X_given_S[lad$model == m])
+    }))
+  }))
+  record("S4 within-score totals reproduce I(theta;X|S)", all(abs(tot$from_s - tot$overall) < 1e-10),
+         sprintf("max |sum_s P(s) I(X|S=s) - I(X|S)| %.1e over %d table-models", max(abs(tot$from_s - tot$overall)), nrow(tot)))
+  # theta-freeness: P(x | S = s) from the full model at theta = -1 and theta = 1 (fitz Rasch, 11 items)
+  fz <- suff$fitz_2024_numeracy; a_r <- rep(fz$rasch_sigma, length(fz$rasch_d))
+  Xe <- as.matrix(expand.grid(rep(list(0:1), length(a_r))))
+  cond_at <- function(th) {
+    P <- p_matrix(a_r, fz$rasch_d, th)
+    px <- exp(Xe %*% t(log(P)) + (1 - Xe) %*% t(log(1 - P)))[, 1]
+    px / ave(px, rowSums(Xe), FUN = sum)
+  }
+  dtf <- max(abs(cond_at(-1) - cond_at(1)))
+  esf <- max(abs(cond_at(0.3) - 2^rasch_log2_p_given_s(Xe, fz$rasch_d)))
+  record("S5 Rasch P(x | S=s) identical at theta = -1 and 1", dtf < 1e-12,
+         sprintf("max |diff| %.1e over %d patterns; vs elementary-symmetric formula %.1e", dtf, nrow(Xe), esf))
+  fi <- do.call(rbind, lapply(suff, `[[`, "fisher"))
+  fr <- fi[fi$model == "Rasch", ]; f2 <- fi[fi$model == "2PL", ]
+  record("S6 Fisher: Rasch sum-score info = test info; 2PL <= at every node",
+         all(abs(fr$sum_score_info - fr$test_info) < 1e-8 * pmax(1, fr$test_info)) &&
+           all(f2$sum_score_info <= f2$test_info + 1e-10),
+         sprintf("Rasch max rel |diff| %.1e; 2PL max (sum - test) %.1e", max(abs(fr$sum_score_info - fr$test_info) / fr$test_info),
+                 max(f2$sum_score_info - f2$test_info)))
+  # Fisher derivative cross-check: analytic vs central difference (step halving < 0.1%)
+  p2 <- suff$fitz_2024_numeracy; a2 <- showcase_a <- readRDS("vignettes/bits_per_item_data/bits_per_item_results.rds")$showcases$fitz_2024_numeracy$items
+  fd <- function(h, th) {
+    up <- lord_wingersky(p_matrix(a2$a, a2$d, th + h)); dn <- lord_wingersky(p_matrix(a2$a, a2$d, th - h))
+    mid <- lord_wingersky(p_matrix(a2$a, a2$d, th))
+    sum(((up - dn) / (2 * h))^2 / mid)
+  }
+  an <- fisher_compare(a2$a, a2$d, c(-1, 0, 1.5))$sum_score_info
+  cd <- sapply(c(-1, 0, 1.5), function(th) fd(1e-4, th))
+  record("S6b sum-score Fisher: analytic LW derivative vs central difference", max(abs(an - cd) / an) < 1e-3,
+         sprintf("max rel |diff| %.1e at theta = -1, 0, 1.5 (h = 1e-4)", max(abs(an - cd) / an)))
+  lad <- do.call(rbind, lapply(suff, `[[`, "ladder"))
+  record("S7 compression ladder ordered: H(X) >= H(S) >= I(theta;S), I(theta;S) <= I(theta;X)",
+         all(lad$H_X >= lad$H_S & lad$H_S >= lad$I_S & lad$I_S <= lad$I_X + 1e-12),
+         paste(sprintf("%s %s %.2f>=%.2f>=%.2f", lad$table, lad$model, lad$H_X, lad$H_S, lad$I_S), collapse = "; "))
+}
+
 checks <- do.call(rbind, out)
 write.csv(checks, "vignettes/bits_per_item_data/checks_results.csv", row.names = FALSE)
 message(sum(checks$pass), " of ", nrow(checks), " checks passed")

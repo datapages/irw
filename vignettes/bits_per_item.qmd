@@ -69,6 +69,8 @@ if (cache_ok) {
   r_n_tables_run   <- 0L
 }
 
+suff_path <- "bits_per_item_data/sufficiency_results.rds"
+suff <- if (file.exists(suff_path)) readRDS(suff_path)$showcases else NULL
 knitr::opts_chunk$set(eval = cache_ok)
 # Every ggplot printed on this page goes through wl().
 registerS3method("knit_print", "ggplot", function(x, ...) print(wl(x)), envir = asNamespace("knitr"))
@@ -729,16 +731,19 @@ two <- mutate(two, gap = I_X - I_S, gap_prop = gap / I_X)
 ggplot(two, aes(gap_prop)) +
   geom_histogram(binwidth = 0.02, boundary = 0, fill = irw_accent, colour = "white") +
   scale_x_continuous(labels = scales::percent) +
-  labs(x = "share of the response pattern's information lost by using the sum score",
+  labs(x = "I(θ; X | S) as a share of I(θ; X): information lost by keeping only the sum score",
        y = "tables",
        title = sprintf("Using the sum score instead of the full pattern costs a median %s of the bits",
                        scales::percent(median(two$gap_prop), accuracy = 1)),
-       subtitle = sprintf("Median loss %s bits; largest %s bits (%s). 2PL.",
+       subtitle = sprintf("Median I(θ; X | S) %s bits; largest %s bits (%s). 2PL.",
                           fmt(median(two$gap), 3), fmt(max(two$gap)),
                           arrange(two, desc(gap))$table[1]))
 ```
 
-Under the Rasch model the sum score carries every bit the pattern carries. Under
+The gap between the full pattern and the sum score has a name: it is the
+conditional mutual information I(θ; X | S), the information about θ in *which*
+items a person got right beyond *how many*. Under the Rasch model it is zero:
+the sum score carries every bit the pattern carries. Under
 the 2PL, items with higher slopes deserve more weight, and an unweighted sum
 throws some information away. The loss is small: a median of
 `r scales::percent(median(two$gap_prop), accuracy = 1)` of the pattern's
@@ -747,6 +752,280 @@ The loss tracks how unequal the slopes are (Spearman correlation
 `r fmt(cor(two$gap_prop, tapply(log(items_df$a), items_df$table, sd)[two$table], method = "spearman"))`
 with the spread of log slopes): tables that mix very sharp items with very
 flat ones lose the most.
+
+## Is the sum score enough?
+
+Every score is computed from the answers, so θ → X → S is a chain: the score
+can only know what the answers know. That is the **data processing
+inequality**, I(θ; S) ≤ I(θ; X). The chain rule splits the full pattern's
+information exactly into what the score keeps and what it drops:
+
+<small>I(θ; X) = I(θ; S) + I(θ; X | S).</small>
+
+A statistic is **sufficient** for θ exactly when nothing is dropped,
+I(θ; X | S) = 0, *whatever the population* [@cover2006elements, §2.9].
+Equivalently, once you know the score, the rest of the pattern says nothing more
+about the person. Under the Rasch model the sum score is sufficient; under the
+2PL the slope-weighted score Σ a~j~x~j~ is, and the plain sum is not.
+
+```{r}
+#| label: suff-bars
+#| fig-height: 3.6
+#| fig-width: 7.5
+
+lad <- suff[[main]]$ladder
+bars <- bind_rows(
+  tibble(model = lad$model, part = "kept by the score: I(θ; S)", bits = lad$I_S),
+  tibble(model = lad$model, part = "dropped by the score: I(θ; X | S)", bits = pmax(lad$I_X_given_S, 0))
+) |>
+  mutate(model = factor(model, c("Rasch", "2PL")),
+         part = factor(part, c("dropped by the score: I(θ; X | S)", "kept by the score: I(θ; S)")))
+full <- lad |> mutate(model = factor(model, c("Rasch", "2PL")))
+ggplot(bars, aes(bits, model, fill = part)) +
+  geom_col(width = 0.55) +
+  geom_errorbarh(data = full, aes(xmin = 0, xmax = I_X, y = model), inherit.aes = FALSE,
+                 height = 0.75, colour = "grey30") +
+  geom_text(data = full, aes(x = I_X, y = model, label = sprintf("I(θ; X) = %s", fmt(I_X, 3))),
+            inherit.aes = FALSE, hjust = -0.08, size = 3.6) +
+  annotate("text", x = lad$I_X[lad$model == "2PL"], y = 2.42, hjust = 1, size = 3.4, colour = irw_red,
+           label = sprintf("I(θ; X | S) = %s bits", fmt(lad$I_X_given_S[lad$model == "2PL"], 3))) +
+  scale_fill_manual(values = c("kept by the score: I(θ; S)" = irw_accent,
+                               "dropped by the score: I(θ; X | S)" = irw_red), name = NULL) +
+  scale_x_continuous(limits = c(0, max(full$I_X) * 1.35), expand = c(0, 0)) +
+  labs(x = "bits about θ (numeracy test)", y = NULL,
+       title = "Under Rasch the sum score keeps every bit; under the 2PL a sliver is lost",
+       subtitle = "θ → X → S. The bracket is everything the full answer pattern says about the person.") +
+  theme(legend.position = "top", panel.grid.major.y = element_blank())
+```
+
+### For every population
+
+Sufficiency is a statement about every prior, not just the population we
+happened to sample. To see that, we hold each model's item parameters fixed and
+recompute the information under 16 different populations: normal
+distributions centred anywhere from −1.5 to 1.5 with SDs of 0.5, 1 and 2, plus
+a two-humped mixture.
+
+```{r}
+#| label: suff-sweep
+#| fig-height: 7.2
+#| fig-width: 7.5
+
+sw <- bind_rows(lapply(suff, `[[`, "sweep")) |>
+  mutate(test = show_titles[table],
+         test = if_else(table == "frac20", "Fraction subtraction (top 12 of 20 items)", test),
+         sd_lab = if_else(prior_kind == "mixture", "bimodal mixture", paste0("SD ", prior_sd)),
+         x = if_else(prior_kind == "mixture", 2.4, prior_mean),
+         model = factor(model, c("Rasch", "2PL")))
+rng <- sw |> filter(model == "2PL") |> group_by(test) |>
+  summarise(lo = min(I_X_given_S), hi = max(I_X_given_S), .groups = "drop")
+p_sweep <- ggplot(sw, aes(x, I_X_given_S, colour = sd_lab, shape = model, group = interaction(sd_lab, model))) +
+  geom_hline(yintercept = 0, colour = "grey40") +
+  geom_line(data = filter(sw, prior_kind == "normal"), linewidth = 0.7) +
+  geom_point(size = 2.2) +
+  facet_wrap(~ test, ncol = 1, scales = "free_y") +
+  scale_y_continuous(n.breaks = 3) +
+  scale_x_continuous(breaks = c(-1.5, -0.5, 0, 0.5, 1.5, 2.4),
+                     labels = c("−1.5", "−0.5", "0", "0.5", "1.5", "bimodal")) +
+  scale_colour_manual(values = c("SD 0.5" = "#9ecae1", "SD 1" = irw_blue, "SD 2" = "#08306b",
+                                 "bimodal mixture" = irw_red), name = "population") +
+  scale_shape_manual(values = c(Rasch = 1, `2PL` = 16), name = "model") +
+  labs(x = "population mean of θ", y = "I(θ; X | S), bits",
+       title = "Rasch's sum score loses nothing in any population; the 2PL's loss depends on who is tested",
+       subtitle = sprintf("Rasch: zero to machine precision in all 48 cases. 2PL: %s.",
+                          paste(sprintf("%s %s–%s bits", sub(" \\(.*", "", rng$test), fmt(rng$lo, 3), fmt(rng$hi, 3)), collapse = "; "))) +
+  theme(legend.position = "top", legend.box = "horizontal", legend.title = element_text(size = 10),
+        legend.text = element_text(size = 9), panel.spacing.y = unit(1, "lines"))
+th <- seq(-4, 4, length.out = 200)
+shapes <- bind_rows(
+  tibble(prior = "N(0, 0.5²)", theta = th, d = dnorm(th, 0, 0.5)),
+  tibble(prior = "N(0, 1²)", theta = th, d = dnorm(th, 0, 1)),
+  tibble(prior = "N(0, 2²)", theta = th, d = dnorm(th, 0, 2)),
+  tibble(prior = "bimodal", theta = th, d = 0.5 * dnorm(th, -1.5, 0.5) + 0.5 * dnorm(th, 1.5, 0.5))
+) |> mutate(prior = factor(prior, unique(prior)))
+p_shapes <- ggplot(shapes, aes(theta, d, colour = prior)) +
+  geom_line(linewidth = 0.8, show.legend = FALSE) +
+  facet_wrap(~ prior, nrow = 1) +
+  scale_colour_manual(values = c("#9ecae1", irw_blue, "#08306b", irw_red)) +
+  labs(x = NULL, y = NULL) +
+  theme_void(base_size = 10) + theme(strip.text = element_text(size = 9))
+wl(p_sweep) / p_shapes + plot_layout(heights = c(6, 1))
+```
+
+The populations matter in two ways. First, the total I(θ; X) changes a lot with
+the population: a narrow population has less to resolve, and a population far
+from the items' difficulties gets mostly uninformative answers. Second, under
+the 2PL the share of that information hiding in *which* items were answered
+moves with it, because which items are informative depends on where people are.
+Under Rasch none of this touches sufficiency: the gap is zero for every
+population, as the definition requires.
+
+### Compression
+
+```{r}
+#| label: suff-ladder
+#| fig-height: 4.8
+#| fig-width: 7.5
+
+ladr <- bind_rows(lapply(suff, `[[`, "ladder")) |> filter(model == "Rasch") |>
+  mutate(test = show_titles[table],
+         test = if_else(table == "frac20", "Fraction subtraction (top 12 items)", test))
+lad_long <- bind_rows(
+  transmute(ladr, test, step = "H(X), patterns", bits = H_X),
+  transmute(ladr, test, step = "H(S), score", bits = H_S),
+  transmute(ladr, test, step = "I(θ; S) = I(θ; X)", bits = I_S)
+) |> mutate(step = factor(step, rev(unique(step))))
+ggplot(lad_long, aes(bits, step, fill = step)) +
+  geom_col(width = 0.7) +
+  geom_text(aes(label = fmt(bits)), hjust = -0.15, size = 3.5) +
+  facet_wrap(~ test, ncol = 1) +
+  scale_fill_manual(values = c("H(X), patterns" = "grey70", "H(S), score" = "grey45",
+                               "I(θ; S) = I(θ; X)" = irw_accent), guide = "none") +
+  scale_x_continuous(limits = c(0, max(lad_long$bits) * 1.12), expand = c(0, 0)) +
+  labs(x = "bits (Rasch)", y = NULL,
+       title = sprintf("The score throws away %s–%s bits of pattern entropy and not one bit about the person",
+                       fmt(min(ladr$H_X - ladr$H_S), 1), fmt(max(ladr$H_X - ladr$H_S), 1)),
+       subtitle = "H(X): entropy of the answer patterns. H(S): entropy of the sum score. I(θ; S): what the score says about the person, which under Rasch equals I(θ; X).") +
+  theme(panel.grid.major.y = element_blank())
+```
+
+Under Rasch the sum score is a **minimal sufficient statistic**: it collapses
+up to 2^n^ patterns into n + 1 scores, the most compression possible without
+losing anything about θ. For the numeracy test that is 2,048 patterns into 12
+scores. In bits, the patterns carry `r fmt(ladr$H_X[ladr$table == main])` bits
+of entropy, the score `r fmt(ladr$H_S[ladr$table == main])`, and both carry the
+same `r fmt(ladr$I_S[ladr$table == main], 3)` bits about the person. Everything
+else the patterns say is noise as far as θ is concerned.
+
+### Same score, different patterns
+
+```{r}
+#| label: suff-same-score
+#| fig-height: 5.2
+#| fig-width: 7.5
+
+ss <- suff[[main]]$same_score
+bs <- suff[[main]]$by_s
+k_show <- sort(unique(ss$s))[1]
+n_show <- 15
+items_lab <- s$items$label
+top <- ss |> filter(s == k_show, rank <= n_show)
+cells <- bind_rows(lapply(seq_len(nrow(top)), function(i)
+  tibble(rank = top$rank[i], item = seq_along(items_lab),
+         x = as.integer(strsplit(top$pattern[i], "")[[1]]))))
+n_k <- choose(length(items_lab), k_show)
+info_k <- bs |> filter(s == k_show) |> select(model, H_X_given_s, I_X_given_s)
+p_cells <- ggplot(cells, aes(item, rank, fill = factor(x))) +
+  geom_tile(colour = "white", linewidth = 0.6) +
+  scale_fill_manual(values = c("0" = "#e8ecf2", "1" = irw_blue), labels = c("incorrect", "correct"), name = NULL) +
+  scale_y_reverse(breaks = 1:n_show) +
+  scale_x_continuous(breaks = seq_along(items_lab), labels = items_lab, expand = c(0, 0)) +
+  labs(x = NULL, y = "pattern rank") +
+  theme(panel.grid = element_blank(), axis.text.x = element_text(angle = 90, vjust = 0.5, size = 8),
+        legend.position = "top")
+p_prob <- ggplot(top, aes(p_given_s, rank)) +
+  geom_col(orientation = "y", fill = "grey55", width = 0.75) +
+  scale_y_reverse() +
+  scale_x_continuous(n.breaks = 2) +
+  labs(x = "P(pattern | score)", y = NULL) +
+  theme(axis.text.y = element_blank(), panel.grid.major.y = element_blank())
+(p_cells | p_prob) + plot_layout(widths = c(3, 1)) +
+  plot_annotation(
+    title = wrap(w = 72, sprintf("%s patterns share a score of %d; telling them apart is %s bits of entropy and %s bits about θ",
+                    format(n_k, big.mark = ","), k_show, fmt(info_k$H_X_given_s[info_k$model == "Rasch"], 1),
+                    fmt(abs(info_k$I_X_given_s[info_k$model == "Rasch"]), 0))),
+    subtitle = wrap(sprintf("Numeracy test, Rasch. The %d most likely of the %s patterns with %d correct. Under the 2PL the same patterns carry %s bits about θ.",
+                       n_show, format(n_k, big.mark = ","), k_show, fmt(info_k$I_X_given_s[info_k$model == "2PL"], 3)), 83))
+```
+
+Many patterns share each score: under Rasch, H(X | S = `r k_show`) is
+`r fmt(info_k$H_X_given_s[info_k$model == "Rasch"], 2)` bits. Yet
+I(θ; X | S = `r k_show`) is zero, because the probability of each pattern
+*given its score* does not depend on θ at all. Two people with the same score
+but very different θ produce these patterns in exactly the same proportions.
+This θ-free conditional distribution is what conditional maximum likelihood
+estimates item parameters from.
+
+### Where misfit lives
+
+```{r}
+#| label: suff-misfit
+#| fig-height: 5
+#| fig-width: 7.5
+
+wsh <- suff[[main]]$within_score_hist
+rsp <- suff[[main]]$respondents
+show_s <- sort(unique(rsp$sum_score))
+hh <- wsh |> filter(s %in% show_s) |> mutate(mid = (lo + hi) / 2, s_lab = paste("score", s))
+rsp <- rsp |> mutate(s_lab = paste("score", sum_score),
+                     who = if_else(kind == "aberrant", "aberrant respondent", "typical respondents"))
+ab_w <- filter(rsp, kind == "aberrant")
+ggplot(hh, aes(mid, mass)) +
+  geom_col(fill = "grey65", width = 0.24) +
+  geom_vline(data = rsp, aes(xintercept = within_surprisal, colour = who), linewidth = 1) +
+  facet_wrap(~ factor(s_lab, paste("score", show_s)), ncol = 1, strip.position = "left", scales = "free_y") +
+  scale_colour_manual(values = c("aberrant respondent" = irw_red, "typical respondents" = "black"), name = NULL) +
+  labs(x = "within-score surprisal, −log₂ P(pattern | score), bits (Rasch; no θ involved)", y = NULL,
+       title = sprintf("Only %s of the %s patterns with a score of %d %s stranger than the aberrant respondent's",
+                       ab_w$n_patterns_stranger, format(ab_w$n_patterns_at_score, big.mark = ","), ab_w$sum_score,
+                       if (ab_w$n_patterns_stranger == 1) "is" else "are"),
+       subtitle = sprintf("Numeracy test. Grey: how surprising patterns are among everyone with that score. Lines: the six replayed respondents. The aberrant pattern scores %s bits.",
+                          fmt(ab_w$within_surprisal, 1))) +
+  theme(legend.position = "top", strip.text.y.left = element_text(angle = 0), axis.text.y = element_blank(),
+        panel.grid.major.y = element_blank())
+```
+
+The θ-free part of the data is where fit lives. A pattern can be very
+surprising *given its score* while saying nothing about the person's level. This
+is a different surprisal from the one in the [Surprise](#surprise) section,
+which asked how unexpected each answer was given what we believed about θ.
+Here θ never enters. The question is only whether this arrangement of correct
+answers is a plausible one for someone with this many correct answers. The
+aberrant respondent from the replays is, by this measure, among the least
+plausible patterns at their score: right on hard items, wrong on easy ones.
+
+### The Fisher view
+
+```{r}
+#| label: suff-fisher
+#| fig-height: 4.4
+#| fig-width: 7.5
+
+fi <- suff[[main]]$fisher |> filter(abs(theta) <= 4)
+f2 <- filter(fi, model == "2PL") |>
+  pivot_longer(c(test_info, sum_score_info), names_to = "what", values_to = "info") |>
+  mutate(what = factor(what, c("test_info", "sum_score_info"),
+                       c("full answer pattern (test information)", "sum score only")))
+fr <- filter(fi, model == "Rasch") |>
+  pivot_longer(c(test_info, sum_score_info), names_to = "what", values_to = "info")
+loss_peak <- f2 |> pivot_wider(names_from = what, values_from = info) |>
+  mutate(loss = 1 - `sum score only` / `full answer pattern (test information)`)
+main_p <- ggplot(f2, aes(theta, info, colour = what, linetype = what)) +
+  geom_line(linewidth = 1.1) +
+  scale_colour_manual(values = c(irw_blue, irw_red), name = NULL) +
+  scale_linetype_manual(values = c("solid", "dashed"), name = NULL) +
+  labs(x = "θ", y = "Fisher information",
+       title = sprintf("Under the 2PL the sum score loses up to %s of the Fisher information at some θ",
+                       scales::percent(max(loss_peak$loss), accuracy = 1)),
+       subtitle = "Numeracy test. Inset: under Rasch the two curves are the same curve.") +
+  theme(legend.position = "top")
+inset <- ggplot(fr, aes(theta, info, colour = what, linetype = what)) +
+  geom_line(linewidth = 0.8, show.legend = FALSE) +
+  scale_colour_manual(values = c(irw_blue, irw_red)) +
+  scale_linetype_manual(values = c("solid", "dashed")) +
+  labs(x = NULL, y = NULL, title = "Rasch") +
+  theme_minimal(base_size = 9) + theme(plot.title = element_text(size = 9, face = "bold"),
+                                       axis.text.y = element_blank(), panel.grid.minor = element_blank())
+wl(main_p) + inset_element(inset, left = 0.68, bottom = 0.55, right = 0.99, top = 0.98)
+```
+
+Two classical facts say the same thing in other units. A sufficient statistic
+preserves the Kullback–Leibler divergence between the response distributions of
+any two values of θ, so any two people are exactly as distinguishable from their
+score as from their full patterns. And it preserves Fisher information at every
+θ, so the score's test information function equals the full data's. Under
+the 2PL the plain sum score loses a little of both, and the slope-weighted
+score keeps both [@cover2006elements].
 
 ## From groups to continuous θ
 
@@ -807,6 +1086,10 @@ more resolution than any of them can use.
 - **Convergence.** `r sum(!two$converged)` 2PL fit
   (`r paste(two$table[!two$converged], collapse = ", ")`) did not meet `mirt`'s
   convergence criterion; its results are included but should be read with care.
+- **Enumeration in the sufficiency section.** Its quantities enumerate every
+  answer pattern on a θ grid, so they are limited to 16 items. For the
+  fraction-subtraction test they use the 12 items with the highest expected
+  bits. The within-score surprisal needs no θ grid and uses all items.
 - **Scope.** Only dichotomous items, and no ENEM tables in this version.
   Polytomous items can carry more than one bit each.
 

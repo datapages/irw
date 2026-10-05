@@ -439,3 +439,112 @@ uncertainty_curves <- function(a, d, K = 6, n_sim = 500, M = 2048) {
   })
   do.call(rbind, out)
 }
+
+# ------------------------------------------------------------------------------
+# Sufficiency in information terms (added for the "Is the sum score enough?"
+# section). Chain rule: I(theta; X) = I(theta; S) + I(theta; X | S).
+# All on a supplied grid (nodes, w), so any prior can be used with item
+# parameters held fixed.
+# ------------------------------------------------------------------------------
+
+# Grid for an arbitrary prior: a wide fixed theta range, weights from the
+# prior density, renormalised.
+prior_grid <- function(dens, lo = -10, hi = 10, n_nodes = 401) {
+  nodes <- seq(lo, hi, length.out = n_nodes)
+  w <- dens(nodes)
+  list(nodes = nodes, w = w / sum(w))
+}
+
+# Everything that needs the full pattern enumeration, for one model and prior.
+# Returns overall quantities and a per-score decomposition.
+enumerate_info <- function(a, d, g) {
+  n <- length(a); stopifnot(n <= 16)
+  P <- p_matrix(a, d, g$nodes)
+  X <- as.matrix(expand.grid(rep(list(0:1), n)))
+  s <- rowSums(X)
+  pxt <- exp(X %*% t(log(P)) + (1 - X) %*% t(log(1 - P)))   # patterns x nodes
+  px <- as.vector(pxt %*% g$w)
+  H_X <- entropy(px)
+  H_X_theta <- h_x_given_theta(P, g$w)
+  L <- lord_wingersky(P)                                      # nodes x (n+1)
+  ps <- colSums(g$w * L)
+  H_S <- entropy(ps)
+  I_S <- H_S - sum(g$w * apply(L, 1, entropy))
+  I_X <- H_X - H_X_theta
+  # Per score level s: H(X | S=s) and I(theta; X | S=s) = H(X|S=s) - H(X|S=s,theta)
+  by_s <- do.call(rbind, lapply(0:n, function(k) {
+    idx <- which(s == k)
+    pk <- ps[k + 1]
+    pxs <- px[idx] / pk
+    H_Xs <- entropy(pxs)
+    Lk <- L[, k + 1]
+    post <- g$w * Lk / pk                                      # P(theta | S = s)
+    cond <- sweep(pxt[idx, , drop = FALSE], 2, pmax(Lk, 1e-300), "/")  # P(x | s, theta)
+    H_cond <- -colSums(cond * log2s(cond))
+    data.frame(s = k, p_s = pk, n_patterns = length(idx), H_X_given_s = H_Xs,
+               I_X_given_s = H_Xs - sum(post * H_cond))
+  }))
+  list(I_X = I_X, I_S = I_S, I_X_given_S = I_X - I_S, H_X = H_X, H_S = H_S,
+       H_X_given_theta = H_X_theta, by_s = by_s)
+}
+
+# I(theta; T) for an arbitrary statistic of the pattern, by grouping
+# enumerated patterns on T (rounded).
+info_statistic <- function(a, d, g, T_fun, digits = 8) {
+  n <- length(a)
+  P <- p_matrix(a, d, g$nodes)
+  X <- as.matrix(expand.grid(rep(list(0:1), n)))
+  key <- round(T_fun(X), digits)
+  pxt <- exp(X %*% t(log(P)) + (1 - X) %*% t(log(1 - P)))
+  pt_theta <- rowsum(pxt, key)                                 # T levels x nodes
+  pt <- as.vector(pt_theta %*% g$w)
+  list(I = entropy(pt) - sum(g$w * apply(pt_theta, 2, entropy)), n_levels = nrow(pt_theta))
+}
+
+# Rasch (common slope): P(x | S = s) does not involve theta. With slope-intercept
+# items, P(x | s) = exp(sum_j x_j d_j) / gamma_s, gamma_s the elementary symmetric
+# function of exp(d). Returns the log2 P(x | s) for a 0/1 matrix of patterns.
+rasch_log2_p_given_s <- function(X, d) {
+  n <- length(d); e <- exp(d)
+  gam <- numeric(n + 1); gam[1] <- 1                           # gamma_0..gamma_n
+  for (j in seq_len(n)) gam[2:(j + 1)] <- gam[2:(j + 1)] + gam[1:j] * e[j]
+  s <- rowSums(X)
+  (as.vector(X %*% d) - log(gam[s + 1])) / log(2)
+}
+
+# Within-score surprisal distribution under Rasch, for every score level, using
+# all items (no theta grid needed, so 2^n patterns are cheap up to n = 20).
+rasch_within_score <- function(d) {
+  n <- length(d)
+  X <- as.matrix(expand.grid(rep(list(0:1), n)))
+  lp <- rasch_log2_p_given_s(X, d)
+  data.frame(s = rowSums(X), surprisal = -lp, p_given_s = 2^lp)
+}
+
+# Percentile of an observed within-score surprisal: probability, among patterns
+# with the same score, of a surprisal at or below the observed one.
+surprisal_percentile <- function(ws, s_obs, surp_obs) {
+  sub <- ws[ws$s == s_obs, ]
+  sum(sub$p_given_s[sub$surprisal <= surp_obs + 1e-12])
+}
+
+# Fisher information at each node: full data (test information) and the sum
+# score's distribution, with dP(S = s | theta)/dtheta carried through the
+# Lord-Wingersky recursion analytically (dP_j/dtheta = a_j P_j (1 - P_j)).
+fisher_compare <- function(a, d, nodes) {
+  P <- p_matrix(a, d, nodes)
+  dP <- sweep(P * (1 - P), 2, a, "*")
+  Q <- nrow(P); n <- ncol(P)
+  L <- matrix(0, Q, n + 1); dL <- matrix(0, Q, n + 1); L[, 1] <- 1
+  for (j in seq_len(n)) {
+    p <- P[, j]; dp <- dP[, j]
+    Lo <- L[, 1:(j + 1), drop = FALSE]; dLo <- dL[, 1:(j + 1), drop = FALSE]
+    newL <- Lo * (1 - p); newd <- dLo * (1 - p) - Lo * dp
+    newL[, 2:(j + 1)] <- newL[, 2:(j + 1)] + L[, 1:j, drop = FALSE] * p
+    newd[, 2:(j + 1)] <- newd[, 2:(j + 1)] + dL[, 1:j, drop = FALSE] * p + L[, 1:j, drop = FALSE] * dp
+    L[, 1:(j + 1)] <- newL; dL[, 1:(j + 1)] <- newd
+  }
+  data.frame(theta = nodes,
+             test_info = as.vector((P * (1 - P)) %*% (a^2)),
+             sum_score_info = rowSums(ifelse(L > 0, dL^2 / L, 0)))
+}
