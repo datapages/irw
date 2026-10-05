@@ -127,8 +127,8 @@ stats_from <- function(pm, tri) {
   c(wst = wst, sst = sst, curl = curl, triads = dec, cycles = cyc)
 }
 
-run_unit <- function(name, d, B = 200) {
-  agents <- sort(unique(c(d$a, d$b)))
+# the transitive model the triad statistics are simulated from
+null_fit <- function(d, agents) {
   f <- fit_model(d, agents)
   if (f$shrink < .05) {
     # as in lr_test: under separation the glm/polr SEs blow up and the shrink falls
@@ -139,6 +139,12 @@ run_unit <- function(name, d, B = 200) {
     s <- tryCatch(shrink_pen(th, f1$par[1], ia, ib, d$home, 0), error = function(e) 0)
     f$theta_sim <- setNames(th * sqrt(s), agents); f$h <- f1$par[1]; f$shrink <- s
   }
+  f
+}
+
+run_unit <- function(name, d, B = 200) {
+  agents <- sort(unique(c(d$a, d$b)))
+  f <- null_fit(d, agents)
   tri <- t(combn(length(agents), 3))
   obs <- stats_from(pair_mats(d, d$y, agents), tri)
   sims <- t(replicate(B, stats_from(pair_mats(d, simulate_y(d, f), agents), tri)))
@@ -149,6 +155,20 @@ run_unit <- function(name, d, B = 200) {
     out[[paste0(s, "_p")]] <- (1 + sum(sims[, s] >= obs[[s]], na.rm = TRUE)) / (1 + sum(!is.na(sims[, s])))
   }
   out
+}
+
+# ---- dense core of a one-on-one table --------------------------------------
+# pairs met >= min_meet times; agents with >= 5 such opponents (iterated); the 80
+# most active; games among them only; each pair capped at its first `cap` games
+core <- function(x, min_meet = 2, top = 80, cap = 10) {
+  x <- x[order(x$date, x$a, x$b), ]
+  pk <- paste(pmin(x$a, x$b), pmax(x$a, x$b), sep = "\t"); tp <- table(pk)
+  e <- do.call(rbind, strsplit(names(tp)[tp >= min_meet], "\t"))
+  for (i in 1:30) { deg <- table(c(e[, 1], e[, 2])); keep <- names(deg)[deg >= 5]; e <- e[e[, 1] %in% keep & e[, 2] %in% keep, , drop = FALSE] }
+  cr <- unique(c(e)); g <- x[x$a %in% cr & x$b %in% cr, ]
+  act <- table(c(g$a, g$b)); tp <- names(sort(act, decreasing = TRUE))[seq_len(min(top, length(act)))]
+  g <- g[g$a %in% tp & g$b %in% tp, ]
+  pk2 <- paste(pmin(g$a, g$b), pmax(g$a, g$b)); g[ave(seq_along(pk2), pk2, FUN = seq_along) <= cap, ]
 }
 
 # ---- rank-2 likelihood-ratio test ----------------------------------------------

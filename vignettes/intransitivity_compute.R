@@ -137,19 +137,7 @@ build_units <- function() {
     for (mt in sort(unique(x$match_type))) for (p in sort(unique(x[match_type == mt]$per)))
       add(paste("cricket", sub("_.*", "", sub("intl_", "intl ", f)), mt, p), mk(x[match_type == mt & per == p]), "Cricket", "team", min_games = 5) }
 
-  # ---- one-on-one: a dense core of the 80 most active agents ----
-  # pairs met >= min_meet times; agents with >= 5 such opponents (iterated); the 80
-  # most active; games among them only; each pair capped at its first `cap` games
-  core <- function(x, min_meet = 2, top = 80, cap = 10) {
-    x <- x[order(x$date, x$a, x$b), ]
-    pk <- paste(pmin(x$a, x$b), pmax(x$a, x$b), sep = "\t"); tp <- table(pk)
-    e <- do.call(rbind, strsplit(names(tp)[tp >= min_meet], "\t"))
-    for (i in 1:30) { deg <- table(c(e[, 1], e[, 2])); keep <- names(deg)[deg >= 5]; e <- e[e[, 1] %in% keep & e[, 2] %in% keep, , drop = FALSE] }
-    cr <- unique(c(e)); g <- x[x$a %in% cr & x$b %in% cr, ]
-    act <- table(c(g$a, g$b)); tp <- names(sort(act, decreasing = TRUE))[seq_len(min(top, length(act)))]
-    g <- g[g$a %in% tp & g$b %in% tp, ]
-    pk2 <- paste(pmin(g$a, g$b), pmax(g$a, g$b)); g[ave(seq_along(pk2), pk2, FUN = seq_along) <= cap, ]
-  }
+  # ---- one-on-one: a dense core of the 80 most active agents (core() is in the helpers) ----
   # Lichess 2013: one unit per month x time control; the pre-game rating difference
   # (Glicko-2 on the Elo 400-point scale) is a fixed offset, so strengths are
   # residual strengths beyond the rating and a player improving during the month

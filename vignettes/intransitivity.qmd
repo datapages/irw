@@ -20,6 +20,20 @@ execute:
 ---
 
 ```{r}
+#| label: cache-warning
+#| echo: false
+#| output: asis
+
+if (!file.exists("intransitivity_data/results.rds")) {
+  cat("::: {.callout-warning}\n",
+      "**Cache not found** — the results below cannot be shown. Generate them by running, from the site root:\n\n",
+      "```r\nRscript vignettes/intransitivity_compute.R\nRscript vignettes/intransitivity_extras.R\n```\n",
+      ":::\n", sep = "")
+  knitr::knit_exit()
+}
+```
+
+```{r}
 #| label: setup
 #| echo: false
 
@@ -41,6 +55,8 @@ cache <- readRDS("intransitivity_data/results.rds")
 preview <- isTRUE(cache$preview)
 U        <- as_tibble(cache$units)
 date_run <- cache$date_run
+# from intransitivity_extras.R: per-player cycles in Lichess, and context for the examples
+extras <- if (file.exists("intransitivity_data/extras.rds")) readRDS("intransitivity_data/extras.rds")
 
 fam_order <- c("MLB", "NBA", "NHL", "NFL", "Football: England and Italy", "Football: other leagues",
                "Football: club cups and internationals", "US college football", "Cricket",
@@ -52,6 +68,9 @@ bullet <- filter(U, grepl("^lichess .* bullet$", unit))
 f2 <- function(x) formatC(x, format = "f", digits = 2)
 f3 <- function(x) formatC(x, format = "f", digits = 3)
 pct <- function(x) paste0(formatC(100 * x, format = "f", digits = 1), "%")
+pct0 <- function(x) paste0(round(100 * x), "%")
+# power simulation: rejection rate at .05 for test column `col` and cyclic scale `cc`
+PW <- function(col, cc) if (is.null(cache$power)) NA else pct0(mean(cache$power[[col]][cache$power$c == cc] <= .05))
 num <- function(x) format(x, big.mark = ",")
 P <- function(u) { p <- U$lr_p[U$unit == u]; if (p <= 1 / 101 + 1e-9) "≤ .01" else sub("^0", "", f2(p)) }
 n_sig <- function(pattern) sum(U$sig[grepl(pattern, U$unit)])
@@ -62,8 +81,12 @@ n_of  <- function(pattern) sum(grepl(pattern, U$unit))
 #| label: preview-note
 #| echo: false
 #| results: asis
-if (preview) cat("::: {.callout-warning title=\"Preview\"}\nThese results were assembled from the analysis that preceded this page's compute script. The script's own run will replace them; numbers may move slightly, and the power table is still to come.\n:::\n")
+if (preview) cat("::: {.callout-warning title=\"Preview\"}\nThese results were assembled from the analysis that preceded this page's compute script. The script's own run will replace them, and numbers may move slightly. The power simulation is from the script's own code.\n:::\n")
 ```
+
+::: {.callout-note appearance="simple"}
+This vignette — the choice of data, the compute scripts, the analysis design, and the writing below — was produced largely by Claude (Anthropic), working from a task specification and with human review. Check the compute script (`intransitivity_compute.R`) directly if you are relying on the numbers here.
+:::
 
 ## Motivation
 
@@ -76,7 +99,7 @@ Throughout, a **cycle** means three competitors who beat each other in a circle:
 
 The two come apart because of luck. Even when the probabilities are perfectly transitive, a short series can go the wrong way, so observed cycles appear in any competition data. The question is whether there are more of them than luck produces, and that excess is what reveals cycles in the probabilities.
 
-Cycles are not exotic. Psychologists have long found that people's preferences can cycle [@tversky1969], a mixture of transitive voters can produce a cyclic majority (Condorcet's paradox), and in games, a player can be beaten by one style and beat another. The question is empirical: in real competition data, is there cyclic structure beyond what a transitive model produces by chance? The IRW's [competition collection](https://itemresponsewarehouse.org/comps_standard.html) holds a wide range of such data: more than a century of North American leagues and European football, cricket, chess on Lichess, engine and bot tournaments, and people judging which of two things is riskier, better written or more salient. We use all of it.
+Cycles are not exotic. Psychologists have long found that people's preferences can cycle [@tversky1969], a mixture of transitive voters can produce a cyclic majority [Condorcet's paradox, @condorcet1785; @gehrlein2006], and in games, a player can be beaten by one style and beat another. The question is empirical: in real competition data, is there cyclic structure beyond what a transitive model produces by chance? The IRW's [competition collection](https://itemresponsewarehouse.org/comps_standard.html) holds a wide range of such data: more than a century of North American leagues and European football, cricket, chess on Lichess, engine and bot tournaments, and people judging which of two things is riskier, better written or more salient. We use all of it.
 
 The short answer: team sports show no detectable intransitivity; online chess and game-playing bots are not; and human judgments mostly are. Getting there takes some care, because observed cycles show up in every kind of data, and in team sports and most judgments they are no more common than luck makes them. Only in online chess and among bots is there clearly more cyclic structure than luck produces.
 
@@ -97,13 +120,13 @@ U |>
   knitr::kable()
 ```
 
-We use `r length(cache$tables) - 1` of the `r length(cache$tables)` tables of the IRW's competition collection, `r num(sum(U$games))` games in all, split into `r num(nrow(U))` *units*: sets of games among which one transitive strength per agent would be a sensible model. Most units are one league-season. Divisions that never meet within a season (England's four divisions, the NBA and ABA before 1976) are split into separate units. The table left out is `t20_hyper`, a subset of the cricsheet IPL data. Where two tables cover the same season (538's NFL games and nflverse's; 538's soccer leagues and the footbayes and eufootball tables), each season is used once.
+We use `r length(cache$tables) - 1` of the `r length(cache$tables)` tables of the IRW's competition collection, `r num(sum(U$games))` games in all, split into `r num(nrow(U))` *units*. Within a unit, each agent's strength in the Bradley-Terry model is held fixed; it can change from one unit to the next. Most units are one league-season. Divisions that never meet within a season (England's four divisions, the NBA and ABA before 1976) are split into separate units. The table left out is `t20_hyper`, a subset of the cricsheet IPL data. Where two tables cover the same season (538's NFL games and nflverse's; 538's soccer leagues and the footbayes and eufootball tables), each season is used once.
 
 - **Team sports.** One unit per league-season, regular season only: [MLB](https://itemresponsewarehouse.org/tables/mlb_through2023/) since 1871; 538's [NBA](https://itemresponsewarehouse.org/tables/fivethirtyeight_nba_1946_2023/), [NHL](https://itemresponsewarehouse.org/tables/fivethirtyeight_nhl_1917_2023/) and [NFL](https://itemresponsewarehouse.org/tables/fivethirtyeight_nfl_1920_2023/) games (NFL from [nflverse](https://itemresponsewarehouse.org/tables/nflverse_nfl_1999_2025/) since 1999); English and Italian football since 1888 and 1929 ([footbayes](https://itemresponsewarehouse.org/tables/footbayes_england/)); other European, American and Australian leagues; MLS; club cups and men's and women's internationals (by decade, teams with at least five games); US college football; and cricket leagues and internationals from [cricsheet](https://itemresponsewarehouse.org/tables/cricsheet_domestic_men_2008_2026/). The home side gets a home-advantage term; neutral venues get none.
 - **Chess on Lichess.** The [Lichess 2013](https://itemresponsewarehouse.org/tables/lichess_2013_bullet/) tables hold every rated game played on the site that year [@lichessdb], split by time control: bullet (under 3 minutes per player), blitz and classical. In 2013 the site was small, so its regulars played each other again and again. A unit is one month of one time control, restricted to a dense core: players who met at least 5 opponents at least twice each, then the 80 most active of them, with games among those 80 only. Each pair is capped at its first 10 games that month, so that a pair of friends playing 60 games in a night, or one account farming another, cannot drive the result. White's first move is the "home" advantage. The pre-game rating difference enters as a fixed offset, so the strengths estimated are strengths *beyond* each player's rating, and a player who improves during the month cannot pass for a cycle.
 - **Engines and bots.** The [TCEC](https://itemresponsewarehouse.org/tables/tcec_engines_2010_2026/) computer-chess championships, and `r n_of("^kaggle ")` game-playing competitions from [Meta Kaggle](https://itemresponsewarehouse.org/tables/metakaggle_rock_paper_scissors_2020_2021/) [@metakaggle], where every agent is one submitted bot. A bot is a fixed program, so it cannot improve during a competition. Each gets the same dense core as Lichess, without an offset. The IRW has one more Kaggle table, Connect-4 (2023–24), but few of its pairs of bots met more than once, so it has no dense core.
 - **UFC and padel.** All [UFC](https://itemresponsewarehouse.org/tables/ufc_1993_2026/) fights, and the [World Padel Tour](https://itemresponsewarehouse.org/tables/costa_gine_2023_wpt_matches/) by category, with the same dense core (one meeting per pair is enough here).
-- **Judgments.** People comparing two things: which of six European business schools a student prefers, in [CEMS](https://itemresponsewarehouse.org/tables/bradleyterry2_cems/) [@dittrich1998cems; @turner2012bt2]; which of two public risks is worse, on eight criteria such as how common it is, how harmful and how worrying [@friedman2019risks]; which of two movie reviews is more positive, which of two 2008 Senate campaign ads is more negative, which of two human-rights report passages describes more torture, and which of two survey answers expresses more worry about immigration [@carlson2017pairwise]; which of two ministries is more salient [@zucco2019data]; which of two German legislators is further left [@guinaudeau2024data]; and [EloChoice](https://itemresponsewarehouse.org/tables/elochoice_physical/) ratings of physical attractiveness. Each table is one unit.
+- **Judgments.** People comparing two things: which of six European business schools a student prefers, in [CEMS](https://itemresponsewarehouse.org/tables/bradleyterry2_cems/) [@dittrich1998cems; @turner2012bt2]; which of two public risks is worse on one of eight criteria, such as which killed more Americans last year, which caused more harm, or which worries the respondent more [@friedman2019risks]; which of two movie reviews is more positive, which of two 2008 Senate campaign ads is more negative, which of two human-rights report passages describes more torture, and which of two survey answers expresses more worry about immigration [@carlson2017pairwise]; which of two ministries is more salient [@zucco2019data]; which of two German legislators is further left [@guinaudeau2024data]; and [EloChoice](https://itemresponsewarehouse.org/tables/elochoice_physical/) ratings of physical attractiveness. Each table is one unit.
 
 A draw counts as half a win for each side. One caveat on "games per pair": with about one game per pair (cricket leagues, NFL seasons, most judgment tables), the data hold very little information about any one matchup, which matters for everything below.
 
@@ -111,19 +134,163 @@ A draw counts as half a win for each side. One caveat on "games per pair": with 
 
 The obvious check is to count cycles. For every three agents that have all played each other, look at who won the head-to-head majority in each pair. The triad is *transitive* if one agent beat both others, and *cyclic* if each agent beat one and lost to one. With noise, though, a transitive world produces cycles too: if A is only a little better than B, B will win their series often enough. So the share of cyclic triads has to be compared with what a transitive model produces on the same schedule, not with zero.
 
-We do that with a parametric bootstrap. Fit Bradley-Terry to the unit (an ordinal version when there are draws), simulate every game again from the fitted model on the same schedule (same pairs, same home sides), recount, and repeat 200 times. Besides the share of cyclic triads, we compute two sharper statistics. One counts violations of *strong stochastic transitivity*: whenever A beats B and B beats C, A should beat C at least as often as either. The other is HodgeRank's *cyclic share* [@jiang2011hodge]: the share of the pairwise log-odds that no ranking can explain.
+We do that with a parametric bootstrap. Fit Bradley-Terry to the unit (an ordinal version when there are draws), simulate every game again from the fitted model on the same schedule (same pairs, same home sides), recount, and repeat 200 times.
+
+Counting is the natural way to think about cycles, but it is a weak test. It reduces each pair to who won their series and throws away the rest, and with two or three games per pair that series result is mostly noise. In bullet chess, where the likelihood test below does find intransitivity, the share of cyclic triads moves by only about half a percentage point. So we use the count to describe the data, not to decide.
+
+A second summary keeps the margins. HodgeRank [@jiang2011hodge] fits a single ranking to all the pairwise log-odds at once, by weighted least squares, and its *cyclic share* is the part of those log-odds that no ranking can explain. It goes through the same bootstrap as the count, and is computed for units with at most 150 agents.
 
 There is one subtlety in the simulation. The fitted strengths are more spread out than the true ones, because they include estimation noise. A null simulated from them makes games too predictable, and so too few cycles. We therefore rescale the strengths by the square root of an empirical-Bayes shrinkage factor (estimated true variance over observed variance) before simulating.
 
-### A likelihood test
+### A model that allows cycles
 
-The triad statistics turn out to have very little power (see below), so the main test is a likelihood ratio. The alternative model adds a rank-2 skew-symmetric term to Bradley-Terry:
+The main test takes a different approach. Instead of summarizing the results and comparing the summary with a null, it fits a model that allows cycles and asks whether that model describes the games better than Bradley-Terry does. The comparison is a likelihood-ratio test. The model that allows cycles adds a rank-2 skew-symmetric term to Bradley-Terry:
 
 $$
 \operatorname{logit} P(a \text{ beats } b) = h \cdot \text{home} + \theta_a - \theta_b + (u_a v_b - u_b v_a).
 $$
 
-Each agent has a strength $\theta$ and a position $(u, v)$ in a plane. The extra term is positive when $b$ sits counter-clockwise of $a$ (as seen from the origin), so three agents spread around the origin can beat each other in a circle. This is the "blade-chest" idea of @chen2016intransitivity in its simplest form. The likelihood-ratio statistic compares the two models, and its null distribution again comes from a parametric bootstrap on the same schedule (50 draws for team-seasons, 100 elsewhere). Both models carry a small ridge penalty, which keeps the fits finite when one agent wins or loses nearly every game.
+Each agent has a strength $\theta$ and a position $(u, v)$ in a plane. The extra term is positive when $b$ sits counter-clockwise of $a$ (as seen from the origin), so three agents spread around the origin can beat each other in a circle. This is the "blade-chest" idea of @chen2016intransitivity in its simplest form.
+
+The cyclic term for a pair is the cross product of their two positions, so it is largest when the two sit far from the origin and at right angles to each other, and zero when they line up with the origin. The three terms around a triad add up to twice the signed area of its triangle. A consequence is easy to see by dragging the points below: when the three strengths are equal, the agents form a cycle exactly when the origin lies inside their triangle. Move it outside and one agent beats both others. Unequal strengths pull against the cycle, and the sliders show how large the cyclic term has to be to survive a gap in strength.
+
+```{=html}
+<div id="cyc-widget" class="cyc-widget">
+<style>
+.cyc-widget { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; margin: 1.5rem 0 0.5rem; }
+.cyc-widget svg { width: 100%; max-width: 360px; touch-action: none; background: #fff; border: 1px solid #dee2e6; border-radius: 4px; }
+.cyc-widget .cyc-panel { flex: 1 1 280px; min-width: 0; font-size: 0.92rem; }
+.cyc-widget .cyc-pt { cursor: grab; }
+.cyc-widget .cyc-pt:active { cursor: grabbing; }
+.cyc-widget label { display: flex; align-items: center; gap: 0.5rem; margin: 0.15rem 0; }
+.cyc-widget label span.nm { width: 5.2rem; }
+.cyc-widget label input { flex: 1; min-width: 0; }
+.cyc-widget label output { width: 2.8rem; text-align: right; font-variant-numeric: tabular-nums; }
+.cyc-widget table { width: 100%; margin: 0.6rem 0; font-variant-numeric: tabular-nums; }
+.cyc-widget td, .cyc-widget th { padding: 0.15rem 0.4rem; text-align: right; }
+.cyc-widget td:first-child, .cyc-widget th:first-child { text-align: left; }
+.cyc-widget .cyc-verdict { font-weight: 600; margin: 0.4rem 0; }
+.cyc-widget button { font-size: 0.85rem; padding: 0.15rem 0.6rem; }
+</style>
+<svg viewBox="0 0 360 360" role="img" aria-label="Three agents as draggable points in the (u, v) plane, with arrows from the favourite to the underdog in each pair">
+  <defs>
+    <marker id="cyc-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#555"></path>
+    </marker>
+  </defs>
+  <g id="cyc-grid" stroke="#eee" stroke-width="1"></g>
+  <line x1="0" y1="180" x2="360" y2="180" stroke="#bbb"></line>
+  <line x1="180" y1="0" x2="180" y2="360" stroke="#bbb"></line>
+  <text x="352" y="172" text-anchor="end" font-size="12" fill="#777">u</text>
+  <text x="188" y="14" font-size="12" fill="#777">v</text>
+  <polygon id="cyc-tri" fill="#2166ac" fill-opacity="0.06" stroke="none"></polygon>
+  <circle cx="180" cy="180" r="3.5" fill="#333"></circle>
+  <text x="186" y="196" font-size="11" fill="#555">origin</text>
+  <g id="cyc-arrows"></g>
+  <g id="cyc-points"></g>
+</svg>
+<div class="cyc-panel">
+  <div><strong>Strengths</strong> (θ)</div>
+  <label><span class="nm">A</span><input type="range" min="-1.5" max="1.5" step="0.1" value="0" data-k="0"><output>0.0</output></label>
+  <label><span class="nm">B</span><input type="range" min="-1.5" max="1.5" step="0.1" value="0" data-k="1"><output>0.0</output></label>
+  <label><span class="nm">C</span><input type="range" min="-1.5" max="1.5" step="0.1" value="0" data-k="2"><output>0.0</output></label>
+  <table>
+    <thead><tr><th>Pair</th><th>θ gap</th><th>Cyclic term</th><th>P(first wins)</th></tr></thead>
+    <tbody id="cyc-rows"></tbody>
+  </table>
+  <div class="cyc-verdict" id="cyc-verdict"></div>
+  <button type="button" id="cyc-reset">Reset</button>
+</div>
+</div>
+<script>
+(function () {
+  const root = document.getElementById("cyc-widget");
+  const S = 75, C0 = 180;                       // pixels per unit, centre
+  const toPx = p => [C0 + S * p[0], C0 - S * p[1]];
+  const toUV = (x, y) => [Math.max(-2.3, Math.min(2.3, (x - C0) / S)), Math.max(-2.3, Math.min(2.3, (C0 - y) / S))];
+  const names = ["A", "B", "C"], cols = ["#2166ac", "#d73027", "#4d4d4d"];
+  const start = () => [[0, 1.2], [-1.04, -0.6], [1.04, -0.6]];
+  let pos = start(), th = [0, 0, 0];
+  const ns = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+  const grid = root.querySelector("#cyc-grid");
+  for (let i = -2; i <= 2; i++) {
+    if (i === 0) continue;
+    grid.appendChild(el("line", { x1: C0 + S * i, y1: 0, x2: C0 + S * i, y2: 360 }));
+    grid.appendChild(el("line", { x1: 0, y1: C0 + S * i, x2: 360, y2: C0 + S * i }));
+  }
+  const svg = root.querySelector("svg"), gA = root.querySelector("#cyc-arrows"), gP = root.querySelector("#cyc-points");
+  const pts = names.map((nm, i) => {
+    const g = el("g", { class: "cyc-pt", tabindex: 0, "aria-label": "Agent " + nm });
+    g.appendChild(el("circle", { r: 14, fill: cols[i], stroke: "#fff", "stroke-width": 2 }));
+    const t = el("text", { "text-anchor": "middle", dy: "0.35em", "font-size": 13, "font-weight": 700, fill: "#fff" });
+    t.textContent = nm; g.appendChild(t); gP.appendChild(g);
+    return g;
+  });
+  const cross = (a, b) => a[0] * b[1] - b[0] * a[1];
+  const plogis = x => 1 / (1 + Math.exp(-x));
+  const pairs = [[0, 1], [1, 2], [2, 0]];
+  function draw() {
+    pts.forEach((g, i) => { const [x, y] = toPx(pos[i]); g.setAttribute("transform", `translate(${x},${y})`); });
+    root.querySelector("#cyc-tri").setAttribute("points", pos.map(p => toPx(p).join(",")).join(" "));
+    gA.textContent = "";
+    const rows = [], beats = [];
+    pairs.forEach(([i, j]) => {
+      const gap = th[i] - th[j], cyc = cross(pos[i], pos[j]), p = plogis(gap + cyc);
+      rows.push(`<tr><td>${names[i]} vs ${names[j]}</td><td>${gap.toFixed(1)}</td><td>${cyc.toFixed(2)}</td><td>${p.toFixed(2)}</td></tr>`);
+      if (Math.abs(p - 0.5) < 0.005) { beats.push(null); return; }
+      const [w, l] = p > 0.5 ? [i, j] : [j, i];
+      beats.push([w, l]);
+      const [x1, y1] = toPx(pos[w]), [x2, y2] = toPx(pos[l]);
+      const dx = x2 - x1, dy = y2 - y1, d = Math.hypot(dx, dy);
+      if (d < 34) return;
+      const ux = dx / d, uy = dy / d;
+      gA.appendChild(el("line", { x1: x1 + 17 * ux, y1: y1 + 17 * uy, x2: x2 - 18 * ux, y2: y2 - 18 * uy,
+        stroke: "#555", "stroke-width": 1.5 + 4 * Math.abs(Math.max(p, 1 - p) - 0.5), "marker-end": "url(#cyc-head)" }));
+      const lab = el("text", { x: (x1 + x2) / 2 - 10 * uy, y: (y1 + y2) / 2 + 10 * ux, "text-anchor": "middle", dy: "0.35em", "font-size": 11, fill: "#333" });
+      lab.textContent = Math.max(p, 1 - p).toFixed(2); gA.appendChild(lab);
+    });
+    root.querySelector("#cyc-rows").innerHTML = rows.join("");
+    const v = root.querySelector("#cyc-verdict");
+    if (beats.some(b => b === null)) { v.textContent = "A tie in at least one pair."; return; }
+    const wins = [0, 0, 0]; beats.forEach(([w]) => wins[w]++);
+    if (wins.every(k => k === 1)) {
+      const s = beats.map(([w, l]) => `${names[w]} beats ${names[l]}`);
+      v.textContent = "Cycle: " + s.join(", ") + ".";
+    } else {
+      const order = [0, 1, 2].sort((a, b) => wins[b] - wins[a]).map(k => names[k]);
+      v.textContent = "No cycle: " + order.join(" > ") + ".";
+    }
+  }
+  let drag = -1;
+  pts.forEach((g, i) => g.addEventListener("pointerdown", e => { drag = i; g.setPointerCapture(e.pointerId); e.preventDefault(); }));
+  svg.addEventListener("pointermove", e => {
+    if (drag < 0) return;
+    const r = svg.getBoundingClientRect();
+    pos[drag] = toUV((e.clientX - r.left) * 360 / r.width, (e.clientY - r.top) * 360 / r.height);
+    draw();
+  });
+  const end = () => { drag = -1; };
+  svg.addEventListener("pointerup", end); svg.addEventListener("pointercancel", end);
+  pts.forEach((g, i) => g.addEventListener("keydown", e => {
+    const step = { ArrowLeft: [-0.1, 0], ArrowRight: [0.1, 0], ArrowUp: [0, 0.1], ArrowDown: [0, -0.1] }[e.key];
+    if (!step) return; e.preventDefault();
+    pos[i] = toUV(...toPx([pos[i][0] + step[0], pos[i][1] + step[1]])); draw();
+  }));
+  root.querySelectorAll("input[type=range]").forEach(inp => inp.addEventListener("input", () => {
+    th[+inp.dataset.k] = +inp.value; inp.nextElementSibling.textContent = (+inp.value).toFixed(1); draw();
+  }));
+  root.querySelector("#cyc-reset").addEventListener("click", () => {
+    pos = start(); th = [0, 0, 0];
+    root.querySelectorAll("input[type=range]").forEach(inp => { inp.value = 0; inp.nextElementSibling.textContent = "0.0"; });
+    draw();
+  });
+  draw();
+})();
+</script>
+```
+
+The likelihood-ratio statistic compares the two models, and its null distribution again comes from a parametric bootstrap on the same schedule (50 draws for team-seasons, 100 elsewhere). Both models carry a small ridge penalty, which keeps the fits finite when one agent wins or loses nearly every game.
 
 The rescaling matters even more here. A natural way to simulate the null is from the fitted Bradley-Terry strengths as they are, and with many games per pair that works. With about one game per pair, the fitted strengths are far too spread out, and so the simulated games are too predictable. A rank-2 term then improves the fit to the real data by more than it ever does to the simulated data, even when there is nothing cyclic to find. @tbl-size shows this on simulated data. We took the schedules of 40 cricket leagues and 20 NFL seasons, simulated every game from a transitive model, and ran the test with the null simulated each way.
 
@@ -153,14 +320,14 @@ if (is.null(cache$power)) {
   knitr::asis_output("*The power simulation has not been run for this build of the page.*")
 } else cache$power |>
   group_by(c) |>
-  summarise(`Likelihood ratio` = mean(lr_p <= .05), `Cyclic triads` = mean(wst_p <= .05),
-            `SST violations` = mean(sst_p <= .05), `HodgeRank cyclic share` = mean(curl_p <= .05), .groups = "drop") |>
+  summarise(`Likelihood ratio` = mean(lr_p <= .05), `HodgeRank cyclic share` = mean(curl_p <= .05),
+            `Cyclic-triad count` = mean(wst_p <= .05), .groups = "drop") |>
   mutate(across(-c, f2)) |>
   rename(`Cyclic scale` = c) |>
-  knitr::kable(align = "lrrrr")
+  knitr::kable(align = "lrrr")
 ```
 
-With two or three games per pair, a team's head-to-head record against any one opponent is mostly noise, and the triad statistics, which are built from those records, barely move when cycles are present. The likelihood test pools all the games into one comparison of two models and does much better. For scale: a cyclic term of 0.5 means that the typical pair's odds are off by about as much as the spread in team strength.
+With no cycles, the likelihood test rejects in `r PW("lr_p", 0)` of these leagues, as it should. With a cyclic term of scale 0.3 it rejects in `r PW("lr_p", 0.3)`, and at 0.5 in `r PW("lr_p", 0.5)`. For scale: at 0.5 the cyclic term moves the typical pair's log-odds by about as much as the spread in team strength, and at 0.3 by about 60% of it. The two summaries do much worse. With two or three games per pair, a team's record against any one opponent is mostly noise, and the cycle count rejects in only `r PW("wst_p", 0.5)` of leagues even at 0.5. HodgeRank's cyclic share, which did well in the much denser bullet chess data, rejects in `r PW("curl_p", 0.5)` here. Both are also conservative, rejecting less than 5% of the time when there are no cycles. In sparse data, only the likelihood test has useful power.
 
 ---
 
@@ -187,7 +354,7 @@ show_plot(p)
 
 In a typical team-season, `r pct(median(team$wst, na.rm = TRUE))` of the triads whose three series were all decided are cyclic in the observed results. Simulating the same schedules from a transitive model gives `r pct(median(team$wst_null, na.rm = TRUE))`. @fig-cycles shows that this holds unit by unit: the points sit along the diagonal. The points far from it are mostly small units, such as cricket leagues with a handful of decided triads, where a single cycle moves the share a lot.
 
-Counting also shows why a better test is needed. Where the likelihood test below does find intransitivity, as in bullet chess, the excess of observed cycles is small: `r pct(median(bullet$wst))` of triads are cyclic in a typical bullet month, against `r pct(median(bullet$wst_null))` under the transitive model. The count rejects in only `r sum(bullet$wst_p <= .05)` of the 12 bullet months, and HodgeRank's cyclic share in `r sum(bullet$curl_p <= .05)`. Even real intransitivity in the win probabilities changes the outcome of only a small fraction of triads, here about half a percentage point, and a count of triads, each decided by a short series, can barely see that.
+Counting also shows why a better test is needed. Where the likelihood test below does find intransitivity, as in bullet chess, the excess of observed cycles is small: `r pct(median(bullet$wst))` of triads are cyclic in a typical bullet month, against `r pct(median(bullet$wst_null))` under the transitive model. The count rejects in only `r sum(bullet$wst_p <= .05)` of the 12 bullet months. HodgeRank's cyclic share, which uses every game rather than series winners, rejects in `r sum(bullet$curl_p <= .05)`, about as often as the likelihood test. Even real intransitivity in the win probabilities changes the outcome of only a small fraction of triads, here about half a percentage point, and a count of triads, each decided by a short series, can barely see that.
 
 ### Team sports: no detectable intransitivity
 
@@ -206,7 +373,7 @@ team |>
 
 Across `r num(nrow(team))` team-seasons, `r sum(team$sig)` (`r pct(mean(team$sig))`) reject at .05, fewer than the 5% that luck alone would give. No sport stands out.
 
-How strong is this evidence? Within any one season, the test can miss a modest cyclic term: in simulated NBA-sized seasons it catches one a third the size of the spread in team strength only about half the time (@tbl-power), and NFL seasons and cricket leagues, with about one game per pair, have far less data than that. Across all the seasons together the evidence is much stronger: if moderate cycles were common in team sports, far more than `r pct(mean(team$sig))` of `r num(nrow(team))` seasons would reject. So a single strength per team misses no cyclic structure that these data can detect.
+How strong is this evidence? Within any one season, the test can miss a modest cyclic term: in simulated NBA-sized seasons it catches a cyclic term of scale 0.3 only `r PW("lr_p", 0.3)` of the time (@tbl-power), and NFL seasons and cricket leagues, with about one game per pair, have far less data than that. Across all the seasons together the evidence is much stronger: if moderate cycles were common in team sports, far more than `r pct(mean(team$sig))` of `r num(nrow(team))` seasons would reject. So a single strength per team misses no cyclic structure that these data can detect.
 
 That is not the same as saying one strength is all you need. The test compares one strength per team with one strength plus a cyclic matchup term, and nothing else. A single fixed strength can fail in other ways this test does not look for: strengths that change during a season (injuries, trades, form), home advantage that differs by team, or information in the margin of victory, since we use only who won. And a better fit is not the same as better predictions of games not yet played; that would need an out-of-sample comparison.
 
@@ -225,29 +392,16 @@ U |> filter(type == "judg") |>
   knitr::kable(align = "lrrrr")
 ```
 
-Pooled across respondents, `r sum(U$sig[U$type == "judg"])` of `r sum(U$type == "judg")` judgment tables reject: the incidence and harm criteria of the risk study, one of the six text-coding tasks (which of two campaign ads is more negative), and the ministry-salience survey.
+Pooled across respondents, `r sum(U$sig[U$type == "judg"])` of `r sum(U$type == "judg")` judgment tables reject: the risk study's "killed more people last year" and "caused more harm" criteria, one of the six text-coding tasks (which of two campaign ads is more negative), and the ministry-salience survey.
 
 A pooled table can be cyclic even if every person in it is perfectly transitive. If one group of respondents ranks A > B > C, another B > C > A, and a third C > A > B, the majority in every pair runs in a circle. This is Condorcet's paradox. CEMS lets us look at individuals directly, because each of its `r length(cache$cems$obs)` students compared all 15 pairs of the six schools, so each student's own answers form a complete little tournament with 20 triads.
 
 ```{r}
-#| label: fig-cems
-#| fig-cap: "Cyclic triads per CEMS student (out of 20), observed and in 100 simulations in which every student draws their answers from one shared preference (the pooled ordinal Bradley-Terry model)."
-
+#| include: false
 ce <- cache$cems
-cc <- bind_rows(
-  tibble(cycles = as.numeric(ce$obs), source = "Observed"),
-  tibble(cycles = as.numeric(ce$sims), source = "One shared noisy preference")) |>
-  count(source, cycles) |> group_by(source) |> mutate(share = n / sum(n)) |> ungroup() |>
-  mutate(text = sprintf("%s<br>%d cyclic triads: %.1f%% of students", source, cycles, 100 * share))
-p <- ggplot(cc, aes(cycles, share, fill = source, text = text)) +
-  geom_col(position = position_dodge(width = .8), width = .75) +
-  scale_fill_manual(values = c(Observed = irw_blue, `One shared noisy preference` = "grey70"), name = NULL) +
-  scale_y_continuous(labels = scales::percent) +
-  labs(x = "Cyclic triads per student", y = "Share of students")
-show_plot(p)
 ```
 
-`r pct(mean(ce$obs == 0))` of students have no cycle at all, against `r pct(mean(ce$sims == 0))` if each were a noisy draw from one shared preference. Students differ from each other in what they prefer, but each is strikingly consistent.
+Individual students are almost always transitive. `r pct(mean(ce$obs == 0))` of them have no cyclic triad among their 20, and the average is `r sprintf("%.1f", mean(ce$obs))` cyclic triads per student. If each student were instead a noisy draw from one shared preference (the pooled ordinal Bradley-Terry model, simulated 100 times), only `r pct(mean(ce$sims == 0))` would have none, and the average would be `r sprintf("%.1f", mean(ce$sims))`. So students differ in what they prefer, but each is consistent: the setting for Condorcet's paradox. Even so, the pooled CEMS table shows no cycle (p = `r P("cems (6 schools, pooled)")`). Different transitive preferences can produce a cyclic majority, but they need not.
 
 What about the `r sum(U$sig[U$type == "judg"])` pooled tables that do reject? A natural explanation is the one above: people who are each transitive but weigh things differently, so that the pooled majorities run in a circle. For the risk ratings, it is plausible that different people weigh everyday harms against catastrophic ones differently. But we have not tested this explanation. In those tables each person made only a handful of judgments, so their individual consistency cannot be checked the way it can in CEMS. A model that lets groups of respondents differ, fitted to these tables, would tell us whether such differences account for the cycles.
 
@@ -262,16 +416,17 @@ Lichess sorts games by time control, using the expected length of the game with 
 li_sum <- U |> filter(grepl("^lichess", unit)) |>
   mutate(tc = factor(sub(".* ", "", unit), c("bullet", "blitz", "classical"))) |>
   group_by(tc) |>
-  summarise(months = sum(sig), games = median(games), gpp = median(games_per_pair),
+  summarise(months = sum(sig), hodge = sum(curl_p <= .05, na.rm = TRUE), games = median(games), gpp = median(games_per_pair),
             obs = median(wst), null = median(wst_null),
             excess = median(lr - lr_null), per1000 = median(1000 * (lr - lr_null) / games), .groups = "drop")
 L <- function(t, col) li_sum[[col]][li_sum$tc == t]
 li_sum |>
-  transmute(`Time control` = as.character(tc), `Months with p ≤ .05` = paste(months, "of 12"),
+  transmute(`Time control` = as.character(tc), `Months with p ≤ .05: LR` = paste(months, "of 12"),
+            `HodgeRank` = paste(hodge, "of 12"),
             `Games per month` = num(round(games)), `Games per pair` = f2(gpp),
             `Cyclic triads: observed vs. no-cycle model` = paste(pct(obs), "vs.", pct(null)),
             `LR excess` = sprintf("%.0f", excess), `LR excess per 1,000 games` = sprintf("%.1f", per1000)) |>
-  knitr::kable(align = "lrrrrrr")
+  knitr::kable(align = "lrrrrrrr")
 ```
 
 The key findings:
@@ -281,30 +436,51 @@ The key findings:
 - **Per game, the cyclic structure is not weaker in slower chess.** The likelihood-ratio excess per 1,000 games is about the same in bullet (`r sprintf("%.1f", L("bullet", "per1000"))`) and blitz (`r sprintf("%.1f", L("blitz", "per1000"))`), and larger in classical (`r sprintf("%.1f", L("classical", "per1000"))`). So these data do not show cycles fading as players get more time to think. Bullet is where there are enough games to see them every month.
 - **Counting cycles barely shows any of this.** Observed cyclic shares sit within about a percentage point of the no-cycle model at every time control (@tbl-lichess). The intransitivity is real, but it changes the outcome of only a small fraction of triads.
 
-These results allow for each player's rating going into each game, so a player improving during the month cannot pass for a cycle, and no pair contributes more than 10 games. @fig-lichess shows the month-by-month results.
-
-```{r}
-#| label: fig-lichess
-#| fig-cap: "Lichess 2013, one point per month and time control: the likelihood-ratio statistic minus its mean under the bootstrap null (positive means more cyclic structure than chance). Filled points reject at .05. All tests include the pre-game rating difference."
-#| fig-height: 4.5
-
-li <- U |> filter(grepl("^lichess", unit)) |>
-  mutate(month = as.integer(sub("lichess 2013-(\\d+) .*", "\\1", unit)),
-         tc = factor(sub(".* ", "", unit), c("bullet", "blitz", "classical")),
-         excess = lr - lr_null,
-         text = sprintf("%s<br>LR %.0f vs %.0f under the null<br>p = %.2f<br>%s games, %.1f per pair", unit, lr, lr_null, lr_p, num(games), games_per_pair))
-p <- ggplot(li, aes(month, excess, colour = tc, shape = sig, text = text)) +
-  geom_hline(yintercept = 0, colour = irw_grey) +
-  geom_line(aes(group = tc), alpha = .4) +
-  geom_point(size = 2.6) +
-  scale_shape_manual(values = c(`TRUE` = 16, `FALSE` = 1), guide = "none") +
-  scale_colour_manual(values = c(bullet = irw_red, blitz = "#f4a582", classical = irw_blue), name = NULL) +
-  scale_x_continuous(breaks = 1:12, labels = month.abb) +
-  labs(x = NULL, y = "LR minus its null mean")
-show_plot(p)
-```
+These results allow for each player's rating going into each game, so a player improving during the month cannot pass for a cycle, and no pair contributes more than 10 games.
 
 This agrees with work that counts rock-paper-scissors cycles among the strategies of over a billion Lichess and FICS games [@sanjaya2022chess]. That work finds the "spinning top" shape proposed for real-world games by @czarnecki2020spinning: cycles are most common among players of middling strength and thin out toward the top. Our dense cores are active club-level players of 2013, which is where that picture puts the most cycles.
+
+```{r}
+#| label: fig-spinning
+#| fig-cap: "Share of each player's decided triads that are cyclic, by the player's pre-game rating, pooled over the 12 months of each time control. Players are grouped into fifths by rating. Grey: the same share under a transitive model simulated on the same schedule (200 draws). The gap between the lines, not the height of either, is the evidence of cycles."
+#| fig-height: 3.8
+#| fig-width: 10
+
+if (!is.null(extras)) {
+  sp <- as_tibble(extras$players) |>
+    filter(dec > 0) |>
+    mutate(tc = factor(tc, c("bullet", "blitz", "classical"))) |>
+    group_by(tc) |>
+    mutate(band = ntile(rating, 5)) |>
+    group_by(tc, band) |>
+    summarise(rating = median(rating), lo = min(rating), hi = max(rating), players = n(),
+              Observed = sum(cyc) / sum(dec), `Transitive model` = sum(cyc_null) / sum(dec_null), .groups = "drop") |>
+    pivot_longer(c(Observed, `Transitive model`), names_to = "source", values_to = "share") |>
+    mutate(text = sprintf("%s, ratings %.0f-%.0f (%d player-months)<br>%s: %s of decided triads cyclic",
+                          tc, lo, hi, players, source, pct(share)))
+  p <- ggplot(sp, aes(rating, share, colour = source, group = source, text = text)) +
+    geom_line(linewidth = 0.7) + geom_point(size = 2.2) +
+    facet_wrap(~ tc, nrow = 1, scales = "free_x") +
+    scale_colour_manual(values = c(Observed = irw_red, `Transitive model` = "grey55"), name = NULL) +
+    scale_y_continuous(labels = scales::percent) +
+    labs(x = "Pre-game rating (median of the fifth)", y = "Cyclic share of decided triads") +
+    theme(legend.position = "top")
+  show_plot(p)
+}
+```
+
+```{r}
+#| include: false
+# excess of observed over simulated cyclic share, by time control: range across the fifths
+sp_ex <- if (!is.null(extras)) sp |> select(tc, band, source, share) |>
+  pivot_wider(names_from = source, values_from = share) |>
+  mutate(ex = 100 * (Observed - `Transitive model`)) |> group_by(tc) |>
+  summarise(lo = min(ex), hi = max(ex), mid = Observed[band == 3], top = Observed[band == 5], .groups = "drop")
+SX <- function(t, col) sprintf("%.1f", sp_ex[[col]][sp_ex$tc == t])
+SP <- function(t, col) pct(sp_ex[[col]][sp_ex$tc == t])
+```
+
+@fig-spinning looks for that shape in our data. There is a spinning top: in bullet, `r SP("bullet", "mid")` of a mid-rated player's decided triads are cyclic, against `r SP("bullet", "top")` for the strongest fifth, and the other time controls are similar. But the transitive model draws the same hump. A mid-rated player has more opponents of about their own strength, and between near-equals a short series can go either way, so cycles come from noise alone. The gap between the lines, which is what a cycle model has to explain, is about the same at every rating: `r SX("bullet", "lo")` to `r SX("bullet", "hi")` percentage points in bullet and `r SX("blitz", "lo")` to `r SX("blitz", "hi")` in blitz, with no consistent gap in classical. So within these dense cores, the shape mostly reflects who plays whom, not cycles concentrated in the middle. Our cores span a narrow range of ratings, and the work above uses far more players, so this does not settle the question. It does show that a spinning top in raw cycle counts needs the same comparison with a transitive model as any other count.
 
 What produces the cycles? One reading is style. A player who thrives on sharp tactics can beat a solid positional player who in turn beats someone else, and an opening specialist can trouble some opponents more than others. We cannot test that reading here: the rank-2 term picks up any matchup-specific advantage, and the data say nothing about style.
 
@@ -325,32 +501,65 @@ U |> filter(family == "Engines and bots") |>
 
 ### What the cycles look like
 
-@tbl-examples shows some cycles from the data. Each row is three competitors (or three risks) that beat each other in a circle, like rock, paper and scissors. "Beat" means won most of their meetings: for players and bots, their head-to-head games; for the risks, the judgments of the respondents who were shown that pair.
+Below are four cycles from the data: two from the risk judgments, one from Lichess and one from the Kaggle bots. Each is three competitors (or three risks) that beat each other in a circle, like rock, paper and scissors. "Beat" means won most of their meetings: for players and bots, their head-to-head games; for the risks, the judgments of the respondents who were shown that pair. For each, the small table gives the three's overall standing, and the text below it says which head-to-head result goes against that standing. That result is what turns a ranking into a loop. Risks: triples that the fitted cyclic model makes into a loop and that also loop in the raw judgments. Players and bots: the most lopsided loop in any bullet month and any Kaggle competition, among pairs that met at least five times; players and bots are numbered rather than named. Each example could be chance on its own; the tests above rest on all the games, not on these.
 
 ```{r}
-#| label: tbl-examples
-#| tbl-cap: "Examples of cycles. Risks: triples that the fitted cyclic model makes into a loop and that also loop in the raw judgments. Players and bots: the most lopsided loop in any bullet month and any Kaggle competition, among pairs that met at least five times; players and bots are numbered rather than named. Each example could be chance on its own; the tests above rest on all the games, not on these."
+#| label: examples
+#| results: asis
 
 ex <- as_tibble(cache$examples) |> mutate(s = pmin(ab_w / ab_n, bc_w / bc_n, ca_w / ca_n))
-rec <- function(w, n) sprintf("%g of %d", w, n)
 pick_row <- function(pat) { x <- filter(ex, grepl(pat, unit)); if (all(is.na(x$model_min))) x[which.max(x$s), ] else x[which.max(x$model_min), ] }
-lab <- function(r, who) if (is.na(who)) c(r$A, r$B, r$C) else paste(who, 1:3)
-rows <- list(
-  list(pat = "^friedman incidence", data = "Risk judgments: incidence", who = NA),
-  list(pat = "^friedman harm", data = "Risk judgments: harm (\"caused more harm to Americans last year\")", who = NA),
-  list(pat = "^lichess", data = NA, who = "Player"),
-  list(pat = "^kaggle", data = NA, who = "Bot"))
-bind_rows(lapply(rows, function(z) {
-  r <- pick_row(z$pat); l <- lab(r, z$who)
-  d <- if (is.na(z$data)) {
-    if (grepl("^lichess", r$unit)) paste0("Lichess bullet, ", month.name[as.integer(sub("lichess 2013-(\\d+) .*", "\\1", r$unit))], " 2013")
-    else paste("Kaggle:", sub("^kaggle ", "", r$unit))
-  } else z$data
-  tibble(Data = d, `The three` = paste(l, collapse = ", "),
-         `Who beat whom` = paste0(l[1], " beat ", l[2], " (", rec(r$ab_w, r$ab_n), ")<br>",
-                                  l[2], " beat ", l[3], " (", rec(r$bc_w, r$bc_n), ")<br>",
-                                  l[3], " beat ", l[1], " (", rec(r$ca_w, r$ca_n), ")"))
-})) |> knitr::kable(escape = FALSE)
+games <- function(w, n, what) sprintf("%g of %d %s", w, n, what)
+# one example: `ids` are the three as named in the data, `lab` as shown, `standing`
+# the overall measure the text orders them by (higher is better)
+show_cycle <- function(title, intro, ids, lab, tab, standing, standing_txt, what) {
+  r <- attr(ids, "row")
+  edges <- list(c(1, 2, r$ab_w, r$ab_n), c(2, 3, r$bc_w, r$bc_n), c(3, 1, r$ca_w, r$ca_n))
+  rec <- sapply(edges, function(e) sprintf("%s beat %s (%s)", lab[e[1]], lab[e[2]], games(e[3], e[4], what)))
+  up <- sapply(edges, function(e) standing[e[1]] < standing[e[2]])
+  ord <- lab[order(-standing)]
+  cat("**", title, "** ", intro, "\n\n", sep = "")
+  cat(knitr::kable(tab, format = "pipe", align = c("l", rep("r", ncol(tab) - 1))), sep = "\n")
+  cat("\nHead to head: ", paste(rec, collapse = "; "), ". ", sep = "")
+  cat("By ", standing_txt, ", the order is ", paste(ord, collapse = " > "), ". The loop closes because ",
+      paste(rec[up], collapse = " and "), ", against that order.\n\n", sep = "")
+}
+if (!is.null(extras)) {
+  rk <- as_tibble(extras$risks)
+  risk_ex <- function(pat, table, title, intro, deaths) {
+    r <- pick_row(pat); ids <- c(r$A, r$B, r$C); attr(ids, "row") <- r
+    x <- rk[rk$table == table, ][match(ids, rk$risk[rk$table == table]), ]
+    tab <- tibble(Risk = ids, `Comparisons won, against all 99 other risks` = pct0(x$share_won))
+    if (deaths) tab$`Actual deaths, 2015` <- num(x$deaths_2015)
+    show_cycle(title, intro, ids, ids, tab, x$share_won, "the share of all comparisons won", "judgments")
+    if (deaths) cat("By actual deaths, the order is ", paste(ids[order(-x$deaths_2015)], collapse = " > "),
+                    ", and no loop is possible.\n\n", sep = "")
+  }
+  risk_ex("^friedman incidence", "friedman2019_risk_incidence", "Risks: which killed more people last year?",
+          "Each respondent saw two risks at a time and picked the one they thought killed more Americans in the last year. Actual deaths are Friedman's 2015 figures.", TRUE)
+  risk_ex("^friedman harm", "friedman2019_risk_harm", "Risks: which caused more harm to Americans last year?",
+          "The same design, asking which risk caused more harm.", FALSE)
+
+  r <- pick_row("^lichess"); ids <- c(r$A, r$B, r$C); attr(ids, "row") <- r
+  pl <- as_tibble(extras$players) |> filter(unit == r$unit)
+  x <- pl[match(ids, pl$player), ]
+  mo <- month.name[as.integer(sub("lichess 2013-(\\d+) .*", "\\1", r$unit))]
+  lab <- paste("Player", 1:3)
+  show_cycle(paste0("Lichess bullet, ", mo, " 2013"),
+             sprintf("Three of the month's %d most active players.", nrow(pl)), ids, lab,
+             tibble(Player = lab, `Rating` = sprintf("%.0f", x$rating), `Games in the month` = x$games,
+                    `Points won` = pct0(x$points / x$games)),
+             x$points / x$games, "points won in the month", "games")
+
+  r <- pick_row("^kaggle"); ids <- c(r$A, r$B, r$C); attr(ids, "row") <- r
+  bt <- as_tibble(extras$bots) |> filter(unit == r$unit) |> mutate(share = points / games, rank = rank(-share, ties.method = "min"))
+  x <- bt[match(ids, bt$bot), ]
+  lab <- paste("Bot", 1:3)
+  show_cycle(paste("Kaggle:", sub("^kaggle ", "", r$unit)),
+             sprintf("Three of the %d bots in the competition's dense core.", nrow(bt)), ids, lab,
+             tibble(Bot = lab, `Games` = x$games, `Points won` = pct0(x$share), `Rank by points` = paste(x$rank, "of", nrow(bt))),
+             x$share, "points won in the competition", "games")
+}
 ```
 
 The bots' loop is what strong intransitivity looks like: each bot beats the next almost every time, so no ordering of the three makes sense. The chess loop is milder, though each player still won most of their games against the next. The risk loops are the weakest. Each rests on a few judgments per pair, and the fitted cyclic model puts the win probabilities around these loops at only about `r f2(min(ex$model_min, na.rm = TRUE))`–`r f2(max(ex$model_min, na.rm = TRUE))`. In the judgment data, cycles nudge preferences slightly away from a single ranking; they do not overturn it.
@@ -390,6 +599,7 @@ Results computed `r format(date_run, "%B %d, %Y")`. All tables are fetched with 
 ```r
 # from the site root; IRW_CORES sets the number of worker processes
 IRW_CORES=2 nice -n 19 Rscript vignettes/intransitivity_compute.R
+IRW_CORES=2 nice -n 19 Rscript vignettes/intransitivity_extras.R   # spinning top and the examples' context; a few minutes
 quarto::quarto_render("vignettes/intransitivity.qmd")
 ```
 
