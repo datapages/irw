@@ -178,7 +178,7 @@ Het IRW bevat **honderden datasets** ("tabellen"), elk een verzameling van indiv
 Elke dataset in het IRW is ontworpen om te voldoen aan vier eigenschappen:
 
 - **Vindbaar (Findable).** Elke dataset wordt geleverd met vooraf berekende metadata — aantal deelnemers, aantal items, responsdichtheid, vakgebied en andere beschrijvende labels — zodat datasets kunnen worden gevonden en gefilterd zonder ze eerst te downloaden.
-- **Toegankelijk (Accessible).** Elke dataset kan worden opgehaald via de webbrowser of het `irw`-package, met een gratis account.
+- **Toegankelijk (Accessible).** Elke dataset kan worden opgehaald via de webbrowser of het `irw`-package, en voor de meeste is helemaal geen account nodig.
 - **Interoperabel (Interoperable).** Elke dataset wordt omgevormd naar dezelfde eenvoudige structuur (hieronder beschreven), zodat dezelfde analysecode met weinig of geen aanpassing op veel datasets kan worden toegepast.
 - **Herbruikbaar (Reusable).** Elke dataset is openlijk gelicentieerd, de herkomst ervan is gedocumenteerd, en de code die is gebruikt om de dataset naar het IRW-formaat om te zetten, is openbaar.
 
@@ -215,7 +215,7 @@ De volledige technische specificatie van de standaard is beschikbaar op [itemres
 Er zijn drie manieren om IRW-data te verkrijgen, afhankelijk van hoeveel u wilt automatiseren.
 
 **1. Bekijk in de webbrowser**
-Verken datasets en hun metadata rechtstreeks in de [IRW-databrowser](/data.qmd) — geen account nodig. Voor het downloaden van een volledige dataset is een gratis [Redivis](https://redivis.com)-account nodig, aangezien dat het platform is dat de onderliggende data host.
+Verken datasets en hun metadata rechtstreeks in de [IRW-databrowser](/data.qmd) — geen account nodig. De meeste tabellen kunnen ook zonder account als CSV worden gedownload vanaf hun pagina; voor de enkele tabellen groter dan 100 MB is het R-pakket of een gratis account bij [Redivis](https://redivis.com) nodig, het platform dat de onderliggende data host.
 
 **2. Gebruik het `irw`-pakket (aanbevolen)**
 Het `irw`-pakket, beschikbaar voor zowel **R** als **Python**, biedt eenvoudige functies om data te vinden, filteren en downloaden.
@@ -242,7 +242,7 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-De eerste keer dat u het pakket gebruikt, wordt u gevraagd in te loggen met een gratis Redivis-account. Daarna downloadt één regel code elke dataset rechtstreeks naar R of Python. Vanaf dat moment is de data klaar voor analyse met standaardsoftware — bijvoorbeeld pakketten voor item response theory of factoranalyse.
+Het R-pakket werkt zonder account; de eerste keer dat u het Python-pakket gebruikt, wordt u gevraagd in te loggen met een gratis Redivis-account. Daarna downloadt één regel code elke dataset rechtstreeks naar R of Python. Vanaf dat moment is de data klaar voor analyse met standaardsoftware — bijvoorbeeld pakketten voor item response theory of factoranalyse.
 
 **3. Gebruik de Redivis-clientbibliotheken rechtstreeks**
 Voor lager-niveau workflows of workflows buiten R/Python is de data ook toegankelijk via Redivis' eigen R- en Python-clientbibliotheken. Zie de [Aan de slag-gids](/getstarted.qmd) voor details.

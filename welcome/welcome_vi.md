@@ -178,7 +178,7 @@ IRW chứa **hàng trăm bộ dữ liệu** (gọi là "bảng"), mỗi bộ là
 Mỗi bộ dữ liệu trong IRW được thiết kế để:
 
 - **Có thể tìm thấy (Findable).** Mỗi bộ dữ liệu đi kèm với siêu dữ liệu đã được tính toán sẵn — số lượng người tham gia, số lượng câu hỏi, mật độ phản hồi, lĩnh vực chủ đề và các thẻ mô tả khác — để có thể tìm và lọc bộ dữ liệu mà không cần tải xuống trước.
-- **Có thể truy cập (Accessible).** Mỗi bộ dữ liệu có thể được lấy qua trình duyệt web hoặc gói `irw`, chỉ cần một tài khoản miễn phí.
+- **Có thể truy cập (Accessible).** Mỗi bộ dữ liệu có thể được lấy qua trình duyệt web hoặc gói `irw`, và hầu hết không cần tài khoản nào cả.
 - **Có thể tương tác (Interoperable).** Mỗi bộ dữ liệu được định dạng lại theo cùng một cấu trúc đơn giản (mô tả bên dưới), để cùng một đoạn mã phân tích có thể chạy trên nhiều bộ dữ liệu mà chỉ cần chỉnh sửa rất ít hoặc không cần chỉnh sửa.
 - **Có thể tái sử dụng (Reusable).** Mỗi bộ dữ liệu có giấy phép mở, nguồn gốc của nó được ghi chép đầy đủ, và mã nguồn dùng để chuyển đổi nó sang định dạng IRW được công khai.
 
@@ -215,7 +215,7 @@ Khi một bộ dữ liệu bao gồm thông tin bổ sung — thời gian phản
 Có ba cách để lấy dữ liệu IRW, tùy thuộc vào mức độ tự động hóa mà bạn mong muốn.
 
 **1. Duyệt trên trình duyệt web**
-Khám phá các bộ dữ liệu và siêu dữ liệu của chúng trực tiếp trên [trình duyệt dữ liệu IRW](/data.qmd) — không cần tài khoản. Việc tải xuống toàn bộ một bộ dữ liệu yêu cầu tài khoản [Redivis](https://redivis.com) miễn phí, vì đó là nền tảng lưu trữ dữ liệu gốc.
+Khám phá các bộ dữ liệu và siêu dữ liệu của chúng trực tiếp trên [trình duyệt dữ liệu IRW](/data.qmd) — không cần tài khoản. Hầu hết các bảng cũng có thể được tải xuống dưới dạng CSV từ trang của chúng mà không cần tài khoản; số ít bảng lớn hơn 100 MB cần dùng gói R hoặc tài khoản miễn phí trên [Redivis](https://redivis.com), nền tảng lưu trữ dữ liệu gốc.
 
 **2. Sử dụng gói `irw` (khuyến nghị)**
 Gói `irw`, có sẵn cho cả **R** và **Python**, cung cấp các hàm đơn giản để tìm kiếm, lọc và tải xuống dữ liệu.
@@ -242,7 +242,7 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-Lần đầu tiên sử dụng gói này, bạn sẽ được yêu cầu đăng nhập bằng tài khoản Redivis miễn phí. Sau đó, chỉ cần một dòng mã là có thể tải bất kỳ bộ dữ liệu nào trực tiếp vào R hoặc Python. Từ đó, dữ liệu đã sẵn sàng để phân tích bằng phần mềm tiêu chuẩn — ví dụ như các gói lý thuyết phản hồi câu hỏi (item response theory) hoặc phân tích nhân tố.
+Gói R hoạt động mà không cần tài khoản; lần đầu tiên sử dụng gói Python, bạn sẽ được yêu cầu đăng nhập bằng tài khoản Redivis miễn phí. Sau đó, chỉ cần một dòng mã là có thể tải bất kỳ bộ dữ liệu nào trực tiếp vào R hoặc Python. Từ đó, dữ liệu đã sẵn sàng để phân tích bằng phần mềm tiêu chuẩn — ví dụ như các gói lý thuyết phản hồi câu hỏi (item response theory) hoặc phân tích nhân tố.
 
 **3. Sử dụng trực tiếp các thư viện client của Redivis**
 Đối với các quy trình làm việc cấp thấp hơn hoặc không dùng R/Python, dữ liệu cũng có thể được truy cập thông qua các thư viện client R và Python riêng của Redivis. Xem [Hướng dẫn Bắt đầu](/getstarted.qmd) để biết chi tiết.

@@ -337,6 +337,12 @@ row <- function(ds) {
 }
 
 rows <- transpose(data_index) |> map(row) |> paste(collapse = "\n")
+# A raw HTML block: pandoc passes it through untouched. Left as markdown, pandoc
+# parsed the whole table -- the backticked BibTeX in every onclick looks like
+# code spans -- and its memory grew faster than the row count: past ~2,400 rows
+# it exhausted the 16 GB runner (site builds cancelled from 10-02 22:10 UTC).
+# Raw, the 4,792-row table takes 0.5 s and 220 MB.
+cat("\n```{=html}\n")
 cat(glue(
   '
   <div id="dataset-table-wrapper" style="display: none;">
@@ -351,4 +357,5 @@ cat(glue(
   </div>
   '
 ))
+cat("\n```\n")
 ```

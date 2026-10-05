@@ -178,7 +178,7 @@ IRW ina **mamia ya seti za data** ("majedwali"), kila moja ikiwa mkusanyiko wa m
 Kila seti ya data katika IRW imeundwa iwe:
 
 - **Inayopatikana kwa urahisi (Findable).** Kila seti ya data inakuja na metadata iliyokokotolewa tayari — idadi ya washiriki, idadi ya vipengele, msongamano wa majibu, uwanja wa somo, na lebo nyingine za maelezo — ili seti za data ziweze kupatikana na kuchujwa bila kuzipakua kwanza.
-- **Inayofikiwa (Accessible).** Kila seti ya data inaweza kupatikana kupitia kivinjari cha wavuti au kifurushi cha `irw`, kwa akaunti ya bure.
+- **Inayofikiwa (Accessible).** Kila seti ya data inaweza kupatikana kupitia kivinjari cha wavuti au kifurushi cha `irw`, na nyingi hazihitaji akaunti hata kidogo.
 - **Inayoweza kutumika pamoja na mifumo mingine (Interoperable).** Kila seti ya data hubadilishwa kuwa muundo mmoja rahisi (ulioelezwa hapa chini), ili msimbo huohuo wa uchambuzi uweze kutumika kwenye seti nyingi za data kwa mabadiliko kidogo au bila mabadiliko yoyote.
 - **Inayoweza kutumika tena (Reusable).** Kila seti ya data ina leseni huria, asili yake imeandikwa, na msimbo uliotumika kuibadilisha kuwa muundo wa IRW ni wa umma.
 
@@ -215,7 +215,7 @@ Maelezo kamili ya kiufundi ya kiwango yanapatikana kwenye [itemresponsewarehouse
 Kuna njia tatu za kupata data ya IRW, kutegemea unavyotaka kuchakata kiotomatiki.
 
 **1. Vinjari kwenye kivinjari cha wavuti**
-Chunguza seti za data na metadata yake moja kwa moja kwenye [kivinjari cha data cha IRW](/data.qmd) — hakuna akaunti inayohitajika. Kupakua seti kamili ya data kunahitaji akaunti huru ya [Redivis](https://redivis.com), kwani hicho ndicho jukwaa linalohifadhi data ya msingi.
+Chunguza seti za data na metadata yake moja kwa moja kwenye [kivinjari cha data cha IRW](/data.qmd) — hakuna akaunti inayohitajika. Majedwali mengi pia yanaweza kupakuliwa kama CSV kutoka kwenye ukurasa wake bila akaunti; yale machache yenye ukubwa wa zaidi ya MB 100 yanahitaji ama kifurushi cha R au akaunti huru ya [Redivis](https://redivis.com), jukwaa linalohifadhi data ya msingi.
 
 **2. Tumia kifurushi cha `irw` (kinachopendekezwa)**
 Kifurushi cha `irw`, kinachopatikana kwa **R** na **Python**, kinatoa vitendaji rahisi vya kutafuta, kuchuja, na kupakua data.
@@ -242,7 +242,7 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-Mara ya kwanza kutumia kifurushi hiki, utaombwa kuingia (login) kwa akaunti huru ya Redivis. Baada ya hapo, mstari mmoja wa msimbo hupakua seti yoyote ya data moja kwa moja kwenye R au Python. Kuanzia hapo, data iko tayari kwa uchambuzi kwa kutumia programu za kawaida — kwa mfano vifurushi vya nadharia ya majibu ya vipengele (item response theory) au uchambuzi wa vipengele (factor analysis).
+Kifurushi cha R hufanya kazi bila akaunti; mara ya kwanza kutumia kifurushi cha Python, utaombwa kuingia (login) kwa akaunti huru ya Redivis. Baada ya hapo, mstari mmoja wa msimbo hupakua seti yoyote ya data moja kwa moja kwenye R au Python. Kuanzia hapo, data iko tayari kwa uchambuzi kwa kutumia programu za kawaida — kwa mfano vifurushi vya nadharia ya majibu ya vipengele (item response theory) au uchambuzi wa vipengele (factor analysis).
 
 **3. Tumia moja kwa moja maktaba za mteja za Redivis**
 Kwa mtiririko wa kazi wa kiwango cha chini zaidi au usio wa R/Python, data pia inaweza kupatikana kupitia maktaba za mteja za Redivis za R na Python. Angalia [Mwongozo wa Kuanza](/getstarted.qmd) kwa maelezo zaidi.
