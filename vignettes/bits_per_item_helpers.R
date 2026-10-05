@@ -30,7 +30,11 @@ make_grid <- function(sd = 1, n_nodes = 81, span = 6) {
 }
 
 # Q x n matrix of P_j(theta_q).
-p_matrix <- function(a, d, nodes) plogis(outer(nodes, a) + matrix(d, length(nodes), length(a), byrow = TRUE))
+# Clamped away from 0 and 1 so that log P stays finite for extreme items.
+p_matrix <- function(a, d, nodes) {
+  P <- plogis(outer(nodes, a) + matrix(d, length(nodes), length(a), byrow = TRUE))
+  pmin(pmax(P, 1e-12), 1 - 1e-12)
+}
 
 # H(X | theta) = sum_q w_q sum_j h(P_qj)
 h_x_given_theta <- function(P, w) sum(w * rowSums(h2(P)))
@@ -178,8 +182,10 @@ lowest_value <- function(x) {
 }
 
 # Long IRW data -> wide 0/1 matrix (rows = respondents), applying the
-# earliest-wave / control-arm rule and the respondent cap.
-prepare_resp <- function(df, max_n = 10000, seed = 1) {
+# earliest-wave / control-arm rule, the respondent cap, and two item drops:
+# items answered by fewer than `min_coverage` of respondents (booklet- or
+# branch-specific items that most people never saw), then zero-variance items.
+prepare_resp <- function(df, max_n = 10000, seed = 1, min_coverage = 0.5) {
   df <- as.data.frame(df)
   info <- list(n_ids_raw = length(unique(df$id)), wave_kept = NA, treat_kept = NA)
   if ("wave" %in% names(df) && length(unique(na.omit(df$wave))) > 1) {
@@ -201,13 +207,22 @@ prepare_resp <- function(df, max_n = 10000, seed = 1) {
     set.seed(seed)
     df <- df[df$id %in% sample(ids, max_n), ]
   }
-  resp <- irw_long2resp(df)
+  n_ids_in <- length(unique(df$id))
+  resp <- irw_long2resp(df)        # drops ids with response density < 0.1 by default
   resp$id <- NULL
-  keep <- vapply(resp, function(x) length(unique(na.omit(x))) > 1, logical(1))
+  info$n_ids_dropped_long2resp <- n_ids_in - nrow(resp)
   info$n_items_raw <- ncol(resp)
+  coverage <- colMeans(!is.na(resp))
+  info$n_low_coverage <- sum(coverage < min_coverage)
+  resp <- resp[, coverage >= min_coverage, drop = FALSE]
+  keep <- vapply(resp, function(x) length(unique(na.omit(x))) > 1, logical(1))
   info$n_zero_var <- sum(!keep)
   resp <- resp[, keep, drop = FALSE]
   info$n_ids_used <- nrow(resp)
+  # Degenerate: every respondent gives one response to every item (e.g. a
+  # person-level condition stored in resp). There is nothing to scale.
+  rng <- apply(as.matrix(resp), 1, function(x) diff(range(x, na.rm = TRUE)))
+  if (all(rng == 0)) stop("degenerate: every respondent answers all items identically")
   list(resp = resp, info = info)
 }
 
@@ -237,6 +252,17 @@ model_bits <- function(a, d, sd, resp, mc_se = 0.005) {
   )
 }
 
+# 2PL with a lognormal(0, 1) prior on the slopes, as in
+# 2pl_across_datasets_compute.R: weak, centred near a = 1, and it stops runaway
+# slopes from inflating the bits. It also keeps slopes positive, so an item
+# that runs against the trait gets a small positive slope rather than a
+# negative one.
+fit_2pl <- function(resp) {
+  ni <- ncol(resp)
+  spec <- mirt::mirt.model(paste0("F = 1-", ni, "\nPRIOR = (1-", ni, ", a1, lnorm, 0.0, 1.0)"))
+  mirt::mirt(resp, spec, itemtype = "2PL", verbose = FALSE)
+}
+
 # ------------------------------------------------------------------------------
 # One table end to end: fetch, prepare, fit Rasch + 2PL, compute everything.
 # ------------------------------------------------------------------------------
@@ -251,7 +277,7 @@ process_table <- function(table_name, max_n = 10000, mc_se = 0.005, n_random = 5
   times$prepare <- Sys.time()
 
   fit_r <- mirt::mirt(resp, 1, itemtype = "Rasch", verbose = FALSE)
-  fit_2 <- mirt::mirt(resp, 1, itemtype = "2PL", verbose = FALSE)
+  fit_2 <- fit_2pl(resp)
   times$fit <- Sys.time()
 
   cr <- mirt::coef(fit_r, simplify = TRUE)
@@ -284,4 +310,132 @@ process_table <- function(table_name, max_n = 10000, mc_se = 0.005, n_random = 5
   list(table = table_name, info = prep$info, n_items = ncol(resp),
        summary = summ, items = items, curves = cbind(table = table_name, curves),
        timing = setNames(diff(as.numeric(c(t0, do.call(c, times)))), names(times)))
+}
+
+# ------------------------------------------------------------------------------
+# Showcase quantities (2PL, latent N(0, 1))
+#
+# The discretisation device: theta is cut into 2^K equally likely groups
+# (quantiles of N(0, 1)). To make binned and continuous quantities exactly
+# comparable, both use one fine equal-probability grid: node i sits at
+# qnorm((i - 0.5) / M) with weight 1 / M, and group k at level K is the run of
+# M / 2^K consecutive nodes. M = 2048 supports K up to 11.
+# ------------------------------------------------------------------------------
+
+fine_grid <- function(M = 2048) list(nodes = qnorm((seq_len(M) - 0.5) / M), w = rep(1 / M, M))
+
+# Average the columns of a (rows x M) matrix within each of 2^K groups.
+bin_cols <- function(X, K) {
+  M <- ncol(X); per <- M / 2^K
+  sapply(seq_len(2^K), function(k) rowMeans(X[, ((k - 1) * per + 1):(k * per), drop = FALSE]))
+}
+
+# P(X_j = 1 | group), 2^K x n.
+group_probs <- function(a, d, K = 6, M = 2048) {
+  fg <- fine_grid(M)
+  P <- p_matrix(a, d, fg$nodes)              # M x n
+  t(bin_cols(t(P), K))
+}
+
+group_bounds <- function(K = 6) qnorm(seq(0, 1, length.out = 2^K + 1))
+
+# I(group; X) for K = 1..Kmax, plus I(theta; X) on the same fine grid.
+# n <= 16: exact, patterns enumerated in chunks. Larger n: Monte Carlo with
+# common random draws across K.
+bin_convergence <- function(a, d, Kmax = 8, M = 2048, n_mc = 40000) {
+  fg <- fine_grid(M)
+  P <- p_matrix(a, d, fg$nodes); n <- ncol(P)
+  lP <- log(P); lQ <- log(1 - P)
+  Ks <- seq_len(Kmax)
+  if (n <= 16) {
+    X <- as.matrix(expand.grid(rep(list(0:1), n)))
+    HXg <- setNames(numeric(Kmax), Ks); HX <- 0
+    for (st in seq(1, nrow(X), by = 4096)) {
+      Xc <- X[st:min(nrow(X), st + 4095), , drop = FALSE]
+      pxt <- exp(Xc %*% t(lP) + (1 - Xc) %*% t(lQ))     # patterns x M
+      px <- rowMeans(pxt)
+      HX <- HX - sum(px * log2s(px))
+      for (K in Ks) {
+        pxg <- bin_cols(pxt, K)                           # patterns x 2^K
+        HXg[K] <- HXg[K] - sum(pxg * log2s(pxg)) / 2^K
+      }
+    }
+    H_X_theta <- h_x_given_theta(P, fg$w)
+    data.frame(K = c(Ks, Inf), bits = c(HX - HXg, HX - H_X_theta), se = 0, method = "enumeration")
+  } else {
+    V <- matrix(NA_real_, n_mc, Kmax + 1)                # columns: K = 1..Kmax, continuous
+    for (st in seq(1, n_mc, by = 4000)) {
+      idx <- st:min(n_mc, st + 3999); b <- length(idx)
+      q <- sample.int(M, b, replace = TRUE)
+      X <- (matrix(runif(b * n), b, n) < P[q, , drop = FALSE]) * 1
+      lpx <- X %*% t(lP) + (1 - X) %*% t(lQ)            # b x M
+      mx <- apply(lpx, 1, max)
+      e <- exp(lpx - mx)
+      lmarg <- mx + log(rowMeans(e))
+      for (K in Ks) {
+        grp <- (q - 1) %/% (M / 2^K) + 1
+        V[idx, K] <- (mx + log(bin_cols(e, K)[cbind(seq_len(b), grp)]) - lmarg) / log(2)
+      }
+      V[idx, Kmax + 1] <- (lpx[cbind(seq_len(b), q)] - lmarg) / log(2)
+    }
+    data.frame(K = c(Ks, Inf), bits = colMeans(V), se = apply(V, 2, sd) / sqrt(n_mc),
+               method = "monte_carlo")
+  }
+}
+
+# Expected bits of every item under a posterior over groups.
+expected_bits <- function(post, PG) h2(colSums(post * PG)) - colSums(post * h2(PG))
+
+# Replay one respondent's responses in a given order (fixed or adaptive).
+# x: named 0/1 vector over items (complete). PG: groups x items.
+replay <- function(x, PG, order = c("fixed", "adaptive")) {
+  order <- match.arg(order)
+  G <- nrow(PG); n <- ncol(PG)
+  post <- rep(1 / G, G); remaining <- seq_len(n)
+  steps <- vector("list", n + 1)
+  steps[[1]] <- list(step = 0, item = NA, response = NA, expected_bits = NA, actual_bits = NA,
+                     surprisal = NA, entropy = entropy(post), posterior = post)
+  for (k in seq_len(n)) {
+    eb <- expected_bits(post, PG)
+    j <- if (order == "fixed") k else remaining[which.max(eb[remaining])]
+    p1 <- sum(post * PG[, j])
+    xj <- x[j]
+    like <- if (xj == 1) PG[, j] else 1 - PG[, j]
+    p_obs <- if (xj == 1) p1 else 1 - p1
+    h_before <- entropy(post)
+    post <- post * like / p_obs
+    steps[[k + 1]] <- list(step = k, item = colnames(PG)[j], response = xj,
+                           expected_bits = eb[j], actual_bits = h_before - entropy(post),
+                           surprisal = -log2(p_obs), entropy = entropy(post), posterior = post)
+    remaining <- setdiff(remaining, j)
+  }
+  list(
+    steps = do.call(rbind, lapply(steps, function(s) as.data.frame(s[setdiff(names(s), "posterior")]))),
+    posterior = do.call(rbind, lapply(steps, `[[`, "posterior"))
+  )
+}
+
+# Mean posterior entropy after k items over simulated respondents, for fixed,
+# random and adaptive orders. Respondents: group drawn uniformly, theta drawn
+# from that group's fine-grid nodes, responses from the 2PL at theta.
+uncertainty_curves <- function(a, d, K = 6, n_sim = 500, M = 2048) {
+  fg <- fine_grid(M); PG <- group_probs(a, d, K, M); n <- length(a)
+  q <- sample.int(M, n_sim, replace = TRUE)
+  X <- (matrix(runif(n_sim * n), n_sim, n) < p_matrix(a, d, fg$nodes[q])) * 1
+  colnames(X) <- colnames(PG) <- names(a)
+  ent <- function(ord) {
+    t(sapply(seq_len(n_sim), function(i) {
+      x <- X[i, ]
+      if (ord == "random") {
+        perm <- sample.int(n)
+        replay(x[perm], PG[, perm, drop = FALSE], "fixed")$steps$entropy
+      } else replay(x, PG, ord)$steps$entropy
+    }))
+  }
+  out <- lapply(c("fixed", "random", "adaptive"), function(o) {
+    E <- ent(o)
+    data.frame(order = o, k = 0:n, mean_entropy = colMeans(E),
+               q10 = apply(E, 2, quantile, .1), q90 = apply(E, 2, quantile, .9))
+  })
+  do.call(rbind, out)
 }
