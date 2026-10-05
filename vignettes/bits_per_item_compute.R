@@ -167,7 +167,9 @@ showcase_payload <- function(table_name) {
     x <- unlist(resp[who[i], ])
     list(respondent = LETTERS[i], kind = c(rep("quantile", 5), "aberrant")[i],
          sum_score = sum(x), zh = pf[who[i]], responses = x,
-         fixed = replay(x, PG, "fixed"), adaptive = replay(x, PG, "adaptive"))
+         fixed = replay(x, PG, "fixed"), adaptive = replay(x, PG, "adaptive"),
+         # easiest item first: makes "right on hard items, wrong on easy ones" readable
+         by_difficulty = { ord <- order(items$b); replay(x[ord], PG[, ord, drop = FALSE], "fixed") })
   })
 
   list(
@@ -228,3 +230,10 @@ saveRDS(results, results_file)
 message("Saved ", results_file, ": ", length(ok), " of ", length(tables), " tables")
 
 irw_save_bibtex(names(ok), output_file = bib_file)
+
+# ==============================================================================
+# 5. Reliability vs bits in the abstract (synthetic tests, no IRW data).
+#    Separate block, own output file; see that script.
+# ==============================================================================
+
+source("vignettes/bits_per_item_reliability_sim.R")

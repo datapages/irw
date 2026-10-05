@@ -69,6 +69,8 @@ if (cache_ok) {
   r_n_tables_run   <- 0L
 }
 
+sim_path <- "bits_per_item_data/reliability_sim_results.rds"
+rel_sim <- if (file.exists(sim_path)) readRDS(sim_path)$sim else NULL
 knitr::opts_chunk$set(eval = cache_ok)
 # Every ggplot printed on this page goes through wl().
 registerS3method("knit_print", "ggplot", function(x, ...) print(wl(x)), envir = asNamespace("knitr"))
@@ -157,9 +159,10 @@ one person, and your job is to find out which slice they are in by asking
 questions from a real test.
 
 Before any question, all 64 slices are equally likely. Pinning down one slice
-out of 64 takes **6 bits**, since 2^6^ = 64. After each answer the curve is
-redrawn to show where the person now probably is (the faint curve is where we
-started), and the counter shows how many bits that answer bought.
+out of 64 takes **6 bits**, since 2^6^ = 64. After each answer the slices are
+re-shaded, darker where the person is now more likely to be, and a line traces
+the same thing as a density over θ. The counter shows how many bits that
+answer bought.
 
 Pick a question from the table; they are ranked by how many bits they are
 *expected* to give. Then either answer it yourself, as the person might, or let
@@ -195,7 +198,6 @@ posterior_of = hs => {
   return p;
 }
 post = { reset_on_test; return posterior_of(hist); }
-prev_post = hist.length ? posterior_of(hist.slice(0, -1)) : null
 exp_bits = j => h2(post.reduce((s, v, g) => s + v * S.pg[g][j], 0)) -
                 post.reduce((s, v, g) => s + v * h2(S.pg[g][j]), 0)
 asked = new Set(hist.map(h => h.j))
@@ -243,23 +245,21 @@ bits_left = entropy(post)
 gained = 6 - bits_left
 theta_plot = {
   const b = S.bounds;
-  const dens = p => p.map((v, g) => ({g, p: v, x1: b[g], x2: b[g + 1], dens: v / (b[g + 1] - b[g])}));
-  const slices = dens(post);
-  const before = prev_post ? dens(prev_post) : [];
-  const prior = d3.range(-3.2, 3.201, 0.04).map(x => ({x, y: Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI)}));
-  // one vertical scale for all three layers, so "before" and "now" are comparable
-  const top = Math.max(0.42, ...slices.map(d => d.dens), ...before.map(d => d.dens));
-  const step = before.flatMap(d => [{x: d.x1, y: d.dens}, {x: d.x2, y: d.dens}]);
+  // Bars never move: each slice is drawn at the population's height. Its shade
+  // is the chance that this person is in it. The line is the updated density.
+  const slices = post.map((v, g) => ({g, p: v, x1: b[g], x2: b[g + 1],
+    pop: (1 / 64) / (b[g + 1] - b[g]), dens: v / (b[g + 1] - b[g])}));
+  const line = slices.flatMap(d => [{x: d.x1, y: d.dens}, {x: d.x2, y: d.dens}]);
+  const top = Math.max(0.42, ...slices.map(d => d.dens));
   return Plot.plot({
     width: Math.min(width, 680), height: 250, marginBottom: 40, marginTop: 24,
     x: {domain: [-3.2, 3.2], label: "θ: the trait the test measures (low → high)", labelAnchor: "center", labelArrow: "none"},
     y: {domain: [0, top * 1.08], axis: null},
-    color: {type: "linear", domain: [0, Math.max(...post)], range: ["#c9d7ea", blue_r]},
+    color: {type: "linear", domain: [0, Math.max(2 / 64, ...post)], range: ["#f4f7fb", "#08306b"]},
     marks: [
-      Plot.rectY(slices, {x1: "x1", x2: "x2", y: "dens", fill: "p", inset: 0.3,
+      Plot.rectY(slices, {x1: "x1", x2: "x2", y: "pop", fill: "p", inset: 0.3,
         title: d => `slice ${d.g + 1} of 64\nθ from ${d.x1.toFixed(2)} to ${d.x2.toFixed(2)}\nchance the person is here: ${(d.p * 100).toFixed(1)}%`}),
-      step.length ? Plot.line(step, {x: "x", y: "y", stroke: "#555", strokeWidth: 1.2}) : null,
-      Plot.line(prior, {x: "x", y: "y", stroke: "#999", strokeDasharray: "4,3"}),
+      hist.length ? Plot.line(line, {x: "x", y: "y", stroke: "#111", strokeWidth: 1.6}) : null,
       reveal ? Plot.ruleX([(slices[hidden].x1 + slices[hidden].x2) / 2], {stroke: "#d73027", strokeWidth: 2.5}) : null,
       reveal ? Plot.text([slices[hidden]], {x: d => (d.x1 + d.x2) / 2, y: top * 1.08, text: () => "the simulated person", dy: -4, lineAnchor: "bottom", fill: "#d73027"}) : null,
       Plot.ruleY([0])
@@ -267,12 +267,10 @@ theta_plot = {
   });
 }
 theta_key = html`<div style="font-size:0.85rem; color:#444; display:flex; flex-wrap:wrap; gap:0.4rem 1.2rem; max-width:680px; margin-bottom:2px;">
-  <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#999" stroke-dasharray="4,3" stroke-width="1.5"/></svg>
-    the population: how everyone is spread along θ</span>
-  <span><svg width="14" height="10"><rect width="14" height="10" fill="${blue_r}"/></svg>
-    where this person probably is, given the answers so far (area = probability)</span>
-  ${prev_post ? html`<span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#555" stroke-width="1.5"/></svg>
-    the same, before the last answer</span>` : ""}
+  <span><svg width="44" height="10"><defs><linearGradient id="kg"><stop offset="0" stop-color="#eef2f8"/><stop offset="1" stop-color="#08306b"/></linearGradient></defs><rect width="44" height="10" fill="url(#kg)" stroke="#ccc"/></svg>
+    the population in 64 equal slices, shaded by the chance this person is in each (light → dark: less → more likely)</span>
+  <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#111" stroke-width="1.6"/></svg>
+    where this person probably is, as a density (appears after the first answer)</span>
 </div>`
 counter = html`<div style="font-size:0.95rem; max-width:680px;">
   <div style="display:flex; justify-content:space-between;">
@@ -283,10 +281,10 @@ counter = html`<div style="font-size:0.95rem; max-width:680px;">
   <div style="height:14px; background:#e9ecef; border-radius:3px; overflow:hidden; margin:4px 0;">
     <div style="height:100%; width:${Math.max(0, gained) / 6 * 100}%; background:${accent_r};"></div></div>
   <div style="color:#666; font-size:0.85rem;">${hist.length} question${hist.length === 1 ? "" : "s"} asked.
-  Before any answer the blue bars match the population exactly: every slice is equally likely.
-  Each answer moves probability toward the slices that would most likely give it.</div>
+  Before any answer every slice has the same shade: all are equally likely.
+  Each answer darkens the slices that would most likely give it, and lightens the rest.</div>
   <div style="color:#666; font-size:0.8rem; margin-top:4px;"><sup>*</sup> An effective count, 2<sup>bits left</sup>.
-  The blue bars are rarely flat over a set of slices and zero elsewhere; they form a bump with tails.
+  The chances are rarely spread evenly over a set of slices and zero elsewhere; they form a bump with tails.
   The count says how many equally likely slices would leave the same uncertainty (entropy) as that bump.</div></div>`
 p1_now = chosen ? post.reduce((s, v, g) => s + v * S.pg[g][chosen.j], 0) : null
 bars = chosen ? Plot.plot({
@@ -312,7 +310,8 @@ html`<div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:flex-star
   <div style="flex:1; min-width:260px;">
     ${chosen ? html`<p style="margin-bottom:0.3rem;"><b>Next question:</b> ${chosen.text ?? chosen.label}</p>
     <p style="color:#666; margin-top:0; font-size:0.9rem;">Expected to give
-    <b style="color:${accent_r}">${chosen.expected.toFixed(3)} bits</b>, out of a possible 1.</p>${bars}` :
+    <b style="color:${accent_r}">${chosen.expected.toFixed(3)} bits</b>, out of a possible 1:
+    I(θ; X<sub>j</sub> | answers so far).</p>${bars}` :
     html`<p>Every question has been asked.</p>`}
   </div></div>`
 ```
@@ -329,6 +328,26 @@ currently believe, splitting the remaining possibilities in half. Questions
 lose value as you go, because the easy distinctions have already been made.
 And now and then the shading spreads *out* after an answer. That happens when
 the person says something the model did not expect.
+
+::: {.callout-note}
+## Which information? The quantities on this page
+
+Several different "bits" appear below. They are not interchangeable.
+
+- **I(θ; X)**: what the full answer pattern says about the person, on average
+  over the population. This is "the test's information" in the warehouse
+  figures.
+- **I(θ; X~j~)**: what one item says *on its own*. Items repeat each other, so
+  these do not add up to the test's total: I(θ; X) ≤ Σ~j~ I(θ; X~j~).
+- **I(θ; X~j~ | answers so far)**: what one more item is expected to add, given
+  the particular answers already seen. These are the "expected bits" in the game
+  above, and the same item is worth less once earlier answers have done its job.
+- **Bits gained by one answer**: H(θ | before) − H(θ | after). This is a realised
+  change, not an average, so it can be negative. Averaged over possible answers
+  it equals the expected bits.
+- **Surprisal**: −log~2~ P(answer | answers so far), how unexpected one answer was.
+- **I(θ; S)** and **I(θ; X | S)**: what the sum score keeps, and what it drops.
+:::
 
 ## What a bit is
 
@@ -365,7 +384,7 @@ ggplot(strip) +
   labs(x = "θ, cut into 64 equally likely slices", y = NULL,
        title = sprintf("A perfect item halves the population; the best real numeracy item manages %s of a bit",
                        fmt(max(s$items$bits))),
-       subtitle = "Each row is one question, shaded by how likely people in each slice are to say yes / get it right.") +
+       subtitle = "Each row is one question, shaded by how likely people in each slice are to say yes / get it right. Right: I(θ; Xⱼ), the item on its own.") +
   theme(panel.grid = element_blank(), legend.position = "bottom", legend.key.width = unit(1.2, "cm"))
 ```
 
@@ -387,33 +406,46 @@ Neither term can exceed one bit.
 #| fig-width: 7.5
 
 reps <- s$replays
+lab_of <- function(it) s$items$label[match(it, s$items$item)]
 surp <- bind_rows(lapply(reps, function(r) {
-  st <- r$fixed$steps[-1, ]
-  tibble(respondent = r$respondent, kind = r$kind, step = st$step,
+  st <- r$by_difficulty$steps[-1, ]
+  tibble(respondent = r$respondent, kind = r$kind, step = st$step, item = lab_of(st$item),
          surprisal = st$surprisal, response = st$response)
 }))
-ab <- filter(surp, kind == "aberrant")
+ord_items <- surp |> filter(kind == "aberrant") |> arrange(step) |> pull(item)
+b_of <- s$items$b[match(ord_items, s$items$label)]
+ab <- filter(surp, kind == "aberrant") |> mutate(answer = if_else(response == 1, "correct", "incorrect"))
 ab_resp <- reps[[which(sapply(reps, `[[`, "kind") == "aberrant")]]
+n_easy_miss <- sum(ab$response[1:3] == 0)
+n_hard_hit <- sum(ab$response[(nrow(ab) - 2):nrow(ab)] == 1)
 ggplot(surp, aes(step, surprisal, group = respondent)) +
   geom_hline(yintercept = 1, linetype = "dashed", colour = irw_grey) +
   geom_step(data = filter(surp, kind != "aberrant"), colour = irw_grey, alpha = 0.5,
             direction = "mid") +
   geom_step(data = ab, colour = irw_red, linewidth = 1, direction = "mid") +
-  geom_point(data = ab, colour = irw_red, size = 2) +
-  scale_x_continuous(breaks = 1:max(surp$step)) +
-  labs(x = "question, in the order the test asks it", y = "surprisal (bits)",
-       title = sprintf("One respondent's answers keep surprising the model, peaking at %s bits",
-                       fmt(max(ab$surprisal), 1)),
-       subtitle = sprintf("Red: the respondent with the worst person-fit (Zh = %s, sum score %d of %d). Grey: five typical respondents. Dashed: 1 bit, the surprise of a fair coin flip.",
-                          fmt(ab_resp$zh, 1), ab_resp$sum_score, nrow(s$items)))
+  geom_point(data = ab, aes(shape = answer), colour = irw_red, fill = "white", size = 2.6, stroke = 1.2) +
+  scale_shape_manual(values = c(correct = 16, incorrect = 21), name = "aberrant respondent's answer") +
+  scale_x_continuous(breaks = seq_along(ord_items),
+                     labels = sprintf("%s\n(b = %s)", ord_items, formatC(b_of, format = "f", digits = 1))) +
+  labs(x = "questions, asked from easiest (left) to hardest (right)",
+       y = "surprisal (bits)",
+       title = sprintf("The aberrant respondent misses %d of the 3 easiest questions and gets %d of the 3 hardest right",
+                       n_easy_miss, n_hard_hit),
+       subtitle = sprintf("Red: the respondent with the worst person-fit (Zh = %s, sum score %d of %d). Grey: five typical respondents. Surprisal = −log₂ P(answer | earlier answers). Dashed: 1 bit, a fair coin flip.",
+                          fmt(ab_resp$zh, 1), ab_resp$sum_score, nrow(s$items))) +
+  theme(legend.position = "top", axis.text.x = element_text(size = 7.5))
 ```
 
 The surprisal of an answer is −log~2~ of the probability the model gave it,
 just before it was given. An answer the model thought had a 50% chance costs
 1 bit of surprise; one it thought had a 1-in-8 chance costs 3 bits. Most
-answers from typical respondents sit around or below a bit. The red respondent
-gets the hard items right and the easy ones wrong, so the model keeps
-being caught out.
+answers from typical respondents sit around or below a bit. Here the questions
+are asked from easiest to hardest, so a typical respondent's answers form a
+run of correct answers followed by a run of incorrect ones, and few surprise
+the model. The red respondent does the reverse: wrong on the easy questions,
+right on the hard ones, so the model keeps being caught out. Surprisal depends
+on the order of asking, since each answer is judged against the earlier ones,
+so this is one ordering among many.
 
 ## Expected versus actual
 
@@ -435,7 +467,8 @@ ggplot(ea, aes(factor(step), bits, fill = kind)) +
   geom_hline(yintercept = 0, colour = "grey30") +
   geom_col(position = position_dodge(width = 0.75), width = 0.7) +
   facet_wrap(~ factor(who, c("Typical respondent (median score)", "Aberrant respondent")), ncol = 1) +
-  scale_fill_manual(values = c("expected bits" = "grey75", "bits actually gained" = irw_accent), name = NULL) +
+  scale_fill_manual(values = c("expected bits" = "grey75", "bits actually gained" = irw_accent), name = NULL,
+                    labels = c("expected bits: I(θ; Xⱼ | earlier answers)", "bits actually gained: H(θ | before) − H(θ | after)")) +
   labs(x = "question, in test order", y = "bits",
        title = "Information is a promise on average: a single answer can even lose bits",
        subtitle = sprintf("Totals over the test. Typical: expected %s, gained %s. Aberrant: expected %s, gained %s.",
@@ -476,7 +509,7 @@ ggplot() +
   scale_linetype_manual(values = c("solid", "dashed", "solid"), name = NULL) +
   scale_y_continuous(limits = c(NA, 6.05), breaks = 0:6) +
   scale_x_continuous(breaks = 0:nrow(s$items)) +
-  labs(x = "questions asked", y = "bits of uncertainty left (of 6)",
+  labs(x = "questions asked", y = "bits left: H(slice | answers so far)",
        title = sprintf("After all %d numeracy questions, about %s of the 6 bits are resolved",
                        nrow(s$items), fmt(end_bits, 1)),
        subtitle = sprintf("Mean over 500 simulated respondents. Adaptive ordering front-loads the gains (%s vs %s bits left after 3 questions). Faint lines: six real respondents.",
@@ -592,7 +625,88 @@ reaches `r fmt(max(two$I_X))` bits. Tests are short and noisy relative to the
 population spread, and bits grow only logarithmically with precision: each
 extra bit requires halving the standard error.
 
+```{r}
+#| label: corpus-items
+#| fig-height: 4.6
+#| fig-width: 7.5
+
+ceil <- tibble(n = 5:60, bits = log2(5:60 + 1))
+share_ceiling <- two$I_X / log2(two$n_items + 1)
+g_items <- ggplot(two, aes(n_items, I_X)) +
+  geom_line(data = ceil, aes(n, bits), colour = "grey30", linetype = "dashed") +
+  annotate("text", x = 40, y = log2(41) + 0.35, label = "ceiling: n perfect items, log₂(n + 1)",
+           size = 3.4, colour = "grey30") +
+  geom_point(aes(text = sprintf("%s\n%d items\nI = %.2f bits", table, n_items, I_X)),
+             colour = irw_accent, alpha = 0.7, size = 1.8) +
+  scale_x_continuous(breaks = c(5, 10, 20, 30, 40, 50, 60)) +
+  scale_y_continuous(limits = c(0, 6.2), breaks = 0:6) +
+  labs(x = "number of items", y = "I(θ; X), bits (2PL)",
+       title = sprintf("Longer tests give more bits, but the median test reaches only %s of what that many perfect items could",
+                       scales::percent(median(share_ceiling), accuracy = 1)))
+g_items <- wl(g_items, 60)
+g_items$labels$title <- gsub("\n", "<br>", g_items$labels$title)
+ggplotly(g_items, tooltip = "text") |>
+  layout(title = list(text = paste0("<b>", g_items$labels$title, "</b>"), x = 0, xanchor = "left",
+                      font = list(size = 15)), margin = list(t = 70))
+```
+
+The dashed line is a hard ceiling. On a single trait, n items that never make
+mistakes can produce only n + 1 different answer patterns, so they carry at
+most log~2~(n + 1) bits, reached when the items cut the population into n + 1
+equal parts. Real tables sit far below it, a median of
+`r scales::percent(median(share_ceiling), accuracy = 1)` of the way up. The
+missing bits are lost to noise, not to test length: answers are probabilistic,
+so the same person could produce many patterns.
+
 ## Reliability in bits
+
+Reliability and bits measure related things. If θ and a score were jointly
+normal, with the score's correlation with θ equal to √ρ, the information
+between them would be exactly −½ log~2~(1 − ρ). Item responses are binary, not
+normal, so the question is how far real tests depart from that curve, and
+why. We look first at synthetic tests, where we control the items, and then at
+the warehouse.
+
+```{r}
+#| label: reliability-sim
+#| fig-height: 5.6
+#| fig-width: 7.5
+
+sim_sum <- rel_sim |> group_by(kind) |>
+  summarise(dev_lo = min(I_X - gauss), dev_hi = max(I_X - gauss), .groups = "drop")
+sim_dev <- rel_sim |> group_by(kind, n_items) |> summarise(dev = mean(I_X - gauss), .groups = "drop")
+curve_s <- tibble(rho = seq(0, 0.97, by = 0.005), bits = -0.5 * log2(1 - rho))
+ggplot(rel_sim, aes(rho, I_X, colour = kind)) +
+  geom_line(data = curve_s, aes(rho, bits), inherit.aes = FALSE, colour = "grey30", linetype = "dashed") +
+  geom_point(aes(size = n_items), alpha = 0.6) +
+  scale_colour_manual(values = c(moderate = irw_blue, `sharp items` = irw_red, `one tail` = "#e6a100"),
+                      labels = c(moderate = "moderate items, spread across θ",
+                                 `sharp items` = "3 near-Guttman items",
+                                 `one tail` = "items bunched at the high end"),
+                      name = NULL) +
+  scale_size_continuous(range = c(1, 3.5), breaks = c(5, 20, 60), name = "items") +
+  labs(x = "marginal reliability", y = "I(θ; X), bits",
+       title = "In simulation, ordinary items follow the Gaussian curve; sharp items and one-sided tests rise above it",
+       subtitle = sprintf("Synthetic 2PL tests, θ ~ N(0, 1), 5–60 items, 10 random draws each. Gap above the curve: moderate %s–%s bits; sharp %s–%s; one tail %s–%s.",
+                          fmt(max(0, sim_sum$dev_lo[sim_sum$kind == "moderate"])), fmt(sim_sum$dev_hi[sim_sum$kind == "moderate"]),
+                          fmt(sim_sum$dev_lo[sim_sum$kind == "sharp items"]), fmt(sim_sum$dev_hi[sim_sum$kind == "sharp items"]),
+                          fmt(sim_sum$dev_lo[sim_sum$kind == "one tail"]), fmt(sim_sum$dev_hi[sim_sum$kind == "one tail"]))) +
+  guides(colour = guide_legend(nrow = 2, override.aes = list(size = 3))) +
+  theme(legend.position = "top", legend.box = "vertical")
+```
+
+With ordinary items, moderately discriminating and spread across θ, the
+Gaussian formula is close: reliability tells you the bits. Two departures push
+tests above the curve. A few **near-Guttman items** split the population almost
+deterministically. That is worth bits a reliability coefficient, built on
+squared error, undercounts. The effect is largest in short tests
+(`r fmt(sim_dev$dev[sim_dev$kind == "sharp items" & sim_dev$n_items == 5])` bits at 5 items)
+and fades as ordinary items accumulate
+(`r fmt(sim_dev$dev[sim_dev$kind == "sharp items" & sim_dev$n_items == 60])` at 60).
+Items **bunched in one tail** make the score precise at one end and vague
+elsewhere, and that gap grows with test length
+(`r fmt(sim_dev$dev[sim_dev$kind == "one tail" & sim_dev$n_items == 5])` →
+`r fmt(sim_dev$dev[sim_dev$kind == "one tail" & sim_dev$n_items == 60])` bits).
 
 ```{r}
 #| label: reliability
@@ -625,9 +739,7 @@ ggplotly(g, tooltip = "text") |>
 
 `r gauss_note`
 
-If θ and a score were jointly normal with correlation √ρ, the information
-between them would be exactly −½ log~2~(1 − ρ). A reliability of .80 is
-then worth `r fmt(-0.5 * log2(0.2))` bits, .90 is worth `r fmt(-0.5 * log2(0.1))`,
+On the Gaussian curve, a reliability of .80 is worth `r fmt(-0.5 * log2(0.2))` bits, .90 is worth `r fmt(-0.5 * log2(0.1))`,
 and .95 is worth `r fmt(-0.5 * log2(0.05))`. The tables follow the curve
 (correlation `r fmt(cor(two$I_X, two$bits_rho_marginal))`), but almost all sit
 above it: the exact information exceeds the Gaussian value in
@@ -663,7 +775,7 @@ ggplot() +
   geom_line(data = med_curve, aes(k, greedy, linetype = "median, greedy order"),
             colour = "black", linewidth = 0.9) +
   scale_linetype_manual(values = c("median, random order" = "solid", "median, greedy order" = "dashed"), name = NULL) +
-  labs(x = "number of items in the sum score", y = "I(θ; S), bits",
+  labs(x = "number of items in the sum score", y = "I(θ; Sₖ), bits",
        title = sprintf("The first item gives a median %s bits; the first ten together only %s",
                        fmt(first), fmt(at10)),
        subtitle = sprintf("Faint: each table's curve, mean of 5 random item orders. Medians use only lengths reached by at least 20 tables (k ≤ %d).",
@@ -698,7 +810,7 @@ pa <- ggplot(ib, aes(a, bits)) +
   geom_bin_2d(bins = 50) +
   scale_fill_gradient(low = "#e5f5f0", high = irw_accent, trans = "log10", name = "items") +
   scale_x_log10() +
-  labs(x = "discrimination a (log scale)", y = "expected bits of the item")
+  labs(x = "discrimination a (log scale)", y = "I(θ; Xⱼ), the item alone (bits)")
 pb <- ggplot(filter(ib, abs(b) < 6), aes(b, bits)) +
   geom_bin_2d(bins = 50) +
   scale_fill_gradient(low = "#e5f5f0", high = irw_accent, trans = "log10", name = "items") +
@@ -765,7 +877,7 @@ ggplot(bc, aes(K, bits, colour = test)) +
   geom_line(linewidth = 1) + geom_point(size = 2) +
   scale_x_continuous(breaks = 1:8, labels = function(k) paste0(k, "\n(", 2^k, ")")) +
   scale_colour_manual(values = c(irw_blue, irw_accent, "black"), name = NULL) +
-  labs(x = "K: number of bits needed to name a group (number of groups)", y = "information about the group, bits",
+  labs(x = "K: number of bits needed to name a group (number of groups)", y = "I(group; X), bits",
        title = "By 64 groups, counting groups captures essentially all the information about θ",
        subtitle = "Dashed: information about continuous θ. Binned information never exceeds it.") +
   theme(legend.position = "top")
