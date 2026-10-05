@@ -138,7 +138,9 @@ ojs_payload <- lapply(names(showcases), function(nm) {
   list(
     key = nm, title = unname(show_titles[nm]), instrument = s$instrument,
     items = s$items[, c("label", "text", "label0", "label1", "a", "b", "bits")],
-    pg = unname(round(s$group_probs, 5))
+    pg = unname(round(s$group_probs, 5)),
+    # group edges on the theta scale; the two open-ended tail groups are drawn to +/- 3.2
+    bounds = pmin(pmax(s$group_bounds, -3.2), 3.2)
   )
 })
 names(ojs_payload) <- names(showcases)
@@ -147,16 +149,23 @@ ojs_define(showcases_r = ojs_payload, accent_r = irw_accent, blue_r = irw_blue)
 
 ## Guess the person
 
-Somewhere in the population is one person. We have cut that population into
-**64 equally sized groups**, from the lowest scorers (top left) to the highest
-(bottom right), and the person is in exactly one of them. Your job is to find
-out which one by asking questions from a real test.
+The curve below is the population: how people are spread along θ, the trait
+the test measures, from low (left) to high (right). We have cut it into
+**64 slices, each holding the same share of people**. The slices are narrow in
+the crowded middle and wide in the thin tails. Somewhere in that population is
+one person, and your job is to find out which slice they are in by asking
+questions from a real test.
 
-Before any question, all 64 groups are equally likely. Pinning down one group
-out of 64 takes **6 bits**, since 2^6^ = 64. Each answer shades the grid: darker
-cells are now more likely. Pick a question from the table (they are ranked by
-how many bits they are *expected* to give), then answer it yourself or let the
-hidden person answer.
+Before any question, all 64 slices are equally likely. Pinning down one slice
+out of 64 takes **6 bits**, since 2^6^ = 64. After each answer the curve is
+redrawn to show where the person now probably is (the faint curve is where we
+started), and the counter shows how many bits that answer bought.
+
+Pick a question from the table; they are ranked by how many bits they are
+*expected* to give. Then either answer it yourself, as the person might, or let
+the simulated person answer. At the start we secretly draw one simulated
+person from the population; they answer with the probabilities the model
+gives someone in their slice. You can reveal where they are at any point.
 
 ```{ojs}
 sc = showcases_r
@@ -167,23 +176,24 @@ viewof tbl = Inputs.select(keys, {label: "Test", value: keys[0], format: k => sc
 ```{ojs}
 S = {
   const s = sc[tbl];
-  return {items: transpose(s.items).map((d, j) => ({...d, j})), pg: s.pg, title: s.title};
+  return {items: transpose(s.items).map((d, j) => ({...d, j})), pg: s.pg, bounds: s.bounds, title: s.title};
 }
 h2 = p => (p <= 0 || p >= 1) ? 0 : -(p * Math.log2(p)) - (1 - p) * Math.log2(1 - p)
 entropy = post => -post.reduce((s, p) => s + (p > 0 ? p * Math.log2(p) : 0), 0)
 mutable hist = []
 mutable hidden = Math.floor(Math.random() * 64)
 reset_on_test = { tbl; mutable hist = []; mutable hidden = Math.floor(Math.random() * 64); return tbl; }
-post = {
-  reset_on_test;
+posterior_of = hs => {
   let p = Array(64).fill(1 / 64);
-  for (const h of hist) {
+  for (const h of hs) {
     const like = S.pg.map(row => h.x === 1 ? row[h.j] : 1 - row[h.j]);
     const z = p.reduce((s, v, g) => s + v * like[g], 0);
     p = p.map((v, g) => v * like[g] / z);
   }
   return p;
 }
+post = { reset_on_test; return posterior_of(hist); }
+prev_post = hist.length ? posterior_of(hist.slice(0, -1)) : null
 exp_bits = j => h2(post.reduce((s, v, g) => s + v * S.pg[g][j], 0)) -
                 post.reduce((s, v, g) => s + v * h2(S.pg[g][j]), 0)
 asked = new Set(hist.map(h => h.j))
@@ -216,39 +226,60 @@ chosen = pick ?? remaining[0]
 viewof act = Inputs.button(chosen ? [
     [`Answer: ${chosen.label1}`, () => answer(chosen.j, 1)],
     [`Answer: ${chosen.label0}`, () => answer(chosen.j, 0)],
-    ["Hidden person answers", () => answer(chosen.j, hidden_answer(chosen.j))]
-  ] : [["No questions left", () => null]], {label: "This question"})
+    ["Let the simulated person answer", () => answer(chosen.j, hidden_answer(chosen.j))]
+  ] : [["No questions left", () => null]])
 viewof act2 = Inputs.button([
-    ["Ask the most informative question", () => { if (remaining.length) { const j = remaining[0].j; answer(j, hidden_answer(j)); } }],
+    ["Ask the best question; the simulated person answers", () => { if (remaining.length) { const j = remaining[0].j; answer(j, hidden_answer(j)); } }],
     ["Start over", () => { mutable hist = []; mutable hidden = Math.floor(Math.random() * 64); }]
-  ], {label: "Or"})
-viewof reveal = Inputs.toggle({label: "Reveal the hidden person"})
+  ])
+viewof reveal = Inputs.toggle({label: "Show where the simulated person is"})
 ```
 
 ```{ojs}
 bits_left = entropy(post)
 gained = 6 - bits_left
-grid_w = Math.min(width, 380)
-grid = Plot.plot({
-  width: grid_w, height: grid_w, padding: 0.06,
-  x: {axis: null}, y: {axis: null},
-  color: {type: "linear", domain: [0, Math.max(...post)], range: ["#f4f6fa", blue_r]},
-  marks: [
-    Plot.cell(post.map((p, g) => ({p, g, col: g % 8, row: Math.floor(g / 8)})),
-      {x: "col", y: "row", fill: "p", inset: 0.5,
-       title: d => `group ${d.g + 1} of 64\nprobability ${(d.p * 100).toFixed(1)}%`}),
-    reveal ? Plot.cell([{col: hidden % 8, row: Math.floor(hidden / 8)}],
-      {x: "col", y: "row", fill: null, stroke: "#d73027", strokeWidth: 3}) : null
-  ]
-})
-counter = html`<div style="font-size:0.95rem; max-width:380px;">
+theta_plot = {
+  const b = S.bounds;
+  const dens = p => p.map((v, g) => ({g, p: v, x1: b[g], x2: b[g + 1], dens: v / (b[g + 1] - b[g])}));
+  const slices = dens(post);
+  const before = prev_post ? dens(prev_post) : [];
+  const prior = d3.range(-3.2, 3.201, 0.04).map(x => ({x, y: Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI)}));
+  // one vertical scale for all three layers, so "before" and "now" are comparable
+  const top = Math.max(0.42, ...slices.map(d => d.dens), ...before.map(d => d.dens));
+  const step = before.flatMap(d => [{x: d.x1, y: d.dens}, {x: d.x2, y: d.dens}]);
+  return Plot.plot({
+    width: Math.min(width, 680), height: 250, marginBottom: 40, marginTop: 24,
+    x: {domain: [-3.2, 3.2], label: "θ: the trait the test measures (low → high)", labelAnchor: "center", labelArrow: "none"},
+    y: {domain: [0, top * 1.08], axis: null},
+    color: {type: "linear", domain: [0, Math.max(...post)], range: ["#c9d7ea", blue_r]},
+    marks: [
+      Plot.rectY(slices, {x1: "x1", x2: "x2", y: "dens", fill: "p", inset: 0.3,
+        title: d => `slice ${d.g + 1} of 64\nθ from ${d.x1.toFixed(2)} to ${d.x2.toFixed(2)}\nchance the person is here: ${(d.p * 100).toFixed(1)}%`}),
+      step.length ? Plot.line(step, {x: "x", y: "y", stroke: "#555", strokeWidth: 1.2}) : null,
+      Plot.line(prior, {x: "x", y: "y", stroke: "#999", strokeDasharray: "4,3"}),
+      reveal ? Plot.ruleX([(slices[hidden].x1 + slices[hidden].x2) / 2], {stroke: "#d73027", strokeWidth: 2.5}) : null,
+      reveal ? Plot.text([slices[hidden]], {x: d => (d.x1 + d.x2) / 2, y: top * 1.08, text: () => "the simulated person", dy: -4, lineAnchor: "bottom", fill: "#d73027"}) : null,
+      Plot.ruleY([0])
+    ]
+  });
+}
+theta_key = html`<div style="font-size:0.85rem; color:#444; display:flex; flex-wrap:wrap; gap:0.4rem 1.2rem; max-width:680px; margin-bottom:2px;">
+  <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#999" stroke-dasharray="4,3" stroke-width="1.5"/></svg>
+    the population: how everyone is spread along θ</span>
+  <span><svg width="14" height="10"><rect width="14" height="10" fill="${blue_r}"/></svg>
+    where this person probably is, given the answers so far (area = probability)</span>
+  ${prev_post ? html`<span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#555" stroke-width="1.5"/></svg>
+    the same, before the last answer</span>` : ""}
+</div>`
+counter = html`<div style="font-size:0.95rem; max-width:680px;">
   <div style="display:flex; justify-content:space-between;">
     <span><b style="color:${accent_r}">${gained.toFixed(2)} bits gained</b></span>
     <span>${bits_left.toFixed(2)} of 6 bits left</span></div>
   <div style="height:14px; background:#e9ecef; border-radius:3px; overflow:hidden; margin:4px 0;">
     <div style="height:100%; width:${Math.max(0, gained) / 6 * 100}%; background:${accent_r};"></div></div>
   <div style="color:#666; font-size:0.85rem;">${hist.length} question${hist.length === 1 ? "" : "s"} asked.
-  Lowest-scoring group top left, highest bottom right.</div></div>`
+  Before any answer the blue bars match the population exactly: every slice is equally likely.
+  Each answer moves probability toward the slices that would most likely give it.</div></div>`
 p1_now = chosen ? post.reduce((s, v, g) => s + v * S.pg[g][chosen.j], 0) : null
 bars = chosen ? Plot.plot({
   width: Math.min(width, 380), height: 140, marginLeft: 90,
@@ -269,7 +300,7 @@ log_rows = hist.map((h, i) => ({
   question: S.items[h.j].text ?? S.items[h.j].label
 }))
 html`<div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:flex-start;">
-  <div>${grid}${counter}</div>
+  <div>${theta_key}${theta_plot}${counter}</div>
   <div style="flex:1; min-width:260px;">
     ${chosen ? html`<p style="margin-bottom:0.3rem;"><b>Next question:</b> ${chosen.text ?? chosen.label}</p>
     <p style="color:#666; margin-top:0; font-size:0.9rem;">Expected to give
@@ -284,7 +315,9 @@ hist.length ? Inputs.table(log_rows, {rows: 6, layout: "fixed",
 ```
 
 A few things show up quickly. No real question is worth anywhere near a full
-bit: the best ones promise about half a bit at most. Questions
+bit: the best ones promise about half a bit at most. A full bit would take a
+perfectly sharp (Guttman) item whose cut falls exactly in the middle of what we
+currently believe, splitting the remaining possibilities in half. Questions
 lose value as you go, because the easy distinctions have already been made.
 And now and then the shading spreads *out* after an answer. That happens when
 the person says something the model did not expect.
@@ -293,41 +326,44 @@ the person says something the model did not expect.
 
 ```{r}
 #| label: bit-strip
-#| fig-height: 4.4
+#| fig-height: 5.2
 #| fig-width: 7.5
 
 s <- showcases[[main]]
 pg <- s$group_probs
 pick3 <- s$items |> arrange(desc(bits)) |> slice(c(1, ceiling(n() / 2), n()))
-ideal <- tibble(row = "A perfect item: everyone in the top half says yes, nobody in the bottom half",
-                g = 1:64, p = rep(c(0, 1), each = 32), bits = 1)
+bnd <- pmin(pmax(s$group_bounds, -3.2), 3.2)
+cells <- tibble(g = 1:64, x1 = bnd[-65], x2 = bnd[-1])
+ideal <- mutate(cells, row = "A perfect (Guttman) item at the median",
+                p = rep(c(0, 1), each = 32), bits = 1)
 real <- bind_rows(lapply(seq_len(nrow(pick3)), function(i) {
   it <- pick3[i, ]
-  tibble(row = paste0("“", substr(it$text, 1, 70), if (nchar(it$text) > 70) "…" else "", "”"),
-         g = 1:64, p = pg[, it$item], bits = it$bits)
+  mutate(cells, row = paste0("\u201c", substr(it$text, 1, 52), if (nchar(it$text) > 52) "\u2026" else "", "\u201d"),
+         p = pg[, it$item], bits = it$bits)
 }))
 strip <- bind_rows(ideal, real) |>
-  mutate(row = factor(row, levels = unique(row)),
+  mutate(row = factor(row, levels = unique(row)), y = 5 - as.integer(row),
          lab = paste0(fmt(bits), if_else(bits == 1, " bit", " bits")))
-ggplot(strip, aes(g, row, fill = p)) +
-  geom_tile(colour = "white", linewidth = 0.3, height = 0.8) +
-  geom_text(data = distinct(strip, row, lab), aes(x = 66, y = row, label = lab),
-            inherit.aes = FALSE, hjust = 0, colour = irw_accent, fontface = "bold", size = 4) +
+labs_df <- distinct(strip, row, y, lab)
+ggplot(strip) +
+  geom_rect(aes(xmin = x1, xmax = x2, ymin = y - 0.4, ymax = y + 0.4, fill = p),
+            colour = "white", linewidth = 0.15) +
+  geom_text(data = labs_df, aes(x = 3.35, y = y, label = lab),
+            hjust = 0, colour = irw_accent, fontface = "bold", size = 4) +
   scale_fill_gradient(low = "#f4f6fa", high = irw_blue, limits = c(0, 1),
-                      name = "P(yes / correct)\nin each group") +
-  scale_x_continuous(limits = c(0.5, 80), breaks = c(1, 32.5, 64),
-                     labels = c("lowest group", "middle", "highest group"), expand = c(0, 0)) +
-  scale_y_discrete(limits = rev, labels = function(x) stringr::str_wrap(x, 34)) +
-  labs(x = NULL, y = NULL,
+                      name = "P(yes / correct)\nin each slice") +
+  scale_x_continuous(limits = c(-3.2, 4.3), breaks = -3:3, expand = c(0, 0)) +
+  scale_y_continuous(breaks = labs_df$y, labels = stringr::str_wrap(as.character(labs_df$row), 34)) +
+  labs(x = "θ, cut into 64 equally likely slices", y = NULL,
        title = sprintf("A perfect item halves the population; the best real numeracy item manages %s of a bit",
                        fmt(max(s$items$bits))),
-       subtitle = "Each row is one question. Each of the 64 cells is a group of people, from low to high numeracy.") +
+       subtitle = "Each row is one question, shaded by how likely people in each slice are to say yes / get it right.") +
   theme(panel.grid = element_blank(), legend.position = "bottom", legend.key.width = unit(1.2, "cm"))
 ```
 
 A bit is the information in the answer to a question whose two answers are
 equally likely and which splits the possibilities cleanly. The top row of the
-figure does exactly that: it cuts 64 groups to 32. Real items fail in two ways.
+figure does exactly that: it cuts 64 slices to 32. Real items fail in two ways.
 Their split is blurred, because people in the same group sometimes answer
 differently. And their split is often off-centre, because easy items mostly
 separate the lowest groups from everyone else. Formally, the expected
