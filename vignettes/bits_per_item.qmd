@@ -166,6 +166,8 @@ Pick a question from the table; they are ranked by how many bits they are
 the simulated person answer. At the start we secretly draw one simulated
 person from the population; they answer with the probabilities the model
 gives someone in their slice. You can reveal where they are at any point.
+The "best" and "worst" buttons ask the remaining question with the most or the
+fewest expected bits, and the simulated person answers it.
 
 ```{ojs}
 sc = showcases_r
@@ -229,7 +231,8 @@ viewof act = Inputs.button(chosen ? [
     ["Let the simulated person answer", () => answer(chosen.j, hidden_answer(chosen.j))]
   ] : [["No questions left", () => null]])
 viewof act2 = Inputs.button([
-    ["Ask the best question; the simulated person answers", () => { if (remaining.length) { const j = remaining[0].j; answer(j, hidden_answer(j)); } }],
+    ["Ask the best question", () => { if (remaining.length) { const j = remaining[0].j; answer(j, hidden_answer(j)); } }],
+    ["Ask the worst question", () => { if (remaining.length) { const j = remaining[remaining.length - 1].j; answer(j, hidden_answer(j)); } }],
     ["Start over", () => { mutable hist = []; mutable hidden = Math.floor(Math.random() * 64); }]
   ])
 viewof reveal = Inputs.toggle({label: "Show where the simulated person is"})
@@ -275,11 +278,16 @@ counter = html`<div style="font-size:0.95rem; max-width:680px;">
   <div style="display:flex; justify-content:space-between;">
     <span><b style="color:${accent_r}">${gained.toFixed(2)} bits gained</b></span>
     <span>${bits_left.toFixed(2)} of 6 bits left</span></div>
+  <div style="font-size:0.9rem; margin-top:2px;">About as certain as knowing the person is in one of
+    <b>${Math.pow(2, bits_left).toFixed(Math.pow(2, bits_left) < 10 ? 1 : 0)}</b> equally likely slices (from 64).<sup>*</sup></div>
   <div style="height:14px; background:#e9ecef; border-radius:3px; overflow:hidden; margin:4px 0;">
     <div style="height:100%; width:${Math.max(0, gained) / 6 * 100}%; background:${accent_r};"></div></div>
   <div style="color:#666; font-size:0.85rem;">${hist.length} question${hist.length === 1 ? "" : "s"} asked.
   Before any answer the blue bars match the population exactly: every slice is equally likely.
-  Each answer moves probability toward the slices that would most likely give it.</div></div>`
+  Each answer moves probability toward the slices that would most likely give it.</div>
+  <div style="color:#666; font-size:0.8rem; margin-top:4px;"><sup>*</sup> An effective count, 2<sup>bits left</sup>.
+  The blue bars are rarely flat over a set of slices and zero elsewhere; they form a bump with tails.
+  The count says how many equally likely slices would leave the same uncertainty (entropy) as that bump.</div></div>`
 p1_now = chosen ? post.reduce((s, v, g) => s + v * S.pg[g][chosen.j], 0) : null
 bars = chosen ? Plot.plot({
   width: Math.min(width, 380), height: 140, marginLeft: 90,
