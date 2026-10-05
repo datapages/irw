@@ -1,6 +1,8 @@
-# Checks behind two numbers typed into sports_trials.qmd (not in the cache):
-# the selection diagnostic on nbashots_sim, and player positions by skill decile
-# for the soccer panel of Figure 1. Run from the site root.
+# Checks behind sports_trials.qmd that are not in the main cache: the selection
+# diagnostic on nbashots_sim (saved to sports_trials_data/sim_selection.rds for
+# Table 3), and soccer shots by player position, overall and by skill decile
+# (saved to sports_trials_data/soccer_positions.rds for the soccer panel of
+# Figure 1). Run from the site root.
 
 ## ---- nbashots_sim
 suppressPackageStartupMessages({library(irw); library(lme4); library(splines)})
@@ -14,10 +16,12 @@ d$easiness <- predict(glm(resp ~ item + d1 + d2 + d3 + d4 + d5 + d6, binomial, d
 pe <- aggregate(cbind(easiness, cov_true_theta) ~ id, d, mean)
 pe$raw <- ranef(m0)$id[as.character(pe$id), 1]
 pe$adj <- ranef(m3)$id[as.character(pe$id), 1]
-round(c(raw_x_ease = cor(pe$raw, pe$easiness), adj_x_ease = cor(pe$adj, pe$easiness),
-        true_x_ease = cor(pe$cov_true_theta, pe$easiness),
-        raw_x_true = cor(pe$raw, pe$cov_true_theta), adj_x_true = cor(pe$adj, pe$cov_true_theta),
-        sd_m0 = attr(VarCorr(m0)$id, "stddev"), sd_m3 = attr(VarCorr(m3)$id, "stddev")), 2)
+sim_sel <- c(raw_x_ease = cor(pe$raw, pe$easiness), adj_x_ease = cor(pe$adj, pe$easiness),
+             true_x_ease = cor(pe$cov_true_theta, pe$easiness), raw_x_adj = cor(pe$raw, pe$adj),
+             raw_x_true = cor(pe$raw, pe$cov_true_theta), adj_x_true = cor(pe$adj, pe$cov_true_theta),
+             sd_m0 = attr(VarCorr(m0)$id, "stddev"), sd_m3 = attr(VarCorr(m3)$id, "stddev"))
+print(round(sim_sel, 2))
+saveRDS(sim_sel, "vignettes/sports_trials_data/sim_selection.rds")
 
 ## ---- soccer positions
 suppressPackageStartupMessages({library(irw); library(lme4); library(splines)})
@@ -45,3 +49,19 @@ cat("cor(n, skill) =", round(cor(pe$n, pe$skill), 2), "\n")
 pl <- jsonlite::fromJSON(path.expand("~/.cache/irw-sports/wyscout/players.json"))
 pe$role <- pl$role$name[match(as.character(pe$id), as.character(pl$wyId))]
 print(round(100 * prop.table(table(pe$decile, pe$role), 1)))
+# shots by position: one row per role, over that role's players and shots
+s$role <- pe$role[match(as.character(s$id), as.character(pe$id))]
+by_role <- do.call(rbind, lapply(split(s, s$role), function(x) {
+  p <- pe[pe$role == x$role[1], ]
+  data.frame(role = x$role[1], players = nrow(p), shots = nrow(x),
+             shots_per_player = mean(p$n), dist = mean(x$trial_dist),
+             header = mean(x$head), penalty = mean(x$pen), free_kick = mean(x$fk),
+             goal_rate = mean(x$resp), easiness = mean(x$easiness),
+             skill_mean = mean(p$skill), skill_sd = sd(p$skill))
+}))
+by_decile <- aggregate(cbind(n, easiness) ~ decile, pe, mean)
+by_decile <- merge(by_decile, as.data.frame.matrix(prop.table(table(pe$decile, pe$role), 1)),
+                   by.x = "decile", by.y = 0)
+print(by_role, digits = 2); print(by_decile, digits = 2)
+saveRDS(list(by_role = by_role, by_decile = by_decile),
+        "vignettes/sports_trials_data/soccer_positions.rds")
