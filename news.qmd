@@ -14,28 +14,20 @@ This log begins in September 2026, when the page was created. The IRW is older
 than the log, and changes before then are recorded only in the repositories'
 commit history and in the versioned data itself.
 
-## 2026-10-05 — ENEM 2024 and 2025 carried every candidate's answers under a stranger's id
+## 2026-10-05 — ENEM 2024 and 2025 ids corrected
 
 Released 2026-10-05, across the eight `enem_2024_1mil_*` and `enem_2025_1mil_*`
-tables and their eight `_nom` companions. From 2024 INEP stopped shipping one
-microdata file and began shipping `PARTICIPANTES_<year>.csv` and
-`RESULTADOS_<year>.csv` separately, keyed differently — `NU_INSCRICAO` in one,
-`NU_SEQUENCIAL` in the other — and the year scripts took `id` from the first
-file, everything else from the second, and bound them side by side on a
-row-count check alone. The two files do share their test-location columns, so
-the pairing can be tested: over all 4,332,944 rows of 2024 the test
-municipality agrees on 0.51%, against 0.54% expected if the pairing were drawn
-at random, and 2025 gives 0.56%. The join was indistinguishable from chance.
-The 2024 Leia-Me says the split was made for LGPD compliance, so the two files
-were never meant to be linked at all.
+tables and their eight `_nom` companions. From 2024 INEP ships participant and
+results data as two separate files, keyed differently, and the year scripts had
+taken `id` from one file and the responses from the other, pairing them by row
+order. The test municipality in the two files agrees no more often than chance
+would predict, so in effect every response sat under the wrong candidate's id.
 
-`id` now comes from `RESULTADOS`' own `NU_SEQUENCIAL`, and `PARTICIPANTES` is
-not read. This is a relabel, not a different sample: the same candidates are
-kept and the `resp` and `resp_raw` sequences are identical row for row, so only
-the id a response carries has changed. One caveat is now recorded in
-[Data Notes](data_notes.qmd) — `NU_SEQUENCIAL` is unique inside a year but INEP
-appears to reuse the shuffle, so it must not be used to follow a person between
-years. 2013 to 2023 are untouched. Refs #2812.
+`id` now comes from the results file's own `NU_SEQUENCIAL`. The candidates and
+the `resp` and `resp_raw` sequences are unchanged row for row; only the id a
+response carries is different. [Data Notes](data_notes.qmd) records one caveat:
+`NU_SEQUENCIAL` is unique within a year but should not be used to follow a
+person between years. 2013 to 2023 are untouched. Refs #2812.
 
 ## 2026-10-05 — The packages will tell you what a column means
 
@@ -59,19 +51,11 @@ source's own words ("1 = hombre · 2 = mujer"). Where the source deposit's own
 codebook was found, the section links it, and links a questionnaire beside it
 when the codebook names the columns but not the response wording.
 
-The section opens by saying it is the IRW's best reconstruction rather than the
-source's codebook, that it may contain mistakes, and that the source data are
-the authority. It never infers a meaning from a column's name: a column with
-neither a definition nor a traced source is shown as not documented. The index
-behind it covered 34,150 columns in 4,595 tables on its first run, with 12,831
-of 20,365 non-core columns documented and 11,684 traced to a source column. The
-codebook links come from sweeps of PLOS and Europe PMC supplementary files (327
-tables), of CRAN, GitHub, GitLab, LDbase and openpsychometrics, of
-statistics-office codebooks found by review (504 tables), of INEP's ENEM
-dictionaries (104 tables), and a deeper pass over OSF, Zenodo, figshare,
-Mendeley and Dataverse deposits that looks inside workbooks and zip members
-rather than only at file names (201 more tables). Refs #2755, #2763, #2766,
-#2770, #2787, #2792.
+The section says it is the IRW's best reconstruction rather than the source's
+codebook, that it may contain mistakes, and that the source data are the
+authority. It never infers a meaning from a column's name: a column with neither
+a definition nor a traced source is shown as not documented. Refs #2755, #2763,
+#2766, #2770, #2787, #2792.
 
 ## 2026-10-03 — Non-commercial and GPL licences now proceed
 
@@ -79,171 +63,66 @@ A ruling of 2026-10-01, now in the processing repo's data standard: a
 non-commercial licence is hostable, with the NC carried into the derived
 licence, and so is GPL. ND licences and scraped or relabelled third-party data
 still stop, and a dataset with no licence at all still means asking the author
-for permission before anything is processed. The automated triage gate had been
-hard-blocking `cc-by-nc` and `cc-by-nc-sa`, so every journal and repository
-sweep was discarding datasets a human may now take up.
-
-One table came back under the new rule: `foundationalassist_worden_2026` was
-withdrawn on 2026-09-30, when its CC BY-NC 4.0 source licence was treated as
-blocking, and restored on 2026-10-01. The intake-policy section of
-[the data standard](standard.qmd) on this site still lists only CC0, CC BY and
-CC BY-SA and has not yet caught up. Refs #2808, #2809.
+for permission. The intake-policy section of [the data standard](standard.qmd)
+on this site has not yet caught up. Refs #2808, #2809.
 
 ## 2026-10-03 — The homepage counts the published warehouse, and Standards gets its own menu
 
-The banner on the front page was the one thing on this site read off disk: a
-file written from the processing repo's own metadata and committed by hand, so
-it lagged what was actually published — 4,495 tables on the banner against
-4,596 in the published metadata at the time. Since 2026-10-01 it is rebuilt from
-published `irw_meta` on every render, records the version it read, and a drift
-report checks the rendered page against that source. It now also carries a line
-for the competition and nominal table counts beside the main count. Refs #1940.
+The front-page banner is now rebuilt from published `irw_meta` on every render
+and records the version it read, where before it came from a file committed by
+hand and lagged what was published. It also gives the competition and nominal
+table counts. Refs #1940.
 
-The Data menu, which had grown to seventeen links in four unlabelled groups,
-split in two on 2026-10-03. Data holds the pages for using the tables, with
+The Data menu split in two. Data holds the pages for using the tables, with
 [Corrections](corrections.qmd) moved over from About; Standards holds the
 specifications, the validator and the contributing guidance, with
 [Overview of the IRW Data Standards](overview.qmd) as its hub.
 
-## 2026-10-02 — 217 tables that older triage rules had set aside
-
-Four batches of leads that earlier automated rules had parked for human review —
-deposits whose response scales looked mixed — were judged by hand and uploaded
-on 2026-10-02: 22 tables and 1,048,088 responses in the first batch, then 62
-tables (528,477 responses), 64 (1,313,685) and 69 (471,773). Roughly half of
-each batch's candidates were shipped; the rest were turned down for personal
-data, for holding totals rather than item responses, for fewer than 100
-respondents, for duplicating another deposit, or for a blocking licence.
-
-The weekly journal sweeps continued alongside: 30 tables and 353,632 responses
-on 2026-09-28, then 46 tables (647,006 responses) with 25 item-text tables
-uploaded on 2026-10-04, and 18 tables (817,775 responses) with 10 item-text
-tables uploaded on 2026-10-05. Those last two are recorded as uploaded, which in
-this project is not the same as released, so check before assuming a table is
-there to fetch.
-
 ## 2026-10-02 — The standard defines design columns, and `irw-validate` 1.4.0
 
 `cluster_id`, `block_id` and `std_baseline*` are now defined in the standard's
-schema table, its column order and its section on randomised trials. About
-eighty tables carry them — the `gilbert_*` series, `ftna_kasper_2022`,
-`thai_mathlearning_2020` — and until now the validator told every one of those
-tables to rename them as covariates. `irw-validate` 1.4.0 allows them, and
-demotes its composite-item check to a warning even when every item label
-matches, on the grounds that label names alone cannot establish that a column
-holds a computed score. The standard also now says the 100-respondent floor does
-not apply to animal data. The [browser validator](validate.qmd) runs 1.4.0 too.
-
-Clause C4 gained an exception for IEA-style sources a few days earlier: an
-omitted response is scored 0 with the source's own code kept in `resp_raw`,
-while a not-reached response is dropped. `timss_tam` and
-`mthimkhulu_2023_pirls_reading` were rebuilt under it and released on
-2026-09-29 — 1,768 omitted responses in `timss_tam` moved from missing to 0 and
-84 not-reached rows were dropped, and the PIRLS table gained 3,107 omitted
-responses as 0.
+schema table, its column order and its section on randomised trials; until now
+the validator told the tables carrying them, such as the `gilbert_*` series, to
+rename them as covariates. `irw-validate` 1.4.0 allows them, and demotes its
+composite-item check to a warning, since label names alone cannot establish that
+a column holds a computed score. The standard also now says the 100-respondent
+floor does not apply to animal data, and clause C4 has an exception for
+IEA-style sources: an omitted response is scored 0 with the source's code kept
+in `resp_raw`, while a not-reached response is dropped. The
+[browser validator](validate.qmd) runs 1.4.0 too.
 
 ## 2026-10-01 — Competition, nominal and simulated data all grew
 
-`irw_competitions` went from v3.2 to v6.2, released 2026-10-01, and the
-dictionary now lists 109 competition tables. The new ones cover professional and
-historical sport (FiveThirtyEight's NBA, NFL, NHL and club-soccer tables,
-`nflverse_nfl_1999_2025`, nine `openfootball_*` leagues and cups, four Cricsheet
-tables, `retrosheet_mlb_1871_2025`, `ufc_1993_2026`,
-`rugby_union_tier1_1871_2026`, `pklmart_pickleball_2021_2025`), machine
-contests (`tcec_engines_2010_2026`, three `lichess_2013_*` tables, eighteen
-`metakaggle_*` simulation competitions, `sscait_ladder_2021_2024`), animal
-dominance (Amboseli baboons, Gombe chimpanzees, Talek and Mara hyenas, Tonkean
-macaques, vervets, elephant seals, mountain chickadees), comparative judgement
-(six Place Pulse 2.0 tables, `ukpconvarg1_convincingness_2016`,
-`bramley_vitello_2019_gcse`, `coertjens_2021_selfreflections`,
-`makri_2026_mathtext_relevance`) and quiz contests
-(`quizbowl_acf_regionals_2018`, `university_challenge_1994_2026`). Three older
-tables were retired as superseded — `nba_2012-2018`, `nfl_2010-2019` and
-`nhl_post1917`, all replaced by FiveThirtyEight tables covering the same
-seasons — and the one-day `lichess` table was replaced by the three 2013 ones.
-See [the competition standard](comps_standard.qmd).
-
-`irw_nominal` went to v3.3, also released 2026-10-01, and lists 84 tables, among
-them `myszkowski_2018_spmls_nom`, `geography_nom`, the two
-`hachenberger_2025_stroop_*_nom` tables and the eight ENEM `_nom` tables.
-`irw_simsyn` went to v1.4, released 2026-10-03, with twelve tables: the new ones
-are `lnirt_sim` (speed and accuracy together), `raschmix_rost2_sim` (a Rasch
-mixture) and `dtmr_sim` (an LCDM with the full generating truth). See
-[the nominal standard](nominal_standard.qmd) and
-[simulated and synthetic data](simsyn.qmd).
+`irw_competitions` (v6.2) now covers professional and historical sport, machine
+contests such as chess engines and Kaggle simulation competitions, animal
+dominance hierarchies, comparative judgement and quiz contests; see
+[the competition standard](comps_standard.qmd). `irw_nominal` (v3.3) and
+`irw_simsyn` (v1.4) grew as well; see [the nominal standard](nominal_standard.qmd)
+and [simulated and synthetic data](simsyn.qmd).
 
 ## 2026-10-01 — A measured quantity is not a response
 
 Ruled over the week and recorded on [Corrections](corrections.qmd): the
 `continuous_response` collection is for response scales — sliders, 0–100
-ratings, visual analogue scales — and a physical measurement never belongs in
-it. Fourteen time-use items recording minutes per day left
-`chile_2023_social-welfare-survey_u` and eight left
-`chile_2023_children-adolescents-survey_cp_c`; the WPAI hours items in
-`uti_newlands_2023_wpai` became covariates; CASEN's measured-quantity items left
-`_rr`, `_ss` and `cp_c`. Three simsalRbim animal tables were withdrawn
-outright, their response being the amount an animal consumed in a paired
-preference test. The three human simsalRbim studies, each below the standard's
-100-respondent floor on its own, were pooled into one `simsalrbim_human` table
-of 4,662 rows and 111 people, with `cov_sample` naming the study. Three tables
-were promoted into `continuous_response` on the same pass: `estcrm_selfeff`,
-`estcrm_epia` and `vollbracht_et_al_2026_ambulatory_assessment`. Refs #1700.
+ratings, visual analogue scales — and a physical measurement such as minutes,
+hours or amount consumed never belongs in it. Self-reported counts stay.
+Refs #1700.
 
-## 2026-09-30 — Corrections released: the audit's first large batch, and the wave staged the week before
+## 2026-09-30 — Corrections from the corpus audit
 
-The retroactive audit of the existing corpus published its first large batch on
-2026-09-30: 164 changed or retired response tables, each listed on
-[Corrections](corrections.qmd) with the version it took effect in, across corpus
-versions 476 to 480. The audit works by class rather than by table — detectors
-run over all 4,605 live tables looking for sentinel codes stored as real
-responses, covariates out of range, response times that are constant or in the
-wrong units, binary scales carrying extra codes, mixed scales and exact
-duplicate rows — so a defect found in one table is then looked for everywhere.
-Refs #2401.
+The retroactive audit of the existing corpus published its first large batch of
+corrections on 2026-09-30, each listed on [Corrections](corrections.qmd) with
+the version it took effect in. The audit works by class rather than by table —
+sentinel codes stored as responses, covariates out of range, response times in
+the wrong units, binary scales carrying extra codes, exact duplicate rows — so a
+defect found in one table is then looked for everywhere. Refs #2401.
 
-The entry of 2026-09-27 below said that some of that week's rebuilt tables were
-released and some were not. Fifty-six of those corrections are now recorded as
-released, on 2026-09-29. Refs #2513.
+## 2026-09-30 — Eedi NeurIPS licence corrected
 
-## 2026-09-30 — Withdrawals, and why
-
-The withdrawal ledger records 93 whole response tables withdrawn since
-2026-09-28: 40 over licences, 34 for wrong data, 12 as duplicates, 3 as out of
-scope, 2 misnamed, one because the author removed the source deposit and one on
-instrument rights. Forty-one of those withdrawals have reached a published
-version; the other 52 are staged and not yet released, so some of these tables
-are still being served.
-
-The larger groups: the sixteen `uruguay_2022_technology_*` tables, whose source
-terms bar redistribution (released in `item_response_warehouse_2` v28.0);
-thirteen `mexico_2023_mobility_*` tables held pending a licence; twenty-one
-`jiang_2024_*` tables whose source turned out to be 707 respondents stacked
-about two and a half times over; the seven `moral_absolutism_goyal_2025_*`
-tables, for duplicated respondents and a miscoded stance item; the five
-`test_taking_much_2025_*` tables, a duplicate ingest; `saha_2026_cesd`, whose
-author removed the deposit; `matosaslopez_2024_teacher_assessment`, whose
-teacher items look simulated; and `luu_2024_stai6`, where the item codes were
-themselves the copyrighted wording. Two `c19prc_uk_mcbride_2021_*` tables,
-withdrawn on 2026-09-29 for matching the wrong wave's items, were rebuilt and
-restored on 2026-10-02.
-
-Not a withdrawal but worth knowing if you have reused them: Eedi permitted the
-IRW in 2023 to reshare its restructured NeurIPS 2020 and 2022 data on condition
-that it carry CC BY-NC-ND 4.0, and the dictionary and bibliography had recorded
-CC BY 4.0 instead. The rows for `neurips_2020`, `neurips_2020_task34` and
+Eedi permitted the IRW to reshare its restructured NeurIPS 2020 and 2022 data on
+condition that it carry CC BY-NC-ND 4.0, and the dictionary and bibliography had
+recorded CC BY 4.0. The rows for `neurips_2020`, `neurips_2020_task34` and
 `neurips_2022` now state the licence the permission actually granted.
-
-## 2026-09-30 — A withdrawn table's page says so again
-
-Table pages are now built from the processing repo's own withdrawal ledger, so a
-withdrawal tombstones the page by itself. Until this change a page was
-tombstoned only if someone separately added a row to a list in the site repo,
-and none of the previous week's withdrawals had one: 80 table URLs had become
-404s, and 32 more would have at the next publish. A ledger row now hides the
-page in the dataset it names even while Redivis is still serving the table —
-nine were withdrawn for publishing personal data — and the tombstone for a
-renamed table links the new name. Eight tables that were rebuilt and re-released
-after being withdrawn keep their pages rather than losing them to a tombstone.
 
 ## 2026-09-30 — Twenty-one collections for specific instruments
 
@@ -254,10 +133,7 @@ collections, these are curated table by table, and every member records its
 basis — whether the instrument was identified from the item wording, from what
 the source supplied, or only from the table's name.
 [Browse IRW Collections](collections.qmd) lists them member by member, with the
-basis shown and filterable, and the R package documents the basis values. The
-commits do not record these collections reaching published metadata; the page
-shows the section only when they are live, so an empty section means the upload
-has not happened yet.
+basis shown and filterable.
 
 ## 2026-09-28 — Source caveats get a Notes section, and a page
 
@@ -265,9 +141,8 @@ A note is not a correction: it describes something odd about a source that the
 IRW table reproduces faithfully, rather than a defect in the IRW's own
 processing. Notes now appear as a plain Notes section on a table page, under
 "About this table", and the new [Data Notes](data_notes.qmd) page lists all of
-them — 178 at the time of writing. Because a note is about the source and not
-about the IRW's handling of it, it carries no banner and does not keep a table
-out of search results.
+them. Because a note is about the source and not about the IRW's handling of it,
+it carries no banner and does not keep a table out of search results.
 
 ## 2026-09-28 — The MCP server can find the script that built a table
 
