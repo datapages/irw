@@ -11,7 +11,9 @@ cd "$(dirname "$0")/.."
 export LC_ALL=C
 work=${IRW_WORK:-vignettes/intransitivity_data/work}
 keys=$work/unit_keys.tsv
-if [ ! -f "$work/units.rds" ]; then echo "no units.rds yet (the units stage is still running)"; exit 0; fi
+if [ ! -f "$work/units.rds" ]; then
+  echo "no units.rds yet; the units stage log ends:"; tail -n 4 "$work/run_units.log" 2> /dev/null; exit 0
+fi
 # one line per unit: cache key, family (rebuilt whenever units.rds is newer)
 if [ ! -f "$keys" ] || [ "$work/units.rds" -nt "$keys" ]; then
   Rscript -e 'w <- commandArgs(TRUE)[1]; m <- readRDS(file.path(w, "units.rds"))$meta
