@@ -26,6 +26,10 @@ suppressPackageStartupMessages({
 })
 source("vignettes/intransitivity_helpers.R")
 CORES <- as.integer(Sys.getenv("IRW_CORES", "2"))
+# irw_fetch() downloads through redivis, which forks parallelly::availableCores()
+# workers (every core) by default; on a big table, forks of a several-GB R session
+# exhaust memory. Cap them at CORES too.
+options(parallelly.availableCores.custom = function() CORES)
 B <- 200
 out_dir <- "vignettes/intransitivity_data"
 work <- file.path(out_dir, "work")
