@@ -14,6 +14,136 @@ This log begins in September 2026, when the page was created. The IRW is older
 than the log, and changes before then are recorded only in the repositories'
 commit history and in the versioned data itself.
 
+## 2026-10-05 — ENEM 2024 and 2025 ids corrected
+
+Released 2026-10-05, across the eight `enem_2024_1mil_*` and `enem_2025_1mil_*`
+tables and their eight `_nom` companions. From 2024 INEP ships participant and
+results data as two separate files, keyed differently, and the year scripts had
+taken `id` from one file and the responses from the other, pairing them by row
+order. The test municipality in the two files agrees no more often than chance
+would predict, so in effect every response sat under the wrong candidate's id.
+
+`id` now comes from the results file's own `NU_SEQUENCIAL`. The candidates and
+the `resp` and `resp_raw` sequences are unchanged row for row; only the id a
+response carries is different. [Data Notes](data_notes.qmd) records one caveat:
+`NU_SEQUENCIAL` is unique within a year but should not be used to follow a
+person between years. 2013 to 2023 are untouched. Refs #2812.
+
+## 2026-10-05 — The packages will tell you what a column means
+
+Python package 0.4.0 through 0.7.3. `describe_columns` is a new MCP tool: for a
+table it reports each column with the data standard's definition where the
+standard defines it, the source column the build script renamed it from, a
+covariate's value labels in the source's own words, and the source deposit's own
+codebook or questionnaire where one has been found. `covariate_labels()` joins
+the public Python API. The R package has `irw_covariate_labels()` and
+`irw_covariates(labels = TRUE)` on main, but the released R package is still
+1.3.0, so there they are merged and not yet shipped. Setup for the MCP server is
+on [Using an AI Assistant](agents.qmd).
+
+## 2026-10-04 — Every table page now has a Codebook section
+
+The plain Columns list on a table page has become a Codebook: one row per
+column, giving the data standard's definition where it defines the column, and
+the source column the build script renamed it from, linked to the line that
+renames it. Covariates list their labelled codes in code order and in the
+source's own words ("1 = hombre · 2 = mujer"). Where the source deposit's own
+codebook was found, the section links it, and links a questionnaire beside it
+when the codebook names the columns but not the response wording.
+
+The section says it is the IRW's best reconstruction rather than the source's
+codebook, that it may contain mistakes, and that the source data are the
+authority. It never infers a meaning from a column's name: a column with neither
+a definition nor a traced source is shown as not documented. Refs #2755, #2763,
+#2766, #2770, #2787, #2792.
+
+## 2026-10-03 — Non-commercial and GPL licences now proceed
+
+A ruling of 2026-10-01, now in the processing repo's data standard: a
+non-commercial licence is hostable, with the NC carried into the derived
+licence, and so is GPL. ND licences and scraped or relabelled third-party data
+still stop, and a dataset with no licence at all still means asking the author
+for permission. The intake-policy section of [the data standard](standard.qmd)
+on this site has not yet caught up. Refs #2808, #2809.
+
+## 2026-10-03 — The homepage counts the published warehouse, and Standards gets its own menu
+
+The front-page banner is now rebuilt from published `irw_meta` on every render
+and records the version it read, where before it came from a file committed by
+hand and lagged what was published. It also gives the competition and nominal
+table counts. Refs #1940.
+
+The Data menu split in two. Data holds the pages for using the tables, with
+[Corrections](corrections.qmd) moved over from About; Standards holds the
+specifications, the validator and the contributing guidance, with
+[Overview of the IRW Data Standards](overview.qmd) as its hub.
+
+## 2026-10-02 — The standard defines design columns, and `irw-validate` 1.4.0
+
+`cluster_id`, `block_id` and `std_baseline*` are now defined in the standard's
+schema table, its column order and its section on randomised trials; until now
+the validator told the tables carrying them, such as the `gilbert_*` series, to
+rename them as covariates. `irw-validate` 1.4.0 allows them, and demotes its
+composite-item check to a warning, since label names alone cannot establish that
+a column holds a computed score. The standard also now says the 100-respondent
+floor does not apply to animal data, and clause C4 has an exception for
+IEA-style sources: an omitted response is scored 0 with the source's code kept
+in `resp_raw`, while a not-reached response is dropped. The
+[browser validator](validate.qmd) runs 1.4.0 too.
+
+## 2026-10-01 — Competition, nominal and simulated data all grew
+
+`irw_competitions` (v6.2) now covers professional and historical sport, machine
+contests such as chess engines and Kaggle simulation competitions, animal
+dominance hierarchies, comparative judgement and quiz contests; see
+[the competition standard](comps_standard.qmd). `irw_nominal` (v3.3) and
+`irw_simsyn` (v1.4) grew as well; see [the nominal standard](nominal_standard.qmd)
+and [simulated and synthetic data](simsyn.qmd).
+
+## 2026-10-01 — A measured quantity is not a response
+
+Ruled over the week and recorded on [Corrections](corrections.qmd): the
+`continuous_response` collection is for response scales — sliders, 0–100
+ratings, visual analogue scales — and a physical measurement such as minutes,
+hours or amount consumed never belongs in it. Self-reported counts stay.
+Refs #1700.
+
+## 2026-09-30 — Corrections from the corpus audit
+
+The retroactive audit of the existing corpus published its first large batch of
+corrections on 2026-09-30, each listed on [Corrections](corrections.qmd) with
+the version it took effect in. The audit works by class rather than by table —
+sentinel codes stored as responses, covariates out of range, response times in
+the wrong units, binary scales carrying extra codes, exact duplicate rows — so a
+defect found in one table is then looked for everywhere. Refs #2401.
+
+## 2026-09-30 — Eedi NeurIPS licence corrected
+
+Eedi permitted the IRW to reshare its restructured NeurIPS 2020 and 2022 data on
+condition that it carry CC BY-NC-ND 4.0, and the dictionary and bibliography had
+recorded CC BY 4.0. The rows for `neurips_2020`, `neurips_2020_task34` and
+`neurips_2022` now state the licence the permission actually granted.
+
+## 2026-09-30 — Twenty-one collections for specific instruments
+
+Collections were added for the PHQ-9, GAD-7, RSES, SWLS, PSS-10, DASS-21,
+PANAS, CES-D, BFI-44, BFI-10, TIPI, SD3, ERQ, GSE, MSPSS, Brief COPE, PCL-5,
+LOT-R, ISI, FCV-19S and the UCLA Loneliness Scale. Unlike the tag-based
+collections, these are curated table by table, and every member records its
+basis — whether the instrument was identified from the item wording, from what
+the source supplied, or only from the table's name.
+[Browse IRW Collections](collections.qmd) lists them member by member, with the
+basis shown and filterable.
+
+## 2026-09-28 — Source caveats get a Notes section, and a page
+
+A note is not a correction: it describes something odd about a source that the
+IRW table reproduces faithfully, rather than a defect in the IRW's own
+processing. Notes now appear as a plain Notes section on a table page, under
+"About this table", and the new [Data Notes](data_notes.qmd) page lists all of
+them. Because a note is about the source and not about the IRW's handling of it,
+it carries no banner and does not keep a table out of search results.
+
 ## 2026-09-28 — The MCP server can find the script that built a table
 
 Python package 0.3.1. The server's processing-notes tool now resolves a table
