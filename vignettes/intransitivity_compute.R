@@ -60,8 +60,15 @@ key <- function(u) paste0(gsub("[^A-Za-z0-9]+", "_", u), ".rds")
 fetch <- function(name) {
   f <- file.path(work, "tables", paste0(name, ".rds"))
   if (file.exists(f)) return(readRDS(f))
-  logf("fetch", name)
-  x <- as.data.table(irw_fetch(name, source = "comp"))
+  # irw_fetch() reports a failed download and returns NULL rather than an error, so an
+  # empty result is retried, then stops the run (never cached as the table)
+  for (i in 1:3) {
+    logf("fetch", name)
+    x <- tryCatch(as.data.table(irw_fetch(name, source = "comp")), error = function(e) NULL)
+    if (NROW(x)) break
+    Sys.sleep(60 * i)
+  }
+  if (!NROW(x)) stop("fetch failed: ", name)
   saveRDS(x, f); x
 }
 yval <- function(w) ifelse(w == "agent_a", 1, ifelse(w == "agent_b", 0, ifelse(w == "draw", 0.5, NA)))
