@@ -30,7 +30,9 @@ wait_for_memory() {
 run() {   # run <name> <stage> [family regex]
   wait_for_memory
   echo "$(date '+%F %T') start $1" >> "$log_dir/run.log"
-  IRW_STAGE="$2" IRW_FAMILY="${3:-}" nice -n 19 Rscript vignettes/intransitivity_compute.R > "$log_dir/run_$1.log" 2>&1
+  if ! IRW_STAGE="$2" IRW_FAMILY="${3:-}" nice -n 19 Rscript vignettes/intransitivity_compute.R > "$log_dir/run_$1.log" 2>&1; then
+    echo "$(date '+%F %T') FAILED $1 (see run_$1.log)" >> "$log_dir/run.log"; exit 1
+  fi
   echo "$(date '+%F %T') done $1" >> "$log_dir/run.log"
 }
 
@@ -45,8 +47,10 @@ case "${1:-}" in
     run calib    calib
     wait_for_memory
     echo "$(date '+%F %T') start extras" >> "$log_dir/run.log"
-    nice -n 19 Rscript vignettes/intransitivity_extras.R > "$log_dir/run_extras.log" 2>&1
-    nice -n 19 Rscript vignettes/vignette_versions_compute.R > "$log_dir/run_versions.log" 2>&1
+    nice -n 19 Rscript vignettes/intransitivity_extras.R > "$log_dir/run_extras.log" 2>&1 ||
+      { echo "$(date '+%F %T') FAILED extras (see run_extras.log)" >> "$log_dir/run.log"; exit 1; }
+    nice -n 19 Rscript vignettes/vignette_versions_compute.R > "$log_dir/run_versions.log" 2>&1 ||
+      { echo "$(date '+%F %T') FAILED versions (see run_versions.log)" >> "$log_dir/run.log"; exit 1; }
     echo "$(date '+%F %T') all done" >> "$log_dir/run.log" ;;
   *)
     echo "usage: $0 units|tests" >&2; exit 2 ;;
