@@ -18,10 +18,13 @@
 #                  Kaggle bots
 #   5. assemble    vignettes/intransitivity_data/results.rds, the only file the page reads
 #
-# Usage (from the site root):
+# Usage (from the site root): vignettes/intransitivity_run.sh runs the stages in
+# batches, each in a fresh R process (see that file). In one process:
 #   IRW_CORES=2 nice -n 19 Rscript vignettes/intransitivity_compute.R
+# but then the test workers are forked from a session that has built every unit,
+# and on 10-05 four of them at about 5 GB each ran the machine out of memory.
 # IRW_CORES sets the number of worker processes (default 2; more workers make the
-# machine hard to use for hours). A full run from scratch is about two days on 2
+# machine hard to use for hours). A full run from scratch is about a day on 4
 # cores: the test stage is the long one (Lichess months and Kaggle competitions
 # take 5-10 minutes each on 4 cores, the largest judgment tables about 25), and the
 # units stage holds one table at a time in memory (the largest Kaggle table has 18
@@ -38,6 +41,12 @@ CORES <- as.integer(Sys.getenv("IRW_CORES", "2"))
 # workers (every core) by default; on a big table, forks of a several-GB R session
 # exhaust memory. Cap them at CORES too.
 options(parallelly.availableCores.custom = function() CORES)
+# IRW_STAGE runs one stage and exits (units, tests, calib = calibration + extras +
+# assemble); IRW_FAMILY (a regex on the unit family) limits a tests run to one batch.
+# intransitivity_run.sh runs them in order, each in a fresh process.
+STAGE <- Sys.getenv("IRW_STAGE", "all")
+FAMILY <- Sys.getenv("IRW_FAMILY", "")
+stage_on <- function(s) STAGE %in% c("all", s)
 out_dir <- "vignettes/intransitivity_data"
 work <- file.path(out_dir, "work")
 for (d in file.path(work, c("tables", "lr", "triads", "calib"))) dir.create(d, showWarnings = FALSE, recursive = TRUE)
@@ -181,18 +190,120 @@ build_units <- function() {
   add("zucco2019_portfoliosalience", judg("zucco2019_portfoliosalience"), "Judgments", "judg")
   add("guinaudeau2024_largechambers", judg("guinaudeau2024_largechambers"), "Judgments", "judg")
 
+  # ==== tables added in irw_competitions v6.2 ====
+  # A unit with more than 150 agents is cut to its dense core (core(), as for Lichess);
+  # where that core has fewer than 10 agents, the unit is listed in `nocore` instead.
+  nocore <- list()
+  add_core <- function(name, d, family, type, min_meet = 2) {
+    if (is.null(d$date)) d$date <- 0
+    d <- d[!is.na(d$y) & d$a != d$b, ]
+    g <- if (length(unique(c(d$a, d$b))) > 150) tryCatch(core(d, min_meet = min_meet), error = function(e) d[0, ]) else d
+    n <- length(unique(c(g$a, g$b)))
+    if (n < 10) { nocore[[name]] <<- data.frame(unit = name, family = family, agents = length(unique(c(d$a, d$b))), games = nrow(d), core_agents = n); return(invisible()) }
+    add(name, g, family, type)
+  }
+
+  # ---- team sports ----
+  # Retrosheet: only the seasons after mlb_through2023
+  rs <- ord(fetch("retrosheet_mlb_1871_2025")); rs <- rs[game_type == "regular" & winner != "draw" & season > max(mlb$season)]
+  for (s in sort(unique(rs$season))) add_split(paste("mlb", s), rs[season == s], "MLB")
+  rm(rs, mlb); gc()
+  # openfootball leagues, league stages only. A season is skipped where 538's soccer
+  # table already has it (at least 20% of its games fall within 538's dates for that league).
+  s538 <- fetch("fivethirtyeight_soccer_2016_2023")
+  of_add <- function(nm, x, lg538) {
+    r <- range(s538[league == lg538]$date)
+    if (mean(x$date >= r[1] & x$date <= r[2]) >= .2) return(invisible())
+    add_split(nm, x, "Football: other leagues")
+  }
+  x <- ord(fetch("openfootball_argentina_2018_2025")); x <- x[grepl("Matchday", stage) & !grepl("Fase", stage)]
+  for (s in sort(unique(x$season))) of_add(paste("argentina", s), x[season == s], "Argentina Primera Division")
+  x <- ord(fetch("openfootball_austria_2010_2027")); x <- x[!grepl("Final|Semifinal|Play-off|Europa|Conference", stage)]
+  for (s in sort(unique(x$season))) of_add(paste("austria", s), x[season == s], "Austrian T-Mobile Bundesliga")
+  x <- ord(fetch("openfootball_brasileirao_2018_2026"))
+  for (s in sort(unique(x$season))) of_add(paste("brazil", s), x[season == s], "Brasileiro Série A")
+  x <- ord(fetch("openfootball_ligamx_2010_2025")); x <- x[!grepl("Playoffs", stage)]   # Apertura and Clausura are separate leagues, as in 538
+  for (s in sort(unique(x$season))) for (t in c("Apertura", "Clausura"))
+    of_add(paste("ligamx", tolower(t), s), x[season == s & startsWith(stage, t)], paste("Mexican Primera Division Torneo", t))
+  rm(s538)
+  rb <- ord(fetch("rugby_union_tier1_1871_2026")); rb$dec <- floor(year_of(rb$date) / 10) * 10
+  for (dc in sort(unique(rb$dec))) add(paste0("rugby union ", dc, "s"), mk(rb[dec == dc]), "Rugby union", "team", min_games = 5)
+  # quiz bowl: each regional site is its own small tournament
+  qb <- fetch("quizbowl_acf_regionals_2018")
+  for (t in sort(unique(qb$tournament))) add(paste("quizbowl", t), mk(qb[tournament == t], home = 0), "Quiz", "team")
+
+  # ---- one-on-one ----
+  sc <- fetch("sscait_ladder_2021_2024"); sc <- sc[is.na(crashed)]; sc$yr <- year_of(sc$date)
+  for (y0 in 2021:2023) { x <- sc[sc$yr == y0]   # 2024 holds only a few days
+    add(paste("sscait", y0), core(data.frame(a = x$agent_a, b = x$agent_b, y = yval(x$winner), home = 0, date = x$date)), "Engines and bots", "1v1") }
+  rm(sc)
+  uc <- fetch("university_challenge_1994_2026")
+  add_core("university challenge (all series)", data.frame(mk(uc, home = 0), date = uc$date), "Quiz", "1v1", min_meet = 1)
+  pk <- fetch("pklmart_pickleball_2021_2025")
+  add_core("pickleball (all years)", data.frame(mk(pk, home = 0), date = pk$date), "Pickleball", "1v1", min_meet = 1)
+
+  # ---- judgments ----
+  add("bramley gcse", judg("bramley_vitello_2019_gcse"), "Judgments", "judg")
+  add("clark strength study 2", judg("clark_2018_strength_study2"), "Judgments", "judg")
+  add("coertjens self-reflections", judg("coertjens_2021_selfreflections"), "Judgments", "judg")
+  add("ramos proof explanation", judg("ramos_2021_proof_explanation"), "Judgments", "judg")
+  x <- fetch("jones_2020_cme_complexity")
+  for (s in sort(unique(x$session))) add_core(paste("jones complexity", s), data.frame(mk(x[session == s], home = 0), date = x[session == s]$date), "Judgments", "judg")
+  for (nm in c("makri_2026_mathtext_relevance", "sangwin_2021_proof_rigour_insight")) {
+    x <- fetch(nm); x <- x[is.na(excluded) | excluded != 1]   # the authors' exclusions
+    for (s in sort(unique(x$session))) add(paste(sub("_.*", "", nm), s), mk(x[session == s], home = 0), "Judgments", "judg") }
+  x <- fetch("ukpconvarg1_convincingness_2016")
+  for (s in sort(unique(x$debate))) add(paste("ukp", s), mk(x[debate == s], home = 0), "Judgments", "judg")
+  for (k in c("beautiful", "boring", "depressing", "livelier", "safer", "wealthier")) {
+    x <- fetch(paste0("placepulse2_", k)); add_core(paste("placepulse2", k), data.frame(mk(x, home = 0), date = x$date), "Judgments", "judg") }
+  rm(x); gc()
+
+  # ---- animal dominance: one unit per group and period over which ranks are plausibly
+  # stable; the "winner" is the animal that won the encounter ----
+  ani <- function(x) mk(x, home = 0)
+  for (g in 1:5) { x <- fetch(paste0("amboseli_baboons_g", g)); x$yr <- floor(x$day / 365)   # day counts from the first record
+    for (y0 in sort(unique(x$yr))) add(sprintf("baboons g%d year %d", g, y0 + 1), ani(x[x$yr == y0]), "Animal dominance", "animal") }
+  x <- fetch("gombe_chimpanzees_males_1978_2011"); x$yr <- year_of(x$date)
+  for (y0 in sort(unique(x$yr))) add(paste("gombe males", y0), ani(x[x$yr == y0]), "Animal dominance", "animal")
+  x <- fetch("gombe_chimpanzees_females_1969_2013"); x$per <- floor((year_of(x$date) - 1969) / 5) * 5 + 1969   # few encounters a year
+  for (p in sort(unique(x$per))) add(sprintf("gombe females %d-%d", p, p + 4), ani(x[per == p]), "Animal dominance", "animal")
+  for (s in c("females_1988_2015", "males_1988_2014")) { x <- fetch(paste0("talek_hyenas_", s))
+    for (yr in sort(unique(x$year))) add(paste("talek", sub("_.*", "", s), yr), ani(x[year == yr]), "Animal dominance", "animal") }
+  for (s in c("happyzebra", "serena_n", "serena_s")) {   # no dates: one unit per clan
+    x <- fetch(paste0(s, "_hyenas")); add_core(paste(sub("_", " ", s), "hyenas"), ani(x), "Animal dominance", "animal") }
+  x <- fetch("tonkean_macaques_2016_2024"); x$yr <- year_of(x$date)
+  for (y0 in sort(unique(x$yr))) add(paste("tonkean macaques", y0), ani(x[x$yr == y0]), "Animal dominance", "animal")
+  x <- fetch("vervets_2015_2017"); x <- x[result != 4]; x$yr <- year_of(x$date)   # result 4 records no outcome
+  for (y0 in sort(unique(x$yr))) add(paste("vervets", y0), ani(x[x$yr == y0]), "Animal dominance", "animal")
+  x <- fetch("mountain_chickadees_2019_2020")
+  for (g in sort(unique(x$group))) add(paste("chickadees", g), ani(x[group == g]), "Animal dominance", "animal")
+  for (s in c("anonuevo_2009_2010", "anonuevo_2010_2011", "anonuevo_2011_2012", "anonuevo_2012_2013", "piedrasblancas_2012"))
+    add(paste("elephant seals", sub("_", " ", s)), ani(fetch(paste0("elephant_seals_", s))), "Animal dominance", "animal")
+  add("feederwatch species", ani(fetch("feederwatch_species_displacements")), "Animal dominance", "animal")
+  rm(x); gc()
+
   meta <- do.call(rbind, meta)
   meta$agents <- sapply(units, function(d) length(unique(c(d$a, d$b))))
   meta$games <- sapply(units, nrow)
   meta$games_per_pair <- round(meta$games / sapply(units, function(d) length(unique(paste(pmin(d$a, d$b), pmax(d$a, d$b))))), 1)
   rownames(meta) <- NULL
-  list(units = units, meta = meta)
+  list(units = units, meta = meta, nocore = do.call(rbind, nocore))
 }
 
 f_units <- file.path(work, "units.rds")
-if (!file.exists(f_units)) { logf("building units"); saveRDS(build_units(), f_units) }
-U <- readRDS(f_units); units <- U$units; meta <- U$meta; rm(U)
+if (!file.exists(f_units)) {
+  if (!stage_on("units")) stop("no ", f_units, ": run IRW_STAGE=units first")
+  logf("building units"); saveRDS(build_units(), f_units)
+}
+U <- readRDS(f_units); units <- U$units; meta <- U$meta; nocore <- U$nocore; rm(U)
 logf(nrow(meta), "units,", sum(meta$games), "games")
+if (STAGE == "units") quit(save = "no")
+if (STAGE == "tests" && nzchar(FAMILY)) {
+  # a batch keeps only its own units, so the forked workers stay small
+  keep <- grepl(FAMILY, meta$family); meta <- meta[keep, ]; units <- units[meta$unit]
+  logf("batch", FAMILY, ":", nrow(meta), "units")
+}
+gc()
 
 # ============================================================================
 # 2. Tests
@@ -217,6 +328,7 @@ test_one <- function(u) {
 }
 big <- meta$unit[meta$agents > 40 | meta$games > 3000]; small <- setdiff(meta$unit, big)
 todo <- function(us) us[!file.exists(file.path(work, "lr", key(us)))]
+if (stage_on("tests")) {
 options(lr_cores = 1)
 invisible(parallel::mclapply(todo(small), function(u) tryCatch(test_one(u), error = function(e) logf(u, conditionMessage(e))),
                              mc.cores = CORES, mc.preschedule = FALSE))
@@ -224,6 +336,8 @@ options(lr_cores = CORES)
 for (u in todo(big)) { logf("test", u); tryCatch(test_one(u), error = function(e) logf(u, conditionMessage(e))) }
 for (u in big[!file.exists(file.path(work, "triads", key(big)))]) tryCatch(test_one(u), error = function(e) NULL)
 options(lr_cores = 1)
+}
+if (STAGE == "tests") quit(save = "no")
 
 # ============================================================================
 # 3. Calibration
@@ -352,8 +466,9 @@ lr <- rbindlist(lapply(file.path(work, "lr", key(meta$unit)), function(f) if (fi
 tri <- rbindlist(lapply(file.path(work, "triads", key(meta$unit)), function(f) if (file.exists(f)) readRDS(f)), fill = TRUE)
 res <- merge(as.data.table(meta), lr, by = "unit", all.x = TRUE)
 res <- merge(res, tri, by = "unit", all.x = TRUE)
+logf(sum(is.na(res$lr_p)), "of", nrow(res), "units have no LR result")
 tables <- sort(unique(irw_list_tables(source = "comp")$name))
-saveRDS(list(units = res, size_sparse = size_sparse, size_offset = size_offset, power = power,
+saveRDS(list(units = res, nocore = nocore, size_sparse = size_sparse, size_offset = size_offset, power = power,
              cems = cems, examples = examples, tables = tables, date_run = Sys.Date()),
         file.path(out_dir, "results.rds"))
 logf("wrote", file.path(out_dir, "results.rds"))
