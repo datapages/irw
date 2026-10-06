@@ -669,6 +669,53 @@ normal, so the question is how far real tests depart from that curve, and
 why. We look first at synthetic tests, where we control the items, and then at
 the warehouse.
 
+Turning that formula around, b bits corresponds to a reliability of
+1 − 4^−b^. To see what that buys, simulate people from the Gaussian picture
+and compare each person's true rank with the rank the score gives them.
+
+```{r}
+#| label: rank-panels
+#| fig-height: 6.6
+#| fig-width: 7.5
+
+set.seed(20261006)
+bits_show <- c(0, 1, 2, 3, 4, 6)
+rank_stats <- function(b, n = 1e6) {
+  r <- sqrt(1 - 4^-b)
+  th <- rnorm(n); sc <- r * th + sqrt(1 - r^2) * rnorm(n)
+  c(rho = r^2, rank_err = 100 * mean(abs(pnorm(th) - pnorm(sc))),
+    concord = 0.5 + asin(r) / pi)          # P(pair in the right order), exact
+}
+rs <- as_tibble(t(sapply(bits_show, rank_stats))) |> mutate(bits = bits_show)
+rs <- rs |> mutate(lab = sprintf("%s %s · reliability %s\ntypical rank error %s points\n%.1f%% of pairs in the right order",
+                                 bits, if_else(bits == 1, "bit", "bits"), signif(rho, 4),
+                                 if_else(rank_err < 1, sprintf("%.1f", rank_err), sprintf("%.2g", rank_err)),
+                                 100 * concord),
+                   lab = factor(lab, lab))
+dots <- rs |> select(bits, lab) |> rowwise() |>
+  reframe(lab = lab, th = rnorm(600)) |>
+  left_join(select(rs, lab, rho), by = "lab") |>
+  mutate(sc = sqrt(rho) * th + sqrt(1 - rho) * rnorm(n()),
+         x = 100 * pnorm(th), y = 100 * pnorm(sc))
+ggplot(dots, aes(x, y)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_point(alpha = 0.5, size = 0.9) +
+  facet_wrap(~ lab, ncol = 3) +
+  scale_x_continuous(breaks = c(0, 50, 100)) + scale_y_continuous(breaks = c(0, 50, 100)) +
+  labs(x = "person's true rank in the population (percentile)",
+       y = "rank the test gives them (percentile)",
+       title = "How well a test ranks people, by how much it tells you about them",
+       subtitle = sprintf("Each panel: 600 simulated people, θ and score jointly normal. On the dashed line the ranking is perfect; each extra bit halves the scatter around it. Rank errors are in percentile points. The median warehouse test carries %s bits; the most informative, %s.",
+                          fmt(median(two$I_X)), fmt(max(two$I_X)))) +
+  theme(strip.text = element_text(hjust = 0, size = 9), panel.spacing = unit(0.8, "lines"))
+```
+
+Most of what a ranking needs arrives in the first bit or two: one bit already
+puts five pairs in six in the right order. The panels show the Gaussian
+picture, which is the dashed curve below. The warehouse tests sit a little
+above that curve, so their bits are only approximately where they land in these
+panels.
+
 ```{r}
 #| label: reliability-sim
 #| fig-height: 5.6
