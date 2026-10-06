@@ -364,13 +364,16 @@ null_rep <- function(d, i) {
 # seasons; each null replicate is tested twice, with the null simulated from the
 # fitted strengths (p_fitted) and from the shrunk ones (lr_p)
 size_sparse <- calib("size_sparse", {
-  pick <- meta$unit[grepl("^cricket", meta$unit) & meta$agents >= 6 & meta$games_per_pair <= 1.6]
-  set.seed(7); pick <- sample(pick, min(40, length(pick)))
-  nfl <- meta$unit[grepl("^nfl", meta$unit) & meta$games_per_pair < 2]; set.seed(8); pick <- c(pick, sample(nfl, 20))
+  # every cricket league with >= 6 teams and <= 1.6 games per pair, and every NFL
+  # season under 2, two null replicates each (a first run with 60 leagues, one
+  # replicate each, was too few to tell a size of 5% from 10%)
+  pick <- c(meta$unit[grepl("^cricket", meta$unit) & meta$agents >= 6 & meta$games_per_pair <= 1.6],
+            meta$unit[grepl("^nfl", meta$unit) & meta$games_per_pair < 2])
+  pick <- rep(pick, 2)
   rbindlist(parallel::mclapply(seq_along(pick), function(i) tryCatch({
     d <- null_rep(units[[pick[i]]][, c("a", "b", "y", "home")], i)
     m <- meta[meta$unit == pick[i], ]
-    data.frame(unit = pick[i], agents = m$agents, games_per_pair = m$games_per_pair,
+    data.frame(unit = pick[i], rep = 1 + (i > length(pick) / 2), agents = m$agents, games_per_pair = m$games_per_pair,
                p_fitted = lr_test(d, B = 50, shrink = FALSE)$lr_p, lr_test(d, B = 50)) }, error = function(e) NULL), mc.cores = CORES), fill = TRUE)
 })
 # (b) the 12 Lichess bullet months, same games and rating offsets
