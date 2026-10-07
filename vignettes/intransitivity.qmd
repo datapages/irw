@@ -377,7 +377,7 @@ if (inherits(g, "plotly")) g <- layout(g, xaxis = list(range = c(-0.01, 0.45)),
 g
 ```
 
-In a typical team-season, `r pct(median(team$wst, na.rm = TRUE))` of the triads whose three series were all decided are cyclic in the observed results. Simulating the same schedules from a transitive model gives `r pct(median(team$wst_null, na.rm = TRUE))`. @fig-cycles shows that this holds unit by unit: the points sit along the diagonal. The points far from it are mostly small units, such as cricket leagues with a handful of decided triads, where a single cycle moves the share a lot.
+In a typical team-season, `r pct(median(team$wst, na.rm = TRUE))` of the triads whose three series were all decided are cyclic in the observed results. Simulating the same schedules from a transitive model gives `r pct(median(team$wst_null, na.rm = TRUE))`. @fig-cycles shows that this holds unit by unit: the points sit along the diagonal. The points farthest from it are mostly small units, such as cricket leagues with a few dozen decided triads, where a single cycle moves the share by several points.
 
 A *decided* triad is three agents who all met, with no pair's series level. If every game were a coin flip, a quarter of decided triads would be cyclic, so a share near 0.25 means the results among those three are about as ordered as noise. Leagues of evenly matched teams come close to that without any intransitivity. That is why the raw share says little and the comparison with the transitive simulation is what counts. @tbl-cyc-share gives both by family. The excess is under one percentage point in most families and below zero in several. It is largest for the bots and Lichess blitz, at little more than one point: even where the likelihood test finds intransitivity, it shows up in only a small share of triads. The large points in @fig-cycles are the units with more cycles than luck by this count: `r sum(cyf$wst_p <= .05)` of the `r num(nrow(cyf))` plotted, or `r pct(mean(cyf$wst_p <= .05))`, where about 5% would by chance. That count is a weak test, though, as the next paragraph shows, so the verdicts below rest on the likelihood test instead.
 
@@ -438,7 +438,7 @@ U |> filter(type == "judg") |>
   knitr::kable(align = "lrrrrr")
 ```
 
-Pooled across respondents, `r sum(U$sig[U$type == "judg"])` of `r sum(U$type == "judg")` judgment units reject, against about `r round(.05 * sum(U$type == "judg"))` by chance. Only `r sum(U$lr_p[U$type == "judg"] <= 1 / 101 + 1e-9)` reject strongly (p ≤ .01): the risk study's "killed more people last year" criterion, and the campaign-ad coding, which has about one comparison per pair, where the test is somewhat too ready to reject (@tbl-size). The rest have p between .02 and .05 and are scattered across studies, with no kind of judgment standing out.
+Pooled across respondents, `r sum(U$sig[U$type == "judg"])` of `r sum(U$type == "judg")` judgment units reject, against about `r round(.05 * sum(U$type == "judg"))` by chance. Only `r sum(U$lr_p[U$type == "judg"] <= 1 / 101 + 1e-9)` reject strongly (p ≤ .01): the risk study's "killed more people last year" criterion; the campaign-ad coding, which has about one comparison per pair, where the test if anything errs toward not rejecting (@tbl-size); and the image-complexity session with brightness equalised. The rest have p between .02 and .05 and are scattered across studies, with no kind of judgment standing out.
 
 A pooled table can be cyclic even if every person in it is perfectly transitive. If one group of respondents ranks A > B > C, another B > C > A, and a third C > A > B, the majority in every pair runs in a circle. This is Condorcet's paradox. CEMS lets us look at individuals directly, because each of its `r length(cache$cems$obs)` students compared all 15 pairs of the six schools, so each student's own answers form a complete little tournament with 20 triads.
 
@@ -507,7 +507,7 @@ if (!is.null(extras)) {
   p <- ggplot(sp, aes(rating, share, colour = source, group = source, text = text)) +
     geom_line(linewidth = 0.7) + geom_point(size = 2.2) +
     facet_wrap(~ tc, nrow = 1, scales = "free_x") +
-    scale_colour_manual(values = c(Observed = irw_red, `Transitive model` = "grey55"), name = NULL) +
+    scale_colour_manual(values = c(Observed = irw_red, `Transitive model` = irw_grey), name = NULL) +
     scale_y_continuous(labels = scales::percent) +
     labs(x = "Pre-game rating (median of each fifth of players)", y = "Cyclic share of decided triads") +
     theme(legend.position = "bottom")
