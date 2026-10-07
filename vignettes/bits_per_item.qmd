@@ -151,17 +151,257 @@ names(ojs_payload) <- names(showcases)
 ojs_define(showcases_r = ojs_payload, accent_r = irw_accent, blue_r = irw_blue)
 ```
 
+## Answer patterns
+
+Everything on this page comes from one object: the **answer pattern**, the
+string of right and wrong answers a person gives. List every pattern a test
+could produce and two quantities decide how much the test tells you about a
+person:
+
+- **Spread**, H(X): how varied the patterns are across the population. If
+  everyone gave the same pattern, seeing it would tell you nothing.
+- **Noise**, H(X | θ): how varied they would be for one person, answering again
+  and again. Some of the spread is just luck, not differences between people.
+
+The information about the person is what is left: **I(θ; X) = H(X) − H(X | θ)**,
+in bits. We build this up on a short numeracy test, one question first, then
+three, five, and the whole test.
+
+### One question
+
+With one question there are only two patterns, right and wrong. To picture the
+population we cut θ, the trait being measured, into **64 slices, each holding
+the same share of people**: narrow in the crowded middle, wide in the thin
+tails. Pinning down one slice out of 64 would take 6 bits, since 2^6^ = 64.
+
+```{r}
+#| label: patterns-setup
+
+s <- showcases[[main]]
+top5 <- s$items |> arrange(desc(bits)) |> slice(1:5)
+gth <- s$grid                                    # the 2PL's N(0, 1) quadrature grid
+# P(correct | theta) for a set of items: length(theta) x items
+p_items <- function(it, theta) plogis(outer(theta, it$a) - matrix(it$a * it$b, length(theta), nrow(it), byrow = TRUE))
+# P(pattern | theta) for 0/1 pattern rows: patterns x theta
+pat_given_theta <- function(X, P) exp(X %*% t(log(P)) + (1 - X) %*% t(log(1 - P)))
+```
+
+```{r}
+#| label: bit-strip
+#| fig-height: 5.2
+#| fig-width: 7.5
+
+pg <- s$group_probs
+pick3 <- s$items |> arrange(desc(bits)) |> slice(c(1, ceiling(n() / 2), n()))
+bnd <- pmin(pmax(s$group_bounds, -3.2), 3.2)
+cells <- tibble(g = 1:64, x1 = bnd[-65], x2 = bnd[-1])
+ideal <- mutate(cells, row = "A perfect (Guttman) item at the median",
+                p = rep(c(0, 1), each = 32), bits = 1)
+real <- bind_rows(lapply(seq_len(nrow(pick3)), function(i) {
+  it <- pick3[i, ]
+  mutate(cells, row = paste0("\u201c", substr(it$text, 1, 52), if (nchar(it$text) > 52) "\u2026" else "", "\u201d"),
+         p = pg[, it$item], bits = it$bits)
+}))
+strip <- bind_rows(ideal, real) |>
+  mutate(row = factor(row, levels = unique(row)), y = 5 - as.integer(row),
+         lab = paste0(fmt(bits), if_else(bits == 1, " bit", " bits")))
+labs_df <- distinct(strip, row, y, lab)
+ggplot(strip) +
+  geom_rect(aes(xmin = x1, xmax = x2, ymin = y - 0.4, ymax = y + 0.4, fill = p),
+            colour = "white", linewidth = 0.15) +
+  geom_text(data = labs_df, aes(x = 3.35, y = y, label = lab),
+            hjust = 0, colour = irw_accent, fontface = "bold", size = 4) +
+  scale_fill_gradient(low = "#f4f6fa", high = irw_blue, limits = c(0, 1),
+                      name = "P(yes / correct)\nin each slice") +
+  scale_x_continuous(limits = c(-3.2, 4.3), breaks = -3:3, expand = c(0, 0)) +
+  scale_y_continuous(breaks = labs_df$y, labels = stringr::str_wrap(as.character(labs_df$row), 34)) +
+  labs(x = "θ, cut into 64 equally likely slices", y = NULL,
+       title = sprintf("A perfect item halves the population; the best real numeracy item manages %s of a bit",
+                       fmt(max(s$items$bits))),
+       subtitle = "Each row is one question, shaded by how likely people in each slice are to say yes / get it right. Right: I(θ; Xⱼ), the item on its own.") +
+  theme(panel.grid = element_blank(), legend.position = "bottom", legend.key.width = unit(1.2, "cm"))
+```
+
+A bit is the information in the answer to a question whose two answers are
+equally likely and which splits the possibilities cleanly. The top row of the
+figure does exactly that: it cuts 64 slices to 32. Real items fail in two ways.
+Their split is blurred, because people in the same group sometimes answer
+differently. And their split is often off-centre, because easy items mostly
+separate the lowest groups from everyone else. In pattern terms, the
+spread is the entropy of the answer across the population, the noise is the
+entropy of the answer for someone at a fixed θ, and the information is the gap:
+<small>I(θ; X~j~) = h(P̄~j~) − E~θ~[h(P~j~(θ))], with h(p) = −p log~2~ p − (1−p) log~2~(1−p).</small>
+Neither term can exceed one bit.
+
+### Three questions
+
+```{r}
+#| label: patterns-three
+#| fig-height: 6.4
+#| fig-width: 7.5
+
+top3 <- top5[1:3, ]
+th3 <- seq(-3, 3, by = 0.02)
+X3 <- as.matrix(expand.grid(rep(list(0:1), 3)))
+X3 <- X3[order(rowSums(X3), -X3 %*% c(4, 2, 1)), ]
+key3 <- apply(X3, 1, paste, collapse = "")
+pxt3 <- pat_given_theta(X3, p_items(top3, th3))           # 8 x theta
+area <- tibble(pattern = rep(key3, times = length(th3)), theta = rep(th3, each = 8),
+               p = as.vector(pxt3), score = rep(rowSums(X3), times = length(th3))) |>
+  group_by(theta) |> mutate(ymax = cumsum(p), ymin = ymax - p) |> ungroup()   # 000 at the bottom
+labs3 <- area |> filter(abs(theta) <= 2.6) |> group_by(pattern) |>
+  slice_max(p, n = 1, with_ties = FALSE) |> ungroup() |> mutate(mid = (ymin + ymax) / 2)
+w3 <- gth$w
+marg3 <- as.vector(pat_given_theta(X3, p_items(top3, gth$theta)) %*% w3)
+H3 <- -sum(marg3 * log2(marg3))
+pxt3g <- pat_given_theta(X3, p_items(top3, gth$theta))
+N3 <- -sum((pxt3g * log2(pxt3g)) %*% w3)
+score_fill <- c(`0` = "#d1e5f0", `1` = "#92c5de", `2` = "#4393c3", `3` = irw_blue)
+p_top <- ggplot(area, aes(theta, fill = factor(score), group = pattern)) +
+  geom_ribbon(aes(ymin = ymin, ymax = ymax), colour = "white", linewidth = 0.4) +
+  geom_text(data = labs3, aes(theta, mid, label = pattern), inherit.aes = FALSE,
+            family = "mono", size = 3.6, colour = if_else(labs3$score >= 2, "white", "grey15")) +
+  scale_fill_manual(values = score_fill, name = "number correct") +
+  scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(x = "θ", y = "chance of each pattern",
+       title = sprintf("Three questions: the mix of patterns shifts with θ, and that shift is %s bits", fmt(H3 - N3)),
+       subtitle = wrap(sprintf("Top: read straight up from any θ to see the patterns a person there would give, answering again and again. Bottom: the same mix averaged over the population. Items, in pattern order: %s.",
+                          paste(top3$label, collapse = ", ")), 78)) +
+  theme(legend.position = "top")
+bars3 <- tibble(pattern = factor(key3, key3), p = marg3, score = factor(rowSums(X3)))
+p_bot <- ggplot(bars3, aes(pattern, p, fill = score)) +
+  geom_col(width = 0.75, show.legend = FALSE) +
+  geom_text(aes(label = fmt(p, 2)), vjust = -0.4, size = 3.3) +
+  scale_fill_manual(values = score_fill) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+  labs(x = "pattern (1 = correct)", y = "population share") +
+  theme(axis.text.x = element_text(family = "mono"), panel.grid.major.x = element_blank())
+p_top / p_bot + plot_layout(heights = c(2.2, 1))
+```
+
+Read the top panel straight up from any point on θ. Far to the left almost
+everyone gives `r key3[1]`; far to the right almost everyone gives
+`r key3[8]`. In between, a person at a fixed θ could give several patterns,
+and which one comes out is partly luck. That luck is the noise, H(X | θ) =
+`r fmt(N3)` bits on average. The bottom panel is what you see when you do not
+know θ: the mix averaged over everyone, whose entropy, the spread, is
+H(X) = `r fmt(H3)` bits. The information is the gap, `r fmt(H3 - N3)` bits,
+and it comes entirely from the mix *changing* along θ. If every θ produced the
+same mix, the top panel would be flat bands, the spread and the noise would be
+equal, and seeing a pattern would tell you nothing about the person.
+
+### Five questions
+
+```{r}
+#| label: patterns
+#| fig-height: 4.6
+#| fig-width: 7.5
+
+pt <- s$patterns |> mutate(rank = row_number())
+P5 <- p_items(top5, gth$theta)
+X5 <- do.call(rbind, lapply(strsplit(pt$pattern, ""), as.integer))
+pxt5 <- pat_given_theta(X5, P5)                       # patterns x theta nodes
+stopifnot(max(abs(as.vector(pxt5 %*% gth$w) - pt$implied)) < 1e-8)
+spread_j <- -pt$implied * log2(pt$implied)
+noise_j <- -as.vector((pxt5 * log2(pxt5)) %*% gth$w)
+H5 <- sum(spread_j); H5_noise <- sum(noise_j)
+post5 <- sweep(pxt5, 2, gth$w, "*"); post5 <- post5 / rowSums(post5)
+q_theta <- function(pr, q) gth$theta[which(cumsum(pr) >= q)[1]]
+pt <- pt |> mutate(
+  spread = spread_j, noise = noise_j, net = spread - noise,
+  who = sapply(seq_len(n()), function(i) sprintf("θ mean %s, middle 80%% %s to %s",
+          fmt(sum(post5[i, ] * gth$theta), 1), fmt(q_theta(post5[i, ], .1), 1), fmt(q_theta(post5[i, ], .9), 1))),
+  answers = sapply(seq_len(n()), function(i) paste(sprintf("%s: %s", top5$label,
+          if_else(X5[i, ] == 1, "correct", "incorrect")), collapse = "<br>")),
+  tip = sprintf("<b>pattern %s</b><br>%s<br><br>model probability %s<br>observed %s (%s of %s)<br>who gives it: %s<br><br>spread  −p log₂ p = %s bits<br>noise = %s bits<br>net = %s bits",
+                pattern, answers, fmt(implied, 3), fmt(observed, 3),
+                format(round(observed * n_obs), big.mark = ","), format(n_obs, big.mark = ","),
+                who, fmt(spread, 3), fmt(noise, 3), fmt(net, 3)))
+g <- ggplot(pt, aes(rank, implied, text = tip)) +
+  geom_col(fill = irw_blue, width = 0.8) +
+  geom_point(aes(y = observed), colour = "black", size = 1.8) +
+  scale_x_continuous(breaks = pt$rank, labels = pt$pattern, expand = c(0.01, 0.01)) +
+  labs(x = "answer pattern on the 5 most informative items (1 = correct)", y = "probability",
+       title = sprintf("Five questions, 32 possible answer patterns, %s bits about the person", fmt(H5 - H5_noise))) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, family = "mono", size = 8))
+g <- wl(g, 55)
+ggplotly(g, tooltip = "text") |>
+  layout(title = list(text = paste0("<b>", gsub("\n", "<br>", g$labels$title), "</b>"), x = 0, xanchor = "left",
+                      font = list(size = 15)), margin = list(t = 70),
+         hoverlabel = list(align = "left"))
+```
+
+Bars: the model's probability of each pattern. Dots: the share of the
+`r format(pt$n_obs[1], big.mark = ",")` respondents who actually gave it.
+Items, in pattern order: `r paste(top5$label, collapse = ", ")`. **Hover over
+a bar** to see its pieces: which answers the pattern contains, who tends to
+give it, and how much it contributes to the spread, to the noise, and to the
+net bits. Summed over the 32 bars, the spread is `r fmt(H5)` bits and the
+noise `r fmt(H5_noise)`, leaving `r fmt(H5 - H5_noise)` bits about the person.
+Most of the spread is noise.
+
+```{r}
+#| label: worked-example
+#| results: asis
+
+i_ex <- 1                                                # the most likely pattern
+x_ex <- X5[i_ex, ]
+th_ex <- c(-1, 0, 1)
+P_ex <- p_items(top5, th_ex)                             # 3 x 5
+p_ans <- t(ifelse(matrix(x_ex, 3, 5, byrow = TRUE) == 1, P_ex, 1 - P_ex))   # 5 x 3
+prod_ex <- apply(p_ans, 2, prod)
+tab <- tibble(item = top5$label, answer = if_else(x_ex == 1, "correct", "incorrect"),
+              `θ = −1` = fmt(p_ans[, 1], 3), `θ = 0` = fmt(p_ans[, 2], 3), `θ = +1` = fmt(p_ans[, 3], 3))
+tab <- bind_rows(tab, tibble(item = "**product**", answer = "",
+                             `θ = −1` = paste0("**", fmt(prod_ex[1], 3), "**"),
+                             `θ = 0` = paste0("**", fmt(prod_ex[2], 3), "**"),
+                             `θ = +1` = paste0("**", fmt(prod_ex[3], 3), "**")))
+cat("::: {.callout-tip collapse=\"true\"}\n## How one bar is computed: pattern ", pt$pattern[i_ex], "\n\n", sep = "")
+cat("**1. The chance of the pattern for one person.** The model gives each item a probability of a correct answer ",
+    "that depends on θ. For a person at a given θ, the chance of the whole pattern is the product of the chances ",
+    "of its five answers, because the model treats answers as independent once θ is fixed. Here it is for three people:\n\n", sep = "")
+print(knitr::kable(tab, align = "llrrr"))
+cat("\n\n**2. Average over the population.** Do the same at every θ and average the products, weighting each θ by ",
+    "how many people sit there (a normal curve, on an ", nrow(gth), "-point grid). That average, ", fmt(pt$implied[i_ex], 3),
+    ", is the height of the bar. ", fmt(100 * pt$observed[i_ex], 0), "% of respondents actually gave this pattern.\n\n", sep = "")
+cat("**3. Spread.** Each bar adds −p log₂ p to the spread: here −", fmt(pt$implied[i_ex], 3), " × log₂ ",
+    fmt(pt$implied[i_ex], 3), " = ", fmt(pt$spread[i_ex], 3), " bits. Summed over all 32 bars that is H(X) = ",
+    fmt(H5), " bits.\n\n", sep = "")
+cat("**4. Noise.** The same calculation *within* each θ, using the products from step 1 instead of the average, ",
+    "then averaged over the population: ", fmt(pt$noise[i_ex], 3), " bits from this pattern, H(X | θ) = ",
+    fmt(H5_noise), " bits in all. This is how unpredictable the pattern is even for someone whose θ we know.\n\n", sep = "")
+cat("**5. Information.** Spread minus noise: I(θ; X) = ", fmt(H5), " − ", fmt(H5_noise), " = ", fmt(H5 - H5_noise),
+    " bits. A single bar's net can be negative; only the total has to be positive.\n:::\n", sep = "")
+```
+
+### The whole test
+
+The numeracy test has `r nrow(s$items)` items, so `r format(2^nrow(s$items), big.mark = ",")`
+possible patterns: too many to draw, but not too many to count. The same
+calculation gives a spread of
+`r fmt(two$H_X[two$table == main])` bits, noise of
+`r fmt(two$H_X_given_theta[two$table == main])` bits, and so
+`r fmt(two$I_X[two$table == main])` bits about the person. Adding six items to
+the five above bought about
+`r fmt(two$I_X[two$table == main] - (H5 - H5_noise))` bits more. The sum score
+gathers the `r format(2^nrow(s$items), big.mark = ",")` patterns into
+`r nrow(s$items) + 1` piles, one per score, and keeps
+`r fmt(two$I_S[two$table == main])` of those bits; [Is the sum score enough?](#is-the-sum-score-enough)
+asks what the piling loses. For long tests the patterns cannot be listed, and
+the same quantities are estimated by simulation (see
+[How the warehouse numbers were computed](#how-the-warehouse-numbers-were-computed)).
+
 ## Guess the person
 
-The curve below is the population: how people are spread along θ, the trait
-the test measures, from low (left) to high (right). We have cut it into
-**64 slices, each holding the same share of people**. The slices are narrow in
-the crowded middle and wide in the thin tails. Somewhere in that population is
-one person, and your job is to find out which slice they are in by asking
-questions from a real test.
+The patterns above are averages over everyone. Now play the test forward for
+one person, an answer at a time. The curve below is the population along θ,
+cut into the same 64 equally likely slices. Somewhere in it is one person, and
+your job is to find out which slice they are in by asking questions from a
+real test.
 
-Before any question, all 64 slices are equally likely. Pinning down one slice
-out of 64 takes **6 bits**, since 2^6^ = 64. After each answer the slices are
+Before any question, all 64 slices are equally likely, so there are 6 bits to
+find. After each answer the slices are
 re-shaded, darker where the person is now more likely to be, and a line traces
 the same thing as a density over θ. The counter shows how many bits that
 answer bought.
@@ -352,55 +592,6 @@ Several different "bits" appear below. They are not interchangeable.
 - **I(θ; S)** and **I(θ; X | S)**: what the sum score keeps, and what it drops.
 :::
 
-## What a bit is
-
-```{r}
-#| label: bit-strip
-#| fig-height: 5.2
-#| fig-width: 7.5
-
-s <- showcases[[main]]
-pg <- s$group_probs
-pick3 <- s$items |> arrange(desc(bits)) |> slice(c(1, ceiling(n() / 2), n()))
-bnd <- pmin(pmax(s$group_bounds, -3.2), 3.2)
-cells <- tibble(g = 1:64, x1 = bnd[-65], x2 = bnd[-1])
-ideal <- mutate(cells, row = "A perfect (Guttman) item at the median",
-                p = rep(c(0, 1), each = 32), bits = 1)
-real <- bind_rows(lapply(seq_len(nrow(pick3)), function(i) {
-  it <- pick3[i, ]
-  mutate(cells, row = paste0("\u201c", substr(it$text, 1, 52), if (nchar(it$text) > 52) "\u2026" else "", "\u201d"),
-         p = pg[, it$item], bits = it$bits)
-}))
-strip <- bind_rows(ideal, real) |>
-  mutate(row = factor(row, levels = unique(row)), y = 5 - as.integer(row),
-         lab = paste0(fmt(bits), if_else(bits == 1, " bit", " bits")))
-labs_df <- distinct(strip, row, y, lab)
-ggplot(strip) +
-  geom_rect(aes(xmin = x1, xmax = x2, ymin = y - 0.4, ymax = y + 0.4, fill = p),
-            colour = "white", linewidth = 0.15) +
-  geom_text(data = labs_df, aes(x = 3.35, y = y, label = lab),
-            hjust = 0, colour = irw_accent, fontface = "bold", size = 4) +
-  scale_fill_gradient(low = "#f4f6fa", high = irw_blue, limits = c(0, 1),
-                      name = "P(yes / correct)\nin each slice") +
-  scale_x_continuous(limits = c(-3.2, 4.3), breaks = -3:3, expand = c(0, 0)) +
-  scale_y_continuous(breaks = labs_df$y, labels = stringr::str_wrap(as.character(labs_df$row), 34)) +
-  labs(x = "θ, cut into 64 equally likely slices", y = NULL,
-       title = sprintf("A perfect item halves the population; the best real numeracy item manages %s of a bit",
-                       fmt(max(s$items$bits))),
-       subtitle = "Each row is one question, shaded by how likely people in each slice are to say yes / get it right. Right: I(θ; Xⱼ), the item on its own.") +
-  theme(panel.grid = element_blank(), legend.position = "bottom", legend.key.width = unit(1.2, "cm"))
-```
-
-A bit is the information in the answer to a question whose two answers are
-equally likely and which splits the possibilities cleanly. The top row of the
-figure does exactly that: it cuts 64 slices to 32. Real items fail in two ways.
-Their split is blurred, because people in the same group sometimes answer
-differently. And their split is often off-centre, because easy items mostly
-separate the lowest groups from everyone else. Formally, the expected
-information of item *j* is the entropy of its answer minus the noise in it:
-<small>I(θ; X~j~) = h(P̄~j~) − E~θ~[h(P~j~(θ))], with h(p) = −p log~2~ p − (1−p) log~2~(1−p).</small>
-Neither term can exceed one bit.
-
 ## Surprise
 
 ```{r}
@@ -557,41 +748,6 @@ order needs several more to reach. This is the logic of computerised adaptive
 testing, and of Wordle solvers. The ending point is the real news, though:
 a full pass through this test leaves most of the uncertainty about which of
 64 groups a person belongs to unresolved.
-
-## Patterns
-
-```{r}
-#| label: patterns
-#| fig-height: 4.4
-#| fig-width: 7.5
-
-pt <- s$patterns |> mutate(rank = row_number())
-top5 <- s$items |> arrange(desc(bits)) |> slice(1:5)
-gth <- s$grid
-P5 <- plogis(outer(gth$theta, top5$a) - matrix(top5$a * top5$b, nrow(gth), 5, byrow = TRUE))
-H5 <- -sum(pt$implied * log2(pt$implied))
-H5_noise <- sum(gth$w * rowSums(h2(P5)))
-ggplot(pt, aes(rank, implied)) +
-  geom_col(fill = irw_blue, width = 0.8) +
-  geom_point(aes(y = observed), colour = "black", size = 1.8) +
-  scale_x_continuous(breaks = pt$rank, labels = pt$pattern, expand = c(0.01, 0.01)) +
-  labs(x = "answer pattern on the 5 most informative items (1 = correct)",
-       y = "probability",
-       title = sprintf("Five questions, 32 possible answer patterns, %s bits about the person",
-                       fmt(H5 - H5_noise)),
-       subtitle = sprintf("Bars: model-implied probability. Dots: observed share of %s respondents. Entropy of the bars %s bits, minus %s bits of noise. Items, in pattern order: %s.",
-                          format(pt$n_obs[1], big.mark = ","), fmt(H5), fmt(H5_noise),
-                          paste(top5$label, collapse = ", "))) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, family = "mono", size = 8))
-```
-
-This is the Wordle bar chart translated. In Wordle, a guess is good when its
-colour patterns are spread out, so that whichever one you see tells you a lot.
-For a test, the spread of the 32 answer patterns is their entropy. But here,
-unlike in Wordle, the same person could produce different patterns on
-different days. That noise, H(X | θ), has to be subtracted before what is left
-counts as information about the person. Most of the entropy in the chart is
-noise.
 
 ## How the warehouse numbers were computed
 
