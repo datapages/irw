@@ -893,10 +893,15 @@ surp <- bind_rows(lapply(reps, function(r) {
 }))
 ord_items <- surp |> filter(kind == "aberrant") |> arrange(step) |> pull(item)
 b_of <- s$items$b[match(ord_items, s$items$label)]
+a_of <- s$items$a[match(ord_items, s$items$label)]
 ab <- filter(surp, kind == "aberrant") |> mutate(answer = if_else(response == 1, "correct", "incorrect"))
 ab_resp <- reps[[which(sapply(reps, `[[`, "kind") == "aberrant")]]
 n_easy_miss <- sum(ab$response[1:3] == 0)
 n_hard_hit <- sum(ab$response[(nrow(ab) - 2):nrow(ab)] == 1)
+# for the text: the easiest item, and the aberrant respondent's most surprising miss
+ab_x <- ab |> mutate(a = a_of[step], b = b_of[step])
+ez <- ab_x[1, ]
+mm <- ab_x |> filter(response == 0, step != 1) |> slice_max(surprisal, n = 1)
 ggplot(surp, aes(step, surprisal, group = respondent)) +
   geom_hline(yintercept = 1, linetype = "dashed", colour = irw_grey) +
   geom_step(data = filter(surp, kind != "aberrant"), colour = irw_grey, alpha = 0.5,
@@ -905,7 +910,8 @@ ggplot(surp, aes(step, surprisal, group = respondent)) +
   geom_point(data = ab, aes(shape = answer), colour = irw_red, fill = "white", size = 2.6, stroke = 1.2) +
   scale_shape_manual(values = c(correct = 16, incorrect = 21), name = "aberrant respondent's answer") +
   scale_x_continuous(breaks = seq_along(ord_items),
-                     labels = sprintf("%s\n(b = %s)", ord_items, formatC(b_of, format = "f", digits = 1))) +
+                     labels = sprintf("%s\na = %s\nb = %s", ord_items, formatC(a_of, format = "f", digits = 1),
+                                      formatC(b_of, format = "f", digits = 1))) +
   labs(x = "questions, from easiest (left) to hardest (right)",
        y = "surprisal (bits)",
        title = sprintf("The aberrant respondent misses %d of the 3 easiest questions and gets %d of the 3 hardest right",
@@ -930,6 +936,17 @@ red respondent's answers disagree with each other. The rest of the pattern says
 very unlikely, and vice versa, so the surprise lands on exactly the answers
 that do not fit. This is the logic of person-fit statistics such as Zh, one
 answer at a time.
+
+Surprisal depends on an item's slope as well as its difficulty. The easiest
+question, `r ez$item` (a = `r fmt(ez$a, 1)`, b = `r fmt(ez$b, 1)`), is also
+one of the flattest, so even fairly able people miss it now and then; the red
+respondent's miss costs `r fmt(ez$surprisal, 1)` bits. Their miss on
+`r mm$item` (a = `r fmt(mm$a, 1)`, b = `r fmt(mm$b, 1)`), which is harder but
+much steeper, costs `r fmt(mm$surprisal, 1)`: anyone the rest of the answers
+place above its location almost never gets it wrong. Leaving one answer out
+also changes the evidence. A miss on a steep item pulls the estimate of θ down
+more than a miss on a flat one, so it makes the person's other misses look less
+surprising.
 
 Elsewhere on the page, as in the game above, surprisal is judged against
 the answers *so far*. That version depends on order, and it adds up: the
