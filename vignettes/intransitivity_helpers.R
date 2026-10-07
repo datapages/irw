@@ -60,20 +60,47 @@ fit_model <- function(d, agents) {
   list(theta = th, theta_sim = th * sqrt(shrink), h = h, kappa = kappa, shrink = shrink)
 }
 
-# The same shrink from a penalized Bradley-Terry fit (fit_ll below): sampling
-# variance from the inverse Fisher information of the centred strengths. Unlike the
-# glm/polr fit, it stays finite under (quasi-)separation, where some agents win or
-# lose nearly every game and the glm standard errors blow up.
-shrink_pen <- function(th, h, ia, ib, home, off, lam = 1e-3) {
-  n <- length(th); p <- plogis(off + h * home + th[ia] - th[ib]); w <- p * (1 - p)
-  I <- matrix(0, n, n)
+# Fisher information of the strengths at win probabilities p (a Laplacian of the
+# schedule weighted by p (1 - p))
+info_matrix <- function(p, ia, ib, n) {
+  w <- p * (1 - p); I <- matrix(0, n, n)
   dg <- rowsum(c(w, w), c(ia, ib)); i <- as.integer(rownames(dg)); I[cbind(i, i)] <- dg[, 1]
   od <- rowsum(w, paste(pmin(ia, ib), pmax(ia, ib)))
   ij <- do.call(rbind, lapply(strsplit(rownames(od), " "), as.integer))
   I[ij] <- I[ij] - od[, 1]; I[ij[, 2:1, drop = FALSE]] <- I[ij[, 2:1, drop = FALSE]] - od[, 1]
-  V <- solve(I + 2 * lam * diag(n)); M <- diag(n) - 1 / n
-  v_err <- mean(diag(M %*% V %*% M)) * n / (n - 1); v_obs <- var(th)
-  max(0, (v_obs - v_err) / v_obs)
+  I
+}
+
+# Strengths for the null when the moment shrink fails. The moment estimate (fitted
+# variance minus mean sampling variance) collapses to 0 whenever any agent or link
+# is separated: a near-linear dominance hierarchy, a team that loses every game, or
+# two leagues joined only by a sweep. One huge standard error then swamps the
+# average, and a null from zero strengths is a coin flip, which makes the test far
+# too conservative. Here the strengths are instead N(0, s2), integrated out by a
+# Laplace approximation, and s2 maximises that marginal likelihood. The prior keeps
+# every strength finite, so s2 is large for a near-deterministic hierarchy and near
+# 0 only when the games carry little signal. Returns the posterior-mode strengths
+# rescaled to variance s2 (as the moment path rescales by sqrt(shrink)) and h.
+strengths_ml <- function(ia, ib, y, home, n, off = 0) {
+  mode_at <- function(ls2, p0) {
+    lam <- 1 / (2 * exp(ls2))
+    o <- optim(p0, function(p) -ll_grad(p, ia, ib, y, home, n, lam, FALSE, off)$ll,
+               function(p) -ll_grad(p, ia, ib, y, home, n, lam, FALSE, off)$g,
+               method = "BFGS", control = list(maxit = 2000, reltol = 1e-8))
+    th <- o$par[-1]; p <- plogis(off + o$par[1] * home + th[ia] - th[ib])
+    H <- info_matrix(p, ia, ib, n) + diag(1 / exp(ls2), n)
+    # log marginal likelihood up to a constant: penalised log-likelihood at the mode,
+    # prior normalisation, Laplace determinant
+    list(lml = -o$value - n / 2 * ls2 - as.numeric(determinant(H)$modulus) / 2, par = o$par)
+  }
+  # each evaluation starts from the previous mode, which is close
+  last <- rep(0, n + 1)
+  lml <- function(l) { m <- mode_at(l, last); last <<- m$par; m$lml }
+  ls2 <- optimize(lml, c(log(1e-4), log(100)), maximum = TRUE, tol = 0.01)$maximum
+  m <- mode_at(ls2, last)
+  th <- m$par[-1] - mean(m$par[-1])
+  th <- if (var(th) > 0) th * sqrt(exp(ls2) / var(th)) else th
+  list(theta = th, h = m$par[1], s2 = exp(ls2))
 }
 
 simulate_y <- function(d, f) {
@@ -129,15 +156,13 @@ stats_from <- function(pm, tri) {
 
 # the transitive model the triad statistics are simulated from
 null_fit <- function(d, agents) {
-  f <- fit_model(d, agents)
-  if (f$shrink < .05) {
-    # as in lr_test: under separation the glm/polr SEs blow up and the shrink falls
-    # to 0; take strengths and shrink from the penalized fit instead
+  f <- tryCatch(fit_model(d, agents), error = function(e) NULL)
+  if (is.null(f) || f$shrink < .05) {
+    # as in lr_test: where the moment shrink fails, strengths from strengths_ml
     ia <- match(d$a, agents); ib <- match(d$b, agents)
-    f1 <- fit_ll(ia, ib, d$y, d$home, length(agents), FALSE)
-    th <- f1$par[-1] - mean(f1$par[-1])
-    s <- tryCatch(shrink_pen(th, f1$par[1], ia, ib, d$home, 0), error = function(e) 0)
-    f$theta_sim <- setNames(th * sqrt(s), agents); f$h <- f1$par[1]; f$shrink <- s
+    m <- strengths_ml(ia, ib, d$y, d$home, length(agents), if (is.null(d$off)) 0 else d$off)
+    if (is.null(f)) f <- list(kappa = 0)
+    f$theta_sim <- setNames(m$theta, agents); f$h <- m$h; f$shrink <- NA
   }
   f
 }
@@ -211,7 +236,8 @@ fit_ll <- function(ia, ib, y, home, n, rank2, lam = 1e-3, starts = 3, off = 0) {
 
 # LR = 2 (ll_rank2 - ll_BT), with a parametric-bootstrap null from the fitted BT
 # model, its strengths rescaled by sqrt(EB shrink). The shrink comes from
-# fit_model; where that fit fails or separates (shrink < .05), from shrink_pen.
+# fit_model; where that fit fails or separates (shrink < .05), the strengths come
+# from strengths_ml instead.
 # shrink = FALSE simulates from the fitted strengths as they are; it is kept only to
 # show, on simulated data, why that null is too lenient. Bootstrap replicates run on
 # getOption("lr_cores", 1) cores.
@@ -222,12 +248,13 @@ lr_test <- function(d, B = 100, seed = 1, off = 0, shrink = TRUE) {
   f1 <- fit_ll(ia, ib, d$y, d$home, n, FALSE, off = off); f2 <- fit_ll(ia, ib, d$y, d$home, n, TRUE, off = off)
   lr <- 2 * (f2$ll - f1$ll)
   h <- f1$par[1]; th <- f1$par[2:(n + 1)]; pdraw <- mean(d$y == 0.5)
-  s <- 1
+  s <- 1; method <- "fitted"
+  th <- th - mean(th)
   if (shrink) {
     s <- tryCatch(fit_model(data.frame(d[, c("a", "b", "y", "home")], off = off), agents)$shrink, error = function(e) NA)
-    if (is.na(s) || s < .05) s <- tryCatch(shrink_pen(th - mean(th), h, ia, ib, d$home, off), error = function(e) 1)
+    if (!is.na(s) && s >= .05) { th <- th * sqrt(s); method <- "moment" }
+    else { m <- strengths_ml(ia, ib, d$y, d$home, n, off); th <- m$theta; h <- m$h; s <- NA; method <- "ml" }
   }
-  th <- (th - mean(th)) * sqrt(s)
   eta <- off + h * d$home + th[ia] - th[ib]
   # a draw is drawn with the observed rate
   null <- unlist(parallel::mclapply(seq_len(B), function(r) { set.seed(seed * 1000 + r)
@@ -239,5 +266,6 @@ lr_test <- function(d, B = 100, seed = 1, off = 0, shrink = TRUE) {
   u <- f2$par[(n + 2):(2 * n + 1)]; v <- f2$par[(2 * n + 2):(3 * n + 1)]
   cyc <- outer(u, v) - outer(v, u)
   data.frame(lr = lr, lr_null = mean(null), lr_p = (1 + sum(null >= lr)) / (B + 1),
-             cyc_sd = sd(cyc[upper.tri(cyc)]), theta_sd = sd(f2$par[2:(n + 1)]), null_shrink = s)
+             cyc_sd = sd(cyc[upper.tri(cyc)]), theta_sd = sd(f2$par[2:(n + 1)]), null_shrink = s,
+             null_method = method, null_sd = sd(th))
 }

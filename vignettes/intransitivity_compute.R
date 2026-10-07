@@ -114,8 +114,12 @@ build_units <- function() {
   ord <- function(x) x[order(x$date, x$agent_a, x$agent_b)]
 
   # ---- team sports: one unit per league-season ----
-  mlb <- ord(fetch("mlb_through2023")); mlb <- mlb[winner != "draw"]   # MLB "draws" are suspended games
+  # MLB from Retrosheet, regular season only. mlb_through2023 has no game-type column,
+  # so its seasons included the postseason, and a World Series sweep between two
+  # leagues that never otherwise met left their relative strength unidentified.
+  mlb <- ord(fetch("retrosheet_mlb_1871_2025")); mlb <- mlb[game_type == "regular" & winner != "draw"]   # "draws" are suspended games
   for (s in sort(unique(mlb$season))) add_split(paste("mlb", s), mlb[season == s], "MLB")
+  rm(mlb); gc()
   nba <- ord(fetch("fivethirtyeight_nba_1946_2023")); nba <- nba[is.na(playoff) | playoff == ""]
   for (s in sort(unique(nba$season))) add_split(paste("nba", s), nba[season == s], "NBA")
   nhl <- ord(fetch("fivethirtyeight_nhl_1917_2023")); nhl <- nhl[playoff == 0]
@@ -211,10 +215,6 @@ build_units <- function() {
   }
 
   # ---- team sports ----
-  # Retrosheet: only the seasons after mlb_through2023
-  rs <- ord(fetch("retrosheet_mlb_1871_2025")); rs <- rs[game_type == "regular" & winner != "draw" & season > max(mlb$season)]
-  for (s in sort(unique(rs$season))) add_split(paste("mlb", s), rs[season == s], "MLB")
-  rm(rs, mlb); gc()
   # openfootball leagues, league stages only. A season is skipped where 538's soccer
   # table already has it (at least 20% of its games fall within 538's dates for that league).
   s538 <- fetch("fivethirtyeight_soccer_2016_2023")
@@ -356,8 +356,8 @@ calib <- function(name, expr) {
 }
 null_rep <- function(d, i) {
   # one true-null replicate on the schedule of d: transitive BT with the shrunk
-  # strengths as the truth
-  ag <- sort(unique(c(d$a, d$b))); f <- fit_model(d, ag)
+  # strengths as the truth (null_fit, so separated units get strengths_ml's)
+  ag <- sort(unique(c(d$a, d$b))); f <- null_fit(d, ag)
   set.seed(100 + i); d$y <- simulate_y(d, f); d
 }
 # (a) sparse schedules: 40 cricket leagues with about one game per pair and 20 NFL
@@ -380,10 +380,23 @@ size_sparse <- calib("size_sparse", {
 size_offset <- calib("size_offset", {
   pick <- grep("^lichess .* bullet$", meta$unit, value = TRUE)
   rbindlist(parallel::mclapply(seq_along(pick), function(i) tryCatch({
-    d <- units[[pick[i]]]; ag <- sort(unique(c(d$a, d$b))); f <- fit_model(d, ag)
+    d <- units[[pick[i]]]; ag <- sort(unique(c(d$a, d$b))); f <- null_fit(d, ag)
     set.seed(200 + i); eta <- d$off + f$h * d$home + f$theta_sim[d$a] - f$theta_sim[d$b]
     y <- as.numeric(runif(nrow(d)) < plogis(eta)); y[runif(nrow(d)) < mean(d$y == 0.5)] <- 0.5; d$y <- y
     data.frame(unit = pick[i], lr_test(d, B = 50, off = d$off)) }, error = function(e) NULL), mc.cores = CORES), fill = TRUE)
+})
+# (d) near-linear dominance hierarchies, where the moment shrink fails and the null
+# comes from strengths_ml: 12 animals with strengths N(0, sd^2), each pair meeting a
+# Poisson(3) number of times, no cycles. At sd = 3 the strongest beats the weakest
+# almost always.
+size_hier <- calib("size_hier", {
+  one <- function(sdv, i) { set.seed(300 + i); n <- 12; th <- rnorm(n, 0, sdv); ag <- sprintf("a%02d", 1:n)
+    pr <- t(combn(n, 2)); k <- rpois(nrow(pr), 3); a <- rep(pr[, 1], k); b <- rep(pr[, 2], k)
+    d <- data.frame(a = ag[a], b = ag[b], y = as.numeric(runif(length(a)) < plogis(th[a] - th[b])), home = 0)
+    data.frame(sd = sdv, rep = i, games = nrow(d), lr_test(d, B = 50)) }
+  grid <- expand.grid(i = 1:60, sdv = c(1.5, 3))
+  rbindlist(parallel::mclapply(seq_len(nrow(grid)), function(r) tryCatch(one(grid$sdv[r], grid$i[r]), error = function(e) NULL),
+                               mc.cores = CORES, mc.preschedule = FALSE), fill = TRUE)
 })
 # (c) simulated leagues: 30 teams, 1,230 games (an NBA season), home advantage 0.4,
 # strengths N(0, 0.7^2), plus a rank-2 cyclic term of scale c (u, v ~ N(0, 1)).
@@ -478,7 +491,7 @@ res <- merge(as.data.table(meta), lr, by = "unit", all.x = TRUE)
 res <- merge(res, tri, by = "unit", all.x = TRUE)
 logf(sum(is.na(res$lr_p)), "of", nrow(res), "units have no LR result")
 tables <- sort(unique(irw_list_tables(source = "comp")$name))
-saveRDS(list(units = res, nocore = nocore, size_sparse = size_sparse, size_offset = size_offset, power = power,
+saveRDS(list(units = res, nocore = nocore, size_sparse = size_sparse, size_offset = size_offset, size_hier = size_hier, power = power,
              cems = cems, examples = examples, tables = tables, date_run = Sys.Date()),
         file.path(out_dir, "results.rds"))
 logf("wrote", file.path(out_dir, "results.rds"))
