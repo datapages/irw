@@ -159,8 +159,9 @@ Asking it tells you which side of the cut a person is on, and nothing else.
 **Click on the chart to place a cut** (or use the slider), and watch the bits.
 With perfect cuts the arithmetic is simple: the cuts chop the population into
 groups, and the bits are the entropy of the groups' shares,
-−Σ p log~2~ p. One cut at the median makes two halves: 1 bit. Three cuts at
-the quartiles make four quarters: 2 bits. In general k cuts are worth at most
+−Σ p log~2~ p. One cut at the median makes two halves: 1 bit (each half holds
+p = ½ of people, so −½ log~2~ ½ − ½ log~2~ ½ = ½ + ½ = 1). Three cuts at
+the quartiles make four quarters: 2 bits (4 × −¼ log~2~ ¼ = 4 × ½ = 2). In general k cuts are worth at most
 log~2~(k + 1) bits, reached only when they make equal groups.
 
 Then turn up the **blur**. A blurred cut is a real question: near the cut,
@@ -239,7 +240,7 @@ viewof cx_b2 = Inputs.button([
   ["Median", () => { mutable cx_cuts = [0]; }],
   ["Quartiles", () => { mutable cx_cuts = [0, -0.67, 0.67]; }],
   ["Octiles", () => { mutable cx_cuts = [0, -0.67, 0.67, -1.15, -0.32, 0.32, 1.15]; }],
-  ["3 at the median", () => { mutable cx_cuts = [0, 0, 0]; }],
+  ["3 near the median", () => { mutable cx_cuts = [0, -0.1, 0.1]; }],
   ["3 in the low tail", () => { mutable cx_cuts = [-1.5, -1.8, -2.1]; }],
   ["Numeracy test", () => { mutable cx_cuts = cx_numeracy.cuts; cx_setblur(cx_numeracy.blur); }]
 ], {label: "Try"})
@@ -317,6 +318,10 @@ Some things to try:
 - **Quartiles.** Each cut's "bits added" depends on what was there before. The
   first cut is worth a full bit; the next two split halves, and are worth half a
   bit each, because each only matters for the half of the population it falls in.
+- **3 near the median.** Cuts at −0.1, 0 and +0.1. The outer two each split
+  off a sliver of about 4% of people, so together the three are worth 1.40
+  bits, well short of the 2 that three spread-out cuts can give. A cut close to
+  an existing one asks nearly the same question.
 - **3 in the low tail.** Each cut splits off a sliver. Cuts where few people
   are say little about most people.
 - **Quartiles, then blur.** The bits fall below 2 even though the cuts are
