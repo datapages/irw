@@ -1247,6 +1247,37 @@ picture, which is the dashed curve below. The warehouse tests sit a little
 above that curve, so their bits are only approximately where they land in these
 panels.
 
+::: {.callout-tip collapse="true"}
+## Why does reliability undercount the bits?
+
+Reliability sees only the *variance* of what is still uncertain about θ after
+the answers. Bits see its whole *shape*. Among all distributions with a given
+variance, the normal is the most uncertain one, so the Gaussian formula
+−½ log~2~(1 − ρ) describes the worst case: with θ normal, the true information
+is at least that much, and equal to it only when every posterior is normal
+and has the same width. Real tests break that in two ways, the two departures
+in the simulation below.
+
+**Sharp items leave lumpy posteriors.** Take one perfect cut at the median. It
+is worth exactly 1 bit: you learn which half the person is in. But the top
+half of a normal distribution has variance 1 − 2/π ≈
+`r fmt(1 - 2 / pi)`, so as a reliability the cut is worth only
+`r fmt(2 / pi)`, and the Gaussian formula turns that into
+`r fmt(-0.5 * log2(1 - 2 / pi))` bits. The hard edge at the cut is very
+informative, but it does not shrink the variance much.
+
+**Uneven precision.** A test whose items bunch at one end is precise there and
+vague elsewhere. Reliability averages the error *variances*; information, in
+effect, averages their *logarithms*. The average of the logs is larger than
+the log of the average, so uneven precision is worth more bits than its
+average error suggests, and the gap grows as the unevenness does.
+
+A technical note: the marginal reliability used here is built from Fisher
+information, a large-sample approximation, rather than from exact posterior
+variances. The two track each other closely in these data, but the guarantee
+above is strictly for the posterior-variance version.
+:::
+
 ```{r}
 #| label: reliability-sim
 #| fig-height: 5.6
