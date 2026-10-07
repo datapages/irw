@@ -517,6 +517,9 @@ marg3 <- as.vector(pat_given_theta(X3, p_items(top3, gth$theta)) %*% w3)
 H3 <- -sum(marg3 * log2(marg3))
 pxt3g <- pat_given_theta(X3, p_items(top3, gth$theta))
 N3 <- -sum((pxt3g * log2(pxt3g)) %*% w3)
+post3 <- sweep(pxt3g, 2, w3, "*") / marg3                 # P(theta | pattern), 8 x nodes
+var3 <- as.vector(post3 %*% gth$theta^2 - (post3 %*% gth$theta)^2)
+sd3 <- sqrt(sum(marg3 * var3))                              # RMS posterior SD, population SD = 1
 score_fill <- c(`0` = "#d1e5f0", `1` = "#92c5de", `2` = "#4393c3", `3` = irw_blue)
 p_top <- ggplot(area, aes(theta, fill = factor(score), group = pattern)) +
   geom_ribbon(aes(ymin = ymin, ymax = ymax), colour = "white", linewidth = 0.4) +
@@ -554,6 +557,15 @@ H(X) = `r fmt(H3)` bits. The information is the gap, `r fmt(H3 - N3)` bits,
 and it comes entirely from the mix *changing* along θ. If every θ produced the
 same mix, the top panel would be flat bands, the spread and the noise would be
 equal, and seeing a pattern would tell you nothing about the person.
+
+In the language of measurement error, `r fmt(H3 - N3)` bits is how far three
+answers narrow down θ. If θ and the evidence about it were jointly normal, each
+bit would halve the standard error, so `r fmt(H3 - N3)` bits would leave an
+error of 2^−`r fmt(H3 - N3)`^ ≈ `r fmt(2^-(H3 - N3))` population SDs, a
+reliability of about `r fmt(1 - 4^-(H3 - N3))`. Computed exactly from the
+model, the typical error after these three answers (the root-mean-square
+posterior SD) is `r fmt(sd3)` SDs. The two differ a little because answers
+are not normal; [Reliability in bits](#reliability-in-bits) takes this up.
 
 ### Five questions
 
