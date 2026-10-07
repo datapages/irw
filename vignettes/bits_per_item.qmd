@@ -418,46 +418,75 @@ pat_given_theta <- function(X, P) exp(X %*% t(log(P)) + (1 - X) %*% t(log(1 - P)
 
 ```{r}
 #| label: bit-strip
-#| fig-height: 5.2
+#| fig-height: 5.6
 #| fig-width: 7.5
 
 pg <- s$group_probs
 pick3 <- s$items |> arrange(desc(bits)) |> slice(c(1, ceiling(n() / 2), n()))
 bnd <- pmin(pmax(s$group_bounds, -3.2), 3.2)
 cells <- tibble(g = 1:64, x1 = bnd[-65], x2 = bnd[-1])
-ideal <- mutate(cells, row = "A perfect (Guttman) item at the median",
-                p = rep(c(0, 1), each = 32), bits = 1)
-real <- bind_rows(lapply(seq_len(nrow(pick3)), function(i) {
-  it <- pick3[i, ]
-  mutate(cells, row = paste0("\u201c", substr(it$text, 1, 52), if (nchar(it$text) > 52) "\u2026" else "", "\u201d"),
-         p = pg[, it$item], bits = it$bits)
+short_q <- function(t) paste0("“", substr(t, 1, 52), ifelse(nchar(t) > 52, "…", ""), "”")
+rows <- tibble(row = c("A perfect (Guttman) item at the median", short_q(pick3$text)),
+               a = c(Inf, pick3$a), b = c(0, pick3$b), bits = c(1, pick3$bits)) |>
+  mutate(row = factor(row, levels = row),
+         lab = paste0(fmt(bits), if_else(bits == 1, " bit", " bits")),
+         par = if_else(is.infinite(a), "perfect step\nat θ = 0",
+                       sprintf("slope %s\nlocation %s", fmt(a, 1), fmt(b, 1))),
+         side = factor(paste0(lab, "\n", par)))
+rows$side <- factor(rows$side, levels = rows$side)
+strip <- bind_rows(
+  mutate(cells, row = rows$row[1], p = rep(c(0, 1), each = 32)),
+  bind_rows(lapply(seq_len(nrow(pick3)), function(i) mutate(cells, row = rows$row[i + 1], p = pg[, pick3$item[i]])))
+) |> mutate(row = factor(row, levels = levels(rows$row)))
+th <- seq(-3.2, 3.2, by = 0.02)
+irf <- bind_rows(lapply(seq_len(nrow(rows)), function(i) {
+  r <- rows[i, ]
+  tibble(row = r$row, side = r$side, theta = th,
+         p = if (is.infinite(r$a)) as.numeric(th >= r$b) else plogis(r$a * (th - r$b)))
 }))
-strip <- bind_rows(ideal, real) |>
-  mutate(row = factor(row, levels = unique(row)), y = 5 - as.integer(row),
-         lab = paste0(fmt(bits), if_else(bits == 1, " bit", " bits")))
-labs_df <- distinct(strip, row, y, lab)
-ggplot(strip) +
-  geom_rect(aes(xmin = x1, xmax = x2, ymin = y - 0.4, ymax = y + 0.4, fill = p),
-            colour = "white", linewidth = 0.15) +
-  geom_text(data = labs_df, aes(x = 3.35, y = y, label = lab),
-            hjust = 0, colour = irw_accent, fontface = "bold", size = 4) +
+dens <- tidyr::crossing(side = rows$side, theta = th) |> mutate(d = dnorm(theta) / dnorm(0))
+p_strip <- ggplot(strip) +
+  geom_rect(aes(xmin = x1, xmax = x2, ymin = 0, ymax = 1, fill = p), colour = "white", linewidth = 0.15) +
+  facet_grid(row ~ ., switch = "y", labeller = labeller(row = label_wrap_gen(30))) +
   scale_fill_gradient(low = "#f4f6fa", high = irw_blue, limits = c(0, 1),
-                      name = "P(yes / correct)\nin each slice") +
-  scale_x_continuous(limits = c(-3.2, 4.3), breaks = -3:3, expand = c(0, 0)) +
-  scale_y_continuous(breaks = labs_df$y, labels = stringr::str_wrap(as.character(labs_df$row), 34)) +
-  labs(x = "θ, cut into 64 equally likely slices", y = NULL,
-       title = sprintf("A perfect item halves the population; the best real numeracy item manages %s of a bit",
-                       fmt(max(s$items$bits))),
-       subtitle = "Each row is one question, shaded by how likely people in each slice are to say yes / get it right. Right: I(θ; Xⱼ), the item on its own.") +
-  theme(panel.grid = element_blank(), legend.position = "bottom", legend.key.width = unit(1.2, "cm"))
+                      name = "P(yes / correct) in each slice",
+                      guide = guide_colourbar(title.position = "top")) +
+  scale_x_continuous(limits = c(-3.2, 3.2), breaks = -3:3, expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(x = "θ, cut into 64 equally likely slices", y = NULL) +
+  theme(panel.grid = element_blank(), axis.text.y = element_blank(),
+        strip.text.y.left = element_text(angle = 0, hjust = 1, size = 10),
+        strip.placement = "outside", legend.position = "bottom", legend.key.width = unit(1, "cm"),
+        legend.key.height = unit(0.3, "cm"), legend.title = element_text(size = 10),
+        panel.spacing.y = unit(0.6, "lines"))
+p_irf <- ggplot(irf, aes(theta, p)) +
+  geom_area(data = dens, aes(theta, d), fill = "grey88", inherit.aes = FALSE) +
+  geom_vline(data = filter(rows, is.finite(b)), aes(xintercept = b), linetype = "dashed", colour = irw_grey) +
+  geom_line(colour = irw_blue, linewidth = 1.1) +
+  facet_grid(side ~ .) +
+  scale_x_continuous(limits = c(-3.2, 3.2), breaks = c(-2, 0, 2), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 1), expand = c(0, 0)) +
+  labs(x = "θ", y = "P(correct)") +
+  theme(strip.text.y = element_text(angle = 0, hjust = 0, size = 9.5, colour = "grey20"),
+        panel.grid.minor = element_blank(),
+        panel.spacing.y = unit(0.6, "lines"), axis.text = element_text(size = 9))
+(p_strip + p_irf + plot_layout(widths = c(1.9, 1), guides = "keep")) +
+  plot_annotation(
+    title = wrap(sprintf("A perfect item halves the population; the best real numeracy item manages %s of a bit",
+                         fmt(max(s$items$bits))), 72),
+    subtitle = wrap("Left: each question's answer, shaded by how likely people in each slice are to get it right. Right: the same item's response curve over the population (grey). Steep curves split cleanly; curves that rise away from the crowd split it unevenly. Far right: I(θ; Xⱼ), the item's bits on its own, with its slope and location.", 85),
+    theme = theme(plot.title = element_text(face = "bold", size = 14)))
 ```
 
 A bit is the information in the answer to a question whose two answers are
 equally likely and which splits the possibilities cleanly. The top row of the
-figure does exactly that: it cuts 64 slices to 32. Real items fail in two ways.
+figure does exactly that: it cuts 64 slices to 32. Real items don't split the sample so cleanly, for two reasons.
 Their split is blurred, because people in the same group sometimes answer
 differently. And their split is often off-centre, because easy items mostly
-separate the lowest groups from everyone else. In pattern terms, the
+separate the lowest groups from everyone else. Both can be read off
+the item response curves on the right: a shallow slope blurs the split, and a
+curve that rises away from the bulk of the population (grey) splits it
+unevenly. In pattern terms, the
 spread is the entropy of the answer across the population, the noise is the
 entropy of the answer for someone at a fixed θ, and the information is the gap:
 <small>I(θ; X~j~) = h(P̄~j~) − E~θ~[h(P~j~(θ))], with h(p) = −p log~2~ p − (1−p) log~2~(1−p).</small>
@@ -495,9 +524,9 @@ p_top <- ggplot(area, aes(theta, fill = factor(score), group = pattern)) +
   scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
   scale_x_continuous(expand = c(0, 0)) +
   labs(x = "θ", y = "chance of each pattern",
-       title = sprintf("Three questions: the mix of patterns shifts with θ, and that shift is %s bits", fmt(H3 - N3)),
-       subtitle = wrap(sprintf("Top: read straight up from any θ to see the patterns a person there would give, answering again and again. Bottom: the same mix averaged over the population. Items, in pattern order: %s.",
-                          paste(top3$label, collapse = ", ")), 78)) +
+       title = sprintf("Three questions, 8 possible answer patterns, %s bits about the person", fmt(H3 - N3)),
+       subtitle = wrap(sprintf("Top: read straight up from any θ to see the patterns a person there would give, answering again and again. Bottom: the same mix averaged over the population. Bits = spread of the bottom bars, H(X) = %s, minus the average spread of a vertical slice of the top panel, H(X | θ) = %s. Items, in pattern order: %s.",
+                          fmt(H3), fmt(N3), paste(top3$label, collapse = ", ")), 78)) +
   theme(legend.position = "top")
 bars3 <- tibble(pattern = factor(key3, key3), p = marg3, score = factor(rowSums(X3)))
 p_bot <- ggplot(bars3, aes(pattern, p, fill = score)) +
