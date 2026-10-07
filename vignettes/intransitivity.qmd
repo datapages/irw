@@ -47,6 +47,8 @@ theme_set(theme_minimal(base_size = 13))
 irw_blue <- "#2166ac"
 irw_red  <- "#d73027"
 irw_grey <- "grey50"
+irw_green  <- "#1b7837"
+irw_orange <- "#e08214"
 # Interactive figures on the site; STATIC_FIGS=1 gives plain images (for
 # previews outside the site, where the plotly scripts cannot load)
 show_plot <- function(p) if (Sys.getenv("STATIC_FIGS") == "1") p else ggplotly(p, tooltip = "text")
@@ -90,7 +92,7 @@ This vignette — the choice of data, the compute scripts, the analysis design, 
 
 ## Motivation
 
-Rock-paper-scissors is the textbook example of intransitivity. Rock beats scissors and scissors beats paper, so if wins were transitive, rock would beat paper. Instead paper beats rock: the three beat each other in a cycle. No ranking of the three is consistent with who beats whom, so it makes no sense to call any of them the strongest. Ranking, though, is what most models for pairwise data do. The Bradley-Terry model [@bradley1952], used in the course's [competitions lesson](https://ben-domingue.github.io/irw-course/lessons/competitions.html), gives each competitor a single strength and lets the difference in strengths set the odds of each game. It is transitive by construction: if A is likely to beat B and B is likely to beat C, then A is even more likely to beat C. That lesson sets intransitivity aside. This vignette picks it up.
+Rock-paper-scissors is the textbook example of intransitivity. Rock beats scissors and scissors beats paper, so if wins were transitive, rock would beat paper. Instead paper beats rock: the three beat each other in a cycle. No ranking of the three is consistent with who beats whom, so it makes no sense to call any of them the strongest. Ranking, though, is what most models for pairwise data do. The Bradley-Terry model [@bradley1952], used in the course's [competitions lesson](https://ben-domingue.github.io/irw-course/lessons/competitions.html), gives each competitor a single strength and lets the difference in strengths set the odds of each game. It is transitive by construction: if A is likely to beat B and B is likely to beat C, then A is even more likely to beat C. That lesson sets intransitivity aside. This vignette picks it up. (The IRW's sports data also appear in the vignette on [sports trial data](sports_trials.qmd), which asks a different question: who takes the hard shot.)
 
 Throughout, a **cycle** means three competitors who beat each other in a circle: A beats B, B beats C, and C beats A, as in rock-paper-scissors. (Longer cycles exist too, but when everyone has played everyone, any longer cycle implies a three-way one, so three is where we look.) The word can mean two different things, though, and the distinction runs through this whole page:
 
@@ -138,7 +140,7 @@ The obvious check is to count cycles. For every three agents that have all playe
 
 We do that with a parametric bootstrap. Fit Bradley-Terry to the unit (an ordinal version when there are draws), simulate every game again from the fitted model on the same schedule (same pairs, same home sides), recount, and repeat 200 times.
 
-Counting is the natural way to think about cycles, but it is a weak test. It reduces each pair to who won their series and throws away the rest, and with two or three games per pair that series result is mostly noise. In bullet chess, where the likelihood test below does find intransitivity, the share of cyclic triads moves by only about half a percentage point. So we use the count to describe the data, not to decide.
+Counting is the natural way to think about cycles, but it is a weak test. It reduces each pair to who won their series and throws away the rest, and with two or three games per pair that series result is mostly noise. In bullet chess, where the likelihood test below does find intransitivity, the share of cyclic triads moves by only about one percentage point. So we use the count to describe the data, not to decide.
 
 A second summary keeps the margins. HodgeRank [@jiang2011hodge] fits a single ranking to all the pairwise log-odds at once, by weighted least squares, and its *cyclic share* is the part of those log-odds that no ranking can explain. It goes through the same bootstrap as the count, and is computed for units with at most 150 agents.
 
@@ -347,17 +349,22 @@ With no cycles, the likelihood test rejects in `r PW("lr_p", 0)` of these league
 
 ```{r}
 #| label: fig-cycles
-#| fig-cap: "Share of decided triads that are cyclic, observed vs. simulated from a transitive model on the same schedule, one point per unit (units with at most 150 agents). Points near the diagonal have about as many cycles as luck produces."
+#| fig-cap: "Share of decided triads that are cyclic, observed vs. simulated from a transitive model on the same schedule, one point per unit (units with at most 150 agents). Points near the diagonal have about as many cycles as luck produces. Large points: units where the likelihood test of a cyclic term rejects at .05."
 #| fig-height: 6
 
 cy <- U |> filter(!is.na(wst), !is.na(wst_null), triads > 0) |>
-  mutate(text = sprintf("%s<br>observed %.3f, simulated %.3f<br>p = %.3f", unit, wst, wst_null, wst_p))
-p <- ggplot(cy, aes(wst_null, wst, colour = type, text = text)) +
+  mutate(text = sprintf("%s<br>observed %.3f, simulated %.3f<br>triad count p = %.3f<br>likelihood test p = %.3f", unit, wst, wst_null, wst_p, lr_p))
+cy <- cy |> mutate(rej = factor(ifelse(sig, "Rejects (p ≤ .05)", "Does not reject"),
+                                 levels = c("Does not reject", "Rejects (p ≤ .05)")))
+p <- ggplot(cy, aes(wst_null, wst, colour = type, size = rej, alpha = rej, text = text)) +
   geom_abline(colour = irw_grey, linetype = 2) +
-  # the ~1,600 team-seasons drawn first, small and faint, so the other families stay visible
-  geom_point(data = ~ filter(.x, type == "team"), alpha = .2, size = 0.9) +
-  geom_point(data = ~ filter(.x, type != "team"), alpha = .75, size = 1.9) +
-  scale_colour_manual(values = c(team = irw_blue, `1v1` = irw_red, judg = "#1b7837", animal = "#e08214"),
+  # units the likelihood test does not reject drawn first, small and faint; the
+  # rejecting ones on top, large
+  geom_point(data = ~ filter(.x, !sig)) +
+  geom_point(data = ~ filter(.x, sig)) +
+  scale_size_manual(values = c(`Does not reject` = 0.5, `Rejects (p ≤ .05)` = 2.6), name = "Likelihood test") +
+  scale_alpha_manual(values = c(`Does not reject` = 0.2, `Rejects (p ≤ .05)` = 0.9), name = "Likelihood test") +
+  scale_colour_manual(values = c(team = irw_blue, `1v1` = irw_red, judg = irw_green, animal = irw_orange),
                       labels = c(team = "Team sports", `1v1` = "One-on-one", judg = "Judgments", animal = "Animal dominance"), name = NULL) +
   labs(x = "Cyclic share, simulated (no cycles)", y = "Cyclic share, observed") +
   coord_equal()
@@ -366,7 +373,22 @@ show_plot(p)
 
 In a typical team-season, `r pct(median(team$wst, na.rm = TRUE))` of the triads whose three series were all decided are cyclic in the observed results. Simulating the same schedules from a transitive model gives `r pct(median(team$wst_null, na.rm = TRUE))`. @fig-cycles shows that this holds unit by unit: the points sit along the diagonal. The points far from it are mostly small units, such as cricket leagues with a handful of decided triads, where a single cycle moves the share a lot.
 
-Counting also shows why a better test is needed. Where the likelihood test below does find intransitivity, as in bullet chess, the excess of observed cycles is small: `r pct(median(bullet$wst))` of triads are cyclic in a typical bullet month, against `r pct(median(bullet$wst_null))` under the transitive model. The count rejects in only `r sum(bullet$wst_p <= .05)` of the 12 bullet months. HodgeRank's cyclic share, which uses every game rather than series winners, rejects in `r sum(bullet$curl_p <= .05)`, about as often as the likelihood test. Even real intransitivity in the win probabilities changes the outcome of only a small fraction of triads, here about half a percentage point, and a count of triads, each decided by a short series, can barely see that.
+A *decided* triad is three agents who all met, with no pair's series level. If every game were a coin flip, a quarter of decided triads would be cyclic, so a share near 0.25 means the results among those three are about as ordered as noise. Leagues of evenly matched teams come close to that without any intransitivity. That is why the raw share says little and the comparison with the transitive simulation is what counts. @tbl-cyc-share gives both by family. The excess is under one percentage point in most families and below zero in several. It is largest for the bots and Lichess blitz, at little more than one point: even where the likelihood test finds intransitivity, it shows up in only a small share of triads.
+
+```{r}
+#| label: tbl-cyc-share
+#| tbl-cap: "Cyclic share of decided triads by family: medians across units (units with at most 150 agents and at least one decided triad). Excess: observed minus simulated, per unit, then the median. With no intransitivity anywhere, the excess would be centred on zero."
+
+cy |>
+  group_by(Family = family) |>
+  summarise(Units = n(), `Decided triads` = num(round(median(triads))),
+            Observed = pct(median(wst)), `Simulated (no cycles)` = pct(median(wst_null)),
+            Excess = sprintf("%+.1f pts", 100 * median(wst - wst_null)), .groups = "drop") |>
+  mutate(Family = factor(Family, levels = fam_order)) |> arrange(Family) |>
+  knitr::kable(align = "lrrrrr")
+```
+
+Counting also shows why a better test is needed. Where the likelihood test below does find intransitivity, as in bullet chess, the excess of observed cycles is small: in a typical bullet month, the observed share of cyclic triads is `r sprintf("%.1f", 100 * median(bullet$wst - bullet$wst_null))` percentage points above the transitive model's (medians across months: `r pct(median(bullet$wst))` observed, `r pct(median(bullet$wst_null))` simulated). The count rejects in only `r sum(bullet$wst_p <= .05)` of the 12 bullet months. HodgeRank's cyclic share, which uses every game rather than series winners, rejects in `r sum(bullet$curl_p <= .05)`, about as often as the likelihood test. Even real intransitivity in the win probabilities changes the outcome of only a small fraction of triads, and a count of triads, each decided by a short series, can barely see that.
 
 ### Team sports: no detectable intransitivity
 
@@ -481,7 +503,7 @@ if (!is.null(extras)) {
     facet_wrap(~ tc, nrow = 1, scales = "free_x") +
     scale_colour_manual(values = c(Observed = irw_red, `Transitive model` = "grey55"), name = NULL) +
     scale_y_continuous(labels = scales::percent) +
-    labs(x = "Pre-game rating (median of the fifth)", y = "Cyclic share of decided triads") +
+    labs(x = "Pre-game rating (median of each fifth of players)", y = "Cyclic share of decided triads") +
     theme(legend.position = "bottom")
   # plotly ignores ggplot's legend position and drew the legend over the facet titles;
   # put it below the x-axis title instead
@@ -627,9 +649,7 @@ if (!is.null(extras)) {
 
 The bots' loop is what strong intransitivity looks like: each bot beats the next almost every time, so no ordering of the three makes sense. The chess loop is milder, though each player still won most of their games against the next. The risk loops are the weakest. Each rests on a few judgments per pair, and the fitted cyclic model puts the win probabilities around these loops at only about `r f2(min(ex$model_min, na.rm = TRUE))`–`r f2(max(ex$model_min, na.rm = TRUE))`. In the judgment data, cycles nudge preferences slightly away from a single ranking; they do not overturn it.
 
----
-
-## Discussion
+### Discussion
 
 Where does this leave the Bradley-Terry model? For team sports it holds up against the cyclic alternative: across more than a century of leagues, we find no matchup structure beyond a single strength per team, and what looks like a cycle is the noise of a short series. Other departures from a single fixed strength, such as strengths that change within a season, were not tested. For online chess and for bots it does not: some matchups are consistently better or worse than the two strengths predict, and those deviations line up into cycles. Judgments sit in between. Individuals are transitive where we can check; pooled judgments occasionally are not, perhaps because people who differ are pooled together, though that is untested here. Animal dominance often fails the single-rank model (`r sum(an$sig)` of `r nrow(an)` groups), but there, ranks that shift over the period and relationships specific to a pair are at least as plausible as true cycles.
 
@@ -669,6 +689,14 @@ vignettes/intransitivity_progress.sh    # share of units done, by family
 ```
 
 Then render `vignettes/intransitivity.qmd`.
+
+::: {.callout-tip}
+To cite the datasets used, run:
+
+```r
+irw_save_bibtex(cache$tables, source = "comp", output_file = "intransitivity_data/references.bib")
+```
+:::
 
 ---
 

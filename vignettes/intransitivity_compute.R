@@ -334,7 +334,8 @@ test_one <- function(u) {
   invisible(NULL)
 }
 big <- meta$unit[meta$agents > 40 | meta$games > 3000]; small <- setdiff(meta$unit, big)
-todo <- function(us) us[!file.exists(file.path(work, "lr", key(us)))]
+# a unit is to do if either cache is missing (a triad-only rerun leaves lr in place)
+todo <- function(us) us[!file.exists(file.path(work, "lr", key(us))) | !file.exists(file.path(work, "triads", key(us)))]
 if (stage_on("tests")) {
 options(lr_cores = 1)
 invisible(parallel::mclapply(todo(small), function(u) tryCatch(test_one(u), error = function(e) logf(u, conditionMessage(e))),

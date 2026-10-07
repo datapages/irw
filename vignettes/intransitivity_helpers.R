@@ -42,7 +42,11 @@ fit_model <- function(d, agents) {
     kappa <- unname(diff(m$zeta) / 2)    # symmetric draw band around eta
   }
   hcol <- has_home && !home_in_cut
-  h <- if (hcol) unname(cf[1]) else if (home_in_cut) -unname(sum(m$zeta)) / 2 * unique(d$home) else 0
+  # with draws and a home column (some neutral games), polr's cutpoint midpoint is
+  # the neutral games' intercept and cf[1] is home relative to it; a neutral game
+  # has no side, so h is their sum (cf[1] alone runs off when the few neutral games
+  # are all won by the side listed first)
+  h <- if (hcol && draws) unname(cf[1]) - mean(m$zeta) else if (hcol) unname(cf[1]) else if (home_in_cut) -unname(sum(m$zeta)) / 2 * unique(d$home) else 0
   th <- c(0, if (hcol) cf[-1] else cf)
   th <- th - mean(th)
   # EB shrink: true variance = observed variance - mean sampling variance of the
