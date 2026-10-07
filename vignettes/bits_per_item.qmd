@@ -307,8 +307,18 @@ html`<div>${cx_plot}${cx_readout}</div>`
 ```
 
 ```{ojs}
-cx_rows.length ? Inputs.table(cx_rows, {rows: 6, layout: "fixed",
-  width: {"#": 35, "θ": 60, "bits added": 90, "on its own": 90}}) :
+cx_rows.length ? html`<div style="max-width:680px; font-size:0.9rem;">
+  <table class="table table-sm" style="margin-bottom:0.3rem;">
+    <thead><tr><th>#</th><th>cut at θ</th><th>group it splits</th>
+      <th style="text-align:right;">bits added</th><th style="text-align:right;">on its own</th></tr></thead>
+    <tbody>${cx_rows.map(r => html`<tr><td>${r["#"]}</td><td>${r["θ"]}</td><td>${r["group it splits"]}</td>
+      <td style="text-align:right;">${r["bits added"]}</td><td style="text-align:right;">${r["on its own"]}</td></tr>`)}</tbody>
+  </table>
+  <div style="color:#666; font-size:0.82rem;"><b>Bits added</b>: what the cut adds given the answers to the cuts
+  above it in the table, I(θ; X<sub>k</sub> | X<sub>1</sub>, …, X<sub>k−1</sub>), averaged over what those answers could be.
+  This column adds up to the total, and it depends on the order the cuts were placed.
+  <b>On its own</b>: what the cut would be worth if it were the only question, I(θ; X<sub>k</sub>).
+  This column does not add up to the total: cuts share information.</div></div>` :
   html`<p style="color:#666;"><i>No cuts yet. Click the chart.</i></p>`
 ```
 
