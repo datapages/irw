@@ -348,6 +348,7 @@ Several different "bits" appear below. They are not interchangeable.
   change, not an average, so it can be negative. Averaged over possible answers
   it equals the expected bits.
 - **Surprisal**: −log~2~ P(answer | answers so far), how unexpected one answer was.
+  The [Surprise](#surprise) section conditions instead on all the person's other answers.
 - **I(θ; S)** and **I(θ; X | S)**: what the sum score keeps, and what it drops.
 :::
 
@@ -409,10 +410,23 @@ Neither term can exceed one bit.
 
 reps <- s$replays
 lab_of <- function(it) s$items$label[match(it, s$items$item)]
+# Leave-one-out surprisal: -log2 P(x_j | every other answer), with the posterior
+# over the 2^K theta groups built from all items except j. Order plays no part;
+# items are shown easiest to hardest only for reading.
+loo_surprisal <- function(x, PG) {
+  ll <- log(PG) %*% diag(x, length(x)) + log(1 - PG) %*% diag(1 - x, length(x))  # groups x items
+  tot <- rowSums(ll)
+  vapply(seq_along(x), function(j) {
+    lp <- tot - ll[, j]; post <- exp(lp - max(lp)); post <- post / sum(post)
+    p1 <- sum(post * PG[, j])
+    -log2(if (x[j] == 1) p1 else 1 - p1)
+  }, numeric(1))
+}
+ord_b <- order(s$items$b)
 surp <- bind_rows(lapply(reps, function(r) {
-  st <- r$by_difficulty$steps[-1, ]
-  tibble(respondent = r$respondent, kind = r$kind, step = st$step, item = lab_of(st$item),
-         surprisal = st$surprisal, response = st$response)
+  x <- r$responses[s$items$item[ord_b]]
+  tibble(respondent = r$respondent, kind = r$kind, step = seq_along(x), item = lab_of(names(x)),
+         surprisal = loo_surprisal(x, s$group_probs[, names(x), drop = FALSE]), response = unname(x))
 }))
 ord_items <- surp |> filter(kind == "aberrant") |> arrange(step) |> pull(item)
 b_of <- s$items$b[match(ord_items, s$items$label)]
@@ -429,30 +443,45 @@ ggplot(surp, aes(step, surprisal, group = respondent)) +
   scale_shape_manual(values = c(correct = 16, incorrect = 21), name = "aberrant respondent's answer") +
   scale_x_continuous(breaks = seq_along(ord_items),
                      labels = sprintf("%s\n(b = %s)", ord_items, formatC(b_of, format = "f", digits = 1))) +
-  labs(x = "questions, asked from easiest (left) to hardest (right)",
+  labs(x = "questions, from easiest (left) to hardest (right)",
        y = "surprisal (bits)",
        title = sprintf("The aberrant respondent misses %d of the 3 easiest questions and gets %d of the 3 hardest right",
                        n_easy_miss, n_hard_hit),
-       subtitle = sprintf("Red: the respondent with the worst person-fit (Zh = %s, sum score %d of %d). Grey: five typical respondents. Surprisal = −log₂ P(answer | earlier answers). Dashed: 1 bit, a fair coin flip.",
+       subtitle = sprintf("Red: the respondent with the worst person-fit (Zh = %s, sum score %d of %d). Grey: five typical respondents. Surprisal = −log₂ P(answer | all their other answers). Dashed: 1 bit, a fair coin flip.",
                           fmt(ab_resp$zh, 1), ab_resp$sum_score, nrow(s$items))) +
   theme(legend.position = "top", axis.text.x = element_text(size = 7.5))
 ```
 
-The surprisal of an answer is −log~2~ of the probability the model gave it,
-just before it was given. An answer the model thought had a 50% chance costs
-1 bit of surprise; one it thought had a 1-in-8 chance costs 3 bits. Most
-answers from typical respondents sit around or below a bit. Here the questions
-are asked from easiest to hardest, so a typical respondent's answers form a
-run of correct answers followed by a run of incorrect ones, and few surprise
-the model. The red respondent does the reverse: wrong on the easy questions,
-right on the hard ones, so the model keeps being caught out. Surprisal depends
-on the order of asking, since each answer is judged against the earlier ones,
-so this is one ordering among many.
+The surprisal of an answer is −log~2~ of the probability the model gave it.
+An answer the model thought had a 50% chance costs 1 bit of surprise; one it
+thought had a 1-in-8 chance costs 3 bits. Here each answer is judged against
+*everything else the person answered*: hide one answer, work out from the
+others where the person probably sits, and ask how likely the hidden answer
+was from there. Nothing depends on the order of asking; the questions are
+lined up from easiest to hardest only so the pattern is easy to read.
+
+Most answers from typical respondents sit around or below a bit, because their
+other answers place them well and each answer agrees with that placement. The
+red respondent's answers disagree with each other. The rest of the pattern says
+"able enough for the hard questions", which makes the misses on the easy ones
+very unlikely, and vice versa, so the surprise lands on exactly the answers
+that do not fit. This is the logic of person-fit statistics such as Zh, one
+answer at a time.
+
+Elsewhere on the page, as in the game at the top, surprisal is judged against
+the answers *so far*. That version depends on order, and it adds up: the
+surprisals of one ordering sum to the surprisal of the whole pattern. The
+leave-one-out version does not add up that way, but it gives each answer one
+number whatever the order, which is what a question about fit needs.
+
+<!-- Expected versus actual: commented out 2026-10-06 (Ben); restore by removing this wrapper and the eval/include lines.
 
 ## Expected versus actual
 
 ```{r}
 #| label: expected-actual
+#| eval: false
+#| include: false
 #| fig-height: 4.6
 #| fig-width: 7.5
 
@@ -488,6 +517,8 @@ contradicts what earlier answers suggested, spreading the posterior back
 out). Averaged over people, actual gains equal expected gains. That is the
 sense in which I(θ; X) is a property of the test and the population, not of
 any one respondent.
+
+-->
 
 ## Watching uncertainty fall
 
