@@ -1620,7 +1620,7 @@ ggplot(lad_long, aes(bits, step, fill = step)) +
                                "I(θ; S) = I(θ; X)" = irw_accent), guide = "none") +
   scale_x_continuous(limits = c(0, max(lad_long$bits) * 1.12), expand = c(0, 0)) +
   labs(x = "bits (Rasch)", y = NULL,
-       title = sprintf("The score throws away %s–%s bits of pattern entropy and not one bit about the person",
+       title = sprintf("Under Rasch, the score throws away %s–%s bits of pattern entropy and not one bit about the person",
                        fmt(min(ladr$H_X - ladr$H_S), 1), fmt(max(ladr$H_X - ladr$H_S), 1)),
        subtitle = "H(X): entropy of the answer patterns. H(S): entropy of the sum score. I(θ; S): what the score says about the person, which under Rasch equals I(θ; X).") +
   theme(panel.grid.major.y = element_blank())
@@ -1632,7 +1632,12 @@ losing anything about θ. For the numeracy test that is 2,048 patterns into 12
 scores. In bits, the patterns carry `r fmt(ladr$H_X[ladr$table == main])` bits
 of entropy, the score `r fmt(ladr$H_S[ladr$table == main])`, and both carry the
 same `r fmt(ladr$I_S[ladr$table == main], 3)` bits about the person. Everything
-else the patterns say is noise as far as θ is concerned.
+else the patterns say is noise as far as θ is concerned. That last step is
+special to Rasch. Under the 2PL the sum score is no longer sufficient, and the
+same compression costs some bits about the person (a median of
+`r scales::percent(median(two$gap_prop), accuracy = 1)` across the warehouse,
+from [What does sum-scoring cost?](#what-does-sum-scoring-cost)); the
+compression that loses nothing is to the slope-weighted score instead.
 
 ### Same score, different patterns
 
