@@ -1447,20 +1447,30 @@ the population median.
 
 ```{r}
 #| label: sum-gap
-#| fig-height: 3.8
+#| fig-height: 4.6
 #| fig-width: 7.5
 
 two <- mutate(two, gap = I_X - I_S, gap_prop = gap / I_X)
-ggplot(two, aes(gap_prop)) +
-  geom_histogram(binwidth = 0.02, boundary = 0, fill = irw_accent, colour = "white") +
-  scale_x_continuous(labels = scales::percent) +
-  labs(x = "I(θ; X | S) as a share of I(θ; X): information lost by keeping only the sum score",
-       y = "tables",
-       title = sprintf("Using the sum score instead of the full pattern costs a median %s of the bits",
-                       scales::percent(median(two$gap_prop), accuracy = 1)),
-       subtitle = sprintf("Median I(θ; X | S) %s bits; largest %s bits (%s). 2PL.",
-                          fmt(median(two$gap), 3), fmt(max(two$gap)),
-                          arrange(two, desc(gap))$table[1]))
+sd_log_a <- tapply(log(items_df$a), items_df$table, sd)
+two$sd_log_a <- as.vector(sd_log_a[two$table])
+lo_gap <- loess(gap_prop ~ sd_log_a, data = two, span = 0.75)
+sm_gap <- tibble(x = seq(min(two$sd_log_a), max(two$sd_log_a), length.out = 200)) |>
+  mutate(y = predict(lo_gap, data.frame(sd_log_a = x)))
+g_gap <- ggplot(two, aes(sd_log_a, gap_prop)) +
+  geom_point(aes(text = sprintf("%s\n%d items\nspread of log slopes %.2f\nsum score loses %.0f%% (%.3f of %.2f bits)",
+                                table, n_items, sd_log_a, 100 * gap_prop, gap, I_X)),
+             colour = irw_accent, alpha = 0.7, size = 1.8) +
+  geom_line(data = sm_gap, aes(x, y), inherit.aes = FALSE, colour = "grey15", linewidth = 1) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "spread of item slopes in the table (SD of log a)",
+       y = "I(θ; X | S) as a share of I(θ; X)",
+       title = sprintf("Using the sum score instead of the full pattern costs a median %s of the bits, more when slopes differ",
+                       scales::percent(median(two$gap_prop), accuracy = 1)))
+g_gap <- wl(g_gap, 60)
+g_gap$labels$title <- gsub("\n", "<br>", g_gap$labels$title)
+ggplotly(g_gap, tooltip = "text") |>
+  layout(title = list(text = paste0("<b>", g_gap$labels$title, "</b>"), x = 0, xanchor = "left",
+                      font = list(size = 15)), margin = list(t = 70))
 ```
 
 The gap between the full pattern and the sum score has a name: it is the
@@ -1475,8 +1485,8 @@ deserve more weight ([Is the sum score enough?](#is-the-sum-score-enough)
 takes this further). The loss is small: a median of
 `r scales::percent(median(two$gap_prop), accuracy = 1)` of the pattern's
 information. It exceeds a quarter in `r sum(two$gap_prop > 0.25)` tables.
-The loss tracks how unequal the slopes are (Spearman correlation
-`r fmt(cor(two$gap_prop, tapply(log(items_df$a), items_df$table, sd)[two$table], method = "spearman"))`
+As the figure shows, the loss tracks how unequal the slopes are (Spearman correlation
+`r fmt(cor(two$gap_prop, two$sd_log_a, method = "spearman"))`
 with the spread of log slopes): tables that mix very sharp items with very
 flat ones lose the most.
 
