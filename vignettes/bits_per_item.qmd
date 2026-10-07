@@ -1150,12 +1150,19 @@ extra bit requires halving the standard error.
 
 ceil <- tibble(n = 5:60, bits = log2(5:60 + 1))
 share_ceiling <- two$I_X / log2(two$n_items + 1)
+lo_items <- loess(I_X ~ n_items, data = two, span = 0.75)
+sm <- tibble(n = seq(min(two$n_items), max(two$n_items), by = 0.5))
+sm_pred <- predict(lo_items, data.frame(n_items = sm$n), se = TRUE)
+sm <- mutate(sm, fit = sm_pred$fit, lo = fit - 2 * sm_pred$se.fit, hi = fit + 2 * sm_pred$se.fit)
+sm_at <- function(k) predict(lo_items, data.frame(n_items = k))
 g_items <- ggplot(two, aes(n_items, I_X)) +
   geom_line(data = ceil, aes(n, bits), colour = "grey30", linetype = "dashed") +
   annotate("text", x = 40, y = log2(41) + 0.35, label = "ceiling: n perfect items, log₂(n + 1)",
            size = 3.4, colour = "grey30") +
+  geom_ribbon(data = sm, aes(x = n, ymin = lo, ymax = hi), inherit.aes = FALSE, fill = "grey60", alpha = 0.25) +
   geom_point(aes(text = sprintf("%s\n%d items\nI = %.2f bits", table, n_items, I_X)),
              colour = irw_accent, alpha = 0.7, size = 1.8) +
+  geom_line(data = sm, aes(n, fit), inherit.aes = FALSE, colour = "grey15", linewidth = 1) +
   scale_x_continuous(breaks = c(5, 10, 20, 30, 40, 50, 60)) +
   scale_y_continuous(limits = c(0, 6.2), breaks = 0:6) +
   labs(x = "number of items", y = "I(θ; X), bits (2PL)",
@@ -1175,6 +1182,16 @@ equal parts. Real tables sit far below it, a median of
 `r scales::percent(median(share_ceiling), accuracy = 1)` of the way up. The
 missing bits are lost to noise, not to test length: answers are probabilistic,
 so the same person could produce many patterns.
+
+The solid line is a smoothed average (loess, with a band of ±2 standard
+errors). Typical bits do rise with length, from about
+`r fmt(sm_at(5), 1)` at 5 items to `r fmt(sm_at(20), 1)` at 20 and
+`r fmt(sm_at(40), 1)` at 40, but far more slowly than the ceiling, which
+climbs from `r fmt(log2(6), 1)` to `r fmt(log2(41), 1)` bits over the same
+range. Beyond about 40 items the line levels off, though only
+`r sum(two$n_items > 40)` tables are that long, so the band widens there.
+[Diminishing returns](#diminishing-returns) follows the same question inside
+individual tests.
 
 ## Reliability in bits
 
