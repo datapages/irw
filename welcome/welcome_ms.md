@@ -178,7 +178,7 @@ IRW mengandungi **ratusan set data** ("jadual"), setiap satunya adalah koleksi r
 Setiap set data dalam IRW direka untuk:
 
 - **Mudah dijumpai (Findable).** Setiap set data disertakan dengan metadata yang telah dikira terlebih dahulu — bilangan peserta, bilangan item, kepadatan respons, bidang subjek, dan label deskriptif lain — supaya set data dapat dicari dan ditapis tanpa perlu memuat turunnya terlebih dahulu.
-- **Boleh diakses (Accessible).** Setiap set data boleh diperoleh melalui pelayar web atau pakej `irw`, dan kebanyakannya tidak memerlukan akaun langsung.
+- **Boleh diakses (Accessible).** Setiap set data boleh diperoleh melalui pelayar web atau pakej `irw`, dengan akaun percuma.
 - **Boleh berinteroperasi (Interoperable).** Setiap set data dibentuk semula ke dalam struktur mudah yang sama (diterangkan di bawah), supaya kod analisis yang sama boleh dijalankan ke atas banyak set data dengan sedikit atau tiada pengubahsuaian.
 - **Boleh digunakan semula (Reusable).** Setiap set data mempunyai lesen terbuka, asal-usulnya didokumentasikan, dan kod yang digunakan untuk menukarkannya ke format IRW adalah terbuka kepada umum.
 
@@ -215,7 +215,7 @@ Spesifikasi teknikal penuh bagi standard ini boleh didapati di [itemresponseware
 Terdapat tiga cara untuk mendapatkan data IRW, bergantung kepada tahap automasi yang anda inginkan.
 
 **1. Semak imbas dalam pelayar web**
-Terokai set data dan metadatanya terus dalam [pelayar data IRW](/data.qmd) — tiada akaun diperlukan. Kebanyakan jadual juga boleh dimuat turun sebagai CSV daripada halamannya tanpa akaun; sebilangan kecil jadual yang melebihi 100 MB memerlukan sama ada pakej R atau akaun percuma di [Redivis](https://redivis.com), platform yang menyimpan data asas.
+Terokai set data dan metadatanya terus dalam [pelayar data IRW](/data.qmd) — tiada akaun diperlukan. Memuat turun set data lengkap memerlukan akaun percuma [Redivis](https://redivis.com), kerana itulah platform yang menyimpan data asas.
 
 **2. Gunakan pakej `irw` (disyorkan)**
 Pakej `irw`, yang tersedia untuk kedua-dua **R** dan **Python**, menyediakan fungsi mudah untuk mencari, menapis, dan memuat turun data.
@@ -242,7 +242,7 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-Pakej R berfungsi tanpa akaun; pada kali pertama anda menggunakan pakej Python, anda akan diminta untuk log masuk dengan akaun Redivis percuma. Selepas itu, satu baris kod sahaja memuat turun mana-mana set data terus ke dalam R atau Python. Dari situ, data sudah sedia untuk dianalisis menggunakan perisian standard — contohnya pakej teori respons item atau analisis faktor.
+Pada kali pertama anda menggunakan pakej ini, anda akan diminta untuk log masuk dengan akaun Redivis percuma. Selepas itu, satu baris kod sahaja memuat turun mana-mana set data terus ke dalam R atau Python. Dari situ, data sudah sedia untuk dianalisis menggunakan perisian standard — contohnya pakej teori respons item atau analisis faktor.
 
 **3. Gunakan pustaka klien Redivis secara terus**
 Bagi aliran kerja peringkat rendah atau bukan R/Python, data juga boleh diakses melalui pustaka klien R dan Python milik Redivis sendiri. Rujuk [Panduan Memulakan](/getstarted.qmd) untuk maklumat lanjut.

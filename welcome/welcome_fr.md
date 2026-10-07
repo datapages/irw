@@ -178,7 +178,7 @@ L'IRW contient **des centaines de jeux de données** (« tableaux »), chacun é
 Chaque jeu de données de l'IRW est conçu pour être :
 
 - **Trouvable (Findable).** Chaque jeu de données est accompagné de métadonnées précalculées — nombre de participants, nombre d'items, densité des réponses, domaine du sujet et autres étiquettes descriptives — afin que les jeux de données puissent être localisés et filtrés sans devoir d'abord être téléchargés.
-- **Accessible.** Chaque jeu de données peut être récupéré via le navigateur web ou le package `irw`, et la plupart ne nécessitent aucun compte.
+- **Accessible.** Chaque jeu de données peut être récupéré via le navigateur web ou le package `irw`, avec un compte gratuit.
 - **Interopérable.** Chaque jeu de données est remis en forme selon une même structure simplifiée (décrite ci-dessous), de sorte que le même code d'analyse puisse s'exécuter sur de nombreux jeux de données avec peu ou pas de modification.
 - **Réutilisable.** Chaque jeu de données est sous licence ouverte, son origine est documentée et le code utilisé pour le convertir au format de l'IRW est public.
 
@@ -215,7 +215,7 @@ La spécification technique complète de la standardisation est disponible sur [
 Il existe trois façons d'obtenir les données de l'IRW selon le degré d'automatisation souhaité.
 
 **1. Parcourir dans le navigateur web**
-Explorez les jeux de données et leurs métadonnées directement sur le [navigateur de données de l'IRW](/data.qmd) — aucun compte n'est requis. La plupart des tableaux peuvent aussi être téléchargés au format CSV depuis leur page, sans compte ; les quelques-uns qui dépassent 100 Mo nécessitent soit le package R, soit un compte gratuit sur [Redivis](https://redivis.com), la plateforme qui héberge les données sous-jacentes.
+Explorez les jeux de données et leurs métadonnées directement sur le [navigateur de données de l'IRW](/data.qmd) — aucun compte n'est requis. Le téléchargement d'un jeu de données complet nécessite un compte gratuit [Redivis](https://redivis.com), puisque c'est la plateforme qui héberge les données sous-jacentes.
 
 **2. Utiliser le paquet `irw` (recommandé)**
 Le package `irw`, disponible pour **R** et **Python**, fournit des fonctions simples pour trouver, filtrer et télécharger des données.
@@ -242,7 +242,7 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-Le package R fonctionne sans compte ; la première fois que vous utilisez le package Python, il vous sera demandé de vous connecter avec un compte Redivis gratuit. Ensuite, une seule ligne de code télécharge n'importe quel jeu de données directement dans R ou Python. À partir de là, les données sont prêtes à être analysées, par exemple, avec la théorie de réponse aux items ou l'analyse factorielle.
+La première fois que vous utilisez le package, il vous sera demandé de vous connecter avec un compte Redivis gratuit. Ensuite, une seule ligne de code télécharge n'importe quel jeu de données directement dans R ou Python. À partir de là, les données sont prêtes à être analysées, par exemple, avec la théorie de réponse aux items ou l'analyse factorielle.
 
 **3. Utiliser directement les bibliothèques clientes de Redivis**
 Pour des flux de travail de plus bas niveau ou hors R/Python, les données peuvent également être consultées via les propres bibliothèques clientes R et Python de Redivis. Consultez le [guide de démarrage](/getstarted.qmd) pour plus de détails.

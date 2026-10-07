@@ -178,7 +178,7 @@ Das IRW enthält **Hunderte von Datensätzen** ("Tabellen"), von denen jeder ein
 Jeder Datensatz im IRW ist darauf ausgelegt:
 
 - **Auffindbar (Findable).** Jeder Datensatz kommt mit vorab berechneten Metadaten — Anzahl der Teilnehmenden, Anzahl der Items, Antwortdichte, Themengebiet und weitere beschreibende Tags —, sodass Datensätze gefunden und gefiltert werden können, ohne sie zuvor herunterzuladen.
-- **Zugänglich (Accessible).** Jeder Datensatz kann über den Webbrowser oder das `irw`-Paket abgerufen werden, und für die meisten ist überhaupt kein Konto nötig.
+- **Zugänglich (Accessible).** Jeder Datensatz kann über den Webbrowser oder das `irw`-Paket abgerufen werden, mit einem kostenlosen Konto.
 - **Interoperabel (Interoperable).** Jeder Datensatz wird in dieselbe einfache Struktur umgeformt (unten beschrieben), sodass derselbe Analysecode mit wenig oder gar keiner Anpassung auf viele Datensätze angewendet werden kann.
 - **Wiederverwendbar (Reusable).** Jeder Datensatz ist offen lizenziert, seine Herkunft ist dokumentiert, und der Code, der zur Umwandlung in das IRW-Format verwendet wurde, ist öffentlich zugänglich.
 
@@ -215,7 +215,7 @@ Die vollständige technische Spezifikation des Standards ist verfügbar unter [i
 Es gibt drei Möglichkeiten, an IRW-Daten zu gelangen, je nachdem, wie viel Sie automatisieren möchten.
 
 **1. Im Webbrowser durchsuchen**
-Erkunden Sie Datensätze und ihre Metadaten direkt im [IRW-Datenbrowser](/data.qmd) — kein Konto erforderlich. Die meisten Tabellen lassen sich außerdem ohne Konto als CSV von ihrer Seite herunterladen; für die wenigen, die größer als 100 MB sind, benötigen Sie entweder das R-Paket oder ein kostenloses Konto bei [Redivis](https://redivis.com), der Plattform, die die zugrunde liegenden Daten hostet.
+Erkunden Sie Datensätze und ihre Metadaten direkt im [IRW-Datenbrowser](/data.qmd) — kein Konto erforderlich. Zum Herunterladen eines vollständigen Datensatzes ist ein kostenloses [Redivis](https://redivis.com)-Konto erforderlich, da diese Plattform die zugrunde liegenden Daten hostet.
 
 **2. Das `irw`-Paket verwenden (empfohlen)**
 Das `irw`-Paket, verfügbar sowohl für **R** als auch für **Python**, bietet einfache Funktionen zum Auffinden, Filtern und Herunterladen von Daten.
@@ -242,7 +242,7 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-Das R-Paket funktioniert ohne Konto; beim ersten Gebrauch des Python-Pakets werden Sie aufgefordert, sich mit einem kostenlosen Redivis-Konto anzumelden. Danach lädt eine einzige Codezeile jeden beliebigen Datensatz direkt in R oder Python herunter. Von da an sind die Daten bereit für die Analyse mit gängiger Software — etwa Paketen für Item-Response-Theorie oder Faktorenanalyse.
+Beim ersten Gebrauch des Pakets werden Sie aufgefordert, sich mit einem kostenlosen Redivis-Konto anzumelden. Danach lädt eine einzige Codezeile jeden beliebigen Datensatz direkt in R oder Python herunter. Von da an sind die Daten bereit für die Analyse mit gängiger Software — etwa Paketen für Item-Response-Theorie oder Faktorenanalyse.
 
 **3. Die Client-Bibliotheken von Redivis direkt verwenden**
 Für Workflows auf niedrigerer Ebene oder außerhalb von R/Python kann auf die Daten auch über die eigenen R- und Python-Client-Bibliotheken von Redivis zugegriffen werden. Weitere Details finden Sie im [Einstiegsleitfaden](/getstarted.qmd).

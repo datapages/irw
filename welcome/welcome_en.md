@@ -178,7 +178,7 @@ The IRW contains **hundreds of datasets** ("tables"), each one a collection of i
 Every dataset in the IRW is designed to be:
 
 - **Findable.** Each dataset comes with pre-computed metadata — participant and item counts, response density, subject area, and other descriptive tags — so datasets can be located and filtered without downloading them first.
-- **Accessible.** Every dataset can be retrieved through the web browser or the `irw` package, and most need no account at all.
+- **Accessible.** Every dataset can be retrieved through the web browser or the `irw` package, using a free account.
 - **Interoperable.** Each dataset is reshaped into the same simple long-format structure (described below), so the same analysis code can run across many datasets with little or no modification.
 - **Reusable.** Each dataset is openly licensed, its origin is documented, and the code used to convert it into the IRW format is public.
 
@@ -215,7 +215,7 @@ The full technical specification of the standard is available at [itemresponsewa
 There are three ways to get IRW data, depending on how much you want to automate.
 
 **1. Browse in the web browser**
-Explore datasets and their metadata directly on the [IRW data browser](/data.qmd) — no account needed. Most tables can also be downloaded as a CSV from their page with no account; the few larger than 100 MB need either the R package or a free account on [Redivis](https://redivis.com), the platform that hosts the underlying data.
+Explore datasets and their metadata directly on the [IRW data browser](/data.qmd) — no account needed. Downloading a full dataset requires a free [Redivis](https://redivis.com) account, since that is the platform that hosts the underlying data.
 
 **2. Use the `irw` package (recommended)**
 The `irw` package, available for both **R** and **Python**, gives simple functions for finding, filtering, and downloading data.
@@ -242,7 +242,7 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-The R package works without an account; the first time you use the Python package, you will be asked to log in with a free Redivis account. After that, one line of code downloads any dataset directly into R or Python. From there, the data is ready for analysis with standard software — for example, item response theory or factor analysis packages.
+The first time you use the package, you will be asked to log in with a free Redivis account. After that, one line of code downloads any dataset directly into R or Python. From there, the data is ready for analysis with standard software — for example, item response theory or factor analysis packages.
 
 **3. Use the Redivis client libraries directly**
 For lower-level or non-R/Python workflows, the data can also be accessed through Redivis's own R and Python client libraries. See the [Getting Started guide](/getstarted.qmd) for details.
