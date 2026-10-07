@@ -1,0 +1,115 @@
+---
+title: "The Conjoint Data Standard"
+# Limited release (2026-10): shareable by link, but not linked from the menu,
+# the standards overview or llms.txt, kept out of site search, and not indexed.
+# The links are on branch conjoint-standard; remove these two settings with them.
+search: false
+include-in-header:
+  text: '<meta name="robots" content="noindex">'
+---
+
+Note: This is an experimental feature.
+
+In a conjoint experiment, respondents see hypothetical **profiles**, such as candidates, immigrants, vaccines or policies, whose **attributes** are randomly assigned. They then choose between the profiles in a **task**, rate each one, or both, usually over several tasks. Every profile is a new random bundle of attribute levels, so no fixed probe can serve as `item`. Conjoint data therefore get their own layout and their own source in the IRW (`source = "conj"`), as the competition and nominal data do.
+
+## The data standard
+
+One row per respondent × task × profile.
+
+| column | | meaning |
+|---|---|---|
+| `id` | required | Respondent identifier. Never a platform worker ID or anything else that identifies a person. |
+| `task` | required | Task index within respondent, in the order shown. |
+| `profile` | required | Position within the task (1 = left or first). Single-profile designs use `profile = 1` throughout. |
+| `choice` | outcome | 1 if this profile was chosen in the task, else 0. |
+| `rating` | outcome | Numeric rating of this profile. |
+| `choice_<name>`, `rating_<name>` | outcome | Further questions asked about the same tasks, for example which candidate a respondent would vote for and which would most reduce corruption. |
+| `attr_<name>` | required, ≥ 2 | The level of each attribute as respondents saw it, stored as text rather than a numeric code. |
+| `attrpos_<name>` | optional | Row position of the attribute in the profile, when attribute order was randomized. |
+| `cov_<name>` | optional | Respondent covariates, as in the [core standard](standard.qmd). A survey weight is `cov_survey_weight`. |
+| `trial_<name>` | optional | Other task-level details, such as an experiment arm or a framing condition. |
+
+Further rules:
+
+- A forced choice has exactly one chosen profile per task. In a design that offered "neither", an opt-out task has `choice = 0` on every profile.
+- Rows with no outcome are left out. A row with a choice but a missing rating is kept.
+- One table holds one experiment: one attribute set and one design. Several questions about the same tasks stay in the same table. Country samples are kept together when the original authors analysed them together and the attribute text is shared, with the country in `cov_country`. Otherwise each sample is its own table.
+- Derived variables, such as dummy codings of attributes or "co-partisan" flags, are dropped, since they can be rebuilt from the attributes.
+
+## What each table means
+
+The tables share one layout but not one meaning. `choice` is "vote for" in one table and "admit" in another, and ratings run 1–7, 0–10 or 0–100. For each table, the IRW records:
+
+- the question wording and scale anchors of every outcome;
+- whether an opt-out was offered;
+- any randomization restrictions, such as combinations of levels that never appear;
+- the country, the language respondents saw, and the language of the stored attribute text;
+- whether task and profile were recorded in the source or inferred from row order.
+
+These records are kept in [`data/conjoint/`](https://github.com/ben-domingue/irw/tree/main/data/conjoint) in the IRW repository, alongside each table's processing script, so that tables can be compared or pooled with their differences in view.
+
+## Getting back to `id`, `item`, `resp`
+
+Any conjoint table converts mechanically to the core layout. Each outcome becomes an `item` named after its question (`choice`, `rating`, ...), its value becomes `resp`, and task, profile and attributes become `trial_` columns. `irw_conj_long()` in R and `irw.conj_long()` in Python do this, so tools written for the core layout can be used. The reverse is not possible, which is why the conjoint layout is the stored form.
+
+## Accessing the conjoint data
+
+The conjoint data are in the Redivis dataset [`irw_conjoint`](https://stanford.redivis.com/datasets/5wjx-90gfb7mqv) and can be accessed from both the R and Python `irw` packages. Tables can be listed and fetched in both, and described with `irw_info()` in R. Filtering, bibliography export and table metadata are not yet available for this source.
+
+::: panel-tabset
+## R
+```{r}
+#| eval: false
+#| echo: true
+library(irw)
+
+# View available conjoint data
+irw_list_tables(source = "conj")
+
+# Fetch a conjoint table
+df <- irw_fetch("kreps_2020_covid_vaccine", source = "conj")
+head(df)
+
+# The core id/item/resp view
+long <- irw_conj_long(df)
+table(long$item)
+```
+
+## Python
+
+```{python}
+#| eval: false
+#| echo: true
+#| python.reticulate: false
+import irw
+
+# View available conjoint data
+irw.list_tables(source="conj")
+
+# Fetch a conjoint table
+df = irw.fetch("kreps_2020_covid_vaccine", source="conj")
+df.head()
+
+# The core id/item/resp view
+long = irw.conj_long(df)
+long["item"].value_counts()
+```
+:::
+
+## An example
+
+Bansak, Hainmueller and Hangartner (2016) asked 18,021 voters in 15 European countries to compare pairs of hypothetical asylum seekers. The average marginal component effect (AMCE) of an attribute level is the change in the probability that a profile is chosen when the attribute takes that level rather than a baseline, averaged over the other attributes. With the paper's baselines and its survey weights (top-coded at 6), a linear probability model on the IRW table gives the same AMCEs the paper reports: +0.13 for a doctor and +0.09 for a teacher (against unemployed), −0.11 for a Muslim (against Christian), and −0.15 for an economic migrant (against political persecution).
+
+```{r}
+#| eval: false
+#| echo: true
+d <- irw_fetch("bansak_2016_asylum", source = "conj")
+d$attr_occupation <- relevel(factor(d$attr_occupation), "Unemployed")
+d$attr_religion   <- relevel(factor(d$attr_religion), "Christian")
+d$attr_reason     <- relevel(factor(d$attr_reason), "Persecution for political views")
+fit <- lm(choice ~ attr_occupation + attr_religion + attr_reason, data = d,
+          weights = pmin(cov_survey_weight, 6))
+coef(fit)
+```
+
+The standard errors should be clustered by respondent, for example with `sandwich::vcovCL(fit, cluster = ~id)`, because each respondent made several choices.
