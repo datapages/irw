@@ -299,9 +299,7 @@ cx_readout = html`<div style="font-size:0.95rem; max-width:680px;">
   <div style="height:14px; background:#e9ecef; border-radius:3px; overflow:hidden; margin:4px 0; position:relative;">
     <div style="height:100%; width:${Math.min(100, cx_res.I / Math.log2(cx_max + 1) * 100)}%; background:${accent_r};"></div>
     <div style="position:absolute; top:0; bottom:0; left:${cx_ceiling / Math.log2(cx_max + 1) * 100}%; border-left:2px dashed #333;"></div></div>
-  <div style="color:#555; font-size:0.88rem;">Spread H(X) ${cx_res.H.toFixed(2)} bits − noise H(X | θ) ${cx_res.N.toFixed(2)} bits.
-  As certain as knowing which of <b>${Math.pow(2, cx_res.I).toFixed(1)}</b> equal groups the person is in.
-  Answer patterns that actually occur: <b>${cx_res.live}</b> of ${Math.pow(2, cx_cuts.length).toLocaleString()} possible${cx_blur > 0 ? " (with a chance above 0.1%)" : ""}.</div>
+  <div style="color:#555; font-size:0.88rem;">As certain as knowing which of <b>${Math.pow(2, cx_res.I).toFixed(1)}</b> equal groups the person is in.</div>
   <div style="color:#888; font-size:0.8rem; margin-top:2px;">Bar: bits so far, on a scale to log₂(${cx_max + 1}), the most ${cx_max} cuts can give. Dashed: the ceiling for this many cuts.${cx_blur > 0 ? " Pale red bands: where a blurred cut is uncertain (from a 10% to a 90% chance of answering right)." : ""}</div></div>`
 html`<div>${cx_plot}${cx_readout}</div>`
 ```
@@ -337,8 +335,8 @@ Some things to try:
 - **3 in the low tail.** Each cut splits off a sliver. Cuts where few people
   are say little about most people.
 - **Quartiles, then blur.** The bits fall below 2 even though the cuts are
-  perfectly placed, and patterns that perfect cuts cannot produce (a right answer
-  above a wrong one) start to occur. That is the noise.
+  perfectly placed. Near each cut the answer is now partly luck, and luck says
+  nothing about the person. The next section measures that luck.
 - **Numeracy test.** Cuts at the difficulty of each of its items, blurred by
   its typical slope. They pile up between about −1 and −0.5, and blurred, the
   whole test is worth little more than one well-placed perfect question. The
@@ -510,7 +508,9 @@ p_top / p_bot + plot_layout(heights = c(2.2, 1))
 Read the top panel straight up from any point on θ. Far to the left almost
 everyone gives `r key3[1]`; far to the right almost everyone gives
 `r key3[8]`. In between, a person at a fixed θ could give several patterns,
-and which one comes out is partly luck. That luck is the noise, H(X | θ) =
+and which one comes out is partly luck. Perfect cuts would allow only four of
+the eight patterns: the ones in which every item a person gets right is easier
+than every item they get wrong. Blur is what lets the other four appear. That luck is the noise, H(X | θ) =
 `r fmt(N3)` bits on average. The bottom panel is what you see when you do not
 know θ: the mix averaged over everyone, whose entropy, the spread, is
 H(X) = `r fmt(H3)` bits. The information is the gap, `r fmt(H3 - N3)` bits,
