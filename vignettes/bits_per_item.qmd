@@ -149,6 +149,185 @@ names(ojs_payload) <- names(showcases)
 ojs_define(showcases_r = ojs_payload, accent_r = irw_accent, blue_r = irw_blue)
 ```
 
+## Cutting up the population
+
+Start with an imaginary test whose questions are perfect. People are spread
+along θ, the trait being measured, in the familiar bell shape. Each question
+is a **cut**: everyone above it answers right, everyone below answers wrong.
+Asking it tells you which side of the cut a person is on, and nothing else.
+
+**Click on the chart to place a cut** (or use the slider), and watch the bits.
+With perfect cuts the arithmetic is simple: the cuts chop the population into
+groups, and the bits are the entropy of the groups' shares,
+−Σ p log~2~ p. One cut at the median makes two halves: 1 bit. Three cuts at
+the quartiles make four quarters: 2 bits. In general k cuts are worth at most
+log~2~(k + 1) bits, reached only when they make equal groups.
+
+Then turn up the **blur**. A blurred cut is a real question: near the cut,
+people sometimes land on the wrong side, so the answer is partly luck. The
+luck is noise, and it comes off the top.
+
+```{ojs}
+cx_pnorm = x => {
+  const t = 1 / (1 + 0.3275911 * Math.abs(x) / Math.SQRT2);
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x / 2);
+  return x >= 0 ? (1 + y) / 2 : (1 - y) / 2;
+}
+cx_qnorm = p => {   // Acklam's approximation
+  const a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+  const b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01];
+  const c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00, -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+  const d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
+  const lo = 0.02425;
+  if (p < lo) { const q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
+  if (p > 1 - lo) { const q = Math.sqrt(-2 * Math.log(1 - p));
+    return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
+  const q = p - 0.5, r = q * q;
+  return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+}
+cx_M = 400
+cx_nodes = Array.from({length: cx_M}, (_, i) => cx_qnorm((i + 0.5) / cx_M))
+cx_h2 = p => (p <= 0 || p >= 1) ? 0 : -(p * Math.log2(p)) - (1 - p) * Math.log2(1 - p)
+cx_ent = ps => -ps.reduce((s, p) => s + (p > 0 ? p * Math.log2(p) : 0), 0)
+cx_shares = cuts => {
+  const c = [...cuts].sort((x, y) => x - y);
+  const edges = [0, ...c.map(cx_pnorm), 1];
+  return edges.slice(1).map((e, i) => e - edges[i]);
+}
+// Exact I(theta; X) for k cuts with logistic blur s (s = 0: perfect cuts).
+cx_info = (cuts, s) => {
+  const k = cuts.length;
+  if (k === 0) return {I: 0, H: 0, N: 0, live: 1};
+  if (s === 0) {
+    const sh = cx_shares(cuts), H = cx_ent(sh);
+    return {I: H, H, N: 0, live: sh.filter(p => p > 1e-9).length};
+  }
+  const n = 1 << k, px = new Float64Array(n), d = new Float64Array(n);
+  let noise = 0;
+  for (const t of cx_nodes) {
+    d.fill(0); d[0] = 1;
+    for (let j = 0; j < k; j++) {
+      const p = 1 / (1 + Math.exp(-(t - cuts[j]) / s)), step = 1 << j;
+      noise += cx_h2(p);
+      for (let i = 0; i < step; i++) { d[i + step] = d[i] * p; d[i] *= 1 - p; }
+    }
+    for (let i = 0; i < n; i++) px[i] += d[i] / cx_M;
+  }
+  noise /= cx_M;
+  const H = cx_ent(Array.from(px));
+  return {I: H - noise, H, N: noise, live: Array.from(px).filter(p => p > 0.001).length};
+}
+cx_max = 12
+mutable cx_cuts = []
+cx_add = t => { if (cx_cuts.length < cx_max) mutable cx_cuts = [...cx_cuts, Math.round(t * 100) / 100]; }
+cx_numeracy = { const it = showcases_r["fitz_2024_numeracy"].items;
+  const a = [...it.a].sort((x, y) => x - y), med = a[Math.floor(a.length / 2)];
+  return {cuts: it.b.map(b => Math.round(b * 100) / 100).slice(0, cx_max), blur: Math.round(20 / med) / 20}; }
+cx_setblur = v => { viewof cx_blur.value = v; viewof cx_blur.dispatchEvent(new Event("input", {bubbles: true})); }
+```
+
+```{ojs}
+viewof cx_blur = Inputs.range([0, 1.5], {step: 0.05, value: 0, label: "Blur (0 = perfect cuts)"})
+viewof cx_place = Inputs.range([-3, 3], {step: 0.05, value: 0, label: "New cut at θ ="})
+viewof cx_b1 = Inputs.button([
+  ["Add cut", () => cx_add(cx_place)],
+  ["Undo", () => { mutable cx_cuts = cx_cuts.slice(0, -1); }],
+  ["Clear", () => { mutable cx_cuts = []; }]
+])
+viewof cx_b2 = Inputs.button([
+  ["Median", () => { mutable cx_cuts = [0]; }],
+  ["Quartiles", () => { mutable cx_cuts = [0, -0.67, 0.67]; }],
+  ["Octiles", () => { mutable cx_cuts = [0, -0.67, 0.67, -1.15, -0.32, 0.32, 1.15]; }],
+  ["3 at the median", () => { mutable cx_cuts = [0, 0, 0]; }],
+  ["3 in the low tail", () => { mutable cx_cuts = [-1.5, -1.8, -2.1]; }],
+  ["Numeracy test", () => { mutable cx_cuts = cx_numeracy.cuts; cx_setblur(cx_numeracy.blur); }]
+], {label: "Try"})
+```
+
+```{ojs}
+cx_res = cx_info(cx_cuts, cx_blur)
+cx_rows = cx_cuts.map((c, i) => {
+  const before = i === 0 ? 0 : cx_info(cx_cuts.slice(0, i), cx_blur).I;
+  const after = cx_info(cx_cuts.slice(0, i + 1), cx_blur).I;
+  const prev = cx_cuts.slice(0, i), pc = cx_pnorm(c);
+  const lo = Math.max(0, ...prev.map(cx_pnorm).filter(q => q <= pc)), hi = Math.min(1, ...prev.map(cx_pnorm).filter(q => q > pc));
+  return {"#": i + 1, "θ": c.toFixed(2),
+    "group it splits": `${((hi - lo) * 100).toFixed(0)}% → ${((pc - lo) * 100).toFixed(0)}% + ${((hi - pc) * 100).toFixed(0)}%`,
+    "bits added": (after - before).toFixed(3), "on its own": cx_info([c], cx_blur).I.toFixed(3)};
+})
+cx_plot = {
+  const W = Math.min(width, 680), mL = 20, mR = 20, dom = [-3.2, 3.2];
+  const xs = d3.range(dom[0], dom[1] + 1e-9, 0.02);
+  const dn = x => Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI);
+  const sorted = [...cx_cuts].sort((x, y) => x - y), edges = [dom[0], ...sorted, dom[1]];
+  const groups = edges.slice(1).map((e, i) => ({x1: edges[i], x2: e, g: i,
+    share: cx_pnorm(e === dom[1] ? 9 : e) - cx_pnorm(edges[i] === dom[0] ? -9 : edges[i])}));
+  const area = groups.flatMap(gr => xs.filter(x => x >= gr.x1 && x <= gr.x2).concat([gr.x2])
+    .map(x => ({x, y: dn(x), g: gr.g})));
+  const s = cx_blur;
+  const plt = Plot.plot({
+    width: W, height: 230, marginLeft: mL, marginRight: mR, marginTop: 26, marginBottom: 40,
+    x: {domain: dom, label: "θ: the trait being measured (low → high)", labelAnchor: "center", labelArrow: "none"},
+    y: {domain: [0, 0.46], axis: null},
+    marks: [
+      Plot.areaY(area, {x: "x", y: "y", z: "g", fill: d => d.g % 2 ? "#92c5de" : "#d1e5f0", curve: "linear"}),
+      s > 0 ? Plot.rect(cx_cuts, {x1: c => c - 2.2 * s, x2: c => c + 2.2 * s, y1: 0, y2: 0.42, fill: "#d73027", fillOpacity: 0.08}) : null,
+      Plot.ruleX(cx_cuts, {x: c => c, y1: 0, y2: 0.42, stroke: "#d73027", strokeWidth: 1.8}),
+      Plot.text(cx_cuts.map((c, i) => ({c, i})), {x: "c", y: 0.42, text: d => String(d.i + 1), dy: -8, fill: "#d73027", fontWeight: "bold"}),
+      Plot.text(groups.filter(gr => gr.share > 0.04), {x: gr => (Math.max(gr.x1, -2.6) + Math.min(gr.x2, 2.6)) / 2, y: 0.03,
+        text: gr => (gr.share * 100).toFixed(0) + "%", fill: "#333", fontSize: 11}),
+      Plot.ruleY([0])
+    ]
+  });
+  plt.style.cursor = "crosshair";
+  plt.addEventListener("click", e => {
+    const [px] = d3.pointer(e, plt);
+    const t = dom[0] + (px - mL) / (W - mL - mR) * (dom[1] - dom[0]);
+    if (t > -3.1 && t < 3.1) cx_add(t);
+  });
+  return plt;
+}
+cx_ceiling = Math.log2(cx_cuts.length + 1)
+cx_readout = html`<div style="font-size:0.95rem; max-width:680px;">
+  <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:0.3rem 1rem;">
+    <span><b style="color:${accent_r}; font-size:1.15rem;">${cx_res.I.toFixed(2)} bits</b> from ${cx_cuts.length} cut${cx_cuts.length === 1 ? "" : "s"}</span>
+    <span>ceiling for ${cx_cuts.length} cut${cx_cuts.length === 1 ? "" : "s"}: log₂(${cx_cuts.length + 1}) = ${cx_ceiling.toFixed(2)} bits</span></div>
+  <div style="height:14px; background:#e9ecef; border-radius:3px; overflow:hidden; margin:4px 0; position:relative;">
+    <div style="height:100%; width:${Math.min(100, cx_res.I / Math.log2(cx_max + 1) * 100)}%; background:${accent_r};"></div>
+    <div style="position:absolute; top:0; bottom:0; left:${cx_ceiling / Math.log2(cx_max + 1) * 100}%; border-left:2px dashed #333;"></div></div>
+  <div style="color:#555; font-size:0.88rem;">Spread H(X) ${cx_res.H.toFixed(2)} bits − noise H(X | θ) ${cx_res.N.toFixed(2)} bits.
+  As certain as knowing which of <b>${Math.pow(2, cx_res.I).toFixed(1)}</b> equal groups the person is in.
+  Answer patterns that actually occur: <b>${cx_res.live}</b> of ${Math.pow(2, cx_cuts.length).toLocaleString()} possible${cx_blur > 0 ? " (with a chance above 0.1%)" : ""}.</div>
+  <div style="color:#888; font-size:0.8rem; margin-top:2px;">Bar: bits so far, on a scale to log₂(${cx_max + 1}), the most ${cx_max} cuts can give. Dashed: the ceiling for this many cuts.${cx_blur > 0 ? " Pale red bands: where a blurred cut is uncertain (from a 10% to a 90% chance of answering right)." : ""}</div></div>`
+html`<div>${cx_plot}${cx_readout}</div>`
+```
+
+```{ojs}
+cx_rows.length ? Inputs.table(cx_rows, {rows: 6, layout: "fixed",
+  width: {"#": 35, "θ": 60, "bits added": 90, "on its own": 90}}) :
+  html`<p style="color:#666;"><i>No cuts yet. Click the chart.</i></p>`
+```
+
+Some things to try:
+
+- **Median, then add another cut at 0.** The second cut adds nothing: it asks
+  a question that has already been answered. Redundancy is the first way bits
+  are lost.
+- **Quartiles.** Each cut's "bits added" depends on what was there before. The
+  first cut is worth a full bit; the next two split halves, and are worth half a
+  bit each, because each only matters for the half of the population it falls in.
+- **3 in the low tail.** Each cut splits off a sliver. Cuts where few people
+  are say little about most people.
+- **Quartiles, then blur.** The bits fall below 2 even though the cuts are
+  perfectly placed, and patterns that perfect cuts cannot produce (a right answer
+  above a wrong one) start to occur. That is the noise.
+- **Numeracy test.** Cuts at the difficulty of each of its items, blurred by
+  its typical slope. They pile up between about −1 and −0.5, and blurred, the
+  whole test is worth little more than one well-placed perfect question. The
+  real test, with each item's own slope, carries `r fmt(two$I_X[two$table == main])` bits.
+
+
 ## Answer patterns
 
 Everything on this page comes from one object: the **answer pattern**, the
@@ -162,8 +341,9 @@ person:
   and again. Some of the spread is just luck, not differences between people.
 
 The information about the person is what is left: **I(θ; X) = H(X) − H(X | θ)**,
-in bits. We build this up on a short numeracy test, one question first, then
-three, five, and the whole test.
+in bits. The cuts above were the special case with no noise. Now we build
+this up on a real numeracy test: one question first, then three, five, and the
+whole test.
 
 ### One question
 
