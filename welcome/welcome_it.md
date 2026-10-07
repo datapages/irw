@@ -178,7 +178,7 @@ L'IRW contiene **centinaia di dataset** ("tabelle"), ciascuno una raccolta di ri
 Ogni dataset dell'IRW è progettato per essere:
 
 - **Reperibile (Findable).** Ogni dataset è accompagnato da metadati precalcolati — numero di partecipanti, numero di item, densità delle risposte, area disciplinare e altre etichette descrittive — così i dataset possono essere individuati e filtrati senza doverli prima scaricare.
-- **Accessibile (Accessible).** Ogni dataset può essere ottenuto tramite il browser web o il pacchetto `irw`, e per la maggior parte non serve alcun account.
+- **Accessibile (Accessible).** Ogni dataset può essere ottenuto tramite il browser web o il pacchetto `irw`, con un account gratuito.
 - **Interoperabile (Interoperable).** Ogni dataset viene riorganizzato nella stessa struttura semplice (descritta di seguito), in modo che lo stesso codice di analisi possa essere eseguito su molti dataset con poche o nessuna modifica.
 - **Riutilizzabile (Reusable).** Ogni dataset ha una licenza aperta, la sua origine è documentata e il codice usato per convertirlo nel formato IRW è pubblico.
 
@@ -215,7 +215,7 @@ La specifica tecnica completa dello standard è disponibile su [itemresponseware
 Esistono tre modi per ottenere i dati dell'IRW, a seconda di quanto si desidera automatizzare.
 
 **1. Esplora nel browser web**
-Esplora i dataset e i loro metadati direttamente nel [browser dati IRW](/data.qmd) — non serve un account. La maggior parte delle tabelle si può anche scaricare in formato CSV dalla relativa pagina senza account; le poche che superano i 100 MB richiedono il pacchetto R oppure un account gratuito su [Redivis](https://redivis.com), la piattaforma che ospita i dati sottostanti.
+Esplora i dataset e i loro metadati direttamente nel [browser dati IRW](/data.qmd) — non serve un account. Scaricare un dataset completo richiede un account gratuito [Redivis](https://redivis.com), poiché è quella la piattaforma che ospita i dati sottostanti.
 
 **2. Usa il pacchetto `irw` (consigliato)**
 Il pacchetto `irw`, disponibile sia per **R** che per **Python**, offre funzioni semplici per trovare, filtrare e scaricare i dati.
@@ -242,7 +242,7 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-Il pacchetto R funziona senza account; la prima volta che usi il pacchetto Python, ti verrà chiesto di accedere con un account Redivis gratuito. Da quel momento, una singola riga di codice scarica qualsiasi dataset direttamente in R o Python. Da lì, i dati sono pronti per l'analisi con software standard — ad esempio pacchetti di teoria della risposta all'item o di analisi fattoriale.
+La prima volta che usi il pacchetto, ti verrà chiesto di accedere con un account Redivis gratuito. Da quel momento, una singola riga di codice scarica qualsiasi dataset direttamente in R o Python. Da lì, i dati sono pronti per l'analisi con software standard — ad esempio pacchetti di teoria della risposta all'item o di analisi fattoriale.
 
 **3. Usa direttamente le librerie client di Redivis**
 Per flussi di lavoro di livello inferiore o non basati su R/Python, i dati sono accessibili anche tramite le librerie client R e Python di Redivis. Per i dettagli, vedi la [Guida introduttiva](/getstarted.qmd).

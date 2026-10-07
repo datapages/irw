@@ -5,8 +5,7 @@ tells you what you cannot guess. Read it before writing code.
 
 The researcher runs the code; you write it. Assume they have R (preferred) or
 Python and can install packages. Assume they have NOT yet set up a Redivis
-account unless they say so. In R they do not need one: the R package reads
-every IRW table, large ones included, without a login. In Python they do.
+account unless they say so.
 
 Home: https://itemresponsewarehouse.org
 R package: https://itemresponsewarehouse.github.io/Rpkg/
@@ -60,12 +59,12 @@ Verified to run offline. Two more zero-network paths:
   - `irw_simdata()` — simulate a table with IRW structure. The package's own
     articles use this whenever the doc build has no credentials.
 
-Only after that works should the researcher fetch from the warehouse. In R
-this needs no account: `irw_fetch()` downloads any table without a login. In
-Python it does, because Redivis's Python client signs in before every request:
-create an account at https://redivis.com/?createAccount, then the first call
-that touches the warehouse opens a browser prompt to authorize. The same holds
-for the IRW MCP server, which runs on the Python package.
+Only after that works should the researcher connect to Redivis: create an
+account at https://redivis.com/?createAccount, then the first call that touches
+the warehouse opens a browser prompt to authorize. Once per session. This
+holds in R and Python alike, and for the IRW MCP server. A script or CI job
+cannot answer the browser prompt: it needs a login cached by an earlier
+interactive session, or a Redivis API token in `REDIVIS_API_TOKEN`.
 
 --------------------------------------------------------------------------
 ## 1. The data standard — what every table looks like
@@ -165,10 +164,8 @@ a message that is easy to miss.
 ## 3. Download size — the one number that matters
 --------------------------------------------------------------------------
 
-Redivis caps how many bytes can be exported in a rolling 30-day window. A
-signed-in researcher (every Python user) downloads under their own login, so
-the budget is theirs; for R downloads without a login the cap is not
-documented, so plan as if it applied.
+Redivis caps how many bytes YOUR account can export in a rolling 30-day
+window (you download under your own Redivis login, so this budget is yours).
 `irw_fetch()` downloads every row and has NO size guard of its own.
 
 The good news, and you should reassure the researcher about this: the corpus is
