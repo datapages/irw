@@ -358,7 +358,28 @@ person:
   and again. Some of the spread is just luck, not differences between people.
 
 The information about the person is what is left: **I(θ; X) = H(X) − H(X | θ)**,
-in bits. The cuts above were the special case with no noise. Now we build
+in bits.
+
+Both are entropies, computed from pattern probabilities. Write p(x) for the
+share of the population that would give pattern x, and p(x | θ) for the chance
+that a person at θ gives it. Then
+
+- **H(X) = −Σ~x~ p(x) log~2~ p(x)**, summed over all 2^J^ patterns. Under an
+  IRT model, p(x) is the average of p(x | θ) over the population:
+  p(x) = ∫ p(x | θ) g(θ) dθ, with g the distribution of θ.
+- **H(X | θ) = ∫ g(θ) [−Σ~x~ p(x | θ) log~2~ p(x | θ)] dθ**: the same entropy
+  for a person at a fixed θ, averaged over the population. Because the model
+  treats answers as independent once θ is fixed, p(x | θ) is a product over
+  items and this reduces to a sum over items, ∫ g(θ) Σ~j~ h(P~j~(θ)) dθ, where
+  P~j~(θ) is the chance of a right answer to item j and
+  h(p) = −p log~2~ p − (1 − p) log~2~(1 − p).
+
+The p(x) are what the [Dutch identity vignette](dutch_identity.qmd) calls
+*manifest probabilities*. That vignette studies their shape; this one counts
+their spread. The worked example under the five-question chart below goes
+through every step of this calculation for one pattern.
+
+The cuts above were the special case with no noise. Now we build
 this up on a real numeracy test: one question first, then three, five, and the
 whole test.
 
@@ -500,6 +521,9 @@ pxt5 <- pat_given_theta(X5, P5)                       # patterns x theta nodes
 stopifnot(max(abs(as.vector(pxt5 %*% gth$w) - pt$implied)) < 1e-8)
 spread_j <- -pt$implied * log2(pt$implied)
 noise_j <- -as.vector((pxt5 * log2(pxt5)) %*% gth$w)
+pbar5 <- colSums(gth$w * P5)
+sum_Ij5 <- sum(h2(pbar5) - colSums(gth$w * h2(P5)))   # items' bits, each on its own
+tc5 <- sum(h2(pbar5)) - sum(spread_j)                 # sum_j H(X_j) - H(X)
 H5 <- sum(spread_j); H5_noise <- sum(noise_j)
 post5 <- sweep(pxt5, 2, gth$w, "*"); post5 <- post5 / rowSums(post5)
 q_theta <- function(pr, q) gth$theta[which(cumsum(pr) >= q)[1]]
@@ -535,6 +559,15 @@ give it, and how much it contributes to the spread, to the noise, and to the
 net bits. Summed over the 32 bars, the spread is `r fmt(H5)` bits and the
 noise `r fmt(H5_noise)`, leaving `r fmt(H5 - H5_noise)` bits about the person.
 Most of the spread is noise.
+
+The five items' bits taken one at a time add up to `r fmt(sum_Ij5)`, more than
+the `r fmt(H5 - H5_noise)` they give together: they partly ask the same thing.
+The overlap, `r fmt(sum_Ij5 - (H5 - H5_noise))` bits, is exactly
+Σ~j~ H(X~j~) − H(X), which measures how far the patterns are from what
+independent items would produce. That is the departure from the independence
+model in the [Dutch identity vignette](dutch_identity.qmd#section-2-log-manifest-probabilities-and-the-independence-baseline),
+counted in bits. The trait that makes items agree with each other is also what
+makes their information overlap.
 
 ```{r}
 #| label: worked-example
@@ -581,7 +614,9 @@ calculation gives a spread of
 the five above bought about
 `r fmt(two$I_X[two$table == main] - (H5 - H5_noise))` bits more. The sum score
 gathers the `r format(2^nrow(s$items), big.mark = ",")` patterns into
-`r nrow(s$items) + 1` piles, one per score, and keeps
+`r nrow(s$items) + 1` piles, one per score (the score distribution plotted in the
+[Dutch identity vignette](dutch_identity.qmd#section-1-the-manifest-probabilities-directly),
+whose Section 4 shows its shape under the Rasch model), and keeps
 `r fmt(two$I_S[two$table == main])` of those bits; [Is the sum score enough?](#is-the-sum-score-enough)
 asks what the piling loses. For long tests the patterns cannot be listed, and
 the same quantities are estimated by simulation (see
