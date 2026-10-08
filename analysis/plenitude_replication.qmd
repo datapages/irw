@@ -1,0 +1,866 @@
+---
+title: "Extending Algorithm Selection for Class Detection to Item Response Data"
+description: |
+  Sociologists use several methods to identify groups of survey respondents who
+  share a cultural schema. These methods often produce different results,
+  leaving researchers with little basis for choosing among them. Sotoudeh and
+  DiMaggio (2021) address this problem by using 198,000 simulated datasets to
+  predict which method will work best on a given dataset. We apply their
+  released code and models to 117 item-response tables from the Item Response
+  Warehouse. Their predictions agree with the internal validity criteria about
+  as well as they did on the original survey modules, and their assessments of
+  particular measures largely hold. The prediction models are less useful for
+  choosing among measures: they recommend the same measure for most tables. One
+  possible explanation is that all the datasets used to train the models had
+  exactly ten items.
+date: today
+bibliography: plenitude_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 3
+execute:
+  echo: false
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+suppressPackageStartupMessages({
+  library(dplyr); library(tidyr); library(ggplot2); library(knitr)
+})
+
+res    <- readRDS("plenitude_data/plenitude_results.rds")
+corpus <- read.csv("plenitude_data/corpus.csv", stringsAsFactors = FALSE)
+table9 <- read.csv("vendor/table9.csv", stringsAsFactors = FALSE)
+date_run <- file.info("plenitude_data/plenitude_results.rds")$mtime
+
+mf <- res$metafeatures; pr <- res$predicted; so <- res$solutions
+va <- res$validity;     rk <- res$reverse_key
+
+n_tables <- dplyr::n_distinct(mf$table)
+n_fits   <- res$n_fits
+
+METHODS <- c("eJaccard","Podani","Euclidean","Cosine","eDice","Correlation",
+             "ACE","Original Relationality","Recursive Relationality","Ensemble")
+CRITERIA <- c(pearsongamma = "Pearson's Gamma", within_ss = "Within-class SS",
+              wb_ratio = "Within-between ratio", ch = "Calinski-Harabasz",
+              aic_improvement = "SEM AIC improvement")
+## All five criteria are higher-is-better as computed here. The four partition
+## criteria come from fpc::cluster.stats() run on |r|, a SIMILARITY matrix, so a
+## tighter partition has a larger within-class SS and within-between ratio, not
+## a smaller one. check_criteria_orientation() in the compute script asserts
+## this on planted classes. An earlier draft treated within_ss and wb_ratio as
+## lower-is-better, which reversed their sign in Q1 and their winners in Q2/Q3.
+LOWER_BETTER <- character(0)
+
+fmt <- function(x, d = 2) formatC(x, format = "f", digits = d)
+```
+
+```{r}
+#| label: run-status
+#| output: asis
+n_drawn   <- nrow(corpus)
+cov       <- mf |> count(table, name = "reps")
+full_reps <- sum(cov$reps == 3)
+## A run is complete when every drawn table x replicate has been attempted --
+## whether it produced a usable matrix or was excluded for cause.
+n_excl    <- if (!is.null(res$excluded)) nrow(res$excluded) else 0
+attempted <- if (!is.null(res$n_attempted)) res$n_attempted else n_fits
+complete  <- attempted >= 3 * n_drawn && all(cov$reps == 3)
+if (!complete) {
+  cat(sprintf(
+"::: {.callout-important}
+## Draft: partial run
+
+The compute run is still in progress. Every number on this page is computed from
+**%d of the %d drawn tables** (%d fits; %d tables have all three replicates,
+%d have fewer). Tables were fitted cheapest-first, so the coverage is *not* a
+random subset of the corpus — it is biased toward tables with few items and few
+respondents, and the widest and largest tables are disproportionately still
+outstanding. Treat every quantity below as provisional, and read the method
+comparisons in particular with care: the measures whose cost scales steeply in
+item count are being judged here mostly on narrow tables.
+:::
+
+",
+    nrow(cov), n_drawn, n_fits, full_reps, nrow(cov) - full_reps))
+}
+```
+
+::: {.callout-note}
+## Correction, October 7, 2026
+An earlier version of this page treated two of the five validity criteria
+(within-class sum of squares and the within-between ratio) as lower-is-better.
+As computed here they are higher-is-better (see issue 6 in @tbl-defects). That
+error had reversed both criteria's correlations with predicted accuracy in Q1
+and inverted their winners in Q2 and Q3. All three questions and the conclusion
+have been revised.
+:::
+
+## Background
+
+Since Goldberg [-@goldberg2011mapping] introduced relational class analysis,
+sociologists have developed related methods for identifying groups of
+respondents who share a cultural schema. Members of these groups organize
+attitudes in similar ways, even when they differ in the attitudes they hold
+[@boutyline2017correlational]. The methods differ mainly in how they measure similarity
+between respondents' answers. These differences can lead to quite different
+groupings of the same respondents. Researchers often choose a method by
+convention, leaving a potentially consequential choice largely unexamined.
+
+Sotoudeh and DiMaggio [-@sotoudeh2021plenitude] propose a way to choose among
+these methods. They simulated 198,000 response matrices with known group
+structures and measured how accurately each of ten distance measures recovered
+those groups. They then regressed accuracy on fourteen summary characteristics
+of each matrix, which they call *meta-features*. These include skewness,
+principal-component structure, and correlations between respondents. An analyst
+can calculate the same features for a new dataset and use the fitted models to
+predict which measure will work best. The authors applied the procedure to nine
+modules from the General Social Survey and the American National Election
+Studies. They assessed the predictions using five internal measures of cluster
+quality.
+
+Predicted accuracy correlated with these criteria at about .54 to .68 (their
+Table 12). No measure was best on every dataset. Recursive relationality and
+correlation performed well across settings, while Euclidean distance, cosine,
+and Goldberg's original relationality measure generally performed less well.
+
+The nine survey modules provide an initial test of the procedure. Its
+usefulness also depends on how well it works with other kinds of data. The
+authors' released code and fitted models allow us to examine that question.
+
+We apply the procedure to `r n_tables` item-response tables from the Item
+Response Warehouse (IRW). These tables vary more widely in the number of items,
+sample size, and subject matter than the original survey modules. We ask three
+questions: Do the predictions agree with the validity criteria? Does the best
+measure vary across tables? Do the authors' assessments of particular measures
+hold up? We retain the original approach and document the implementation
+choices described below.
+
+### The released materials
+
+The authors' files are stored in a personal Google Drive folder without a DOI.
+The linked GitHub repository contains only a README. We keep local copies in
+`analysis/vendor/` and record their SHA-256 hashes so the analysis can be
+reproduced if the original files change.
+
+The files limit what we can test in two ways.
+
+- **No prediction model for the ensemble.** `metafeature_models_cleaned.RDS`
+  contains nine `lm` objects, one for each distance measure. It includes no
+  prediction model for the pairwise-voting ensemble, which combines the other
+  measures. We run all ten methods and calculate all five criteria for each, but
+  can compare predicted accuracy for only nine.
+- **No usable noise models.** `models_w_noise.RDS` contains regressions fitted
+  under different assumptions about error variance. It downloads as a valid gzip
+  file but cannot be opened with `readRDS`. The comparison in the paper's Table
+  11 depends on these models, so we cannot reproduce it.
+
+### Issues in the released code
+
+We identified six issues in the released code (@tbl-defects). Four emerged
+during the preliminary review, one when we applied the prediction models, and
+one after a reader asked about the signs of two criteria in Q1. The table
+records how we handled each issue.
+
+```{r}
+#| label: tbl-defects
+data.frame(
+  Issue = c("`num_vars` defaults to 10",
+             "`PercentOut` scale",
+             "`OverallRightKurt` on a logical vector",
+             "Louvain hardcoded",
+             "`make_prediction()` matches positionally",
+             "Validity criteria computed on a similarity matrix"),
+  What = c(
+    "`evaluate.metafeatures()` defaults to `num_vars = 10`, and `select.method()` never overrides it. This value is the denominator of `PercentOut` and `intrinsicDimProp`.",
+    "The released formula counts the items that contain outliers, divides by the number of items, and multiplies by 100, giving values from 0 to 100. The same column in their Table 9 runs from 0.000 to 0.048.",
+    "`Kurt(df > mean(df))` is the kurtosis of a Bernoulli indicator. The function that seems to have been intended, `right_half_kurt`, is defined at line 217 but never called.",
+    "`metaRCA()` fixes community detection at `cluster_louvain()` with no option to change it, although the paper notes that this choice matters.",
+    "Coefficients are multiplied by meta-features by position. The column order of `evaluate.metafeatures()` does not match the order of the coefficients in the fitted models; 7 of 14 positions are swapped.",
+    "`fpc::cluster.stats()` expects distances but is given `abs(cor(t(x)))`, which is a similarity. On it, a better partition has a *larger* within-class SS and within-between ratio, and negative Pearson's Γ and Calinski–Harabasz values, which the released code's `abs()` turns positive."),
+  Handling = c(
+    "We pass `num_vars = ncol(df)` explicitly and do not use `select.method()`.",
+    "We compute both versions and compare them (@sec-appendix).",
+    "We use the released version, since the coefficients were fitted on it, and report the corrected one in @sec-appendix.",
+    "Kept as in the paper and treated as fixed.",
+    "We match by name and report the released positional matching in @sec-appendix.",
+    "Kept as in the paper, with all four criteria read as higher-is-better. The compute script checks this on planted classes before fitting.")
+) |> kable(caption = "Places where the released code needs care, and how each is handled here.")
+```
+
+An 18-item table illustrates the first issue. The default calculation gives
+`PercentOut = 130`, which is outside the possible range of a percentage. It also
+gives `intrinsicDimProp = 0.400`, rather than 0.222. Passing the actual item
+count through `num_vars` corrects both calculations.
+
+The sixth issue does not change any criterion value; it changes how the values
+should be read. With two planted classes, the true partition scores higher than
+a shuffled one on all four partition criteria as the released code computes
+them. The compute script now runs this check before fitting and stops if any
+criterion fails it.
+
+## Data and methods
+
+### Corpus
+
+```{r}
+#| label: tbl-strata
+corpus |>
+  count(affect_cog, catband = cut(n_categories, c(3,5,7,1e6),
+                                  labels = c("4-5","6-7","8+"))) |>
+  pivot_wider(names_from = catband, values_from = n, values_fill = 0) |>
+  rename(`Construct tag` = affect_cog) |>
+  kable(caption = "Realized stratification of the drawn corpus, on response-category count and the affective/cognitive tag.")
+```
+
+```{r}
+#| label: frame
+elig <- read.csv("scout_eligible_tables.csv")
+n_big <- sum(elig$n_participants > 50000)
+```
+
+The sampling frame contains `r nrow(elig)` IRW tables that meet four criteria:
+`density == 1`, 6–40 items, at least 300 respondents, and at least four response
+categories. We excluded `r n_big` tables with more than 50,000 respondents
+because of download costs. We then drew `r nrow(corpus)` tables, stratified by
+response-category count and construct type (@tbl-strata).
+`r sum(corpus$affect_cog == "untagged")` sampled tables have no construct tag,
+so comparisons by construct type cover a smaller sample.
+
+One table, `sd3ypl_klimczak_2019_sd3`, has no complete cases, leaving
+`r n_tables` tables for analysis. IRW lists it as complete, but the density flag
+records whether a response row exists, not whether it contains a value. Of its
+18,980 responses, 1,460 are `NA`. The missing values are concentrated in a few
+items, but every one of the 730 respondents is missing at least one answer. The
+authors' `grab_measurements()` function uses complete-case filtering, which
+removes all respondents. An IRW density of one therefore does not guarantee
+complete responses.
+
+We analyse each table separately. Some IRW tables share respondents and could be
+combined, but doing so produced substantial reverse-keying problems in
+preliminary runs (see below). Combining tables also requires consistent
+respondent IDs. We could confirm this for only 24 of 114 candidate groups.
+
+### Subsampling
+
+```{r}
+#| label: n-shortfall
+n_short <- sum(!corpus$n_participants >= 2000)
+```
+
+We use at most 2,000 respondents per table and run three replicates with seeds
+101, 202, and 303. Several meta-features depend on sample size. The cap limits
+differences between our tables and the authors' nine empirical datasets, which
+each had roughly 1,500–2,500 respondents.
+
+`r n_short` of the `r nrow(corpus)` sampled tables
+(`r fmt(100*n_short/nrow(corpus), 0)`%) have fewer than 2,000 respondents, so we
+use all their respondents. For these tables, the three replicates contain the
+same people. Any differences in their results arise from stochastic community
+detection and reflect algorithmic stability. For larger tables, the replicates
+also reflect sampling variability. The `N_capped` field in
+`plenitude_data/metafeatures.csv` identifies tables affected by the cap.
+
+### Procedure
+
+For each table and replicate, we calculate the fourteen meta-features and use
+the nine fitted models to predict each measure's accuracy. We then apply the
+nine measures and the ensemble to identify classes. Finally, we calculate the
+five internal validity criteria. Following the original paper, these criteria
+are computed from absolute response correlations between respondents.
+
+::: {.callout-warning}
+## A caveat from the original paper
+The criteria favor correlation-based measures, including correlation, cosine,
+and ACE, because the criteria are themselves computed from correlations. The
+authors acknowledge this limitation. Agreement between the predictions and the
+criteria may therefore partly reflect their shared basis in correlation.
+:::
+
+The fifth criterion compares a saturated covariance model fitted separately
+within each class with a single pooled model. It records the improvement in AIC.
+Classes with too few respondents relative to the number of items can prevent
+estimation, and these methods often produce small classes. We retain the
+authors' code, which uses `try()` and returns `NA` if estimation fails. As a
+supplement, we report a trimmed version that combines all classes with fewer
+than p + 1 respondents into one group, where p is the number of items.
+
+## Results
+
+```{r}
+#| label: run-scale
+tot_hours <- sum(so$secs, na.rm = TRUE) / 3600
+```
+
+All `r n_fits` runs (`r n_tables` tables × 3 replicates) finished, using about
+`r fmt(tot_hours, 0)` core-hours of clustering.
+
+### Predicted accuracy and the scale of PercentOut
+
+```{r}
+#| label: readings-summary
+below0 <- function(r) mean(pr$predicted[pr$reading == r] < 0, na.rm = TRUE)
+above1 <- function(r) mean(pr$predicted[pr$reading == r] > 1, na.rm = TRUE)
+```
+
+The intended scale of `PercentOut` is unclear. The released formula returns
+values on a 0–100 scale, and using these values with the fitted models produces
+predicted accuracies below zero in `r fmt(100*below0("primary"), 0)`% of cases.
+The alternative, the proportion of outlying cells, is closer in magnitude to the
+values in the authors' Table 9. Under it, no predictions fall below zero,
+although `r fmt(100*above1("pct_cells"), 0)`% exceed one. These results suggest a
+mismatch between the released `evaluate.metafeatures()` calculation and the
+inputs expected by the prediction models. We use the cell-proportion
+specification (`pct_cells`) for the remaining analysis, though we cannot confirm
+that it matches the definition used in the training data. The choice matters:
+@sec-appendix shows that it, the `OverallRightKurt` correction, and positional
+coefficient matching each change which measure is predicted to be best in most
+tables.
+
+```{r}
+#| label: tbl-oor
+mf_long <- mf |> select(table, replicate, all_of(c("OverallSD","OverallKurt","OverallRightKurt",
+  "VarColPC1","SkewColPC1","SkewColPC2","Skewness","Mean_Row_Corr","Row_Corr_Kurtosis",
+  "CorrRightKurt","Mean_Col_Kurtosis","Mean_SD_Ratio","intrinsicDemnsionalityProp"))) |>
+  pivot_longer(-c(table, replicate), names_to = "feature", values_to = "value")
+t9 <- table9 |> select(-dataset) |>
+  pivot_longer(everything(), names_to = "feature", values_to = "value") |>
+  group_by(feature) |> summarise(lo = min(value), hi = max(value), .groups = "drop")
+oor <- mf_long |> inner_join(t9, by = "feature") |>
+  mutate(outside = value < lo | value > hi) |>
+  group_by(feature) |>
+  summarise(`% outside their Table 9 range` = sprintf("%.0f%%", 100*mean(outside)), .groups = "drop") |>
+  arrange(desc(`% outside their Table 9 range`))
+kable(oor, caption = "How often IRW meta-feature values fall outside the range their nine datasets spanned. Their simulation training data is not distributed, so Table 9 is the closest available reference envelope.")
+```
+
+The simulated data were not released, and the fitted models were saved without
+their model frames. We therefore cannot compare our tables directly with the
+training data. The authors' nine empirical datasets (their Table 9) provide the
+closest available reference. Skewness falls outside the reported range for more
+than half of our tables. The mean correlation between respondents falls outside
+it for more than a third. Values within these ranges indicate similarity to the
+GSS and ANES modules, but not necessarily to the simulations.
+
+### Q1. Do the predictions agree with the validity criteria?
+
+Across their nine datasets, Sotoudeh and DiMaggio found correlations of about
+.54 to .68 between predicted accuracy and the five internal criteria (their
+Table 12).
+
+Pooling results across our tables requires care. Within-class sum of squares and
+the Calinski–Harabasz index depend on the numbers of respondents and items. Our
+tables range from `r min(corpus$n_items)` to `r max(corpus$n_items)` items and
+include up to 2,000 respondents per run. A pooled correlation may therefore
+reflect differences between tables as well as differences between methods. To
+focus on comparisons among methods for a given table, we calculate correlations
+within each table and average them across tables. We also report pooled
+correlations for comparison with the published figures.
+
+```{r}
+#| label: q1
+d <- pr |> filter(reading == "pct_cells") |>
+  inner_join(va, by = c("table","replicate","method"))
+
+## sign convention: a positive correlation always means "predicted accuracy
+## agrees with the criterion" (LOWER_BETTER is empty; see setup)
+orient <- function(cr) if (cr %in% LOWER_BETTER) -1 else 1
+
+q1 <- lapply(names(CRITERIA), function(cr) {
+  dd <- d |> mutate(val = orient(cr) * .data[[cr]]) |> filter(is.finite(val), is.finite(predicted))
+  if (nrow(dd) < 10) return(NULL)
+
+  ## pooled, as their Table 12 reads
+  ct <- cor.test(dd$predicted, dd$val)
+
+  ## within-table, then summarised across tables
+  wt <- dd |> group_by(table) |>
+    filter(n() >= 5, sd(val) > 0, sd(predicted) > 0) |>
+    summarise(r = cor(predicted, val), .groups = "drop")
+  ci <- if (nrow(wt) > 2) t.test(wt$r)$conf.int else c(NA, NA)
+
+  data.frame(Criterion = CRITERIA[[cr]],
+             `Tables` = nrow(wt),
+             `Mean within-table r` = mean(wt$r),
+             `lo` = ci[1], `hi` = ci[2],
+             `Pooled r` = unname(ct$estimate),
+             `plo` = ct$conf.int[1], `phi` = ct$conf.int[2],
+             check.names = FALSE)
+}) |> bind_rows()
+
+q1 |>
+  transmute(Criterion, Tables,
+            `Mean within-table r [95% CI]` = sprintf("%s [%s, %s]",
+              fmt(`Mean within-table r`), fmt(lo), fmt(hi)),
+            `Pooled r [95% CI]` = sprintf("%s [%s, %s]",
+              fmt(`Pooled r`), fmt(plo), fmt(phi))) |>
+  kable(caption = "Q1. Agreement between predicted accuracy and each internal validity criterion. All five criteria are higher-is-better, so positive means agreement. Their nine-dataset values were .54-.68.")
+```
+
+```{r}
+#| label: fig-q1-dist
+#| fig-cap: "Distribution of the within-table correlation between predicted accuracy and each criterion. One value per table."
+lapply(names(CRITERIA), function(cr) {
+  d |> mutate(val = orient(cr) * .data[[cr]]) |>
+    filter(is.finite(val), is.finite(predicted)) |>
+    group_by(table) |> filter(n() >= 5, sd(val) > 0, sd(predicted) > 0) |>
+    summarise(r = cor(predicted, val), .groups = "drop") |>
+    mutate(criterion = CRITERIA[[cr]])
+}) |> bind_rows() |>
+  ggplot(aes(r)) +
+  geom_histogram(bins = 25, fill = "#4292c6") +
+  geom_vline(xintercept = 0, colour = "grey30") +
+  facet_wrap(~ criterion) +
+  labs(x = "Within-table correlation of predicted accuracy with the criterion",
+       y = "Tables") +
+  theme_minimal(base_size = 11)
+```
+
+```{r}
+#| label: fig-q1
+#| fig-cap: "Predicted accuracy against each validity criterion, pooled. One point per table x replicate x method. The spread between tables on the two scale-dependent criteria is why we summarise within tables."
+d |> select(predicted, all_of(names(CRITERIA))) |>
+  pivot_longer(-predicted, names_to = "criterion", values_to = "value") |>
+  filter(is.finite(value)) |>
+  mutate(criterion = CRITERIA[criterion]) |>
+  ggplot(aes(value, predicted)) +
+  geom_point(alpha = 0.15, size = 0.7) +
+  geom_smooth(method = "lm", se = TRUE, colour = "#2c7fb8") +
+  facet_wrap(~ criterion, scales = "free_x") +
+  labs(x = "Validity criterion", y = "Predicted accuracy") +
+  theme_minimal(base_size = 11)
+```
+
+```{r}
+#| label: q1-readout
+q1r <- setNames(q1$`Mean within-table r`, q1$Criterion)
+```
+
+The predictions agree with the criteria about as well as they did in the
+original study. The mean within-table correlations for within-class sum of
+squares (`r fmt(q1r[["Within-class SS"]])`), the within-between ratio
+(`r fmt(q1r[["Within-between ratio"]])`), Pearson's Γ
+(`r fmt(q1r[["Pearson's Gamma"]])`), and Calinski–Harabasz
+(`r fmt(q1r[["Calinski-Harabasz"]])`) all fall within the published range.
+The SEM correlation is also positive, but weaker
+(`r fmt(q1r[["SEM AIC improvement"]])`). As the warning above notes, some of this
+agreement may reflect the shared basis in correlation.
+
+The number of classes each method identifies may also contribute. Partition-based
+criteria depend partly on how many classes a partition contains. @tbl-kconfound
+reports the associations between class count and the five criteria.
+
+```{r}
+#| label: tbl-kconfound
+kj <- so |> select(table, replicate, method, k) |>
+  inner_join(va, by = c("table","replicate","method"))
+
+krow <- function(cr) {
+  w <- kj |> mutate(v = .data[[cr]]) |> filter(is.finite(v)) |>
+    group_by(table, replicate) |> filter(n() >= 5, sd(k) > 0, sd(v) > 0) |>
+    summarise(rho = cor(k, v, method = "spearman"), .groups = "drop")
+  data.frame(Criterion = CRITERIA[[cr]], `rho with k` = mean(w$rho), check.names = FALSE)
+}
+kt <- bind_rows(lapply(names(CRITERIA), krow))
+
+kp <- pr |> filter(reading == "pct_cells") |>
+  inner_join(so |> select(table, replicate, method, k), by = c("table","replicate","method")) |>
+  group_by(table, replicate) |> filter(sd(k) > 0, sd(predicted) > 0) |>
+  summarise(rho = cor(predicted, k, method = "spearman"), .groups = "drop")
+rho_pred_k <- mean(kp$rho)
+
+kt |> mutate(`rho with k` = fmt(`rho with k`)) |>
+  kable(caption = "Mean within-run Spearman correlation between the number of recovered classes and each criterion. All five criteria are higher-is-better, so a positive value means the criterion rewards finer partitions.")
+```
+
+Methods with higher predicted accuracy tend to identify more classes (mean
+within-run ρ = `r fmt(rho_pred_k)`). Four of the five criteria also favor
+partitions with more classes; Calinski–Harabasz is the exception and favors
+fewer. Agreement on those four may therefore partly reflect a shared preference
+for finer partitions. Agreement on Calinski–Harabasz runs against that tendency,
+so it is not explained by class count.
+
+We retain the published comparisons without adjusting for class count. These
+associations do not tell us how much of the agreement class count explains.
+
+For every criterion, the pooled correlation is smaller than the mean
+within-table correlation. The two summaries therefore give different impressions
+of agreement. The within-table correlations address our question more directly:
+how do the methods compare for a given dataset?
+
+### Q2. Does the best measure vary across tables?
+
+```{r}
+#| label: q2
+top_pred <- pr |> filter(reading == "pct_cells") |>
+  group_by(table, replicate) |> slice_max(predicted, n = 1, with_ties = FALSE) |>
+  ungroup() |> transmute(table, replicate, basis = "Predicted accuracy", winner = method)
+
+top_val <- lapply(names(CRITERIA), function(cr) {
+  v <- va |> select(table, replicate, method, val = all_of(cr)) |> filter(is.finite(val))
+  if (nrow(v) == 0) return(NULL)
+  if (cr %in% LOWER_BETTER) v <- v |> group_by(table, replicate) |> slice_min(val, n = 1, with_ties = FALSE)
+  else                      v <- v |> group_by(table, replicate) |> slice_max(val, n = 1, with_ties = FALSE)
+  v |> ungroup() |> transmute(table, replicate, basis = CRITERIA[[cr]], winner = method)
+}) |> bind_rows()
+
+wins <- bind_rows(top_pred, top_val)
+wins |> count(basis, winner) |>
+  group_by(basis) |> mutate(pct = sprintf("%.0f%%", 100*n/sum(n))) |>
+  select(-n) |> pivot_wider(names_from = basis, values_from = pct, values_fill = "-") |>
+  arrange(match(winner, METHODS)) |> rename(Method = winner) |>
+  kable(caption = "Q2. Share of table x replicate runs each method wins, by basis. Predicted accuracy covers nine methods; the criteria cover all ten.")
+```
+
+```{r}
+#| label: q2-concentration
+conc <- wins |> count(basis, winner) |> group_by(basis) |>
+  summarise(top_share = max(n)/sum(n), top_method = winner[which.max(n)],
+            n_distinct_winners = n(), .groups = "drop")
+```
+
+```{r}
+#| label: tbl-q2-conc
+conc |> mutate(top_share = sprintf("%.0f%%", 100*top_share)) |>
+  rename(Basis = basis, `Top method` = top_method,
+         `Its share of wins` = top_share, `Distinct winners` = n_distinct_winners) |>
+  kable(caption = "Q2. Concentration of wins. A high share means that basis consistently favours a single measure.")
+```
+
+```{r}
+#| label: q2-readout
+cs <- function(b) conc |> filter(basis == b)
+pct <- function(x) sprintf("%.0f%%", 100*x)
+pred_top <- cs("Predicted accuracy")
+corr_bases <- conc |> filter(basis != "Predicted accuracy", top_method == "Correlation")
+PROSE <- c(`Pearson's Gamma` = "Pearson's Γ", `Within-class SS` = "within-class SS",
+           `Within-between ratio` = "the within-between ratio")
+```
+
+Recursive relationality has the highest predicted accuracy in
+`r pct(pred_top$top_share)` of runs, and only `r pred_top$n_distinct_winners`
+measures ever rank first. The models thus recommend the same measure for most of
+the `r n_tables` tables. The differences between these tables and the 10-item,
+100-respondent training matrices may help explain this result, as discussed
+below.
+
+The validity criteria also concentrate, but on a different measure. Correlation
+ranks first under `r c("one","two","three","four","five")[nrow(corr_bases)]` of the five criteria:
+`r paste(sprintf("%s of runs under %s", pct(corr_bases$top_share), PROSE[corr_bases$basis]), collapse = ", ")`.
+The ensemble ranks first in `r pct(cs("Calinski-Harabasz")$top_share)` of runs
+under Calinski–Harabasz. Only the SEM criterion is widely spread: its leading
+method, `r cs("SEM AIC improvement")$top_method`, accounts for
+`r pct(cs("SEM AIC improvement")$top_share)` of runs, and
+`r cs("SEM AIC improvement")$n_distinct_winners` methods rank first at least
+once. Correlation's strong showing needs to be read in light of the
+correlation-based criteria.
+
+The best measure therefore varies across tables, but less than the original
+study suggested. Even under the most concentrated criterion, a different measure
+wins in about a third of runs, so no measure is best everywhere. But on four of
+the five criteria a single measure wins most runs, and three of those favor the
+measure that the criteria are built to favor. The predictions and the criteria
+also disagree about which measure that is: the models favor recursive
+relationality, while the criteria mostly favor correlation.
+
+### Q3. Do the authors' assessments of particular measures hold?
+
+```{r}
+#| label: q3
+rank_within <- function(df, col, lower_better) {
+  df |> group_by(table, replicate) |>
+    mutate(rk = if (lower_better) rank(.data[[col]], na.last = "keep")
+                else rank(-.data[[col]], na.last = "keep")) |> ungroup()
+}
+ranks <- lapply(names(CRITERIA), function(cr) {
+  va |> select(table, replicate, method, val = all_of(cr)) |> filter(is.finite(val)) |>
+    rank_within("val", cr %in% LOWER_BETTER) |>
+    transmute(method, criterion = CRITERIA[[cr]], rk)
+}) |> bind_rows()
+
+q3 <- ranks |> group_by(method) |>
+  summarise(`Mean rank across criteria` = mean(rk, na.rm = TRUE),
+            `Top-3 rate` = mean(rk <= 3, na.rm = TRUE), .groups = "drop") |>
+  left_join(pr |> filter(reading == "pct_cells") |> group_by(method) |>
+              summarise(`Mean predicted accuracy` = mean(predicted), .groups = "drop"),
+            by = "method") |>
+  arrange(`Mean rank across criteria`)
+
+q3 |> mutate(across(where(is.numeric), ~ fmt(.x, 3))) |>
+  rename(Method = method) |>
+  kable(caption = "Q3. Mean rank across the five validity criteria (lower is better; ten methods so 5.5 is chance), the rate of finishing top-3, and mean predicted accuracy. The ensemble has no fitted model.")
+```
+
+```{r}
+#| label: q3-readout
+best <- q3$method[1]; worst <- q3$method[nrow(q3)]
+rng  <- range(q3$`Mean rank across criteria`)
+mr   <- setNames(q3$`Mean rank across criteria`, q3$method)
+t3   <- setNames(q3$`Top-3 rate`, q3$method)
+```
+
+Mean ranks range from `r fmt(rng[1])` to `r fmt(rng[2])`, compared with an
+expected rank of 5.5 under random ordering, so the criteria separate the methods
+clearly. `r best` ranks best on average and `r worst` worst.
+
+The authors' assessments largely hold. Correlation (mean rank
+`r fmt(mr[["Correlation"]])`, top three in `r pct(t3[["Correlation"]])` of
+runs) and recursive relationality (`r fmt(mr[["Recursive Relationality"]])`)
+both perform well, and recursive relationality also has the highest mean
+predicted accuracy. Euclidean distance (`r fmt(mr[["Euclidean"]])`) and original
+relationality (`r fmt(mr[["Original Relationality"]])`) are among the weakest.
+Cosine sits near the middle (`r fmt(mr[["Cosine"]])`), close to chance
+rather than clearly poor. The ensemble also performs well
+(`r fmt(mr[["Ensemble"]])`), though the released models provide no prediction of
+its accuracy. Correlation's first place should be read with the same caveat as
+in Q2.
+
+### Class solutions and degeneracy
+
+```{r}
+#| label: tbl-degen
+so |> filter(status == "ok") |>
+  group_by(Method = method) |>
+  summarise(`median k` = median(k), `median substantive k` = median(n_substantive),
+            `median largest class` = sprintf("%.0f%%", 100*median(largest_prop)),
+            .groups = "drop") |>
+  arrange(match(Method, METHODS)) |>
+  kable(caption = "Recovered class solutions.")
+```
+
+```{r}
+#| label: degen-rate
+degen_rate <- mean(so$degenerate[so$status == "ok"], na.rm = TRUE)
+err_rate   <- mean(so$status != "ok")
+```
+
+`r if (degen_rate == 0 && err_rate == 0) "No run produced a degenerate solution (a single class, or one class holding more than 90% of respondents), and none failed." else sprintf("%s%% of method runs produced a degenerate solution (a single class, or one class holding more than 90%% of respondents) and %s%% failed. Degenerate solutions are retained in every table above.", fmt(100*degen_rate, 1), fmt(100*err_rate, 1))`
+
+## The reverse-keying diagnostic
+
+Recovered classes may separate respondents by response polarity rather than by
+distinct covariance patterns. For each table and method, we assess how closely
+class membership corresponds to respondents' alignment with the signs of the
+first principal-component loadings. We summarize this relationship as the share
+of variance in PC1 polarity scores explained by class membership (η²).
+
+```{r}
+#| label: tbl-rk
+rk |> filter(is.finite(eta2)) |> group_by(Method = method) |>
+  summarise(Q1 = quantile(eta2, .25), Median = median(eta2), Q3 = quantile(eta2, .75),
+            Max = max(eta2), `share > 0.5` = sprintf("%.0f%%", 100*mean(eta2 > 0.5)),
+            .groups = "drop") |>
+  mutate(across(c(Q1, Median, Q3, Max), ~ fmt(.x, 3))) |>
+  arrange(match(Method, METHODS)) |>
+  kable(caption = "Reverse-keying eta-squared by method. High values mean the classes mostly separate respondents by the direction of their answers.")
+```
+
+```{r}
+#| label: fig-rk
+#| fig-cap: "Distribution of reverse-keying eta-squared across tables, by method."
+rk |> filter(is.finite(eta2)) |>
+  mutate(method = factor(method, levels = rev(METHODS))) |>
+  ggplot(aes(eta2, method)) +
+  geom_boxplot(outlier.alpha = 0.3, fill = "#deebf7") +
+  geom_vline(xintercept = 0.5, linetype = 2, colour = "grey40") +
+  labs(x = expression(eta^2 ~ "of PC1 polarity explained by class"), y = NULL) +
+  theme_minimal(base_size = 11)
+```
+
+eJaccard and cosine show the strongest associations with response polarity.
+Their η² exceeds .5 in about a third and a quarter of tables, respectively. This
+does not establish that the classes lack substantive meaning, but it affects
+their interpretation. When class membership closely follows response polarity, a
+high validity score provides limited evidence that the method has identified
+distinct covariance patterns.
+
+## How far the tables are from the training data
+
+Every one of the 198,000 simulated matrices used to train the models had 10
+items and 100 respondents. Item count was not among the parameters the authors
+varied (their Table 3).
+
+```{r}
+#| label: tbl-transport
+mf |> distinct(table, .keep_all = TRUE) |>
+  summarise(
+    `Items: min` = min(n_items), `Items: median` = median(n_items),
+    `Items: max` = max(n_items), `Items: % at 10` = sprintf("%.0f%%", 100*mean(n_items == 10)),
+    `N: min` = min(n_resp), `N: median` = median(n_resp), `N: max` = max(n_resp)) |>
+  mutate(across(everything(), as.character)) |>
+  pivot_longer(everything(), names_to = "Quantity", values_to = "Value") |>
+  kable(caption = "Our corpus against their training design of 10 items and 100 respondents.")
+```
+
+```{r}
+#| label: fig-transport
+#| fig-cap: "Item count and respondent count of the corpus. The dashed lines are their training design."
+mf |> distinct(table, .keep_all = TRUE) |>
+  select(n_items, n_resp) |>
+  pivot_longer(everything()) |>
+  mutate(name = recode(name, n_items = "Items", n_resp = "Respondents")) |>
+  ggplot(aes(value)) +
+  geom_histogram(bins = 30, fill = "#4292c6") +
+  geom_vline(data = data.frame(name = c("Items","Respondents"), v = c(10, 100)),
+             aes(xintercept = v), linetype = 2, colour = "grey30") +
+  facet_wrap(~ name, scales = "free") +
+  labs(x = NULL, y = "Tables") + theme_minimal(base_size = 11)
+```
+
+The IRW tables differ from the training matrices in both item count and sample
+size. These differences may help explain the results, although we cannot
+establish how much they matter. Two meta-features, `PercentOut` and
+`intrinsicDimProp`, are divided by item count. Others, including `VarColPC1` and
+`OverallSD`, depend on scale and the number of response categories.
+
+Applying models trained on 10-item, 100-respondent matrices to tables with up to
+`r max(corpus$n_items)` items and 2,000 respondents therefore requires
+extrapolation. The released materials do not allow us to quantify the resulting
+prediction error. Simulations covering a wider range of item counts and sample
+sizes would allow a more direct test of the procedure for these data.
+
+## Conclusion
+
+The results largely support Sotoudeh and DiMaggio's assessments. Predicted
+accuracy agrees with four of the five validity criteria about as well as it did
+on the original survey modules. The measures they recommended, recursive
+relationality and correlation, rank near the top, and Euclidean distance and
+original relationality rank near the bottom. Support for their broader finding
+that no measure is best across datasets is weaker: the best measure still varies,
+but four of the five criteria favor a single measure in most runs, three of them
+correlation. The prediction models provide less useful guidance: they recommend
+the same measure for most tables. The narrow simulation design may contribute to
+this result, but its role remains uncertain. A wider simulation design and
+clearer documentation of the code issues in @tbl-defects would help establish
+when the procedure can guide method selection for item-response data.
+
+## Limitations
+
+- The simulated training data were not released, and the fitted models do not
+  retain their model frames. We can compare our tables with the authors' nine
+  empirical datasets, but cannot compare them directly with the data used to
+  train the models.
+- The noise-assumption models cannot be loaded, so we do not test the claim that
+  the ensemble's advantage grows with error variance.
+- The released code uses Louvain community detection throughout. The authors
+  report that this choice affected performance, so our results are conditional
+  on it.
+- The validity criteria are computed from correlations and so favour
+  correlation-based measures, as the authors acknowledge.
+- `r sum(corpus$affect_cog == "untagged")` of the `r nrow(corpus)` sampled tables
+  have no construct tag, so comparisons by construct type rest on fewer tables.
+- One sampled table, `sd3ypl_klimczak_2019_sd3`, could not be analysed (see
+  Corpus), so the results are based on `r n_tables` tables, not
+  `r nrow(corpus)`.
+- We excluded tables with more than 50,000 respondents because of download
+  costs. This practical restriction limits the sampling frame.
+- Two 40-item tables (`hexaco_ashton_2014_c` and `hexaco_ashton_2014_h`) were
+  excluded after sampling because of computational costs. At 2,000 respondents,
+  each required about 19 core-hours. We did not replace them because substitutes
+  would have had fewer items, underrepresenting the widest tables. The analytic
+  sample therefore contains at most `r max(corpus$n_items)` items per table,
+  making extrapolation from the 10-item training matrices less extensive than the
+  full sampling frame would permit.
+
+## Appendix: implementation sensitivity {#sec-appendix}
+
+```{r}
+#| label: tbl-readings
+## OverallRightKurt_corrected is undefined when every value above the mean is
+## identical (Kurt of a constant), so the rk_corrected reading is summarised over
+## its finite cases and the undefined count is reported rather than hidden.
+pr |>
+  group_by(reading) |>
+  summarise(min = min(predicted, na.rm = TRUE),
+            median = median(predicted, na.rm = TRUE),
+            max = max(predicted, na.rm = TRUE),
+            `below 0` = sprintf("%.0f%%", 100*mean(predicted < 0, na.rm = TRUE)),
+            `above 1` = sprintf("%.0f%%", 100*mean(predicted > 1, na.rm = TRUE)),
+            undefined = sum(!is.finite(predicted)),
+            .groups = "drop") |>
+  mutate(across(c(min, median, max), ~ fmt(.x, 3))) |>
+  kable(caption = "Predicted accuracy under each reading of the ambiguous inputs. Accuracy is a proportion, so values outside [0,1] are impossible by construction.")
+```
+
+```{r}
+#| label: winner-stability
+winner_by <- function(reading) {
+  pr |> filter(reading == !!reading) |>
+    group_by(table, replicate) |>
+    slice_max(predicted, n = 1, with_ties = FALSE) |>
+    ungroup() |> select(table, replicate, winner = method)
+}
+w <- Reduce(function(a, b) full_join(a, b, by = c("table","replicate")),
+            lapply(c("primary","pct_cells","rk_corrected","positional"), function(r)
+              winner_by(r) |> rename(!!r := winner)))
+agree <- sapply(c("primary","rk_corrected","positional"),
+                function(r) mean(w[[r]] == w$pct_cells, na.rm = TRUE))
+```
+
+@tbl-readings compares predicted accuracy under four specifications: the
+released `PercentOut` formula (`primary`), the cell-proportion `PercentOut` used
+in the main analysis (`pct_cells`), the corrected `OverallRightKurt`
+(`rk_corrected`), and the released positional matching of coefficients to
+meta-features (`positional`). Under the released `PercentOut` formula,
+`r fmt(100*below0("primary"), 0)`% of predictions fall below zero; under
+positional matching, `r fmt(100*above1("positional"), 0)`% exceed one.
+
+These choices substantially affect which measure is selected. Relative to
+`pct_cells`, the same measure ranks first in only
+`r fmt(100*agree[["primary"]], 0)`% of tables when we use the released
+`PercentOut` calculation. Agreement falls to
+`r fmt(100*agree[["rk_corrected"]], 0)`% when `OverallRightKurt` is corrected
+and to `r fmt(100*agree[["positional"]], 0)`% when coefficients are matched by
+position, as in the released code.
+
+## Reproducibility
+
+```{r}
+#| output: asis
+## components/source_links.R hardcodes the vignettes/ directory; this page lives
+## in analysis/, so the links are emitted here against the same URL pattern.
+files <- c("plenitude_replication.qmd", "plenitude_replication_compute.R",
+           "plenitude_lib.R", "plenitude_data_prep.R", "plenitude_sample.R",
+           "plenitude_collate.R")
+files <- files[file.exists(files)]
+cat("\n**Source code for this page:** ",
+    paste(sprintf("[`%s`](https://github.com/datapages/irw/blob/main/analysis/%s)", files, files),
+          collapse = " · "), "\n\n", sep = "")
+```
+
+Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate the
+analysis, run the following commands from the project root:
+
+```r
+# 1. Draw the corpus (deterministic given the seed)
+source("analysis/plenitude_sample.R")
+
+# 2. Fetch, fit and collate. Skip-if-exists at the table x replicate level,
+#    so the run is resumable. Needs REDIVIS_API_TOKEN for the fetch stage.
+#    ~140 core-hours; PLENITUDE_WORKERS controls parallelism. Stops before
+#    fitting if check_criteria_orientation() fails.
+source("analysis/plenitude_replication_compute.R")
+
+# 3. Re-render this page
+quarto::quarto_render("analysis/plenitude_replication.qmd")
+```
+
+::: {.callout-tip}
+To cite the datasets used, run:
+
+```r
+irw_save_bibtex(unique(read.csv("analysis/plenitude_data/corpus.csv")$table),
+                output_file = "analysis/plenitude_data/references.bib")
+```
+:::
+
+---
+
+## References
+
+::: {#refs}
+:::
