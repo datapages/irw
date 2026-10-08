@@ -188,6 +188,108 @@ if (file.exists(sf)) {
          paste(sprintf("%s %s %.2f>=%.2f>=%.2f", lad$table, lad$model, lad$H_X, lad$H_S, lad$I_S), collapse = "; "))
 }
 
+# ------------------------------------------------------------------------------
+# Polytomous checks (poly_results.rds from bits_per_item_poly_compute.R)
+# ------------------------------------------------------------------------------
+pf <- "vignettes/bits_per_item_data/poly_results.rds"
+if (file.exists(pf)) {
+  source("vignettes/bits_per_item_poly_helpers.R")
+  options(irw.itemtext_disclaimer = FALSE)
+  poly <- readRDS(pf)
+  gb <- make_grid(1)
+
+  it <- poly$items
+  bound <- pmin(it$log2K, it$H_model)
+  record("P1 per-item I(theta;X_j) <= min(log2 K_j, model-implied H(X_j))", all(it$I <= bound + 1e-12),
+         sprintf("%d item-models; largest I / bound %.3f; largest I %.3f bits (log2 K up to %.2f)",
+                 nrow(it), max(it$I / bound), max(it$I), max(it$log2K)))
+
+  cl <- poly$collapses
+  nested_ok <- cl |> group_by(table, model, item) |> group_modify(function(d, ...) {
+    cs <- strsplit(d$cuts, ","); bad <- 0L
+    for (i in seq_along(cs)) for (j in seq_along(cs))
+      if (i != j && all(cs[[j]] %in% cs[[i]]) && d$I[j] > d$I[i] + 1e-12) bad <- bad + 1L
+    data.frame(bad = bad, over_full = sum(d$I > d$I_full + 1e-12))
+  }) |> ungroup()
+  record("P2 every collapse <= full item; coarser never beats finer along nested merges",
+         all(nested_ok$bad == 0 & nested_ok$over_full == 0),
+         sprintf("%d item-models, %d collapses; nested violations %d; over-full %d",
+                 nrow(nested_ok), nrow(cl), sum(nested_ok$bad), sum(nested_ok$over_full)))
+
+  # Fresh GPCM fits on the two enumerable tables, for P3, P7, P8.
+  pfit <- function(t, rev) {
+    set.seed(sum(utf8ToInt(t)))
+    r <- prepare_resp_poly(irw_fetch(t), reverse = rev, seed = sum(utf8ToInt(t)))$resp
+    list(gpcm = mirt(r, 1, itemtype = "gpcm", verbose = FALSE),
+         nrm = mirt(r, 1, itemtype = "nominal", verbose = FALSE))
+  }
+  pfits <- list(su_2024_gad7 = pfit("su_2024_gad7", character(0)),
+                rosenberg_selfesteem = pfit("rosenberg_selfesteem", poly$settings$reverse$rosenberg_selfesteem))
+  for (t in names(pfits)) {
+    Ps <- item_probs(pfits[[t]]$gpcm, gb$nodes)
+    ex <- poly_info_exact(Ps, gb$w)$I; mc <- poly_info_mc(Ps, gb$w, target_se = 0.005)
+    record(paste("P3 MC vs enumeration (GPCM),", t), abs(ex - mc$I) < 3 * mc$se,
+           sprintf("exact %.4f over %d patterns, MC %.4f (SE %.4f, %d draws)", ex, prod(sapply(Ps, ncol)),
+                   mc$I, mc$se, mc$draws))
+  }
+
+  sw <- poly$showcase$sweep
+  s_pcm <- filter(poly$summary, model == "PCM", I_X_method == "enumeration")
+  record("P4 PCM I(theta;X|S) = 0: every prior (showcase) and every enumerated table",
+         all(abs(sw$I_X_given_S[sw$model == "PCM"]) < 1e-10) && all(abs(s_pcm$gap) < 1e-10),
+         sprintf("%d priors, max |I(X|S)| %.1e; tables %s, max %.1e", sum(sw$model == "PCM"),
+                 max(abs(sw$I_X_given_S[sw$model == "PCM"])), paste(s_pcm$table, collapse = ","), max(abs(s_pcm$gap))))
+
+  ws <- poly$showcase$weighted_score
+  record("P5 GPCM weighted score sum a_j x_j: I(theta;T) = I(theta;X) (showcase)", abs(ws$I_T - ws$I_X) < 1e-10,
+         sprintf("|diff| %.1e (%d T levels / %d patterns); sum score I(theta;S) %.4f vs I(theta;X) %.4f",
+                 abs(ws$I_T - ws$I_X), ws$n_levels, ws$n_patterns, ws$I_S, ws$I_X))
+
+  ge <- poly$showcase$grm_equal_slopes
+  record("P6 GRM I(theta;X|S) > 0: every prior, and with one common slope (showcase)",
+         all(sw$I_X_given_S[sw$model == "GRM"] > 1e-8) && ge$gap > 1e-8,
+         sprintf("free slopes: %.4f to %.4f bits over %d priors; common slope %.3f: %.5f bits (converged %s)",
+                 min(sw$I_X_given_S[sw$model == "GRM"]), max(sw$I_X_given_S[sw$model == "GRM"]),
+                 sum(sw$model == "GRM"), ge$slope, ge$gap, ge$converged))
+
+  th <- c(-2, -0.5, 0, 1, 2.5)
+  fis <- do.call(rbind, lapply(seq_len(extract.mirt(pfits$rosenberg_selfesteem$gpcm, "nitems")), function(j) {
+    item <- extract.item(pfits$rosenberg_selfesteem$gpcm, j)
+    a <- coef(pfits$rosenberg_selfesteem$gpcm, IRTpars = FALSE, simplify = TRUE)$items[j, "a1"]
+    an <- gpcm_fisher(probtrace(item, matrix(th)), a)
+    data.frame(an = an, num = numeric_fisher(item, th), mirt = as.vector(iteminfo(item, matrix(th))))
+  }))
+  record("P7 GPCM Fisher a^2 Var(X_j|theta) = numerical second derivative (and mirt::iteminfo)",
+         max(abs(fis$an - fis$num) / fis$an) < 1e-4 && max(abs(fis$an - fis$mirt) / fis$an) < 1e-8,
+         sprintf("Rosenberg, 10 items x 5 nodes: max rel |diff| vs numeric %.1e, vs iteminfo %.1e",
+                 max(abs(fis$an - fis$num) / fis$an), max(abs(fis$an - fis$mirt) / fis$an)))
+
+  Pn <- item_probs(pfits$rosenberg_selfesteem$nrm, gb$nodes)
+  perm_diff <- max(sapply(Pn, function(P) {
+    I0 <- poly_item_info(list(P), gb$w)[, "I"]
+    max(sapply(1:5, function(r) abs(poly_item_info(list(P[, sample(ncol(P))]), gb$w)[, "I"] - I0)))
+  }))
+  record("P8 relabelling categories (nominal model) leaves I(theta;X_j) unchanged", perm_diff < 1e-12,
+         sprintf("Rosenberg, 10 items x 5 random permutations: max |diff| %.1e", perm_diff))
+
+  dres <- readRDS("vignettes/bits_per_item_data/bits_per_item_results.rds")
+  sc <- dres$showcases$fitz_2024_numeracy$items
+  P2 <- p_matrix(sc$a, sc$d, gb$nodes)
+  Ps2 <- lapply(seq_len(ncol(P2)), function(j) cbind(1 - P2[, j], P2[, j]))
+  stored <- filter(dres$summary, table == "fitz_2024_numeracy", model == "2PL")
+  dif <- c(item_bits = max(abs(poly_item_info(Ps2, gb$w)[, "I"] - sc$bits)),
+           I_X = abs(poly_info_exact(Ps2, gb$w)$I - stored$I_X),
+           I_S = abs(poly_info_sum(Ps2, gb$w) - stored$I_S),
+           H_X_theta = abs(poly_h_x_given_theta(Ps2, gb$w) - stored$H_X_given_theta))
+  record("P9 K = 2: polytomous code reproduces the stored dichotomous results (fitz_2024_numeracy, 2PL)",
+         all(dif < 1e-8), paste(sprintf("%s |diff| %.1e", names(dif), dif), collapse = "; "))
+
+  nc <- filter(poly$summary, !converged)
+  record("P10 all polytomous fits converged", nrow(nc) == 0,
+         if (nrow(nc)) paste(nc$table, nc$model, collapse = "; ") else
+           sprintf("%d table-models", nrow(poly$summary)))
+}
+
 checks <- do.call(rbind, out)
 write.csv(checks, "vignettes/bits_per_item_data/checks_results.csv", row.names = FALSE)
 message(sum(checks$pass), " of ", nrow(checks), " checks passed")

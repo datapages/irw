@@ -6,7 +6,8 @@ description: |
   Information theory lets us count that narrowing in bits, the same unit that
   tells you how much a Wordle guess cuts down the list of possible words. We
   play the game on three real tests, then measure the bits delivered by more
-  than two hundred dichotomous tests in the Item Response Warehouse.
+  than two hundred dichotomous tests in the Item Response Warehouse, and
+  close with three tests whose answers come in ordered categories.
 date: today
 bibliography: bits_per_item_data/references.bib
 nocite: |
@@ -71,6 +72,9 @@ if (cache_ok) {
 
 suff_path <- "bits_per_item_data/sufficiency_results.rds"
 suff <- if (file.exists(suff_path)) readRDS(suff_path)$showcases else NULL
+poly_path <- "bits_per_item_data/poly_results.rds"
+poly <- if (file.exists(poly_path)) readRDS(poly_path) else NULL
+poly_ok <- !is.null(poly)
 sim_path <- "bits_per_item_data/reliability_sim_results.rds"
 rel_sim <- if (file.exists(sim_path)) readRDS(sim_path)$sim else NULL
 knitr::opts_chunk$set(eval = cache_ok)
@@ -1807,6 +1811,240 @@ gives `r fmt(showcases[[main]]$bin_convergence$bits[1])` bits. With 64 it gives
 Because the tests deliver only one or two bits, six bits of groups is far
 more resolution than any of them can use.
 
+## More than right and wrong
+
+Many tables in the warehouse do not record right and wrong answers. They record
+a choice among ordered categories: *strongly disagree* to *strongly agree*,
+*not at all* to *nearly every day*. Everything above carries over to such
+items. Two things are new: the ceiling on what one item can deliver, and a
+question that right-or-wrong items never raise, how many categories an item
+needs. Rather than the whole warehouse, this section works through three
+familiar instruments under the generalized partial credit model (GPCM), the
+polytomous counterpart of the 2PL.
+
+```{r}
+#| label: poly-setup
+#| eval: !expr poly_ok
+
+poly_titles <- c(rosenberg_selfesteem           = "Rosenberg self-esteem (10 items, 4 categories)",
+                 bfi_goldberg_1992_extraversion = "Extraversion, Big Five (10 items, 5 categories)",
+                 su_2024_gad7                   = "GAD-7 anxiety (7 items, 4 categories)")
+poly_short  <- c(rosenberg_selfesteem = "Rosenberg", bfi_goldberg_1992_extraversion = "Extraversion",
+                 su_2024_gad7 = "GAD-7")
+p_sum  <- poly$summary |> mutate(test = factor(poly_titles[table], poly_titles))
+p_it   <- poly$items   |> mutate(test = factor(poly_titles[table], poly_titles))
+p_cl   <- poly$collapses
+p_sc   <- poly$showcase
+p_gpcm <- filter(p_it, model == "GPCM")
+p_info <- poly$info
+rev_txt <- function(t) paste(p_info[[t]]$reversed, collapse = ", ")
+gp_I <- function(t) p_sum$I_X[p_sum$table == t & p_sum$model == "GPCM"]
+cat_cols <- c("#d1e5f0", "#92c5de", "#4393c3", "#2166ac", "#08306b")
+```
+
+The three are the Rosenberg self-esteem scale [@rosenberg1965society] (10
+statements, four categories from *strongly disagree* to *strongly agree*), the
+ten extraversion items of a Big Five inventory (five categories), and the GAD-7
+anxiety screener (seven symptoms, from *not at all* to *nearly every day* over
+the last two weeks). Each was subsampled to 10,000 respondents. Half the
+Rosenberg and extraversion items are worded against the trait ("I certainly
+feel useless at times", "I keep in the background"), and the warehouse stores
+them as answered; we reversed them before fitting (Rosenberg items
+`r rev_txt("rosenberg_selfesteem")`; extraversion
+`r rev_txt("bfi_goldberg_1992_extraversion")`). Reversal changes nothing about
+how many bits an item carries; it only makes a higher category mean more of the
+trait on every item.
+
+### One item, four bins
+
+```{r}
+#| label: poly-one-item
+#| eval: !expr poly_ok
+#| fig-height: 4.4
+#| fig-width: 7.5
+
+ros <- filter(p_gpcm, table == "rosenberg_selfesteem")
+j1 <- which.max(ros$I)
+j1_item <- ros$item[j1]
+j1_text <- p_sc$items$text[p_sc$items$item == j1_item]
+gpj <- p_sc$group_probs[, match(j1_item, p_sc$items$item), ]
+d1 <- expand.grid(g = 1:64, k = 1:4) |>
+  mutate(p = gpj[cbind(g, k)], cat = factor(p_sc$category_labels[k], rev(p_sc$category_labels)))
+ggplot(d1, aes(g, p, fill = cat)) +
+  geom_col(width = 1, colour = "white", linewidth = 0.1) +
+  scale_fill_manual(values = setNames(cat_cols[c(1, 2, 3, 5)], p_sc$category_labels), name = NULL,
+                    breaks = p_sc$category_labels) +
+  scale_x_continuous(breaks = c(1, 64), labels = c("lowest\nself-esteem", "highest\nself-esteem"),
+                     expand = c(0, 0.5)) +
+  scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
+  labs(x = "the population in 64 equally likely slices", y = "chance of each answer",
+       title = sprintf("A four-category item can deliver at most 2 bits; Rosenberg's best delivers %s",
+                       fmt(ros$I[j1])),
+       subtitle = wrap(sprintf("\"%s\" (GPCM). Its answers carry %s bits of entropy; %s of them are noise, answers that vary among people at the same level.",
+                               j1_text, fmt(ros$H_model[j1]), fmt(ros$H_model[j1] - ros$I[j1])), 90)) +
+  theme(legend.position = "top", panel.grid.major.x = element_blank(),
+        plot.margin = margin(5.5, 30, 5.5, 5.5))
+```
+
+A right-or-wrong item asks one yes/no question, so it can deliver at most 1
+bit. Four categories sort people into four bins, which is the three-cut case
+from the opening widget. Telling four equally full bins apart takes two yes/no
+questions (upper half or lower half? then upper or lower within it?), so the
+ceiling is 2 bits. In general it is log~2~ K: 1.58 bits for three categories,
+2.32 for five. The ceiling is reached only by an item whose
+categories are perfectly sharp and equally full. The decomposition is the one
+used throughout, I(θ; X~j~) = H(X~j~) − H(X~j~ | θ). The only difference is
+that the noise term is now a category entropy,
+−Σ~k~ P~k~(θ) log~2~ P~k~(θ), averaged over the population. The figure shows
+why it is large. Even among the most self-assured slice of people, the
+statement draws a mix of *agree* and *strongly agree*, and that mix is noise as
+far as θ is concerned.
+
+Some of that noise is not luck. People differ in how they use a response
+scale: some favour the extremes, others the midpoint, whatever their level of
+the trait. A one-dimensional model has nowhere to put those response styles
+except H(X~j~ | θ). The answers carry information about something, but not about θ.
+
+### Categories offered, categories used
+
+```{r}
+#| label: poly-ceiling
+#| eval: !expr poly_ok
+#| fig-height: 7.4
+#| fig-width: 7.5
+
+pc <- p_gpcm |>
+  group_by(test) |> mutate(lab = sub("^item_", "", item), lab = reorder(paste(test, lab), I)) |> ungroup()
+ggplot(pc, aes(y = lab)) +
+  geom_vline(aes(xintercept = log2K), linetype = "dashed", colour = "grey30") +
+  geom_segment(aes(x = 0, xend = I, yend = lab), colour = irw_accent, linewidth = 1.6) +
+  geom_point(aes(x = H_obs, shape = "observed category entropy, H(Xⱼ)"), colour = "grey35", size = 2.2) +
+  geom_point(aes(x = I, shape = "information about θ, I(θ; Xⱼ)"), colour = irw_accent, size = 2.4) +
+  facet_wrap(~ test, ncol = 1, scales = "free_y") +
+  scale_y_discrete(labels = function(x) sub(".* ", "", x)) +
+  scale_shape_manual(values = c("observed category entropy, H(Xⱼ)" = 1, "information about θ, I(θ; Xⱼ)" = 16),
+                     name = NULL) +
+  scale_x_continuous(limits = c(0, 2.45), expand = c(0, 0)) +
+  labs(x = "bits per item (GPCM). Dashed: the ceiling, log₂ K", y = NULL,
+       title = sprintf("Items offer 2 or 2.3 bits, answers use a median of %s, and θ gets a median of %s",
+                       fmt(median(pc$H_obs)), fmt(median(pc$I))),
+       subtitle = "The gap from the dashed line to the open circle is categories offered but not used; from the circle to the bar's end, answers that vary for reasons other than θ.") +
+  theme(legend.position = "top", panel.grid.major.y = element_blank(), strip.text = element_text(hjust = 0))
+```
+
+```{r}
+#| label: poly-ceiling-numbers
+#| eval: !expr poly_ok
+
+gad <- filter(p_gpcm, table == "su_2024_gad7")
+ext <- filter(p_gpcm, table == "bfi_goldberg_1992_extraversion")
+# share answering "not at all" or "several days" per GAD-7 item (full table, from the scouting pass)
+gad_low <- read.csv("bits_per_item_data/poly_scout_items.csv") |> filter(table == "su_2024_gad7") |>
+  group_by(item) |> summarise(low = sum(n[resp <= 1]) / sum(n), .groups = "drop")
+```
+
+The label on the scale sets the ceiling, log~2~ K. A tighter ceiling comes from
+the data: the entropy of the answers actually given, H(X~j~). If respondents use
+only two of an item's five categories, the item cannot deliver much more than 1
+bit, whatever its label. The GAD-7 makes the point. Its four categories offer 2
+bits per item, but in this general-population sample
+`r scales::percent(min(gad_low$low), accuracy = 1)`–`r scales::percent(max(gad_low$low), accuracy = 1)`
+of people answer each item *not at all* or *several days*, so the answers carry only
+`r fmt(min(gad$H_obs))`–`r fmt(max(gad$H_obs))` bits of entropy, and θ gets
+`r fmt(min(gad$I))`–`r fmt(max(gad$I))` of them. The extraversion items use
+nearly all of their 2.32 bits (`r fmt(min(ext$H_obs))`–`r fmt(max(ext$H_obs))`),
+yet deliver only `r fmt(min(ext$I))`–`r fmt(max(ext$I))` bits about θ. Their
+categories are all in use; most of that use is noise. Across the three tables
+a single polytomous item delivers a median of `r fmt(median(pc$I))` bits, against a
+median of `r fmt(median(items_df$bits))` for a dichotomous item in the warehouse.
+That is more than one right-or-wrong question, and a long way below the ceiling.
+
+### How many categories do you need?
+
+```{r}
+#| label: poly-collapse
+#| eval: !expr poly_ok
+#| fig-height: 5.6
+#| fig-width: 7.5
+
+g_cl <- p_cl |> filter(model == "GPCM") |> mutate(share = I / I_full)
+best <- g_cl |> group_by(table, item, k) |> slice_max(I, n = 1, with_ties = FALSE) |> ungroup()
+# Two contrasting Rosenberg items: the one whose best two-category version keeps the most, and the least.
+r2 <- best |> filter(table == "rosenberg_selfesteem", k == 2) |> arrange(desc(share))
+pair <- c(r2$item[1], r2$item[nrow(r2)])
+txt <- function(it) p_sc$items$text[p_sc$items$item == it]
+lab_pair <- setNames(c(sprintf("\"%s\"", txt(pair[1])), sprintf("\"%s\"", txt(pair[2]))), pair)
+curve_k <- best |> group_by(table, k) |> summarise(share = median(share), .groups = "drop") |>
+  mutate(test = factor(poly_short[table], poly_short))
+dich <- poly$dichotomised |> filter(rule == "best") |>
+  mutate(share = I_dich / I_X, k = 2, test = factor(poly_short[table], poly_short))
+ggplot(curve_k, aes(k, share, colour = test)) +
+  geom_line(linewidth = 1.1) +
+  geom_point(aes(shape = "a typical item (the median)"), size = 2.6) +
+  geom_point(data = dich, aes(shape = "the whole test, every item cut to two"), size = 4, fill = "white", stroke = 1.4) +
+  scale_colour_manual(values = c(Rosenberg = irw_accent, Extraversion = irw_blue, `GAD-7` = irw_red), name = NULL) +
+  scale_shape_manual(values = c("a typical item (the median)" = 16, "the whole test, every item cut to two" = 23), name = NULL) +
+  scale_y_continuous(labels = scales::percent, limits = c(0.5, 1), breaks = seq(0.5, 1, 0.1)) +
+  scale_x_continuous(breaks = 2:5) +
+  labs(x = "answer categories kept (the best way of merging neighbours)", y = "share of the bits kept",
+       title = wrap(sprintf("Merging an item's answers down to two keeps a median %s of its bits; doing it to every item in a test keeps %s–%s of the test's bits",
+                            scales::percent(median(best$share[best$k == 2]), accuracy = 1),
+                            scales::percent(min(dich$share), accuracy = 1),
+                            scales::percent(max(dich$share), accuracy = 1)), 72),
+       subtitle = wrap("Each line ends at 100%: all of the item's categories kept. The diamonds sit above the lines because, over a whole test, what one item loses is partly made up by the others.", 90)) +
+  guides(colour = guide_legend(order = 1, override.aes = list(shape = 16)), shape = guide_legend(order = 2)) +
+  theme(legend.position = "top", legend.box = "vertical", legend.spacing.y = unit(0, "pt"))
+```
+
+Merging adjacent categories (counting *agree* and *strongly agree* as one
+answer, say) is a function of the response, so by the data processing
+inequality it can only lose information. The chain rule says exactly how much:
+the loss is I(θ; X~j~ | merged X~j~), the information in the distinction the
+merge erases. A four-category item has seven ways to merge adjacent categories
+and a five-category item fifteen. We evaluated each under the fitted model,
+without refitting.
+
+The answer depends on the item. For
+`r lab_pair[pair[1]]` the best two-way split keeps
+`r scales::percent(r2$share[1], accuracy = 1)` of the item's bits. For
+`r lab_pair[pair[2]]` it keeps
+`r scales::percent(r2$share[nrow(r2)], accuracy = 1)`.
+
+Over a whole test the losses are smaller, because the items overlap. Taken one
+at a time, Rosenberg's ten items carry `r fmt(sum(ros$I))` bits between them,
+but the test as a whole carries only `r fmt(gp_I("rosenberg_selfesteem"))`: most
+of what each item says, the other nine already say. So when a merge erases a
+fine distinction on one item (*agree* against *strongly agree*, say), the other
+items have already placed the person roughly, and the lost distinction would
+mostly have repeated them. Merging every Rosenberg item down to two keeps
+`r scales::percent(dich$share[dich$table == "rosenberg_selfesteem"], accuracy = 1)`
+of the test's bits, against
+`r scales::percent(curve_k$share[curve_k$table == "rosenberg_selfesteem" & curve_k$k == 2], accuracy = 1)`
+for a typical item on its own. Dichotomizing every GAD-7 item at its
+best split (in practice, *not at all* against everything else) keeps
+`r scales::percent(dich$share[dich$table == "su_2024_gad7"], accuracy = 1)` of
+the test's `r fmt(gp_I("su_2024_gad7"))` bits. That is the "categories offered
+are not categories used" point, put in bits: almost all of the GAD-7's
+information is in whether a symptom is present at all. Extraversion, whose
+categories are all in use, keeps
+`r scales::percent(dich$share[dich$table == "bfi_goldberg_1992_extraversion"], accuracy = 1)`.
+
+```{r}
+#| label: poly-table
+#| eval: !expr poly_ok
+#| results: asis
+
+tab <- p_sum |> filter(model == "GPCM") |>
+  left_join(filter(poly$dichotomised, rule == "best") |> select(table, I_dich), by = "table") |>
+  transmute(Test = poly_titles[table],
+            `I(θ; X)` = fmt(I_X), `bits per item` = fmt(bits_per_item),
+            `share of Σ log₂ K` = scales::percent(efficiency, accuracy = 1),
+            `−½ log₂(1 − ρ)` = fmt(bits_rho_marginal),
+            `dichotomized` = fmt(I_dich))
+print(knitr::kable(tab, align = "lrrrrr",
+  caption = "The three tests under the GPCM. Share of Σ log₂ K: I(θ; X) as a share of the most the items could deliver. −½ log₂(1 − ρ): the Gaussian bits implied by marginal reliability. Dichotomized: I(θ; X) with every item cut at its best split."))
+```
+
 ## Limitations
 
 - **Model dependence.** Every number is computed from a fitted model, not from
@@ -1837,8 +2075,23 @@ more resolution than any of them can use.
   answer pattern on a θ grid, so they are limited to 16 items. For the
   fraction-subtraction test they use the 12 items with the highest expected
   bits. The within-score surprisal needs no θ grid and uses all items.
-- **Scope.** Only dichotomous items, and no ENEM tables in this version.
-  Polytomous items can carry more than one bit each.
+- **Scope.** The warehouse-wide numbers cover only dichotomous items, and no
+  ENEM tables in this version. The polytomous section uses three tables, chosen
+  by hand, not a sample of the warehouse's polytomous tables.
+- **Polytomous models and choices.** The polytomous bits depend on the model as
+  much as the dichotomous ones do. The section reports the generalized partial
+  credit model; under the partial credit and graded response models a test's
+  bits change by up to
+  `r if (poly_ok) with(subset(poly$summary, model %in% c("PCM", "GPCM", "GRM")), fmt(max(tapply(I_X, table, function(x) diff(range(x)))), 2))` bits. Negatively worded items were reversed before
+  fitting. Every category was kept, including GAD-7's sparse top category
+  (*nearly every day*, under 1.5% of answers on every item), which leaves its
+  estimates the least precise. Merged
+  categories were evaluated under the model fitted to the full categories,
+  without refitting. That isolates what the distinction is worth under one
+  model, but a model refitted to the merged data could tell a slightly different
+  story. `r if (poly_ok) with(subset(poly$summary, model %in% c("PCM", "GPCM", "GRM")), sprintf("%d of %d polytomous fits converged", sum(converged), length(converged)))`. Rosenberg and the GAD-7 were enumerated
+  exactly (up to 4^10^ = 1,048,576 patterns); extraversion (5^10^ patterns) used
+  Monte Carlo (standard error under 0.005 bits).
 
 ## Reproducibility
 
@@ -1855,6 +2108,9 @@ source("vignettes/bits_per_item_scout.R")
 # 1. Validation checks, then the compute script (from the project root)
 source("vignettes/bits_per_item_checks.R")
 source("vignettes/bits_per_item_compute.R")
+
+# 1b. The polytomous section (three tables; checks are the "P" block above)
+source("vignettes/bits_per_item_poly_compute.R")
 
 # 2. Re-render this page
 quarto::quarto_render("vignettes/bits_per_item.qmd")
