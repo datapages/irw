@@ -41,11 +41,14 @@ SHARD_REF <- c(
 # in irw_meta's `metadata`, and each is fetched in the packages with `source =`.
 # Table names are unique across ALL sources -- the 66 nom tables were renamed to
 # *_nom for exactly this -- so every source shares the one flat /tables/<slug>/.
+# Conjoint (irw_conjoint, ben-domingue/irw#2887) has no item/resp either: its
+# metadata counts respondents, tasks and profiles, and carries design fields
+# (country, languages, randomization restrictions) plus a conj_outcomes table.
 NONCORE <- data.frame(
-  dataset = c("irw_simsyn",      "irw_competitions",      "irw_nominal"),
-  ref     = c("irw_simsyn:0btg", "irw_competitions:cmd7", "irw_nominal:614n"),
-  prefix  = c("simsyn",          "comps",                 "nominal"),
-  source  = c("sim",             "comp",                  "nom"),
+  dataset = c("irw_simsyn",      "irw_competitions",      "irw_nominal",      "irw_conjoint"),
+  ref     = c("irw_simsyn:0btg", "irw_competitions:cmd7", "irw_nominal:614n", "irw_conjoint:5wjx"),
+  prefix  = c("simsyn",          "comps",                 "nominal",          "conj"),
+  source  = c("sim",             "comp",                  "nom",              "conj"),
   stringsAsFactors = FALSE)
 PAGE_REF <- c(SHARD_REF, setNames(NONCORE$ref, NONCORE$dataset))
 

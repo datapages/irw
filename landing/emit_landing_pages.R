@@ -343,11 +343,19 @@ kv_rows <- function(pairs) {
 # values -- the codebook is the source's, and the page says so rather than
 # implying the IRW holds one.
 STANDARD_URL  <- "https://github.com/ben-domingue/irw/blob/main/datastandard.md"
+CONJ_STANDARD_URL <- "https://itemresponsewarehouse.org/conjoint_standard.html"
 STANDARD_COLS <- c("id", "item", "resp", "resp_raw", "wave", "treat", "rt", "date",
                    "rater", "item_family", "cluster_id", "block_id", "std_baseline")
 columns_note <- function(x) {
   # A competitions table's agent_a/agent_b/winner are the IRW's own layout.
   if (identical(x$src, "comp")) return("")
+  # A conjoint table's layout is the conjoint standard's, not datastandard.md's;
+  # its attr_ columns hold the levels as respondents saw them.
+  if (identical(x$src, "conj")) return(paste0(
+    "<p class=\"note\">The layout (one row per respondent, task and profile; ",
+    "<code>choice</code>/<code>rating</code> outcomes; <code>attr_</code> columns holding ",
+    "each attribute level as displayed) is defined in the <a href=\"", CONJ_STANDARD_URL,
+    "\">IRW conjoint standard</a>. What the outcomes asked is under Design above.</p>\n"))
   std <- x$variables[x$variables %in% STANDARD_COLS | startsWith(x$variables, "std_baseline")]
   first <- if (length(std)) paste0(
     paste0("<code>", vapply(std, esc, character(1)), "</code>", collapse = ", "),
@@ -697,6 +705,7 @@ build_croissant <- function(x) {
   std <- switch(x$src,
     comp = c("agent_a", "agent_b", "winner"),
     nom  = c("id", "item", "resp", "text"),
+    conj = c("id", "task", "profile", "choice", "rating"),
     c("id", "item", "resp"))
   core <- intersect(std, x$variables)
   fields <- lapply(core, function(v) {
@@ -704,7 +713,8 @@ build_croissant <- function(x) {
          "@id"   = paste0("responses/", v),
          name    = v,
          description = paste0("The '", v, "' column of the IRW table."),
-         dataType = if (v == "resp") "sc:Float" else "sc:Text",
+         dataType = if (v %in% c("resp", "choice", "rating")) "sc:Float" else
+                    if (v %in% c("task", "profile")) "sc:Integer" else "sc:Text",
          source  = list("fileObject" = list("@id" = "redivis-table"),
                         "extract"    = list("column" = v)))
   })
@@ -776,6 +786,8 @@ build_croissant <- function(x) {
       "@type" = "cr:RecordSet", "@id" = "responses", name = "responses",
       description = if (x$src == "comp")
         "One row per comparison between two agents, per the IRW competitions format."
+        else if (x$src == "conj")
+        "One row per respondent, task and profile, per the IRW conjoint format."
         else "One row per person-item response, per the IRW data standard.",
       field = fields
     ))
@@ -857,6 +869,52 @@ licence_terms <- function(lic) {
       "adaptations must be shared under the same licence")
 }
 
+# A conjoint table's design (conj_metadata's design columns, conj_outcomes'
+# wording), in the codes data/conjoint/README.md defines. "unknown" is shown as
+# such: it means no source states the fact, and the README forbids guessing.
+CONJ_PROVENANCE <- c(recorded = "recorded in the deposit",
+                     inferred = "inferred from row order",
+                     unknown  = "unknown")
+design_html <- function(x) {
+  m <- x$m
+  restr <- chr(m$restrictions)
+  restr_txt <- if (!nzchar(restr)) "" else switch(restr,
+    none     = "none (levels randomized independently and uniformly, per the source)",
+    yes      = "yes (stated by the source)",
+    observed = "observed in the data (not documented by the source)",
+    restr)
+  if (restr %in% c("yes", "observed") && !blank(m$restrictions_note))
+    restr_txt <- paste0(restr_txt, ": ", chr(m$restrictions_note))
+  prov <- function(v) { v <- chr(v); if (v %in% names(CONJ_PROVENANCE)) CONJ_PROVENANCE[[v]] else v }
+  out <- kv_rows(list(
+    list("Country",                  gsub(";", ", ", chr(m$country))),
+    list("Language shown",           gsub(";", ", ", chr(m$display_language))),
+    list("Language of stored levels", gsub(";", ", ", chr(m$label_language))),
+    list("Randomization restrictions", restr_txt),
+    list("Task order",               prov(m$task_source)),
+    list("Profile position",         prov(m$profile_source))))
+  warn <- c(
+    if (restr %in% c("yes", "observed"))
+      "Because the attribute levels were not randomized independently, an estimator has to account for the restriction; a plain difference in means across levels can mislead.",
+    if ("inferred" %in% c(chr(m$task_source), chr(m$profile_source)))
+      "Task order or profile position was rebuilt from row order; analyses of position or task order should leave it out.")
+  if (length(warn)) out <- paste0(out, "<p class=\"note\">", esc(paste(warn, collapse = " ")), "</p>\n")
+  o <- x$outcomes
+  if (!is.null(o) && nrow(o)) {
+    o <- o[order(o$outcome, method = "radix"), , drop = FALSE]
+    out <- paste0(out, "<p>Outcomes:</p>\n", kv_rows(lapply(seq_len(nrow(o)), function(i) {
+      r <- o[i, , drop = FALSE]
+      detail <- if (chr(r$type) == "rating") {
+        end <- function(v, a) paste0(num_fmt(v), if (!blank(a)) paste0(" (", chr(a), ")") else "")
+        paste0("rating, ", end(r$scale_min, r$low_anchor), " to ", end(r$scale_max, r$high_anchor))
+      } else paste0("choice", if (chr(r$opt_out) == "yes") ", opt-out allowed"
+                              else if (chr(r$opt_out) == "no") ", forced" else "")
+      list(chr(r$outcome), paste0(chr(r$question), " [", detail, "]"))
+    })))
+  }
+  out
+}
+
 build_page <- function(x) {
   # A table with an open data defect (landing/known_issues.tsv) keeps its page,
   # but is kept out of search until the fix ships: noindex, no Dataset JSON-LD,
@@ -905,7 +963,16 @@ build_page <- function(x) {
     list("Responses per respondent",  num_fmt(x$m$responses_per_participant)),
     list("Responses per item",        num_fmt(x$m$responses_per_item)),
     list("Density",                   num_fmt(x$m$density)),
-    list("Longitudinal",              x$m$longitudinal)))
+    list("Longitudinal",              x$m$longitudinal),
+    # Conjoint (irw#2887): conj_metadata counts rows, not responses.
+    list("Respondents",               num_fmt(x$m$n_respondents)),
+    list("Rows (one per respondent, task and profile)", num_fmt(x$m$n_rows)),
+    list("Tasks per respondent (most)", num_fmt(x$m$n_tasks)),
+    list("Profiles per task",         num_fmt(x$m$n_profiles)),
+    list("Attributes",                num_fmt(x$m$n_attributes)),
+    list("Tasks with no profile chosen", num_fmt(x$m$n_optout_tasks))))
+
+  design <- if (x$src == "conj") design_html(x) else ""
 
   about <- kv_rows(list(
     list("Description", x$description),
@@ -1054,6 +1121,7 @@ related$note,
 section("About this table", about),
 section("Notes", notes, id = "notes"),
 section("Size and shape", size),
+section("Design", design, id = "design"),
 section("Classification", tagbody),
 section("Item text", itext),
 { cb <- codebook_html(x, STANDARD)
@@ -1225,22 +1293,27 @@ main <- function() {
   tg    <- as_df(meta_ds$table("tags"))
   itm   <- as_df(meta_ds$table("itemtext_metadata"))
   message("[landing] read irw_meta ", meta_ver, ": ", nrow(md), " metadata rows")
-  # The non-core sources keep their own metadata/biblio (and, for nom, tags)
-  # tables in irw_meta, with no `dataset` column of their own to rely on.
+  # The non-core sources keep their own metadata/biblio (and, for nom, tags;
+  # for conj, outcomes) tables in irw_meta, with no `dataset` column of their own.
+  outc <- data.frame(table = character(0), outcome = character(0), stringsAsFactors = FALSE)
   for (i in seq_len(nrow(NONCORE))) {
     pf <- NONCORE$prefix[i]
     m2 <- as_df(meta_ds$table(paste0(pf, "_metadata")))
     m2$dataset <- NONCORE$dataset[i]
     md  <- bind_fill(md,  m2)
     bib <- bind_fill(bib, as_df(meta_ds$table(paste0(pf, "_biblio"))))
+    meta_tabs <- vapply(meta_ds$list_tables(), function(t) t$name, character(1))
     tname <- paste0(pf, "_tags")
-    if (tname %in% vapply(meta_ds$list_tables(), function(t) t$name, character(1)))
-      tg <- bind_fill(tg, as_df(meta_ds$table(tname)))
+    if (tname %in% meta_tabs) tg <- bind_fill(tg, as_df(meta_ds$table(tname)))
+    # conj_outcomes: one row per table x outcome column (what was asked, its scale).
+    oname <- paste0(pf, "_outcomes")
+    if (oname %in% meta_tabs) outc <- bind_fill(outc, as_df(meta_ds$table(oname)))
     message("[landing] read ", pf, "_metadata: ", nrow(m2), " rows")
   }
 
   key <- function(df) tolower(trimws(as.character(df[[1]])))
   md$.k <- key(md); bib$.k <- key(bib); tg$.k <- key(tg); itm$.k <- key(itm)
+  outc$.k <- key(outc)
 
   # One listing per shard, not one request per table: at ~4,000 tables the
   # per-table call was the whole runtime. Each listed table carries Redivis' own
@@ -1385,12 +1458,20 @@ main <- function() {
     size_sentence <- if (src == "comp") paste0(
       num_fmt(mrow$n_responses), " comparisons among ",
       num_fmt(mrow$n_actors), " agents.")
+    else if (src == "conj") paste0(
+      num_fmt(mrow$n_rows), " rated or chosen profiles from ",
+      num_fmt(mrow$n_respondents), " respondents, in up to ",
+      num_fmt(mrow$n_tasks), " tasks of ", num_fmt(mrow$n_profiles),
+      if (identical(num_fmt(mrow$n_profiles), "1")) " profile" else " profiles",
+      " varying on ", num_fmt(mrow$n_attributes), " attributes.")
     else paste0(
       num_fmt(mrow$n_responses), if (src == "sim") " simulated" else "", " responses from ",
       num_fmt(mrow$n_participants), " respondents to ",
       num_fmt(mrow$n_items), " items.")
 
-    manifest_pin <- pin_of[[shard]] %||% ""
+    # A dataset the manifest does not track yet (irw_conjoint, 2026-10) has no
+    # pin; [[ ]] on a missing name is an error, not NULL.
+    manifest_pin <- if (shard %in% names(pin_of)) pin_of[[shard]] %||% "" else ""
     if (nzchar(manifest_pin) && nzchar(si$version) && manifest_pin != si$version)
       lagging <- unique(c(lagging, shard))
 
@@ -1413,8 +1494,9 @@ main <- function() {
       doi = doi, doi_url = doi_url,
       keywords = c(unname(unlist(tags)),
                    switch(src, sim = "simulated data", comp = "paired comparisons",
-                          nom = "nominal responses", NULL)),
+                          nom = "nominal responses", conj = "conjoint experiment", NULL)),
       src = src, twin = unname(twin_of[k]), family = family_of[[k]],
+      outcomes = outc[outc$.k == k, , drop = FALSE],
       truth_cols = grep("^cov_true_", vars, value = TRUE),
       page_url = page_url,
       croissant_url = paste0(SITE_URL, "/tables/", slug, "/croissant.jsonld"),
@@ -1446,6 +1528,7 @@ main <- function() {
                sim  = "Simulated item response data",
                comp = "Paired-comparison data",
                nom  = "Item response data keeping the option each respondent chose,",
+               conj = "Conjoint experiment data",
                "Item response data"),
              " in the Item Response Warehouse (IRW), a harmonised ",
              "collection of item-level response data for psychometric research."),
@@ -1467,7 +1550,8 @@ main <- function() {
       urls <- c(urls, page_url)
     }
     rows[[length(rows) + 1]] <- list(table = x$table, slug = slug, shard = shard,
-                                     n_responses = mrow$n_responses,
+                                     # conj has no responses; its count is rows
+                                     n_responses = if (src == "conj") mrow$n_rows else mrow$n_responses,
                                      license = x$license, issue = x$issue)
     if (!nzchar(x$rows_url)) too_big <- c(too_big, x$table)
   }
