@@ -133,6 +133,7 @@ CACHES <- list(
                                "asymmetric_irt_data/convergence_sim.rds",
                                "asymmetric_irt_data/example_itemfit.rds",
                                "asymmetric_irt_data/validation_gate_log.rds"),
+  "conjoint"               = "conjoint_data/conjoint_results.rds",
   "dimensionality"         = c("dimensionality_data/dimensionality_results.rds",
                                "dimensionality_data/dimensionality_merge_results.rds"),
   "dutch_identity"         = "dutchdata/dutch_identity_results.rds",

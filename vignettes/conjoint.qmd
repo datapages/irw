@@ -1,0 +1,661 @@
+---
+title: "Conjoint Experiments as Paired Comparisons"
+description: |
+  A conjoint experiment asks people to choose between pairs of randomly built
+  profiles: two immigrants, two candidates, two vaccines. The usual summary is
+  the average effect of each attribute. IRW holds 216 conjoint experiments, and
+  read as item response data each choice is a paired comparison. That lets us
+  ask two measurement questions across all of them: how well do the attributes
+  predict a choice nobody has seen yet, and how much do individual respondents'
+  own preferences add to that? Start by taking one of the experiments yourself.
+date: today
+bibliography: conjoint_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(plotly)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+cache_path <- "conjoint_data/conjoint_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache           <- readRDS(cache_path)
+  summary_df       <- .cache$summary
+  irt_df           <- .cache$irt_summary
+  hhy_amce         <- .cache$hhy_amce
+  widget_tasks     <- .cache$widget_tasks
+  support          <- .cache$support
+  candidate_tables <- .cache$candidate_tables
+  date_run         <- .cache$date_run
+  is_pilot         <- isTRUE(.cache$pilot)
+  r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
+  r_n_conj         <- .cache$n_conj_tables
+  r_irt_pool       <- .cache$irt_pool_n
+  r_n_tables_run   <- nrow(summary_df)
+} else {
+  summary_df <- tibble(table = character(), n_resp = integer(), n_tasks_used = integer(),
+                       n_attr = integer(), n_terms = integer(), restrictions = character(),
+                       country = character(), imv_attr = numeric(), w_base = numeric(),
+                       w_attr = numeric(), imv_indiv = numeric(), w_shared = numeric(),
+                       w_indiv = numeric(), lambda = numeric(), n_resp_q2 = integer(),
+                       mean_tasks = numeric(), reference = character())
+  irt_df <- tibble(table = character(), persons = integer(), items = integer(),
+                   per_person = numeric(), lambda = numeric(), imv_indiv = numeric(),
+                   w_shared = numeric(), w_indiv = numeric())
+  hhy_amce <- tibble(attribute = character(), level = character(), baseline = logical(),
+                     published_amce = numeric(), published_se = numeric(),
+                     irw_amce = numeric(), irw_se = numeric(), dim = numeric())
+  widget_tasks <- tibble(task_key = integer(), profile = integer(), choice = integer())
+  support <- tibble(attribute = character(), level = character(), other = character(),
+                    other_levels = list())
+  candidate_tables <- character()
+  date_run         <- Sys.Date()
+  is_pilot         <- FALSE
+  r_all_candidates <- 0L
+  r_n_conj         <- 0L
+  r_irt_pool       <- 0L
+  r_n_tables_run   <- 0L
+}
+
+# Display names for the Hainmueller, Hopkins & Yamamoto attributes and levels,
+# in the order the paper lists them (the first level of each is the baseline).
+hhy_labels <- list(
+  attr_education = c("No formal education" = "No formal education",
+    "Equivalent to completing fourth grade in the US" = "4th grade",
+    "Equivalent to completing eighth grade in the US" = "8th grade",
+    "Equivalent to completing high school in the US" = "High school",
+    "Equivalent to completing two years of college in the US" = "Two years of college",
+    "Equivalent to completing a college degree in the US" = "College degree",
+    "Equivalent to completing a graduate degree in the US" = "Graduate degree"),
+  attr_gender = c("female" = "Female", "male" = "Male"),
+  attr_origin = c("Germany" = "Germany", "France" = "France", "Mexico" = "Mexico",
+    "Philippines" = "Philippines", "Poland" = "Poland", "India" = "India", "China" = "China",
+    "Sudan" = "Sudan", "Somalia" = "Somalia", "Iraq" = "Iraq"),
+  attr_application_reason = c("Reunite with family members already in the U.S." = "Reunite with family",
+    "Seek better job in U.S." = "Seek a better job",
+    "Escape political/religious persecution" = "Escape persecution"),
+  attr_profession = c("Janitor" = "Janitor", "Waiter" = "Waiter",
+    "Child care provider" = "Child care provider", "Gardener" = "Gardener",
+    "Financial analyst" = "Financial analyst", "Construction worker" = "Construction worker",
+    "Teacher" = "Teacher", "Computer programmer" = "Computer programmer", "Nurse" = "Nurse",
+    "Research scientist" = "Research scientist", "Doctor" = "Doctor"),
+  attr_job_experience = c("No job training or prior experience" = "None",
+    "One or two years of job training and experience" = "1-2 years",
+    "Three to five years of job training and experience" = "3-5 years",
+    "More than five years of job training and experience" = "More than 5 years"),
+  attr_job_plans = c("Has a contract with a U.S. employer" = "Contract with U.S. employer",
+    "Does not have a contract with a U.S. employer but has done job interviews" = "Interviews, no contract",
+    "Will look for work after arriving in the U.S." = "Will look for work",
+    "Has no plans to look for work at this time" = "No plans to look for work"),
+  attr_prior_trips = c("Never been to the U.S." = "Never",
+    "Entered U.S. once before on a tourist visa" = "Once, tourist visa",
+    "Has visited the U.S. many times before on tourist visas" = "Many times, tourist visas",
+    "Spent six months with family members in the U.S" = "Six months with family",
+    "Entered the U.S. once before without legal authorization" = "Once, without authorization"),
+  attr_language = c("During the admission interview, this applicant spoke fluent English" = "Fluent English",
+    "During admission interview, this applicant spoke broken English" = "Broken English",
+    "During admission interview, this applicant tried to speak English but was unable" = "Tried English, unable",
+    "During admission interview, this applicant spoke [language] and used an interpreter" = "Used an interpreter"))
+hhy_attr_names <- c(attr_education = "Education", attr_gender = "Gender",
+  attr_origin = "Country of origin", attr_application_reason = "Reason for applying",
+  attr_profession = "Profession", attr_job_experience = "Job experience",
+  attr_job_plans = "Job plans", attr_prior_trips = "Prior trips to the U.S.",
+  attr_language = "Language skills")
+
+level_key <- bind_rows(lapply(names(hhy_labels), function(a)
+  tibble(attribute = a, attr_label = hhy_attr_names[[a]], level = names(hhy_labels[[a]]),
+         short = unname(hhy_labels[[a]]), order_in_attr = seq_along(hhy_labels[[a]]))))
+level_key$row <- seq_len(nrow(level_key))
+
+knitr::opts_chunk$set(eval = cache_ok)
+```
+
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (!cache_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Cache not found** — figures and tables will not appear. Generate results ",
+  "by running the compute script, then re-render:\n\n",
+  "```r\nRscript vignettes/conjoint_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+```{r}
+#| label: pilot-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (cache_ok && is_pilot) cat(
+  "::: {.callout-warning}\n",
+  "**Draft preview, partial run.** This render uses a partial sample of ",
+  r_n_tables_run, " tables out of ", r_all_candidates, " eligible tables, ",
+  "to validate the pipeline and page layout before the full batch finishes. ",
+  "All numbers here are real computed results -- not placeholders -- but ",
+  "treat the *distributions* as a small, noisy preview rather than a ",
+  "representative picture. Re-run `conjoint_compute.R` (with `CONJ_PILOT` ",
+  "unset) to scale up.\n",
+  ":::\n", sep = ""
+)
+```
+
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the
+analysis design, and the writing below — was produced largely by Claude
+(Anthropic), working from a task specification and with human review.
+Treat the methodological choices and interpretations accordingly, and
+check the compute script (`conjoint_compute.R`) directly if you're relying
+on the numbers here.
+:::
+
+## Motivation
+
+A conjoint experiment shows a respondent two profiles side by side and asks
+which one they prefer. Each profile is a bundle of attributes (an immigrant's
+education, profession, country of origin and so on), and every attribute is
+drawn at random, independently for each profile. The respondent sees a handful
+of such pairs. Because the attributes are randomized, comparing how often
+profiles with one level are chosen against profiles with another level
+estimates that level's average effect on the choice, the *average marginal
+component effect* or AMCE [@Hainmueller_2014]. The design is popular in
+political science because it lets one experiment estimate the effects of many
+attributes at once.
+
+The easiest way to see how this works is to take part in one. The pairs below
+are real tasks from Hainmueller, Hopkins & Yamamoto's (2014) study of
+immigrant admission, in which 1,396 Americans each compared five pairs of
+applicants. Each time, choose the applicant you would admit. After each
+choice you will see what the person who actually saw that pair chose, and
+the chart below the cards turns your choices into AMCEs and sets them against
+the published ones.
+
+```{r}
+#| label: widget-data
+#| echo: false
+
+w_tasks <- widget_tasks
+for (a in names(hhy_labels)) {
+  w_tasks[[a]] <- sub("[language]", "a language other than English", w_tasks[[a]], fixed = TRUE)
+}
+w_amce <- hhy_amce |>
+  inner_join(level_key, by = c("attribute", "level")) |>
+  arrange(row) |>
+  transmute(attribute, attr_label, level, short, baseline,
+            published = published_amce, published_se, row)
+w_support <- support |>
+  mutate(other = ifelse(is.na(other), "", other)) |>
+  unnest_longer(other_levels, keep_empty = TRUE) |>
+  mutate(other_levels = ifelse(is.na(other_levels), "", other_levels))
+w_attrs <- tibble(attribute = names(hhy_attr_names), label = unname(hhy_attr_names))
+ojs_define(w_tasks_r = w_tasks, w_amce_r = w_amce, w_support_r = w_support, w_attrs_r = w_attrs)
+```
+
+```{ojs}
+//| echo: false
+
+w_tasks   = transpose(w_tasks_r)
+w_amce    = transpose(w_amce_r)
+w_support = transpose(w_support_r)
+w_attrs   = transpose(w_attrs_r)
+
+// one entry per task: [profile 1, profile 2], in a random order for this reader
+w_pairs = {
+  const by = d3.group(w_tasks, d => d.task_key);
+  const pairs = Array.from(by.values()).map(v => v.sort((a, b) => a.profile - b.profile));
+  return d3.shuffle(pairs.slice());
+}
+
+// for each non-baseline level: which values of the restricted partner attribute
+// it is compared over (empty = all), and the attribute's baseline level
+w_rules = {
+  const m = new Map();
+  for (const s of w_support) {
+    const k = s.attribute + "|" + s.level;
+    if (!m.has(k)) m.set(k, {other: s.other, allowed: new Set()});
+    if (s.other_levels !== "") m.get(k).allowed.add(s.other_levels);
+  }
+  return m;
+}
+w_base = new Map(w_amce.filter(d => d.baseline).map(d => [d.attribute, d.level]))
+```
+
+```{ojs}
+//| echo: false
+
+viewof w_answers = {
+  const el = html`<div class="cj-widget"></div>`;
+  el.value = [];
+  let i = 0, last = null;
+  const cell = (txt) => html`<td style="padding:4px 10px;border-top:1px solid #ddd;">${txt}</td>`;
+  function render() {
+    const pair = w_pairs[i % w_pairs.length];
+    const pick = (p) => {
+      last = {mine: p, theirs: pair[0].choice === 1 ? 1 : 2};
+      el.value = [...el.value, {pair, chosen: p}];
+      i += 1;
+      el.dispatchEvent(new Event("input", {bubbles: true}));
+      render();
+    };
+    const btn = (p) => {
+      const b = html`<button class="btn btn-outline-primary btn-sm">Admit applicant ${p}</button>`;
+      b.onclick = () => pick(p);
+      return b;
+    };
+    const fb = last === null ? "" :
+      `On the last pair you chose applicant ${last.mine}; the respondent who saw it chose applicant ${last.theirs}` +
+      (last.mine === last.theirs ? " too." : ".");
+    const agree = el.value.filter(a => (a.pair[0].choice === 1 ? 1 : 2) === a.chosen).length;
+    el.replaceChildren(html`<div>
+      <p style="margin-bottom:6px;"><strong>Pair ${i + 1}.</strong> Which applicant would you admit to the United States?</p>
+      <table style="border-collapse:collapse;max-width:760px;width:100%;font-size:0.92em;">
+        <thead><tr><th></th><th style="padding:4px 10px;">Applicant 1</th><th style="padding:4px 10px;">Applicant 2</th></tr></thead>
+        <tbody>${w_attrs.map(a => html`<tr>${cell(html`<strong>${a.label}</strong>`)}${cell(pair[0][a.attribute])}${cell(pair[1][a.attribute])}</tr>`)}</tbody>
+        <tfoot><tr><td></td><td style="padding:8px 10px;">${btn(1)}</td><td style="padding:8px 10px;">${btn(2)}</td></tr></tfoot>
+      </table>
+      <p style="margin-top:6px;color:#555;font-size:0.9em;">${fb}${el.value.length ? ` You have made ${el.value.length} choice${el.value.length > 1 ? "s" : ""} and agreed with the original respondent on ${agree}.` : ""}</p>
+    </div>`);
+  }
+  render();
+  return el;
+}
+```
+
+```{ojs}
+//| echo: false
+
+// The reader's AMCEs: for each level, the share of profiles with that level the
+// reader chose, minus the share for the baseline level. For the two restricted
+// attributes the comparison is made only among profiles where both levels could
+// appear, which is what makes the simple difference an AMCE in this design.
+w_mine = {
+  const profs = w_answers.flatMap(a => a.pair.map(p => ({...p, chosen: p.profile === a.chosen ? 1 : 0})));
+  return w_amce.filter(d => !d.baseline).map(d => {
+    const rule = w_rules.get(d.attribute + "|" + d.level);
+    const ok = p => !rule || rule.other === "" || rule.allowed.has(p[rule.other]);
+    const g1 = profs.filter(p => ok(p) && p[d.attribute] === d.level);
+    const g0 = profs.filter(p => ok(p) && p[d.attribute] === w_base.get(d.attribute));
+    if (!g1.length || !g0.length) return {...d, mine: null};
+    const r = g => (d3.sum(g, p => p.chosen) + 0.5) / (g.length + 1);
+    const est = d3.mean(g1, p => p.chosen) - d3.mean(g0, p => p.chosen);
+    const se = Math.sqrt(r(g1) * (1 - r(g1)) / g1.length + r(g0) * (1 - r(g0)) / g0.length);
+    return {...d, mine: est, lo: est - 2 * se, hi: est + 2 * se};
+  });
+}
+```
+
+```{ojs}
+//| echo: false
+
+{
+  const n = w_answers.length;
+  const rows = w_amce.map(d => d.attr_label + ": " + d.short);
+  const pub = w_amce.filter(d => !d.baseline);
+  const base = w_amce.filter(d => d.baseline);
+  const mine = w_mine.filter(d => d.mine !== null);
+  const xs = mine.map(d => d.mine), ys = mine.map(d => d.published);
+  const mx = d3.mean(xs), my = d3.mean(ys);
+  const cor = xs.length > 5 ? d3.sum(xs.map((x, i) => (x - mx) * (ys[i] - my))) /
+    Math.sqrt(d3.sum(xs.map(x => (x - mx) ** 2)) * d3.sum(ys.map(y => (y - my) ** 2))) : null;
+  const note = n < 5
+    ? `Make at least five choices to see your estimates (${n} so far).`
+    : `Your estimates from ${n} choices (red, ±2 SE) against the published AMCEs from 1,396 respondents (blue, ±2 SE)` +
+      (cor !== null && isFinite(cor) ? `. Across the ${mine.length} levels you have estimates for, the two correlate at r = ${cor.toFixed(2)}.` : ".");
+  const plot = Plot.plot({
+    width: 760,
+    height: 22 * rows.length + 40,
+    marginLeft: 260,
+    x: {label: "Change in the chance an applicant is chosen", domain: [-1, 1], grid: true},
+    y: {domain: rows, label: null},
+    marks: [
+      Plot.ruleX([0], {stroke: "#999"}),
+      Plot.dot(base, {x: 0, y: d => d.attr_label + ": " + d.short, symbol: "diamond", fill: "#999", r: 3, title: () => "Baseline level"}),
+      n >= 5 ? Plot.ruleY(mine, {y: d => d.attr_label + ": " + d.short, x1: "lo", x2: "hi", stroke: "#d73027", strokeOpacity: 0.5}) : null,
+      n >= 5 ? Plot.dot(mine, {x: "mine", y: d => d.attr_label + ": " + d.short, fill: "#d73027", r: 3.5,
+        title: d => `You: ${d.mine.toFixed(2)}\nPublished: ${d.published.toFixed(2)}`}) : null,
+      Plot.ruleY(pub, {y: d => d.attr_label + ": " + d.short, x1: d => d.published - 2 * d.published_se,
+        x2: d => d.published + 2 * d.published_se, stroke: "#2166ac", strokeWidth: 2}),
+      Plot.dot(pub, {x: "published", y: d => d.attr_label + ": " + d.short, fill: "#2166ac", r: 3.5,
+        title: d => `Published: ${d.published.toFixed(3)}`})
+    ]
+  });
+  return html`<div><p style="font-size:0.92em;color:#333;">${note}</p>${plot}</div>`;
+}
+```
+
+A few things stand out after ten or twenty choices. Your own estimates are
+noisy, because five pairs are very little information about one person; the
+published estimates are precise because they pool 1,396 people. And for most
+attributes the average effect is a reasonable summary of what you did:
+education, a job plan and English skills move most people the same way. Diamonds
+mark each attribute's baseline level, against which the others are measured.
+
+### The published analysis reproduces from the IRW table
+
+The IRW table `hainmueller_2014_immigrant` has one row per respondent, task
+and profile, with the respondent's choice and the profile's attributes in
+`attr_*` columns. It can be read without a Redivis account, from the same
+link its [table page](https://itemresponsewarehouse.org/tables/hainmueller_2014_immigrant/)
+offers:
+
+```{r}
+#| label: read-hhy
+#| eval: false
+#| code-fold: false
+
+url <- paste0("https://redivis.com/api/v1/tables/datapages.irw_conjoint:v3_0.",
+              "hainmueller_2014_immigrant/rows?format=csv")
+hhy <- read.csv(url)
+# with a Redivis account: irw::irw_fetch("hainmueller_2014_immigrant", source = "conj")
+```
+
+The AMCEs come from a linear probability model of the choice on every
+attribute, with standard errors clustered by respondent. Two combinations
+could never appear (the four high-skill professions without at least two years
+of college, and fleeing persecution from the six countries other than China,
+Sudan, Somalia and Iraq), so those two pairs of attributes get an interaction
+and each level's effect is averaged over the levels of its partner where both
+it and the baseline could occur. This is what the `cjoint` package does.
+
+```{r}
+#| label: hhy-model
+#| eval: false
+
+fit <- lm(choice ~ attr_education + attr_gender + attr_origin + attr_application_reason +
+            attr_profession + attr_job_experience + attr_job_plans + attr_prior_trips +
+            attr_language + attr_education:attr_profession +
+            attr_origin:attr_application_reason, data = hhy)
+V <- sandwich::vcovCL(fit, cluster = ~ id, type = "HC1")
+# then, for a restricted attribute, AMCE = main effect + the mean of its
+# interaction terms over the partner levels where it and the baseline can occur
+```
+
+```{r}
+#| label: hhy-check
+#| echo: false
+
+hhy_diff <- max(abs(hhy_amce$irw_amce - hhy_amce$published_amce), na.rm = TRUE)
+hhy_se_diff <- max(abs(hhy_amce$irw_se - hhy_amce$published_se), na.rm = TRUE)
+hhy_dim_diff <- max(abs(hhy_amce$dim - hhy_amce$irw_amce), na.rm = TRUE)
+```
+
+All `r sum(!hhy_amce$baseline)` AMCEs and their standard errors match the
+published estimates (computed by `cjoint` from the authors' replication data)
+to within `r signif(max(hhy_diff, hhy_se_diff), 1)`, that is, exactly. The
+simple difference in choice rates the widget uses, applied to all 1,396
+respondents, is within `r round(hhy_dim_diff, 3)` of every AMCE.
+
+The rest of this page steps back from the average effects. Read as item
+response data, each task is a paired comparison: two objects, one chosen. That
+is the same shape as the [comparisons](intransitivity.qmd) elsewhere in IRW,
+except that the objects are built at random rather than fixed (the [conjoint
+standard](../conjoint_standard.qmd) describes the format). So we can ask two
+predictive questions, scored with the InterModel Vigorish
+[IMV, @domingue2025imv; @domingue2024imvlens; see also the [IMV vignette](imv.qmd)]:
+
+1. **How much do the attributes explain?** How much better than a coin flip
+   does a model of the attributes predict choices it was not fitted to?
+2. **How much do people differ?** Given that model, how much do
+   respondent-specific preferences add? And how does that compare with what a
+   person's ability adds over item difficulties in ordinary item response
+   data?
+
+## Data and methods
+
+### Dataset selection
+
+The IRW conjoint source held `r r_n_conj` tables when this was run. We use
+those with a forced choice between exactly two profiles and at least 500
+usable tasks, where a usable task is one in which exactly one of the two
+profiles was chosen (this drops opt-out and unanswered tasks):
+
+```{r}
+#| label: filter-datasets
+#| eval: false
+
+meta <- read.csv(paste0("https://redivis.com/api/v1/tables/datapages.irw_meta:v38_0.",
+                        "conj_metadata/rows?format=csv"))
+candidates <- subset(meta, grepl("(^|;)choice(;|$)", outcomes) & n_profiles == 2 &
+                           n_respondents * n_tasks >= 500)$table
+```
+
+`r r_all_candidates` tables met this screen as of
+`r format(date_run, "%B %Y")`, and `r r_n_tables_run` had at least 500 usable
+tasks. Tables with more than 5,000 respondents were subsampled to 5,000 at
+random.
+
+### Per-table computation
+
+For each table, the two profiles in a task are coded as attribute dummies and
+the model works with their difference, so a task becomes one binary outcome:
+was the first profile chosen? Attributes that were not shown on a profile get
+a level of their own.
+
+1. **Attributes.** An L2-penalised logistic regression of the choice on the
+   difference in attribute dummies (penalty 1, intercept unpenalised) is fitted
+   on four fifths of the respondents and predicts the other fifth, rotating
+   over five folds. The baseline is a coin weighted to the training share of
+   first-profile choices. The IMV compares the two.
+2. **Respondent preferences.** Among respondents with at least three tasks,
+   one task in five (by position, so each respondent keeps most of their tasks
+   for fitting) is held out at a time. The shared model is the attribute model
+   above, fitted to the training tasks. The individual model keeps it as an
+   offset and gives each respondent their own deviation on every attribute term
+   and on the intercept, shrunk towards zero by an L2 penalty $\lambda$. This
+   is the posterior mode of a random-coefficient logit.
+   $\lambda \in \{1, 3, 10, 30, 100\}$ is chosen on a random 20% of
+   respondents and the IMV of the individual over the shared model is reported
+   on the other 80%. Tables need at least 200 such respondents.
+
+```{r}
+#| label: fit-function
+#| eval: false
+
+# Respondent i's deviation delta_i, given the shared model's linear predictor
+# `off` on their training tasks Z (attribute differences plus a 1 for their own
+# intercept). The penalised optimum lies in the span of Z's rows, so we solve for
+# alpha with delta_i = t(Z) %*% alpha: a system the size of the number of tasks.
+K <- tcrossprod(Z); a <- numeric(nrow(Z))
+for (it in 1:50) {
+  p <- plogis(off + drop(K %*% a)); W <- p * (1 - p)
+  step <- solve(W * K + diag(lambda, nrow(Z)), y - p - lambda * a)
+  a <- a + step
+  if (max(abs(step)) < 1e-8) break
+}
+p_test <- plogis(off_test + drop(Z_test %*% t(Z) %*% a))
+```
+
+For the comparison with ordinary item response data we sampled
+`r nrow(irt_df)` tables at random from the `r r_irt_pool` dichotomous core IRW
+tables that are cross-sectional, at least 90% complete, have 300 to 20,000
+respondents and 5 to 100 items, and applied the same design with items in place
+of tasks: one fifth of each person's responses held out at a time, a shared
+model of item difficulties (the logit of each item's training mean), and an
+individual model adding a person ability with the same kind of penalty,
+$\lambda \in \{0.3, 1, 3, 10\}$, chosen the same way.
+
+::: {.callout-note}
+To reproduce with current IRW holdings, re-run `conjoint_compute.R`
+and commit the updated `conjoint_data/conjoint_results.rds`. Every table is read
+without a login.
+:::
+
+## Results
+
+### How much do the attributes explain?
+
+```{r}
+#| label: q1-numbers
+#| echo: false
+
+q1 <- summary_df |> filter(!is.na(imv_attr))
+q1_med <- median(q1$imv_attr)
+q1_w   <- median(q1$w_attr)
+q1_rho <- cor(q1$imv_attr, q1$n_attr, method = "spearman")
+```
+
+Across `r nrow(q1)` experiments the median IMV of the attribute model over a
+coin flip is `r round(q1_med, 2)`. In accuracy terms, the median attribute model
+predicts a held-out choice like a coin that comes up right
+`r round(100 * q1_w)`% of the time. Designs with more attributes are, if
+anything, less predictable (Spearman $\rho$ = `r round(q1_rho, 2)` between the
+IMV and the number of attributes).
+
+```{r}
+#| label: fig-q1
+#| fig-cap: "Held-out IMV of the attribute model over a coin flip, one point per experiment, by the number of attributes in the design. Hover for the table."
+
+p1 <- ggplot(q1, aes(n_attr, imv_attr,
+                     text = paste0(table, "<br>IMV = ", round(imv_attr, 3),
+                                   "<br>attributes: ", n_attr, "<br>usable tasks: ", n_tasks_used))) +
+  geom_jitter(width = 0.15, height = 0, colour = irw_blue, alpha = 0.7, size = 2) +
+  geom_hline(yintercept = q1_med, linetype = "dashed", colour = irw_grey) +
+  labs(x = "Number of attributes", y = "IMV, attributes over a coin flip")
+ggplotly(p1, tooltip = "text")
+```
+
+### How much do people differ?
+
+```{r}
+#| label: q2-numbers
+#| echo: false
+
+q2 <- summary_df |> filter(!is.na(imv_indiv))
+q2_med  <- median(q2$imv_indiv)
+irt_med <- median(irt_df$imv_indiv)
+q2_share_small <- mean(q2$imv_indiv < 0.01)
+q2_top <- q2 |> arrange(desc(imv_indiv)) |> slice_head(n = 5)
+both <- bind_rows(
+  q2 |> transmute(table, imv = imv_indiv, family = "Conjoint: respondent preferences",
+                  n_per = mean_tasks, detail = paste0("tasks per respondent: ", round(mean_tasks, 1))),
+  irt_df |> transmute(table, imv = imv_indiv, family = "Dichotomous IRT: person ability",
+                      n_per = per_person, detail = paste0("items per person: ", round(per_person, 1))))
+```
+
+Respondent-specific preferences add much less. Over the shared attribute model
+the median IMV is `r round(q2_med, 3)` across `r nrow(q2)` experiments, and in
+`r round(100 * q2_share_small)`% of them it is below 0.01. In the
+`r nrow(irt_df)` dichotomous IRT tables, knowing the person adds a median of
+`r round(irt_med, 3)` over item difficulties alone.
+
+```{r}
+#| label: fig-q2
+#| fig-cap: "Held-out IMV of the individual model over the shared model: respondent-specific preferences in conjoint experiments, person ability in dichotomous IRW tables. One point per table; the bar marks the median."
+
+meds <- both |> group_by(family) |> summarise(m = median(imv))
+p2 <- ggplot(both, aes(imv, family, text = paste0(table, "<br>IMV = ", round(imv, 3), "<br>", detail))) +
+  geom_jitter(aes(colour = family), height = 0.2, width = 0, alpha = 0.6, size = 2) +
+  geom_point(data = meds, aes(m, family), inherit.aes = FALSE, shape = 124, size = 9) +
+  geom_vline(xintercept = 0, colour = irw_grey) +
+  scale_colour_manual(values = c(irw_red, irw_blue), guide = "none") +
+  labs(x = "IMV, individual over shared model", y = NULL)
+ggplotly(p2, tooltip = "text")
+```
+
+The experiments where preferences add the most are those where people
+plausibly disagree about which way an attribute should push, so that the
+average effect hides opposing preferences:
+
+```{r}
+#| label: tbl-q2-top
+#| echo: false
+
+q2_top |>
+  transmute(Table = table, `IMV, preferences` = round(imv_indiv, 3),
+            `IMV, attributes` = round(imv_attr, 3), Respondents = n_resp,
+            `Tasks per respondent` = round(mean_tasks, 1)) |>
+  knitr::kable()
+```
+
+Put together: in a typical conjoint experiment the attributes do a fair amount
+of work, and the average effect captures most of what can be learned about how
+a given respondent will choose. For person-level prediction, a conjoint's
+handful of tasks per respondent buys less than a test's items do.
+
+## Limitations
+
+::: {.callout-important}
+**Draft, for review.** This section was written by Claude and has not yet been
+checked by the IRW team.
+:::
+
+- **Few tasks per respondent.** A typical conjoint gives each respondent about
+  five tasks, against a dozen or more terms for their preferences; a test gives
+  a person a dozen or more items for one ability. The preference IMV measures
+  how much can be learned about a respondent from the tasks they did, not how
+  much respondents truly differ, and it rises with the number of tasks
+  (Spearman $\rho$ = `r round(cor(q2$imv_indiv, q2$mean_tasks, method = "spearman"), 2)`).
+  The comparison with IRT is between what each kind of design lets you learn
+  about a person, not between quantities of the same size.
+- **One model of preferences.** The individual model is additive in the
+  attributes with one isotropic penalty. Preferences that are structured (for
+  example, a respondent's party driving several attributes at once) would be
+  captured better by respondent covariates or a low-rank model, and would
+  likely add more.
+- **Held-out tasks by position.** Conjoint tasks are held out by their position
+  in the sequence and IRT items at random, so order effects (fatigue, learning)
+  enter the conjoint comparison slightly differently.
+- **Forced choices only.** Ratings, opt-out tasks and designs with one or three
+  profiles are left out; so are tables with fewer than 500 usable tasks.
+- **A random IRT sample.** The `r nrow(irt_df)` IRT tables are a random draw from
+  dichotomous core tables, not matched to the conjoint experiments by sample,
+  domain or length.
+- **The widget.** Its pairs are a random 400 of the 6,980 tasks, its estimator
+  is a simple difference in choice rates, and the published respondents are a
+  2012 sample of U.S. adults.
+
+## Reproducibility
+
+{{< include ../components/_source-links.qmd >}}
+
+{{< include ../components/_data-version.qmd >}}
+
+Results were computed on `r format(date_run, "%B %d, %Y")` from
+`irw_conjoint` v3.0 and `irw_meta` v38.0. To regenerate:
+
+```r
+# 1. Re-run the compute script (from the project root)
+source("vignettes/conjoint_compute.R")
+
+# 2. Re-render this page
+quarto::quarto_render("vignettes/conjoint.qmd")
+```
+
+::: {.callout-tip}
+To cite the datasets used, run:
+
+```r
+irw_save_bibtex(summary_df$table, source = "conj", output_file = "conjoint_data/references.bib")
+```
+:::
+
+---
+
+## References
