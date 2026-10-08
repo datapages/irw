@@ -12,11 +12,21 @@ Every response table in the IRW belongs to exactly one **data family**, and each
 |---|---|---|
 | Core | `"core"` (the default) | A person responds to an item; the responses are ordered or continuous |
 | Nominal | `"nom"` | As in core, but the response categories have no order |
-| Competitions | `"comp"` | Two agents meet and an outcome is recorded, including pairwise comparisons of fixed things such as essays |
+| Competitions | `"comp"` | Two entities meet and an outcome is recorded: a game, or a choice between two fixed things such as two essays |
 | Simulated and synthetic | `"sim"` | Responses that no real person produced |
 | Conjoint | `"conj"` | Respondents choose between, or rate, profiles whose attributes are assigned at random |
 
-Four families are defined by the shape of the data. Simsyn is defined by where the data come from: a simulated table can have any shape, and it belongs to simsyn rather than to the family its shape would suggest. The line between competitions and conjoint is what gets compared. In competitions the same named entities meet again and again; in a conjoint experiment each profile is a new random bundle of attributes.
+Four families are defined by the shape of the data. Simsyn is defined by where the data come from: a simulated table can have any shape, and it belongs to simsyn rather than to the family its shape would suggest.
+
+### Core, competitions and conjoint
+
+Set simsyn aside, and fold nominal into core (it differs only in that the response categories are unordered). That leaves three shapes of data. What separates them is what gets compared, and what we would want a parameter for.
+
+- **Core.** A person responds to an item. Persons and items are categorically different things, and both persist: the same item is answered by many people. The usual model gives each of them a parameter, an ability and a difficulty, say.
+- **Competitions.** There is no item. Two entities meet—teams in a game, chess engines, two essays put in front of a judge, two named options put to a voter—and an outcome is recorded. The entities recur across many comparisons, and the target is a parameter for each of them (an Elo rating, a Bradley–Terry strength). Where there is a judge, the judge is the instrument rather than the object of measurement.
+- **Conjoint.** A person chooses between, or rates, profiles (hypothetical candidates, immigrants, policies) whose attributes are assigned at random. A profile is built for one task and never seen again, so there is nothing to give a parameter to. The target is instead the effect of each attribute on the response, and how that effect varies across people. In IRT terms, this sits closest to an explanatory model such as the LLTM, wherein the items are generated on the fly from their features.
+
+A simple test sorts most new datasets. Do the things being responded to keep a stable identity, and would we want a parameter for each? If so, the data are core when a person responds to them one at a time and competitions when they are pitted against each other in pairs. If instead the things are assembled fresh from attributes and the question is which attributes drive the response, the data are conjoint. Note that a "conjoint" study that shows everyone the same fixed set of profiles fails the test: its profiles have identities, so it belongs in core or competitions.
 
 Item text and the metadata are not families. They hold no responses and describe the tables in the families.
 
