@@ -54,18 +54,41 @@ reverse_key_eta2 <- function(m, cl) {
 ## lean toward correlation, cosine and ACE (their own caveat, p.1866).
 ## The fifth is the AIC improvement of a class-grouped saturated covariance
 ## model over the pooled one.
-validity_criteria <- function(m, cl, covmodel, semdat, overall_aic) {
+## Note the matrix handed to cluster.stats() is a SIMILARITY (|r|), though
+## cluster.stats() reads it as a dissimilarity. So on these values a better
+## partition has a HIGHER within-class SS and within-between ratio, and raw
+## Pearson's Gamma and CH come out negative (their abs() turns them positive).
+## All four are therefore higher-is-better; check_criteria_orientation() below
+## asserts that before any fitting.
+partition_criteria <- function(m, cl) {
   cs <- try(fpc::cluster.stats(abs(cor(t(m))), clustering = cl), silent = TRUE)
-  out <- data.frame(pearsongamma = NA_real_, within_ss = NA_real_,
-                    wb_ratio = NA_real_, ch = NA_real_,
+  if (inherits(cs, "try-error"))
+    return(c(pearsongamma = NA_real_, within_ss = NA_real_, wb_ratio = NA_real_, ch = NA_real_))
+  c(pearsongamma = abs(cs$pearsongamma), within_ss = cs$within.cluster.ss,
+    wb_ratio = cs$wb.ratio, ch = abs(cs$ch))
+}
+
+## Plant two response-pattern classes and require the true partition to beat a
+## shuffled one on every criterion, read higher-is-better as the page reads them.
+check_criteria_orientation <- function(n = 300, p = 10, seed = 1) {
+  set.seed(seed)
+  v1 <- rnorm(p); v2 <- rnorm(p); g <- rep(1:2, each = n / 2)
+  m <- t(sapply(seq_len(n), function(i)
+    (if (g[i] == 1) v1 else v2) * rnorm(1, 1, 0.3) + rnorm(p, 0, 0.7)))
+  truth <- partition_criteria(m, g); shuffled <- partition_criteria(m, sample(g))
+  bad <- names(truth)[!(truth > shuffled)]
+  if (length(bad))
+    stop("criteria orientation check failed (true partition does not score higher): ",
+         paste(bad, collapse = ", "))
+  invisible(rbind(truth, shuffled))
+}
+
+validity_criteria <- function(m, cl, covmodel, semdat, overall_aic) {
+  pc <- partition_criteria(m, cl)
+  out <- data.frame(pearsongamma = pc[["pearsongamma"]], within_ss = pc[["within_ss"]],
+                    wb_ratio = pc[["wb_ratio"]], ch = pc[["ch"]],
                     aic_improvement = NA_real_, aic_improvement_trimmed = NA_real_,
                     aic_status = NA_character_)
-  if (!inherits(cs, "try-error")) {
-    out$pearsongamma <- abs(cs$pearsongamma)
-    out$within_ss    <- cs$within.cluster.ss
-    out$wb_ratio     <- cs$wb.ratio
-    out$ch           <- abs(cs$ch)
-  }
 
   fit_group <- function(dat, grp) {
     dat$.grp <- grp
@@ -226,12 +249,15 @@ jobs <- expand.grid(table = corpus$table, rep_i = seq_len(N_REPS),
   left_join(corpus[, c("table", "cost")], by = "table") %>%
   arrange(cost)
 
+check_criteria_orientation()
+
 plan(multisession, workers = WORKERS)
 message("fitting ", nrow(jobs), " table x replicate jobs on ", WORKERS, " workers")
 future_walk2(jobs$table, jobs$rep_i, run_one,
              .options = furrr_options(seed = TRUE,
                globals = c("FITDIR","CACHE","SEEDS","N_CAP","SEM_TIME","models",
-                           "worker_init","reverse_key_eta2","validity_criteria")),
+                           "worker_init","reverse_key_eta2","validity_criteria",
+                           "partition_criteria")),
              .progress = FALSE)
 plan(sequential)
 
