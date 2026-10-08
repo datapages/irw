@@ -24,7 +24,7 @@ One row per respondent × task × profile.
 | `choice` | outcome | 1 if this profile was chosen in the task, else 0. |
 | `rating` | outcome | Numeric rating of this profile. |
 | `choice_<name>`, `rating_<name>` | outcome | Further questions asked about the same tasks, for example which candidate a respondent would vote for and which would most reduce corruption. |
-| `attr_<name>` | required, ≥ 2 | The level of each attribute as respondents saw it, stored as text rather than a numeric code. |
+| `attr_<name>` | required, ≥ 2 | The level of each attribute as respondents saw it, stored as text rather than a numeric code. An attribute the design left off a profile is the text `(not shown)`, never a blank cell. |
 | `attrpos_<name>` | optional | Row position of the attribute in the profile, when attribute order was randomized. |
 | `cov_<name>` | optional | Respondent covariates, as in the [core standard](standard.qmd). A survey weight is `cov_survey_weight`. |
 | `trial_<name>` | optional | Other task-level details, such as an experiment arm or a framing condition. |
@@ -33,6 +33,7 @@ Further rules:
 
 - A forced choice has exactly one chosen profile per task. In a design that offered "neither", an opt-out task has `choice = 0` on every profile.
 - Rows with no outcome are left out. A row with a choice but a missing rating is kept.
+- `(not shown)` is the one reserved attribute value. It is used when a design hides some attributes, shows a subset in some arms, or leaves a clause out, and it reads the same in every table and language. Levels respondents actually saw keep their own text, even when they describe an absence, such as "None". A blank attribute cell never appears.
 - One table holds one experiment: one attribute set and one design. Several questions about the same tasks stay in the same table. Country samples are kept together when the original authors analysed them together and the attribute text is shared, with the country in `cov_country`. Otherwise each sample is its own table.
 - Derived variables, such as dummy codings of attributes or "co-partisan" flags, are dropped, since they can be rebuilt from the attributes.
 
