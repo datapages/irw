@@ -1,16 +1,8 @@
 ---
 title: "The Conjoint Data Standard"
-# Limited release (2026-10): shareable by link, but not linked from the menu,
-# the standards overview or llms.txt, kept out of site search, and not indexed.
-# The links are on branch conjoint-standard; remove these two settings with them.
-search: false
-include-in-header:
-  text: '<meta name="robots" content="noindex">'
 ---
 
-Note: This is an experimental feature.
-
-In a conjoint experiment, respondents see hypothetical **profiles**, such as candidates, immigrants, vaccines or policies, whose **attributes** are randomly assigned. They then choose between the profiles in a **task**, rate each one, or both, usually over several tasks. Every profile is a new random bundle of attribute levels, so no fixed probe can serve as `item`. Conjoint data therefore get their own layout and their own source in the IRW (`source = "conj"`), as the competition and nominal data do.
+In a conjoint experiment, respondents see hypothetical **profiles**, such as candidates, immigrants, vaccines or policies, whose **attributes** are randomly assigned. They then choose between the profiles in a **task**, rate each one, or both, usually over several tasks. Every profile is a new random bundle of attribute levels, so no fixed probe can serve as `item`. Conjoint data therefore get their own layout and form their own [data family](overview.qmd#families) in the IRW (`source = "conj"`), as the competition and nominal data do.
 
 A table belongs here when respondents evaluate profiles whose attributes were randomized: at least two attributes, each with varying levels. That covers paired and single-profile conjoints, and factorial surveys or vignette experiments that randomize the attributes of a text vignette. A fixed set of vignettes shown identically to everyone, such as anchoring vignettes, is a set of ordinary items and belongs in the core IRW.
 
@@ -83,7 +75,7 @@ Any conjoint table converts mechanically to the core layout. Each outcome become
 
 ## Accessing the conjoint data
 
-The conjoint data are in the Redivis dataset [`irw_conjoint`](https://stanford.redivis.com/datasets/5wjx-90gfb7mqv) and can be accessed from both the R and Python `irw` packages. Tables can be listed and fetched in both, and described with `irw_info()` in R. Filtering, bibliography export and table metadata are not yet available for this source.
+The conjoint data are in the Redivis dataset [`irw_conjoint`](https://stanford.redivis.com/datasets/5wjx-90gfb7mqv) and can be accessed from both the R and Python `irw` packages. Tables can be listed, fetched, described, filtered and cited in both. The table metadata (`irw_metadata(source = "conj")`) carries the design of each experiment: the numbers of respondents, tasks, profiles and attributes, the outcomes, the country and language, and the randomization restrictions.
 
 ::: panel-tabset
 ## R
@@ -102,6 +94,13 @@ head(df)
 # The core id/item/resp view
 long <- irw_conj_long(df)
 table(long$item)
+
+# Design metadata, and tables with a rating outcome fielded in the US or UK
+meta <- irw_metadata(source = "conj")
+irw_filter(source = "conj", outcome = "rating", country = c("US", "GB"))
+
+# Citations
+irw_save_bibtex("kreps_2020_covid_vaccine", source = "conj", output_file = "conjoint.bib")
 ```
 
 ## Python
@@ -122,6 +121,13 @@ df.head()
 # The core id/item/resp view
 long = irw.conj_long(df)
 long["item"].value_counts()
+
+# Design metadata, and tables with a rating outcome fielded in the US or UK
+meta = irw.metadata(source="conj")
+irw.filter(source="conj", outcome="rating", country=["US", "GB"])
+
+# Citations
+irw.save_bibtex(["kreps_2020_covid_vaccine"], source="conj", output_file="conjoint.bib")
 ```
 :::
 
