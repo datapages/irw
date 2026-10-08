@@ -52,8 +52,8 @@ MIN_RESP_HET  <- 200    # respondents with >= 3 tasks, for the preference model
 MAX_N         <- 5000   # downsample respondents/persons before fitting
 N_IRT         <- 80     # dichotomous core tables in the comparison
 N_WIDGET      <- 400    # HHY tasks shipped to the page's widget
-LAMBDA_CONJ   <- c(1, 3, 10, 30, 100)
-LAMBDA_IRT    <- c(0.3, 1, 3, 10)
+LAMBDA_CONJ   <- c(1, 3, 10, 30, 100, 300, 1000)
+LAMBDA_IRT    <- c(0.3, 1, 3, 10, 30, 100)
 PILOT         <- as.logical(Sys.getenv("CONJ_PILOT", "FALSE"))  # TRUE: a few tables for a draft page
 PILOT_N       <- 12
 
@@ -241,9 +241,17 @@ message("  candidates: ", length(candidates), " of ", nrow(conj_meta))
 conj_tables <- if (PILOT) unique(c("hainmueller_2014_immigrant", "kreps_2020_covid_vaccine",
                                     sample(setdiff(candidates, "hainmueller_2014_immigrant"), PILOT_N - 2))) else candidates
 
+# Known defects in irw_conjoint v3.0, corrected here until the table is fixed:
+# brazzill_2020_social_investment's task-3 choices copy task 2's (identical in
+# every respondent-profile pair although the profiles differ); the IRW build
+# notes say task 3 was to be dropped. A scan of all tables for choices copied
+# between adjacent tasks found no other case.
+DROP_TASKS <- list(brazzill_2020_social_investment = 3)
+
 fit_conj <- function(tab) {
   d <- read_rows(CONJ_VERSION, tab)
   if (!all(c("id", "task", "profile", "choice") %in% names(d))) return(NULL)
+  if (!is.null(DROP_TASKS[[tab]])) d <- d[!task %in% DROP_TASKS[[tab]]]
   ids <- unique(d$id)
   if (length(ids) > MAX_N) d <- d[id %in% sample(ids, MAX_N)]
   tf <- tasks_frame(d); t <- tf$t; D <- tf$D
@@ -379,8 +387,10 @@ tabulate_sum <- function(i, x, n) { out <- numeric(n); s <- rowsum(x, i); out[as
 to_disk <- function(key, fun) {
   out_file <- file.path(fits_dir, paste0(key, ".rds"))
   if (file.exists(out_file)) return(invisible(NULL))
-  res <- tryCatch(fun(), error = function(e) { message("  failed ", key, ": ", conditionMessage(e)); NULL })
-  saveRDS(res, out_file)   # NULL is saved too, so a dropped table is not retried
+  res <- tryCatch(fun(), error = function(e) { message("  failed ", key, ": ", conditionMessage(e)); e })
+  # An error (a failed fetch, say) is not saved, so re-running retries it. A
+  # NULL means the table is ineligible, and is saved so it is not retried.
+  if (!inherits(res, "error")) saveRDS(res, out_file)
   invisible(NULL)
 }
 
