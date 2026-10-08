@@ -52,8 +52,8 @@ pages) source it, so the two cannot drift. The rules were settled by Ben on
 
 ## Non-core sources
 
-Tables in `irw_simsyn`, `irw_competitions` and `irw_nominal` get pages too
-(irw#2453, 2026-09-26), under the same flat `/tables/<slug>/`: table names are
+Tables in `irw_simsyn`, `irw_competitions`, `irw_nominal` and `irw_conjoint` get
+pages too (irw#2453, 2026-09-26; conjoint irw#2887), under the same flat `/tables/<slug>/`: table names are
 unique across all sources, which is why the 66 nominal tables were renamed to
 `*_nom`. Their facts come from irw_meta's `<prefix>_metadata` / `_biblio` (and
 `nominal_tags`) tables, and their columns from Redivis, since those tables have
@@ -66,8 +66,14 @@ no `variables` column. The same licence, known-issue and tombstone rules apply.
   record set is `agent_a`, `agent_b`, `winner` instead of `id`, `item`, `resp`.
 - **Nominal** (`nom`): the record set adds `text`. A `x_nom` table and core
   table `x` link to each other when both have a page.
+- **Conjoint** (`conj`): sized as rows (respondent x task x profile), respondents,
+  tasks, profiles and attributes from `conj_metadata`; a Design section gives its
+  country, languages, randomization restrictions and task/profile provenance in
+  the codes of `data/conjoint/README.md`, and each outcome's wording and scale
+  from `conj_outcomes`. The record set is `id`, `task`, `profile`, `choice`,
+  `rating` (those present); the index's count column shows rows.
 
-The R and Python snippets pass `source =` for all three.
+The R and Python snippets pass `source =` for all four.
 
 ## The index at /tables/
 
