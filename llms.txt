@@ -92,11 +92,23 @@ RESERVED optional columns (exact names — do not invent variants):
   trial_*       trial-level details (trial_number, trial_block); `item` still
                 identifies the probe -- it is always authoritative
 
-Two sibling schemas are NOT id/item/resp. Do not apply the above to them:
+Tables come in five DATA FAMILIES, one Redivis dataset each, chosen with the
+`source` argument: core ("core", the default, all of the above), nominal
+("nom"), competitions ("comp"), simulated/synthetic ("sim", core schema, no
+real respondents) and conjoint ("conj"). Three families are NOT id/item/resp.
+Do not apply the above to them:
   - Competitions (`source="comp"`): agent_a, agent_b, score_a, score_b, winner,
-    homefield, date. Paired comparisons, e.g. `collegefb_2021and2022`.
+    homefield, date. Contests and paired comparisons of fixed things, e.g.
+    `collegefb_2021and2022`.
   - Nominal (`source="nom"`): `text` replaces `resp`. Reshape with
     `irw_long2resp(df, resp_col = "text")`. e.g. `preference_inventory_nom`.
+  - Conjoint (`source="conj"`): one row per id x task x profile; outcomes
+    `choice` (0/1) and/or `rating` (plus `choice_<name>`/`rating_<name>`),
+    attributes as text in `attr_*`. No item/resp: `irw_conj_long(df)` gives the
+    core view. Design facts (outcome wording, scales, country, randomization
+    restrictions) are in `irw_metadata(source = "conj")`.
+    e.g. `kreps_2020_covid_vaccine`. Standard:
+    https://itemresponsewarehouse.org/conjoint_standard.html
 
 Item text lives in a separate dataset: `irw_itemtext(table)`,
 `irw_list_itemtext_tables()`. IMPORTANT: item-text licensing is separate from
@@ -218,6 +230,7 @@ site and package docs, so their behavior is known. All are small.
   andrich_mudfold         non-monotone (unfolding) counterexample; small
   collegefb_2021and2022   source="comp" paired comparisons
   preference_inventory_nom source="nom" nominal responses
+  kreps_2020_covid_vaccine source="conj" conjoint: choice with opt-out + rating
 
 For a known-multidimensional vs known-unidimensional contrast, the site pairs
 `psychtools_bfi` against `4thgrade_math_sirt`.
@@ -248,7 +261,10 @@ And to get data, once you have a name:
                                 With align = wide, rows follow wide$id exactly.
 
 All of the above take `source = "core"` (the default), or "comp" / "nom" for the
-sibling schemas in §1.
+sibling schemas in §1. For "conj", irw_list_tables, irw_fetch, irw_info,
+irw_metadata, irw_filter (its own arguments: n_respondents, n_attributes,
+outcome, country, license) and irw_save_bibtex work; functions that need
+item/resp (irw_table_sets, irw_long2resp) want irw_conj_long(df) first.
 
 To find tables that HAVE a covariate at all, filter on the column name — `var`
 accepts an exact name or a prefix:
