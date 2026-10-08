@@ -1,0 +1,387 @@
+---
+title: "News"
+---
+
+Major changes to the IRW — new data, new tools, and changes to what the
+warehouse claims about itself. Smaller day-to-day work (individual table
+additions, corrections to single tables, item-text disclosures) is not listed
+here; see [Corrections](corrections.qmd) for every correction to a published
+table, [Known Issues](itemtext_issues.qmd) for the running record of item-text
+caveats, and the [GitHub repositories](https://github.com/ben-domingue/irw)
+for everything else.
+
+This log begins in September 2026, when the page was created. The IRW is older
+than the log, and changes before then are recorded only in the repositories'
+commit history and in the versioned data itself.
+
+## 2026-10-05 — ENEM 2024 and 2025 ids corrected
+
+Released 2026-10-05, across the eight `enem_2024_1mil_*` and `enem_2025_1mil_*`
+tables and their eight `_nom` companions. From 2024 INEP ships participant and
+results data as two separate files, keyed differently, and the year scripts had
+taken `id` from one file and the responses from the other, pairing them by row
+order. The test municipality in the two files agrees no more often than chance
+would predict, so in effect every response sat under the wrong candidate's id.
+
+`id` now comes from the results file's own `NU_SEQUENCIAL`. The candidates and
+the `resp` and `resp_raw` sequences are unchanged row for row; only the id a
+response carries is different. [Data Notes](data_notes.qmd) records one caveat:
+`NU_SEQUENCIAL` is unique within a year but should not be used to follow a
+person between years. 2013 to 2023 are untouched. Refs #2812.
+
+## 2026-10-05 — The packages will tell you what a column means
+
+Python package 0.4.0 through 0.7.3. `describe_columns` is a new MCP tool: for a
+table it reports each column with the data standard's definition where the
+standard defines it, the source column the build script renamed it from, a
+covariate's value labels in the source's own words, and the source deposit's own
+codebook or questionnaire where one has been found. `covariate_labels()` joins
+the public Python API. The R package has `irw_covariate_labels()` and
+`irw_covariates(labels = TRUE)` on main, but the released R package is still
+1.3.0, so there they are merged and not yet shipped. Setup for the MCP server is
+on [Using an AI Assistant](agents.qmd).
+
+## 2026-10-04 — Every table page now has a Codebook section
+
+The plain Columns list on a table page has become a Codebook: one row per
+column, giving the data standard's definition where it defines the column, and
+the source column the build script renamed it from, linked to the line that
+renames it. Covariates list their labelled codes in code order and in the
+source's own words ("1 = hombre · 2 = mujer"). Where the source deposit's own
+codebook was found, the section links it, and links a questionnaire beside it
+when the codebook names the columns but not the response wording.
+
+The section says it is the IRW's best reconstruction rather than the source's
+codebook, that it may contain mistakes, and that the source data are the
+authority. It never infers a meaning from a column's name: a column with neither
+a definition nor a traced source is shown as not documented. Refs #2755, #2763,
+#2766, #2770, #2787, #2792.
+
+## 2026-10-03 — Non-commercial and GPL licences now proceed
+
+A ruling of 2026-10-01, now in the processing repo's data standard: a
+non-commercial licence is hostable, with the NC carried into the derived
+licence, and so is GPL. ND licences and scraped or relabelled third-party data
+still stop, and a dataset with no licence at all still means asking the author
+for permission. The intake-policy section of [the data standard](standard.qmd)
+on this site has not yet caught up. Refs #2808, #2809.
+
+## 2026-10-03 — The homepage counts the published warehouse, and Standards gets its own menu
+
+The front-page banner is now rebuilt from published `irw_meta` on every render
+and records the version it read, where before it came from a file committed by
+hand and lagged what was published. It also gives the competition and nominal
+table counts. Refs #1940.
+
+The Data menu split in two. Data holds the pages for using the tables, with
+[Corrections](corrections.qmd) moved over from About; Standards holds the
+specifications, the validator and the contributing guidance, with
+[Overview of the IRW Data Standards](overview.qmd) as its hub.
+
+## 2026-10-02 — The standard defines design columns, and `irw-validate` 1.4.0
+
+`cluster_id`, `block_id` and `std_baseline*` are now defined in the standard's
+schema table, its column order and its section on randomised trials; until now
+the validator told the tables carrying them, such as the `gilbert_*` series, to
+rename them as covariates. `irw-validate` 1.4.0 allows them, and demotes its
+composite-item check to a warning, since label names alone cannot establish that
+a column holds a computed score. The standard also now says the 100-respondent
+floor does not apply to animal data, and clause C4 has an exception for
+IEA-style sources: an omitted response is scored 0 with the source's code kept
+in `resp_raw`, while a not-reached response is dropped. The
+[browser validator](validate.qmd) runs 1.4.0 too.
+
+## 2026-10-01 — Competition, nominal and simulated data all grew
+
+`irw_competitions` (v6.2) now covers professional and historical sport, machine
+contests such as chess engines and Kaggle simulation competitions, animal
+dominance hierarchies, comparative judgement and quiz contests; see
+[the competition standard](comps_standard.qmd). `irw_nominal` (v3.3) and
+`irw_simsyn` (v1.4) grew as well; see [the nominal standard](nominal_standard.qmd)
+and [simulated and synthetic data](simsyn.qmd).
+
+## 2026-10-01 — A measured quantity is not a response
+
+Ruled over the week and recorded on [Corrections](corrections.qmd): the
+`continuous_response` collection is for response scales — sliders, 0–100
+ratings, visual analogue scales — and a physical measurement such as minutes,
+hours or amount consumed never belongs in it. Self-reported counts stay.
+Refs #1700.
+
+## 2026-09-30 — Corrections from the corpus audit
+
+The retroactive audit of the existing corpus published its first large batch of
+corrections on 2026-09-30, each listed on [Corrections](corrections.qmd) with
+the version it took effect in. The audit works by class rather than by table —
+sentinel codes stored as responses, covariates out of range, response times in
+the wrong units, binary scales carrying extra codes, exact duplicate rows — so a
+defect found in one table is then looked for everywhere. Refs #2401.
+
+## 2026-09-30 — Eedi NeurIPS licence corrected
+
+Eedi permitted the IRW to reshare its restructured NeurIPS 2020 and 2022 data on
+condition that it carry CC BY-NC-ND 4.0, and the dictionary and bibliography had
+recorded CC BY 4.0. The rows for `neurips_2020`, `neurips_2020_task34` and
+`neurips_2022` now state the licence the permission actually granted.
+
+## 2026-09-30 — Twenty-one collections for specific instruments
+
+Collections were added for the PHQ-9, GAD-7, RSES, SWLS, PSS-10, DASS-21,
+PANAS, CES-D, BFI-44, BFI-10, TIPI, SD3, ERQ, GSE, MSPSS, Brief COPE, PCL-5,
+LOT-R, ISI, FCV-19S and the UCLA Loneliness Scale. Unlike the tag-based
+collections, these are curated table by table, and every member records its
+basis — whether the instrument was identified from the item wording, from what
+the source supplied, or only from the table's name.
+[Browse IRW Collections](collections.qmd) lists them member by member, with the
+basis shown and filterable.
+
+## 2026-09-28 — Source caveats get a Notes section, and a page
+
+A note is not a correction: it describes something odd about a source that the
+IRW table reproduces faithfully, rather than a defect in the IRW's own
+processing. Notes now appear as a plain Notes section on a table page, under
+"About this table", and the new [Data Notes](data_notes.qmd) page lists all of
+them. Because a note is about the source and not about the IRW's handling of it,
+it carries no banner and does not keep a table out of search results.
+
+## 2026-09-28 — The MCP server can find the script that built a table
+
+Python package 0.3.1. The server's processing-notes tool now resolves a table
+to the script that produced it through a table-to-script index generated in the
+processing repo, instead of guessing at a path. If you use the local MCP server
+described on [Using an AI Assistant](agents.qmd), an assistant can now ask how
+a particular table was built and get the actual script.
+
+## 2026-09-27 — A wave of rebuilt tables, part released and part still staged
+
+Several dozen tables were rebuilt after real defects in the scripts that made
+them. Among them: `MEFSIRODGAS_Nileksela_2023_freq` had been written from the
+severity group, so it held the 499 severity respondents rather than the 501
+frequency ones. `fcupanas_cffsdas_reyna_2018` pooled PANAS items 11–20 across
+studies that printed them in different orders, and cut Study 3's 7-point
+responses to missing; those now ship as their own `_7pt` table.
+`iandolo_2021_asq` shipped three reverse-keyed items already reversed for Italy
+and Japan but raw for Spain, and is now raw throughout (627 rows changed).
+`quopl2_forster_2021_quop` had response times in milliseconds, not seconds. The
+18 `eammi_grahe_2018_*` tables were shipping Qualtrics' whole-survey duration
+as `rt` — one identical value for every item a respondent answered — which is
+now `cov_survey_duration` instead. `ds14_mokken` had item Si3 overwritten with
+Si1. `alsuhibani_2022_gcbs` mapped Study 2's items by position and was shifted
+by one. `opladen2025_*` had collapsed eight pairs of different people who
+shared an anonymised code, and now reports the 217 participants the deposit's
+own summary implies.
+
+Some of this is released and some is not, so check before assuming a fix
+reached you. The `iandolo_2021_asq` and `liu_2025_ydcy` corrections are
+confirmed live, at `item_response_warehouse_3` v10.0 and
+`item_response_warehouse_4` v9.0. Refs #2282.
+
+## 2026-09-27 — Congressional roll calls
+
+Released in corpus version 442. `rollcall_house` and `rollcall_senate` treat
+congressional votes from the 110th through 118th Congresses as item response
+data, with `resp` 1 for Yea and 0 for Nay and members linked across Congresses
+by bioguide ID. Item text for each vote is in the `irw_text_3` shard.
+
+## 2026-09-27 — The validator checks folders, and warns about rights
+
+`irw-validate` 1.3.0 accepts a directory and takes `-r`/`--recursive`, so you
+can check a whole folder of tables rather than one file at a time. It also
+names the dominant `resp` value rather than only flagging that one exists,
+adds `--verbose`, and warns with the rights-register row for an instrument
+before a table ships. Version 1.2.0, tagged on 2026-09-21, started checking
+what an `rt` column *means* rather than only that it parses as a number. Both
+went out as release tags, which is what publishes them to PyPI; the
+[browser validator](validate.qmd) and `pip install -U irw-validate` run the
+same checks.
+
+## 2026-09-26 — Nominal-response tables now end in `_nom`
+
+Corpus version 439 renamed 66 tables in the nominal source to carry a `_nom`
+suffix, so that no table name is shared across two IRW sources. 52 of them are
+ENEM tables. No response changed.
+
+This matters if you refer to a nominal table by name, and it bites in two
+different ways. For 59 of the 66, a core table of the same name still exists,
+so the old name still resolves — but to the core table, not the nominal one
+you may have meant. For the other seven, including `preference_inventory`,
+`persuade_learningagency`, `goldberg_2018_spa_computer_use` and
+`mthimkhulu_2023_pirls_reading_mc`, there was no core table of that name, so
+the old name now resolves to nothing. The renames point both ways in the
+change record. The uploader now refuses a table name another IRW source is
+already using, so this particular collision should not recur. See
+[the nominal data standard](nominal_standard.qmd) for what the nominal source
+holds.
+
+## 2026-09-25 — Project KIDS item names now carry the WJ-III form
+
+Corpus versions 435 and 436. Forms A and B of the Woodcock-Johnson III put
+different words and problems at the same position, and the ten Project KIDS WJ
+tables had been pooling the two forms under a single item name. Item names now
+carry the form, which roughly doubles the item count in each table, or more:
+`project_kids_wj_lwid_wave` goes from 76 items to 228, `project_kids_wj_ap`
+from 39 to 78, `project_kids_wj_mf` from 80 to 160, `project_kids_wj_pc_wave`
+from 44 to 130, and so on across all ten.
+
+If you have fit a model to one of these tables, it was treating two different
+stimuli as one item wherever respondents took different forms.
+
+## 2026-09-25 — A third item-text shard
+
+Item text now spans `irw_text`, `irw_text_2` and `irw_text_3`; the third shard
+went live in corpus version 422. Both the R and the Python package resolve all
+three for you. As before, querying `irw_text` directly gets you part of the
+collection, not all of it.
+
+## 2026-09-24 — 4,495 tables, and item text for 1,589 of them
+
+The corpus has grown from 4,273 tables in mid-September to 4,495. Many of the
+new tables came from systematic sweeps of open-access journals (PLOS ONE and
+Europe PMC) for articles that deposit item-level responses under an open
+licence. The homepage now also shows how many tables have item text alongside
+their responses: 1,589.
+
+## 2026-09-23 — What a collection actually searched
+
+The documented coverage of the `tagged-subset-only` collections was wrong, and
+in the optimistic direction. Those collections are built by reading the
+`construct name` tag — not merely "has a tags row", which is what the previous
+figure of roughly 62% counted. Most rows added by auto-tagging carry no
+construct name, so the real figure is about half the documented corpus: 2,467
+of 4,495 tables as of 2026-09-23, and far less in the newer warehouses (98% of
+the first, 77% of the second, 26% of the third, 27% of the fourth, 30% of the
+fifth, 52% of the sixth). Each collection definition now states the exact
+number of tables it searched, and `irw_collections()` says so in its
+documentation. As the [Browse IRW Collections](collections.qmd) page already
+noted, a collection is a starting point, not a census.
+
+## 2026-09-21 — Two new vignettes
+
+[What Is a Floor, Actually?](./vignettes/esm_floor.qmd) asks how much of the
+pile-up at the bottom of experience-sampling scales is real. It measures how
+much floor IRW's intensive longitudinal datasets actually carry, and compares a
+censored model, a bounded-response model and a graded model on a study that
+randomised its response format.
+[Guessing in Multiple-Choice Data](./vignettes/guessing.qmd) compares three
+published corrections for guessing against standard IRT baselines on real IRW
+tables, using out-of-sample prediction, to see which correction helps and when
+the correction itself does harm.
+
+## 2026-09-19 — IRW Data Standard 1.0, and a validator that runs in your browser
+
+[The data standard](standard.qmd) is now a numbered, versioned specification.
+Clauses C1 to C7 are marked MUST or SHOULD, clause numbers will never be reused,
+and every change goes in a version table at the bottom of the page. Version 1.0
+is in beta while we hear from people using it outside the IRW. To check a file
+against it, drop the file on the [browser validator](validate.qmd), which runs
+entirely on your own computer, or run `pip install irw-validate` for the
+command-line version. Both run the same checks and report each problem against
+a numbered clause. The standard describes a valid table. It does not claim that
+every table IRW published before 1.0 conforms.
+
+## 2026-09-19 — A page for every table
+
+Every table with a recorded licence now has its own page, and there is an
+index of all of them at [/tables/](/tables/). That is 4,169 tables when the
+pages were first built. Each page shows the table's licence in bold, repeats a
+restrictive licence beside the download buttons, and gives a ready-to-copy
+citation. Each page also carries schema.org and
+[Croissant](https://mlcommons.org/working-groups/data/croissant/) metadata,
+so Google Dataset Search and machine-learning tools can find and load
+individual tables. A table without a known licence gets no page until the
+licence is known. A table with an open data defect keeps its page but gets a
+banner and is kept out of search results. A withdrawn table keeps its URL as a
+notice that it was withdrawn.
+
+## 2026-09-19 — Tables you download are kept on disk
+
+R package 1.3.0 and Python package 0.3.0 keep each table they download as a
+Parquet file and reuse it in later sessions, so restarting no longer
+downloads the same table again. Every download counts against Redivis'
+30-day export limit, so this matters. The two packages share one cache: a
+table fetched in Python is not downloaded again in R.
+
+## 2026-09-19 — A public record of corrections
+
+IRW corrects published tables regularly, but until now nothing told you a table
+you had used had changed. The new [Corrections](corrections.qmd) page states
+how IRW handles it — released versions never change, a correction is a new
+version, renames point both ways — and lists corrections to published
+response tables, starting with those released on 2026-08-27, each with the IRW
+version it took effect in and the issue that reported it. If a correction touches a table in your analysis,
+`irw_use_version()` with the earlier number still returns what you had.
+
+## 2026-09-08 — An MCP server for the IRW
+
+The Python package now ships a local [MCP](https://modelcontextprotocol.io)
+server, so an AI assistant can search the corpus, describe a table, read its
+processing notes, and fetch bounded slices of data without you pasting anything
+in by hand. Seven tools, all read-only. Setup instructions are on
+[Using an AI Assistant](agents.qmd), alongside the plain-text
+[briefing at /llms.txt](llms.txt) for assistants that cannot run a server.
+
+`resp_raw` is now documented in [the core data standard](standard.qmd): the
+column that preserves a response exactly as the source recorded it, when
+`resp` had to be coerced to a number.
+
+## 2026-09-07 — `pip install irw`
+
+The Python package is [on PyPI](https://pypi.org/project/irw/). Previously it
+had to be installed from GitHub. One consequence worth knowing: `pip install
+irw` gives you the last *released* version, so a fix that has been merged is
+not necessarily a fix you have.
+
+## 2026-09-05 — Item text outgrew one table, and some wording was withdrawn
+
+Item text is now spread across shards (`irw_text`, `irw_text_2`) because a
+single Redivis dataset holds at most 1000 tables. Both the R and Python
+packages resolve shards for you; if you were querying `irw_text` directly, you
+were seeing only part of the collection.
+
+Separately, a rights review removed IRW-hosted item *wording* for several
+instruments — including PROMIS, the TAS-20 and the DSES — where the
+instrument's own licence bars redistribution, even though the response data
+remains freely available. The licence on a deposited dataset is not a licence
+to the instrument inside it. Response data for those tables is untouched;
+only the wording is gone. R package 1.1.3 released the same day.
+
+## 2026-09-04 — Tag coverage, and what the tags are worth
+
+A long backfill closed the tag gap: missing tag cells went from 1,427 to 11,
+published in IRW data version 20.0. Because more coverage is not the same as
+more accuracy, there is now a [Tag Quality](tags_quality.qmd) page reporting
+what human-versus-machine comparisons actually found — including where the
+machine labels disagree with a table's own covariates. Tags are a search aid,
+not a warranty.
+
+The same day, [/llms.txt](llms.txt) went up: a single plain-text briefing on
+the IRW written for AI assistants, and a [page explaining it](agents.qmd) for
+the humans pointing them at it.
+
+## 2026-09-03 — One version number for the whole corpus
+
+Every response now carries an `irw_version`, and there is a corpus-wide
+version manifest behind it. `irw_version()` / `irw_use_version()` in R and
+`irw.version()` in Python let you read the current version, look up what was
+current on a given date, and pin an entire analysis to one version. Version
+numbers are never reused or renumbered.
+
+Also that day: a [pilot of per-table landing pages](data.qmd) for 25 tables,
+each with schema.org and Croissant metadata, so individual IRW tables can be
+found and machine-read from outside the warehouse.
+
+## 2026-09-02 — R package gains prediction utilities
+
+`irw_imv()` and `irw_predict()` give the information-theoretic model
+comparison example a home in the package rather than in a vignette. `redivis`
+moved from Imports to Suggests, so installing `irw` no longer requires it
+until you fetch data. `irw_simdata()`'s 2PL discriminations now have a spread
+worth simulating — previously they were near-constant. Released as 1.1.0
+through 1.1.2.
+
+## 2026-08-29 — Collections
+
+Related tables are now grouped into named collections, browsable on
+[Browse IRW Collections](collections.qmd), filterable in the data explorer,
+and readable from R with `irw_collections()` and `irw_collection()`. Inclusion
+calls are ours and are worth verifying before you rely on one.

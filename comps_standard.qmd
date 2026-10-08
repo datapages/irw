@@ -44,7 +44,7 @@ head(df)
 #| eval: false
 #| echo: true
 #| python.reticulate: false
-# Install package with `pip install "git+https://github.com/itemresponsewarehouse/Python-pkg.git"`
+# Install package with `pip install irw`
 import irw
 
 # View available competition data
@@ -72,7 +72,8 @@ library(elo)
 library(BradleyTerry2)
 
 # Fetch and prepare data
-df <- irw::irw_fetch("nfl_2010-2019", source = 'comp')
+df <- irw::irw_fetch("fivethirtyeight_nfl_1920_2023", source = 'comp')
+df <- df[df$season >= 2010 & df$season <= 2019, ]  # the 2010-2019 seasons, playoffs included
 df <- df[order(df$date), ]
 
 # ===== Elo ANALYSIS =====
@@ -90,17 +91,13 @@ elo_long <- lapply(seq_len(nrow(elo_results)), function(i) {
 })
 elo_long <- do.call(rbind, elo_long)
 
-# Convert dates to years with decimal (e.g., 2015.5 for mid-2015)
-elo_long$year <- elo_long$date/(365*24*60*60)
+# Convert dates to years since the start of the 2010 season
+elo_long$year <- (elo_long$date - as.numeric(as.POSIXct("2010-09-01", tz = "UTC")))/(365.25*24*60*60)
 
 
 elo_by_team <- split(elo_long, elo_long$team)
 
 # ===== BRADLEY-TERRY ANALYSIS =====
-# Create season variable based on date gaps
-date_diff <- diff(df$date)
-df$season <- c(0, cumsum(date_diff > 1e7)) + 2010
-
 # Prepare data for BT model
 df_bt <- df[df$winner != 'draw', ]
 df_bt$win <- as.numeric(df_bt$winner == 'agent_a')

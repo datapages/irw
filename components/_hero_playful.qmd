@@ -39,17 +39,13 @@ rendered standalone.
 
 library(jsonlite)
 
-# Emergency fallback only: used if data/hero_stats.json is missing or fails
-# to parse at build time (e.g. accidental deletion, bad merge). This keeps
-# `quarto render` from failing rather than being a source of truth -- it is
-# NOT refreshed automatically by metadata/00_hero_totals.R or
-# metadata/00_hero_category_breakdown.R (those write the checked-in JSON
-# file), so it will drift stale over time. Update by hand only if the
-# checked-in JSON itself is broken and a rebuild is needed before a fix
-# lands.
+# Fallback only: data/hero_stats.json is written by the pre-render step
+# landing/hero_stats.R from published irw_meta (ben-domingue/irw#1940) and is
+# not tracked. It is missing only in a local render with no Redivis token; in
+# CI a failed read stops the render instead. These values are never refreshed.
 hero_stats_fallback <- list(
   generated_at = "2025-01-01T00:00:00Z",
-  totals = list(n_tables = 1300, n_responses = 27000000000, n_participants = 65000000, n_items = 730000),
+  totals = list(n_tables = 1300, n_responses = 27000000000, n_participants = 65000000, n_items = 730000, n_tables_itemtext = 500),
   category_breakdown = list(
     list(n_categories = 2,    n_items = 148589, n_responses = 2112679586),
     list(n_categories = 3,    n_items = 11974,  n_responses = 28686057),
@@ -107,11 +103,6 @@ html`<style>
 
 /* ---------- Header ---------- */
 .irw-hero .header{ text-align:center; margin-bottom:32px; }
-.irw-hero .pill-badge{
-  display:inline-block; background:var(--purple); color:#fff; font-weight:800;
-  font-size:clamp(30px, 5vw, 52px); letter-spacing:0.5px; padding:10px 28px; border-radius:999px;
-  border:var(--border); box-shadow:var(--shadow-sm); transform:rotate(-3deg); margin-bottom:22px;
-}
 .irw-hero h1.headline{
   font-family:'Fredoka', sans-serif; font-weight:700; font-size:clamp(30px, 5vw, 52px);
   line-height:1.15; margin:0 0 6px;
@@ -147,6 +138,7 @@ html`<style>
 }
 .irw-hero .stamp .stamp-number{ font-family:'Fredoka', sans-serif; font-weight:700; line-height:1; font-size:22px; }
 .irw-hero .stamp .stamp-label{ font-weight:800; letter-spacing:1px; margin-top:4px; font-size:11px; }
+.irw-hero .stamp .stamp-sub{ font-weight:700; margin-top:4px; font-size:9.5px; line-height:1.15; max-width:100px; opacity:.9; }
 .irw-hero #irw-hero-stamp-items{ background:var(--green); width:150px; height:150px; }
 .irw-hero #irw-hero-stamp-items .stamp-number{ font-size:26px; }
 .irw-hero #irw-hero-stamp-items .stamp-label{ font-size:12px; }
@@ -339,6 +331,15 @@ heroBadge = (key) => {
 // are illustrative only (see file header comment) and stay hand-written.
 CONFIG = ({
   tables: fmtInt(hero_stats.totals.n_tables),
+  // Optional: older hero_stats.json files predate this field, so it is not
+  // in required_totals and the stamp line is dropped when it is absent.
+  tablesItemtext: hero_stats.totals.n_tables_itemtext ? fmtInt(hero_stats.totals.n_tables_itemtext) : null,
+  // Optional too: the other branches' counts. hero_stats.R omits either one
+  // when its read fails, and the line then names only what it has.
+  tablesBranches: [
+    hero_stats.totals.n_tables_comp ? `${fmtInt(hero_stats.totals.n_tables_comp)} competition` : null,
+    hero_stats.totals.n_tables_nom ? `${fmtInt(hero_stats.totals.n_tables_nom)} nominal` : null
+  ].filter(Boolean).join(" · ") || null,
   people: fmtAbbrev(hero_stats.totals.n_participants),
   items: fmtAbbrev(hero_stats.totals.n_items),
   responses: fmtWords(hero_stats.totals.n_responses),
@@ -369,7 +370,6 @@ heroRoot = {
   root.innerHTML = `
     <div class="page">
       <div class="header">
-        <div class="pill-badge">ITEM RESPONSE WAREHOUSE</div>
         <h1 class="headline">
           Every question ever answered<sup>*</sup>, in
           <span class="highlight">one place
@@ -392,6 +392,8 @@ heroRoot = {
             <div class="stamp bob" style="animation-delay:0s;">
               <div class="stamp-number">${CONFIG.tables}+</div>
               <div class="stamp-label">TABLES</div>
+              ${CONFIG.tablesItemtext ? `<div class="stamp-sub">${CONFIG.tablesItemtext} with item text</div>` : ''}
+              ${CONFIG.tablesBranches ? `<div class="stamp-sub">plus ${CONFIG.tablesBranches}</div>` : ''}
             </div>
             <div class="tag-cloud" id="irw-hero-table-domains"></div>
           </div>

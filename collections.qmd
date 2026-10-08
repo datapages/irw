@@ -12,6 +12,12 @@ library(htmltools)
 library(irw)
 
 reg <- irw_collections()
+mem <- irw_collection_members()
+
+##Exact-instrument collections (irw#1712): kind "instrument", curated table by table.
+##They render as member lists below rather than as cards, since the point of them is
+##which tables are in and how each was identified. Empty until they are uploaded.
+exact <- reg$collection[reg$kind == "instrument" & reg$coverage == "curated-only"]
 
 KIND_META <- tibble::tribble(
   ~kind,        ~heading,                     ~blurb,
@@ -35,8 +41,20 @@ A table belongs to as many collections as apply: `frac20` is in both
 #| label: coverage-note
 #| echo: false
 #| results: asis
-n_tagged <- 2251L
-n_total  <- 3650L
+## The counts come from the note 10_collections.R appends to every
+## tagged-subset-only definition: "(searched the N of M tables that have a
+## construct name; ...)". Parsed here rather than hardcoded -- the last
+## hardcoded pair (2,251 of 3,650) went stale within a month (irw#1719, 17.3).
+## If no definition carries that shape, the prose below drops the numbers
+## rather than showing old ones.
+cov_m <- str_match(reg$definition,
+                   "searched the ([0-9,]+) of ([0-9,]+) tables that have a construct name")
+cov_m <- cov_m[!is.na(cov_m[, 1]), , drop = FALSE]
+n_searched <- if (nrow(cov_m)) as.integer(gsub(",", "", cov_m[1, 2])) else NA_integer_
+n_total    <- if (nrow(cov_m)) as.integer(gsub(",", "", cov_m[1, 3])) else NA_integer_
+fmt <- function(n) format(n, big.mark = ",")
+searched_txt <- if (is.na(n_searched)) "the tables" else
+  glue("the **{fmt(n_searched)} of {fmt(n_total)}** tables")
 n_part <- sum(reg$coverage == "tagged-subset-only")
 cat(glue(
   '::: {{.callout-warning appearance="simple"}}\n',
@@ -45,14 +63,16 @@ cat(glue(
   'Most collections are assigned by a rule --- the presence of a column, or a pattern ',
   'matched against the construct name each table was annotated with. A pattern over ',
   'free text will sometimes catch a table you would exclude, and miss one you would ',
-  'include. `continuous_response` is assigned by hand, which makes it a judgment of a ',
-  'different kind rather than a safer one. Nothing here has been checked table by table. ',
+  'include. `continuous_response` and the exact-instrument collections are assigned by ',
+  'hand, table by table, which makes them a judgment of a different kind rather than a ',
+  'safer one: most exact-instrument members were identified from wording IRW supplied, ',
+  'not from the study\'s own materials (see [Exact instruments](#exact-instruments)). ',
   'Every membership records the basis on which it was decided --- see ',
   '`irw_collection_members()` --- so you can inspect a collection and form your own view; ',
   'please do so before using one as the sample for an analysis.\n\n',
   '**Coverage is also uneven.** Collections built from the tag annotations searched only ',
-  'the **{format(n_tagged, big.mark=",")} of {format(n_total, big.mark=",")}** tables that ',
-  'carry tags, and tag coverage is much lower in the newer warehouses. {n_part} of the ',
+  '{searched_txt} whose tags include a construct name, and that field is much sparser in ',
+  'the newer warehouses. {n_part} of the ',
   '{nrow(reg)} collections below are marked `tagged-subset-only` for that reason: they are ',
   'useful starting points, but they are not exhaustive, and they lean toward older tables. ',
   'Treat them as "the ones we know of", not "all of them". The rest searched every ',
@@ -92,6 +112,10 @@ intersect(irw_collection("math"), irw_collection("multistage"))
 irw_filter(collection = c("rct", "response_time"))
 
 irw_collection_members(tables = "frac20")   # which collections is this table in?
+
+# Exact-instrument collections: keep only tables whose own item text was checked.
+m <- irw_collection_members(collection = "phq9")
+m[startsWith(m$basis, "wording"), ]
 ```
 
 ## Python
@@ -113,6 +137,9 @@ sorted(set(irw.collection("math", quiet=True)) &
 
 irw.filter(collection=["rct", "response_time"])   # union, not intersection
 irw.collection_members(tables="frac20")
+
+m = irw.collection_members(collection="phq9")
+m[m.basis.str.startswith("wording")]
 ```
 
 :::
@@ -141,12 +168,114 @@ cat('
   background: #e8f1fb; color: #1a5c9e; white-space: nowrap; }
 .coll-cov.partial { background: #f6ead6; color: #8f5410; }
 .coll-cov.curated { background: #eceef0; color: #495057; }
+.ex-controls { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin: 0.5rem 0 0.75rem; }
+.ex-controls input { flex: 1 1 220px; min-width: 0; padding: 0.35rem 0.6rem; border: 1px solid #dee2e6; border-radius: 6px; }
+.ex-chips { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.ex-chip { font-size: 0.8rem; padding: 0.2rem 0.7rem; border-radius: 100px; border: 1px solid #dee2e6; background: #fff; color: #212529; }
+.ex-chip[aria-pressed="true"] { background: #2f6b5c; border-color: #2f6b5c; color: #fff; }
+.ex-list { margin-bottom: 2rem; border-top: 1px solid #dee2e6; }
+.ex-coll { border-bottom: 1px solid #dee2e6; }
+.ex-coll summary { cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.35rem 1rem;
+  align-items: baseline; padding: 0.7rem 0; list-style: none; }
+.ex-coll summary::-webkit-details-marker { display: none; }
+.ex-title { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: baseline; min-width: 0; }
+.ex-label { font-weight: 600; }
+.ex-count { font-size: 0.85rem; color: #6c757d; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ex-count b { color: #212529; }
+.ex-bar { grid-column: 1 / -1; display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: #eceef0; }
+.ex-bar span { display: block; height: 100%; }
+.ex-wording { background: #2f6b5c; } .ex-supplied { background: #7b93b8; } .ex-name { background: #c9a86a; }
+.ex-body { padding: 0 0 1rem; }
+.ex-what { font-size: 0.85rem; color: #495057; margin: 0 0 0.5rem; }
+.ex-tbl { overflow-x: auto; }
+.ex-tbl table { width: 100%; font-size: 0.85rem; }
+.ex-tbl th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: #6c757d; font-weight: 600; }
+.ex-tbl td, .ex-tbl th { padding: 0.3rem 0.8rem 0.3rem 0; border-bottom: 1px solid #eceef0; vertical-align: top; }
+.ex-pill { display: inline-flex; gap: 0.4rem; align-items: center; white-space: nowrap; }
+.ex-sw { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.ex-note { font-size: 0.78rem; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 0 0.35rem; white-space: nowrap; }
 </style>
 ')
 
+BASES <- c("wording", "supplied", "name")
+exact_instruments <- function() {
+  ex <- reg[reg$collection %in% exact, ]
+  m  <- mem[mem$collection %in% exact, ]
+  m$b    <- str_trim(str_extract(m$basis, "^[^;]+"))
+  m$note <- str_trim(str_match(m$basis, ";\\s*(.*)$")[, 2])
+  ex <- ex[order(-ex$n_tables), ]
+  cat(glue('\n### Exact instruments {{#exact-instruments}}\n\n',
+    'Each of these lists the tables that administered one specific instrument: the full scale, ',
+    'at least 80% of its items, or one whole subscale. Short forms, lengthened adaptations and ',
+    'reworded versions are left out. Every membership was decided table by table, and its ',
+    '`basis` says how the table was identified:\n\n',
+    '- <span class="ex-sw ex-wording"></span> **wording**: the study\'s own item text matches the instrument. Identity is observed.\n',
+    '- <span class="ex-sw ex-supplied"></span> **supplied**: IRW identified the instrument and supplied its canonical wording, so a ',
+    'wording match only confirms that identification. Identity is asserted.\n',
+    '- <span class="ex-sw ex-name"></span> **name**: there is no usable English item text; only the table\'s metadata names the instrument.\n\n',
+    'A note after the basis marks a partial table (`partial: 18/20 items`) or a single subscale ',
+    '(`subscale: anxiety (7/21)`). For the strictly verified set, keep members whose basis starts ',
+    'with `wording`. The method is written up in the ',
+    '[collections README](https://github.com/ben-domingue/irw/blob/main/src/collections/README).\n\n'))
+  rows_html <- vapply(seq_len(nrow(ex)), function(i) {
+    r  <- ex[i, ]
+    mm <- m[m$collection == r$collection, ]
+    mm <- mm[order(match(mm$b, BASES), tolower(mm$table)), ]
+    n  <- nrow(mm)
+    cnt <- vapply(BASES, function(b) sum(mm$b == b), 0L)
+    bar <- paste0(vapply(BASES, function(b) if (cnt[[b]]) glue(
+      '<span class="ex-{b}" style="width:{round(100 * cnt[[b]] / n, 2)}%" title="{b}: {cnt[[b]]}"></span>') else "", ""),
+      collapse = "")
+    what <- str_match(r$definition, "^Tables that administered (.*?): ")[, 2]
+    trs <- paste0(glue_data(mm,
+      '<tr data-b="{b}" data-t="{tolower(table)}"><td><a href="tables/{table}/"><code>{table}</code></a></td>',
+      '<td><span class="ex-pill"><span class="ex-sw ex-{b}"></span>{b}</span></td>',
+      '<td>{ifelse(is.na(note), "", paste0(\'<span class="ex-note">\', htmlEscape(note), "</span>"))}</td></tr>'),
+      collapse = "")
+    glue('<details class="ex-coll" data-slug="{r$collection}">',
+      '<summary><span class="ex-title"><span class="ex-label">{htmlEscape(r$label)}</span>',
+      '<code>{r$collection}</code></span>',
+      '<span class="ex-count"><b>{n}</b> tables &middot; {cnt[["wording"]]} wording</span>',
+      '<span class="ex-bar" aria-hidden="true">{bar}</span></summary>',
+      '<div class="ex-body">{if (!is.na(what)) paste0("<p class=\\"ex-what\\">", htmlEscape(what), "</p>") else ""}',
+      '<div class="ex-tbl"><table><thead><tr><th>Table</th><th>Basis</th><th>Note</th></tr></thead>',
+      '<tbody>{trs}</tbody></table></div></div></details>')
+  }, "")
+  cat('<div class="ex-controls"><input id="ex-q" type="search" placeholder="Search table names" aria-label="Search table names">',
+      '<div class="ex-chips" role="group" aria-label="Filter by basis">',
+      paste0(vapply(c("all", BASES), function(b) glue(
+        '<button type="button" class="ex-chip" data-b="{b}" aria-pressed="{tolower(b == "all")}">{b}</button>'), ""),
+        collapse = ""),
+      '</div></div>\n<div class="ex-list">', paste0(rows_html, collapse = ""), '</div>\n\n', sep = "")
+  cat('<script>
+(function () {
+  var q = "", basis = "all";
+  function apply() {
+    document.querySelectorAll(".ex-coll").forEach(function (d) {
+      var shown = 0;
+      d.querySelectorAll("tbody tr").forEach(function (tr) {
+        var ok = (basis === "all" || tr.dataset.b === basis) && tr.dataset.t.indexOf(q) !== -1;
+        tr.hidden = !ok; if (ok) shown++;
+      });
+      d.hidden = shown === 0;
+      if (q) d.open = true;
+    });
+  }
+  document.getElementById("ex-q").addEventListener("input", function (e) { q = e.target.value.trim().toLowerCase(); apply(); });
+  document.querySelectorAll(".ex-chip").forEach(function (b) {
+    b.addEventListener("click", function () {
+      basis = b.dataset.b;
+      document.querySelectorAll(".ex-chip").forEach(function (x) { x.setAttribute("aria-pressed", x === b); });
+      apply();
+    });
+  });
+})();
+</script>\n\n')
+}
+
 for (k in KIND_META$kind) {
   meta <- KIND_META[KIND_META$kind == k, ]
-  rows <- reg[reg$kind == k, ]
+  rows <- reg[reg$kind == k & !reg$collection %in% exact, ]
   if (nrow(rows) == 0) next
 
   cat(glue('\n## {meta$heading}\n\n{meta$blurb}\n\n'))
@@ -159,9 +288,11 @@ for (k in KIND_META$kind) {
     ##chip below instead, and reads as clutter inside the prose.
     desc <- str_squish(str_remove(r$definition, "\\s*\\(searched the.*?\\)\\s*$"))
     cov_txt <- dplyr::case_when(
-      r$coverage == "tagged-subset-only" ~ glue("of {format(n_tagged, big.mark=',')} tagged"),
+      r$coverage == "tagged-subset-only" & !is.na(n_searched) ~ glue("of {fmt(n_searched)} searched"),
+      r$coverage == "tagged-subset-only" ~ "partial search",
       r$coverage == "curated-only"       ~ "hand-curated",
-      TRUE                               ~ glue("of all {format(n_total, big.mark=',')}")
+      !is.na(n_total)                    ~ glue("of all {fmt(n_total)}"),
+      TRUE                               ~ "of all documented"
     )
     cov_cls <- dplyr::case_when(
       r$coverage == "tagged-subset-only" ~ "partial",
@@ -180,6 +311,7 @@ for (k in KIND_META$kind) {
     ))))
   }
   cat('</div>\n\n')
+  if (k == "instrument" && length(exact)) exact_instruments()
 }
 ```
 
@@ -189,9 +321,12 @@ Each collection is one row in a [version-controlled
 registry](https://github.com/ben-domingue/irw/blob/main/src/collections/registry.csv)
 carrying its definition and the rule that produces its membership --- the
 presence of a column (`treat` for `rct`, `qmatrix*` for `q_matrix`), or a
-pattern over the recorded construct name. `continuous_response` is the one
-collection assembled by hand, because the available signals disagree too often
-for a rule to settle it.
+pattern over the recorded construct name. `continuous_response` is assembled by
+hand, because the available signals disagree too often for a rule to settle it.
+The exact-instrument collections are also assembled by hand: a script proposes
+candidates and checks their item text against the instrument's wording, and
+each membership is then decided table by table (see
+[issue #1712](https://github.com/ben-domingue/irw/issues/1712)).
 
 Adding a collection is therefore a change to data, not to code, and every
 membership records the basis on which it was decided. That last point is

@@ -1,53 +1,139 @@
 project:
   type: website
+  # Published at itemresponsewarehouse.org/llms.txt, which is the URL agents.qmd
+  # tells researchers to point their AI assistant at. Listed explicitly rather
+  # than left to Quarto's default resource discovery so it cannot quietly stop
+  # being copied.
+  resources:
+    - llms.txt
+    # Brand artwork. The app icons are named only in site.webmanifest, and
+    # the other variants are not referenced by any page, so Quarto's resource
+    # discovery would not copy them. logos/reference/ is deliberately left out.
+    - logos/*.svg
+    - logos/*.png
+    - logos/*.ico
+    - site.webmanifest
+    # Copy of logos/favicon.ico at the root, where browsers look by default.
+    # Covers the pages emitted into tables/, which have their own <head>.
+    - favicon.ico
+  # Working notes live beside the vignettes and scouting data but are not pages:
+  # rendering them put them in the sitemap and in Google's index. Everything
+  # else renders as before.
+  render:
+    - "*.qmd"
+    - "*.md"
+    - "*.Rmd"
+    - "!scouting/"
+    - "!vignettes/continuous_scout_data/"
+    - "!vignettes/*_NOTES.md"
+    - "!LOCAL_DEV.md"
+    - "!logos/"
   preview:
     port: 4200
+  # The homepage hero's numbers (data/hero_stats.json), rebuilt from published
+  # irw_meta before every render (ben-domingue/irw#1940). In CI a failed read is a
+  # hard error; locally it warns and the hero keeps whatever file it has.
+  pre-render:
+    - Rscript landing/hero_stats.R
+  # Per-table landing pages (ben-domingue/irw#1706). Runs after Quarto has
+  # written _site/, and emits into _site/tables/. Skips itself with exit 0 when
+  # REDIVIS_API_TOKEN is unset, so a credential-free local preview still renders --
+  # but in CI a missing token is a hard error, because publishing without the
+  # landing pages deletes them from the live site (ben-domingue/irw#2129).
+  # landing/write_sitemaps.R then turns Quarto's sitemap.xml into a sitemap index
+  # over sitemap-pages.xml (Quarto's pages, lastmod from git) and the
+  # sitemap-tables.xml the emitter wrote. Order matters: the emitter first.
+  post-render:
+    - Rscript landing/emit_landing_pages.R
+    - Rscript landing/write_sitemaps.R
 
 website:
   title: "Item Response Warehouse"
+  # Without this Quarto emits no sitemap.xml at all, for any page on the site,
+  # and canonical-url below has no base to build from. The sitemap Quarto writes
+  # is rewritten by the post-render steps; see landing/write_sitemaps.R.
+  site-url: https://itemresponsewarehouse.org
   google-analytics: G-NM0Y0TP4RY
+  favicon: logos/favicon.ico
+  # Social-sharing cards. Quarto makes the image URL absolute from site-url.
+  # The description is the fallback for pages without their own; without it
+  # link previews show a blank line.
+  open-graph:
+    image: logos/og-image.png
+    description: "A free, open collection of harmonized item response data for psychometrics and measurement research."
+  twitter-card:
+    card-style: summary_large_image
+    image: logos/og-image.png
+    description: "A free, open collection of harmonized item response data for psychometrics and measurement research."
   navbar:
+    # The lockup carries the name, so the text title is hidden; logo-alt
+    # keeps it for screen readers.
+    title: false
+    logo: logos/irw-lockup.svg
+    logo-alt: "Item Response Warehouse"
     search: true
     left:
       - href: index.qmd
         text: Home
+      # Data is for readers using the tables; Standards is for anyone writing
+      # data to the format. A menu item with text and no href renders as a
+      # section label.
       - text: "Data"
         menu:
-        - href: overview.qmd
-          text: Overview of IRW Data Standards
         - href: data.qmd
-          text: Browse the IRW Data
+          text: Browse the data
+        # Written by the post-render emitter, not a Quarto source file, so a
+        # site-absolute path rather than a .qmd. 404s in a local preview
+        # rendered without REDIVIS_API_TOKEN.
+        - href: /tables/
+          text: Table pages (A–Z)
         - href: collections.qmd
-          text: Browse IRW Collections
-        - href: metadata.qmd
-          text: Metadata for IRW tables
+          text: Collections
         - href: docs.qmd
-          text: Data Documentation
-        - text: "---"
-        - href: itemtext.qmd
-          text: Item Text Standard
-        - href: itemtext_desc.qmd
-          text: Item Text Descriptives
-        - href: itemtext_issues.qmd
-          text: Known Issues
-        - href: itemtext_merge.qmd
-          text: Merging with IRW data
-        - text: "---"
-        - href: standard.qmd
-          text: The Core IRW Data Standard
-        - href: comps_standard.qmd
-          text: The Competition Data Standard
-        - href: nominal_standard.qmd
-          text: The Nominal Data Standard
+          text: Dataset documentation
         - href: simsyn.qmd
-          text: Simulated and Synthetic Data
+          text: Simulated and synthetic data
+        - text: "---"
+        - text: "About the tables"
+        - href: metadata.qmd
+          text: Metadata
+        - href: tags_quality.qmd
+          text: Tag quality
+        - href: data_notes.qmd
+          text: Data notes
+        - href: corrections.qmd
+          text: Corrections
+        - text: "---"
+        - text: "Item text"
+        - href: itemtext_desc.qmd
+          text: Item text descriptives
+        - href: itemtext_merge.qmd
+          text: Merging item text with responses
+        - href: itemtext_issues.qmd
+          text: Known item-text issues
+      - text: "Standards"
+        menu:
+        - href: overview.qmd
+          text: Overview of the standards
+        - href: standard.qmd
+          text: The core standard (v1.0)
+        - href: validate.qmd
+          text: Check a file against the standard
+        - href: comps_standard.qmd
+          text: The competition standard
+        - href: nominal_standard.qmd
+          text: The nominal standard
+        - href: itemtext.qmd
+          text: The item text standard
         - text: "---"
         - href: contribute.qmd
-          text: Contributing Data to the IRW
+          text: Contributing data
       - text: "Get Started"
         menu:
         - href: getstarted.qmd
           text: Getting Started
+        - href: agents.qmd
+          text: Using an AI Assistant
         - href: training.qmd
           text: Training Resources
         - href: problems.qmd
@@ -58,6 +144,8 @@ website:
         menu:
         - href: about.qmd
           text: About the IRW
+        - href: news.qmd
+          text: News
         - href: research.qmd
           text: Research!
         - href: othersites.qmd
@@ -65,12 +153,19 @@ website:
         - href: contact.qmd
           text: Contact Us
     right:
+      # Repositories, not documentation sites: this is the GitHub icon, and a
+      # reader clicking it wants the source. The R package's pkgdown reference
+      # is linked from Get Started and from the data explorer instead.
       - icon: github
         menu:
-          - text: "Data processing"
-            href: https://github.com/itemresponsewarehouse/misc/tree/main/data
-          - text: "irw: R package for managing IRW data"
-            href: https://itemresponsewarehouse.github.io/Rpkg/
+          - text: "Data processing code"
+            href: https://github.com/ben-domingue/irw/tree/main/data
+          - text: "irw: R package"
+            href: https://github.com/itemresponsewarehouse/Rpkg
+          - text: "irw: Python package"
+            href: https://github.com/itemresponsewarehouse/Python-pkg
+          - text: "This website's source"
+            href: https://github.com/datapages/irw
 
 format:
   html:
@@ -84,6 +179,11 @@ format:
       body-width: 1200px
       margin-width: 0px
     callout-icon: false
+    include-in-header: logos/_head.html
+    # A <link rel="canonical"> on every page, from site-url. Directory index
+    # pages get their clean URL (/, /vignettes/), so /index.html is not a second
+    # page to a crawler. The table pages write their own.
+    canonical-url: true
     df-print: kable
     code-fold: true
 

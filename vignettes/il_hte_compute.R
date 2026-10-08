@@ -46,7 +46,10 @@ fit_one <- function(tab) {
   }
   if (is.null(df)) return(NULL)
 
-  # Filter to wave 1 if wave column is present
+  # Filter to wave 1 if wave column is present. Checked 2026-09-28 (irw#2513) over all 62
+  # dichotomous treat+wave tables: in 57 wave 1 is the first follow-up (wave 0, where
+  # present, is the pretest). In gilbert_meta_58 (0, 0.2, ..., 1) and _70-_73 (0, 0.5, 1)
+  # waves are rescaled so wave 1 is the endline, which is the outcome used here.
   if ("wave" %in% names(df)) df <- df[df$wave == 1, ]
 
   # Require treat column

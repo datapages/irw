@@ -2,16 +2,34 @@
 title: "Data"
 ---
 
-This page has two tools:
+{{< include components/_dataset_jsonld.qmd >}}
+
+This page has two tools, and individual tables have their own pages:
 
 - [**Explore all datasets**](#explore-all-datasets) — filter and browse across all IRW datasets by size, response type, and other properties. As you filter, this tool builds a ready-to-run R code snippet that reproduces your selection with the `irw` package.
 - [**Look up a single dataset**](#look-up-a-single-dataset) — search for one dataset by name and generate its citation (reference and BibTeX) for use in your own work.
+- [**Browse table pages**](/tables/) — every table with a recorded licence has its own page, giving a description of what it measures and where it came from, its size and shape (responses, respondents, items and response categories), the tags that classify it, item text statistics where they exist, the columns it contains, and ready-to-run R and Python code to fetch it. Each page names the IRW version it describes, so it can be cited.
+
+For what the filter columns mean, see [Metadata](metadata.qmd). Ready-made groups of tables (randomized trials, Big Five, and so on) are listed under [Collections](collections.qmd), and every dataset's description, licence and source are listed in one place on [Dataset documentation](docs.qmd).
 
 ---
 
 ## Explore all datasets
 
 {{< include _load-data-explore.qmd >}}
+
+```{r}
+#| label: table-pages
+#| echo: false
+#| message: false
+# Which tables have a landing page under /tables/ (ben-domingue/irw#1706). The
+# emitter runs post-render and cannot tell this page anything, so both read the
+# same rule from landing/page_rules.R: a table gets a page unless it has no
+# recorded licence (held, see irw#2266). Withdrawn tables have a tombstone, not a
+# page, and are not linked from here.
+source(file.path("landing", "page_rules.R"))
+ojs_define(page_tables = tolower(page_tables(metadata_table, biblio)))
+```
 
 {{< include components/_interval.qmd >}}
 {{< include components/_hist.qmd >}}
@@ -403,6 +421,19 @@ viewof row = Inputs.table(dsf, {
 ## {{< bi info-circle class=header-icon >}}Information on selected dataset
 
 ```{ojs}
+// Tables that have a landing page. ojs_define collapses a length-1 list to a
+// bare string and gives an empty vector as undefined, so both are normalised.
+has_page = new Set(
+  (typeof page_tables === "undefined" || page_tables === null
+     ? []
+     : (Array.isArray(page_tables) ? page_tables : [page_tables])
+  ).map(s => String(s).toLowerCase())
+)
+
+table_page_href = (name) => `/tables/${String(name).toLowerCase()}/`
+```
+
+```{ojs}
 // specify which variables to show in info box
 info = ({
   "table":       { label: "Dataset"        },
@@ -415,12 +446,17 @@ info = ({
 })
 
 // element for each info entry ($head: $text) with $text wrapped in <a> if head matches "Link"
-pullout = (head, text) => html.fragment`<p><b>${head}</b>: ${/Link/.test(head) ? html.fragment`<a href="${text}" target="_blank">${text}</a>` : text}</p>`
+// and $text is a URL. data_url also holds values like "NA" and "Author Permission";
+// linked, those became relative hrefs that crawlers followed to 404s.
+pullout = (head, text) => html.fragment`<p><b>${head}</b>: ${/Link/.test(head) && /^https?:\/\//.test(String(text)) ? html.fragment`<a href="${text}" target="_blank">${text}</a>` : text}</p>`
 
 // elements for all info entries, placeholder if no table selected
 placeholder = "No table selected"
 row ? html`<div class="pullout">
   ${Object.entries(info).map(([field, properties]) => pullout(properties.label, row[field]))}
+  ${has_page.has(String(row.table).toLowerCase())
+      ? html.fragment`<p><b>Citable page</b>: <a href="${table_page_href(row.table)}">${table_page_href(row.table)}</a> &mdash; a permanent page for this table, naming the IRW version it describes.</p>`
+      : html.fragment``}
 </div>` : html`<div class="pullout"><em>${placeholder}</em></div>`
 ```
 :::
@@ -608,13 +644,9 @@ viewof license_vals = tag_checkbox("license")
 
 ## Look up a single dataset
 
-{{< include _load-data.qmd >}}
+Below we show an example dataset and illustrations of how to access the data programmatically. You can also explore the data [here](https://redivis.com/datasets/as2e-cv7jb41fd/tables).
 
-Below we show metadata for the entire IRW, an example dataset, and illustrations of how to access the data programmatically. You can also explore the data [here](https://redivis.com/datasets/as2e-cv7jb41fd/tables).
-
-### Metadata
-
-<iframe width="800" height="500" allowfullscreen src="https://redivis.com/embed/tables/datapages.irw_meta:bdxt:current.metadata:h5gs#cells" style="border:0;"></iframe>
+Individual tables also have their own citable pages, listed at [IRW table pages](/tables/) and linked from the panel above where one exists.
 
 ```{ojs}
 // Load the dictionary and bib data

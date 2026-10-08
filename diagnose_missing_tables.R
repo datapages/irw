@@ -12,13 +12,13 @@ library(redivis)
 
 irw_meta <- redivis$user("datapages")$dataset("irw_meta:bdxt")
 
-metadata_table <- irw_meta$table("metadata:h5gs")$to_tibble() |>
+metadata_table <- irw_meta$table("metadata")$to_tibble() |>
   mutate(table = str_to_lower(table))
 
-tag_table <- irw_meta$table("tags:7nkh")$to_tibble() |>
+tag_table <- irw_meta$table("tags")$to_tibble() |>
   mutate(table = str_to_lower(table))
 
-biblio <- irw_meta$table("biblio:qahg")$to_tibble() |>
+biblio <- irw_meta$table("biblio")$to_tibble() |>
   mutate(table = str_to_lower(table))
 
 ds <- c("item_response_warehouse", "item_response_warehouse_2", "item_response_warehouse_3", "item_response_warehouse_4", "item_response_warehouse_5", "item_response_warehouse_6")
@@ -41,9 +41,9 @@ diagnosis <- tibble(table = missing) |>
     dropped_by_ncat_filter = in_metadata & (n_categories == 0 | is.na(n_categories)),
     in_tags           = table %in% tag_table$table,
     reason = case_when(
-      !in_metadata               ~ "missing from quantitative metadata (metadata:h5gs)",
+      !in_metadata               ~ "missing from quantitative metadata (metadata)",
       dropped_by_ncat_filter     ~ "in metadata but n_categories == 0 (filtered out)",
-      !in_tags                   ~ "missing from tags sheet (tags:7nkh)",
+      !in_tags                   ~ "missing from tags sheet (tags)",
       TRUE                       ~ "present in all sources -- unexplained, re-check join keys"
     )
   )
