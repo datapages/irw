@@ -39,14 +39,17 @@ library(furrr)
 
 set.seed(20261008)
 
+CONJ_VERSION  <- "irw_conjoint:v4_1"
+META_VERSION  <- "irw_meta:v39_0"
+
 out_dir   <- "vignettes/conjoint_data"
-fits_dir  <- file.path(out_dir, "fits")
+# Per-table fits are kept per source version, so a version change refits everything
+fits_dir  <- file.path(out_dir, "fits", gsub("[^A-Za-z0-9_]", "_", CONJ_VERSION))
 fetch_dir <- file.path(out_dir, "fits", "rows")   # raw row cache, gitignored with fits/
 dir.create(fetch_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(fits_dir, recursive = TRUE, showWarnings = FALSE)
 bib_file  <- file.path(out_dir, "references.bib")
 
-CONJ_VERSION  <- "irw_conjoint:v3_0"
-META_VERSION  <- "irw_meta:v38_0"
 MIN_TASKS     <- 500    # usable forced-choice tasks per table
 MIN_RESP_HET  <- 200    # respondents with >= 3 tasks, for the preference model
 MAX_N         <- 5000   # downsample respondents/persons before fitting
@@ -241,17 +244,9 @@ message("  candidates: ", length(candidates), " of ", nrow(conj_meta))
 conj_tables <- if (PILOT) unique(c("hainmueller_2014_immigrant", "kreps_2020_covid_vaccine",
                                     sample(setdiff(candidates, "hainmueller_2014_immigrant"), PILOT_N - 2))) else candidates
 
-# Known defects in irw_conjoint v3.0, corrected here until the table is fixed:
-# brazzill_2020_social_investment's task-3 choices copy task 2's (identical in
-# every respondent-profile pair although the profiles differ); the IRW build
-# notes say task 3 was to be dropped. A scan of all tables for choices copied
-# between adjacent tasks found no other case.
-DROP_TASKS <- list(brazzill_2020_social_investment = 3)
-
 fit_conj <- function(tab) {
   d <- read_rows(CONJ_VERSION, tab)
   if (!all(c("id", "task", "profile", "choice") %in% names(d))) return(NULL)
-  if (!is.null(DROP_TASKS[[tab]])) d <- d[!task %in% DROP_TASKS[[tab]]]
   ids <- unique(d$id)
   if (length(ids) > MAX_N) d <- d[id %in% sample(ids, MAX_N)]
   tf <- tasks_frame(d); t <- tf$t; D <- tf$D

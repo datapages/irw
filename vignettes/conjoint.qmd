@@ -3,7 +3,7 @@ title: "Conjoint Experiments as Paired Comparisons"
 description: |
   A conjoint experiment asks people to choose between pairs of randomly built
   profiles: two immigrants, two candidates, two vaccines. The usual summary is
-  the average effect of each attribute. IRW holds 216 conjoint experiments, and
+  the average effect of each attribute. IRW holds 489 conjoint experiments, and
   read as item response data each choice is a paired comparison. That lets us
   ask two measurement questions across all of them: how well do the attributes
   predict a choice nobody has seen yet, and how much do individual respondents'
@@ -374,7 +374,7 @@ offers:
 #| eval: false
 #| code-fold: false
 
-url <- paste0("https://redivis.com/api/v1/tables/datapages.irw_conjoint:v3_0.",
+url <- paste0("https://redivis.com/api/v1/tables/datapages.irw_conjoint:v4_1.",
               "hainmueller_2014_immigrant/rows?format=csv")
 hhy <- read.csv(url)
 # with a Redivis account: irw::irw_fetch("hainmueller_2014_immigrant", source = "conj")
@@ -436,8 +436,7 @@ introduces:
 
 ### Dataset selection
 
-The IRW conjoint source held `r r_n_conj` tables in version 3.0, which this page uses (version 4.0, released as this page was finished,
-adds 53 more). We use
+The IRW conjoint source holds `r r_n_conj` tables in version 4.1, which this page uses. We use
 those with a forced choice between exactly two profiles and at least 500
 usable tasks, where a usable task is one in which exactly one of the two
 profiles was chosen (this drops opt-out and unanswered tasks):
@@ -446,15 +445,15 @@ profiles was chosen (this drops opt-out and unanswered tasks):
 #| label: filter-datasets
 #| eval: false
 
-meta <- read.csv(paste0("https://redivis.com/api/v1/tables/datapages.irw_meta:v38_0.",
+meta <- read.csv(paste0("https://redivis.com/api/v1/tables/datapages.irw_meta:v39_0.",
                         "conj_metadata/rows?format=csv"))
 candidates <- subset(meta, grepl("(^|;)choice(;|$)", outcomes) & n_profiles == 2 &
                            n_respondents * n_tasks >= 500)$table
 ```
 
 `r r_all_candidates` tables met this screen as of
-`r format(date_run, "%B %Y")`, and `r r_n_tables_run` had at least 500 usable
-tasks. Tables with more than 5,000 respondents were subsampled to 5,000 at
+`r format(date_run, "%B %Y")`, `r if (r_n_tables_run == r_all_candidates) "all of them with" else paste(r_n_tables_run, "with")`
+at least 500 usable tasks. Tables with more than 5,000 respondents were subsampled to 5,000 at
 random.
 
 ### Per-table computation
@@ -509,13 +508,6 @@ $\lambda \in \{0.3, 1, 3, 10, 30, 100\}$, chosen the same way. `r nrow(irt_df)`
 of the 80 gave results; the other (`vocabulary_iq`) has six response values
 although its metadata lists two.
 
-One table is corrected before fitting. In `irw_conjoint` v3.0,
-`brazzill_2020_social_investment` recorded each respondent's third-task
-choices as copies of their second (identical in every respondent-profile pair,
-although the profiles differ). We drop that task, as v4.0 of the source does. A
-scan of every conjoint table for choices copied between adjacent tasks found no
-other case.
-
 ::: {.callout-note}
 To reproduce with current IRW holdings, re-run `conjoint_compute.R`
 and commit the updated `conjoint_data/conjoint_results.rds`. Every table is read
@@ -539,9 +531,9 @@ q1_rho <- cor(q1$imv_attr, q1$n_attr, method = "spearman")
 Across `r nrow(q1)` experiments the median IMV of the attribute model over a
 coin flip is `r round(q1_med, 2)`. In accuracy terms, the median attribute model
 predicts a held-out choice like a coin that comes up right
-`r round(100 * q1_w)`% of the time. Designs with more attributes are, if
-anything, less predictable (Spearman $\rho$ = `r round(q1_rho, 2)` between the
-IMV and the number of attributes).
+`r round(100 * q1_w)`% of the time. Designs with more attributes are not more
+predictable (Spearman $\rho$ = `r round(q1_rho, 2)` between the IMV and the
+number of attributes).
 
 ```{r}
 #| label: fig-q1
@@ -594,13 +586,15 @@ p2 <- ggplot(both, aes(imv, family, text = paste0(table, "<br>IMV = ", round(imv
 ggplotly(p2, tooltip = "text")
 ```
 
-The experiments where preferences add the most are ones where respondents take
-sides: choosing between candidates who differ by party
+Most of the experiments where preferences add the most are ones where
+respondents take sides: choosing between candidates who differ by party
 (`mummolo_2021_partisan_loyalty`, `driscoll_2023_court_curbing`) and choosing
 which side of a dispute to sympathize with (`inouye_2026_sympathies_2023` and
 `_2025`). There an attribute's average effect mixes respondents pulling in
 opposite directions, and knowing which way a given respondent leans helps
-predict their next choice.
+predict their next choice. The exception near the top is a purchase,
+`zou_2020_ev_purchase` (new and used electric cars), where buyers weigh the
+same features differently.
 
 ```{r}
 #| label: tbl-q2-top
@@ -656,10 +650,9 @@ checked by the IRW team.
 - **A random IRT sample.** The `r nrow(irt_df)` IRT tables are a random draw from
   dichotomous core tables, not matched to the conjoint experiments by sample,
   domain or length.
-- **One version of the source.** Everything here is `irw_conjoint` v3.0 (216
-  tables). Version 4.0 adds 53 experiments; rerunning on it means changing the
-  two version strings at the top of `conjoint_compute.R` once its metadata is
-  published.
+- **One version of the source.** Everything here is `irw_conjoint` v4.1 (489
+  tables). Later versions will add experiments; rerunning means changing the two
+  version strings at the top of `conjoint_compute.R`.
 - **The widget.** Its pairs are a random 400 of the 6,980 tasks, its estimator
   is a simple difference in choice rates, and the published respondents are a
   2012 sample of U.S. adults.
@@ -671,7 +664,7 @@ checked by the IRW team.
 {{< include ../components/_data-version.qmd >}}
 
 Results were computed on `r format(date_run, "%B %d, %Y")` from
-`irw_conjoint` v3.0 and `irw_meta` v38.0. To regenerate:
+`irw_conjoint` v4.1 and `irw_meta` v39.0. To regenerate:
 
 ```r
 # 1. Re-run the compute script (from the project root)
