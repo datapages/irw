@@ -85,6 +85,19 @@ season_series <- c("Baseball (MLB)", "Basketball (NBA)", "Ice hockey (NHL)",
                    "American football (NFL)", "England (all divisions)", "Italy (Serie A)")
 covid <- c(2020, 2021)
 fmt <- function(x, d = 2) formatC(x, format = "f", digits = d)
+# sport type, used to colour the league names on the y axis of the by-league figures
+group_cols <- c("North American leagues" = irw_red, "Club football" = irw_blue,
+                "Internationals and rugby" = "#1b7837")
+sport_group <- function(sport) case_when(
+  grepl("538|England and Italy", sport) ~ "Club football",
+  grepl("internationals|Rugby", sport)  ~ "Internationals and rugby",
+  TRUE                                  ~ "North American leagues")
+# plotly tick labels take a colour span; `labels` are the factor levels in axis order
+colour_y_labels <- function(fig, labels, groups) {
+  fig |> layout(yaxis = list(tickvals = seq_along(labels),
+                             ticktext = paste0("<span style=\"color:", group_cols[groups], "\">",
+                                               labels, "</span>")))
+}
 # inline values: evaluated only when the cache exists (arguments are lazy)
 iv <- function(x) if (cache_ok) x else "\u2014"
 ```
@@ -350,11 +363,13 @@ league_538 <- unit_size |>
 ```{r}
 #| label: fig-size
 #| fig-height: 5.5
-#| fig-cap: "Home side's expected share of the points against an equally strong opponent (win = 1, draw = ½), by era, ±2 SE. 50% means no home advantage. Precision-weighted over the seasons (or decades) in each era; 2020 and 2021 are left out."
+#| fig-cap: "Home side's expected share of the points against an equally strong opponent (win = 1, draw = ½), by era, ±2 SE. 50% means no home advantage. Precision-weighted over the seasons (or decades) in each era; 2020 and 2021 are left out. League names are coloured by sport type: red for the North American leagues, blue for club football, green for internationals and rugby."
 
-era_cols <- c("before 1950" = "grey70", "1950-1989" = "#92c5de", "1990-2019" = irw_blue)
+era_cols <- c("before 1950" = "grey75", "1950-1989" = "grey45", "1990-2019" = "black")
 pd <- era_size |>
-  mutate(league = factor(league, levels = rev(recent$league)),
+  left_join(distinct(summary_df, league, sport), by = "league") |>
+  mutate(group = sport_group(sport),
+         league = factor(league, levels = rev(recent$league)),
          text = paste0(league, ", ", era, "<br>h = ", fmt(h), " (SE ", fmt(h_se), ")",
                        "<br>equal teams: home win ", pct(p_win),
                        if_else(p_draw > 0.005, paste0(", draw ", pct(p_draw)), ""),
@@ -370,7 +385,10 @@ p <- ggplot(pd, aes(share, league, colour = era, text = text)) +
   scale_colour_manual(values = era_cols) +
   scale_x_continuous(labels = function(x) paste0(round(100 * x), "%")) +
   labs(x = "home side's expected share of the points, equal teams", y = NULL, colour = NULL)
-ggplotly(p, tooltip = "text") |> layout(legend = list(orientation = "h", y = -0.15))
+lab_groups <- distinct(pd, league, group) |> arrange(league)
+ggplotly(p, tooltip = "text") |>
+  layout(legend = list(orientation = "h", y = -0.15)) |>
+  colour_y_labels(as.character(lab_groups$league), lab_groups$group)
 ```
 
 ```{r}
@@ -538,11 +556,11 @@ in front of a crowd that is almost entirely its own.
 ```{r}
 #| label: fig-nocrowd
 #| fig-height: 9
-#| fig-cap: "Change in home advantage (δ, logits) in games played without crowds, by league, ±2 SE. Negative means home advantage shrank. Each estimate is net of team-season strength, from the 2016-2023 seasons."
+#| fig-cap: "Change in home advantage (δ, logits) in games played without crowds, by league, ±2 SE. Negative means home advantage shrank. Each estimate is net of team-season strength, from the 2016-2023 seasons. League names and points are coloured by sport type."
 
 nc <- nocrowd_df |>
   mutate(label = if_else(definition == "attendance column", paste(league, "(attendance)"), league),
-         group = if_else(sport == "Football (538 leagues)", "Club football", "North American leagues"),
+         group = sport_group(sport),
          text = paste0(label, "<br>δ = ", fmt(delta), " (SE ", fmt(delta_se), ")<br>h with crowds = ",
                        fmt(h), "<br>", n_nocrowd, " home games without a crowd")) |>
   arrange(delta) |>
@@ -551,9 +569,11 @@ p <- ggplot(nc, aes(delta, label, text = text, colour = group)) +
   geom_vline(xintercept = 0, colour = irw_grey) +
   geom_linerange(aes(xmin = delta - 2 * delta_se, xmax = delta + 2 * delta_se), alpha = 0.6) +
   geom_point(size = 1.5) +
-  scale_colour_manual(values = c("Club football" = irw_blue, "North American leagues" = irw_red)) +
+  scale_colour_manual(values = group_cols) +
   labs(x = "change in home advantage without crowds (δ, logits)", y = NULL, colour = NULL)
-ggplotly(p, tooltip = "text") |> layout(legend = list(orientation = "h", y = -0.08))
+ggplotly(p, tooltip = "text") |>
+  layout(legend = list(orientation = "h", y = -0.08)) |>
+  colour_y_labels(levels(nc$label), nc$group[order(nc$label)])
 ```
 
 ```{r}
