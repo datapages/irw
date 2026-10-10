@@ -3,7 +3,7 @@ title: "Conjoint Experiments as Paired Comparisons"
 description: |
   A conjoint experiment asks people to choose between pairs of randomly built
   profiles: two immigrants, two candidates, two vaccines. The usual summary is
-  the average effect of each attribute. IRW holds 489 conjoint experiments, and
+  the average effect of each attribute. IRW holds 849 conjoint experiments, and
   read as item response data each choice is a paired comparison. That lets us
   ask two measurement questions across all of them: how well do the attributes
   predict a choice nobody has seen yet, and how much do individual respondents'
@@ -374,7 +374,7 @@ offers:
 #| eval: false
 #| code-fold: false
 
-url <- paste0("https://redivis.com/api/v1/tables/datapages.irw_conjoint:v4_1.",
+url <- paste0("https://redivis.com/api/v1/tables/datapages.irw_conjoint:v4_2.",
               "hainmueller_2014_immigrant/rows?format=csv")
 hhy <- read.csv(url)
 # with a Redivis account: irw::irw_fetch("hainmueller_2014_immigrant", source = "conj")
@@ -445,7 +445,7 @@ profiles was chosen (this drops opt-out and unanswered tasks):
 #| label: filter-datasets
 #| eval: false
 
-meta <- read.csv(paste0("https://redivis.com/api/v1/tables/datapages.irw_meta:v39_0.",
+meta <- read.csv(paste0("https://redivis.com/api/v1/tables/datapages.irw_meta:v41_0.",
                         "conj_metadata/rows?format=csv"))
 candidates <- subset(meta, grepl("(^|;)choice(;|$)", outcomes) & n_profiles == 2 &
                            n_respondents * n_tasks >= 500)$table
@@ -600,13 +600,15 @@ ggplotly(p2, tooltip = "text")
 
 Most of the experiments where preferences add the most are ones where
 respondents take sides: choosing between candidates who differ by party
-(`mummolo_2021_partisan_loyalty`, `driscoll_2023_court_curbing`) and choosing
+(`titelman_2024_party_labels`, `mummolo_2021_partisan_loyalty`,
+`carey_2020_democracy_public_oct`, `driscoll_2023_court_curbing`) and choosing
 which side of a dispute to sympathize with (`inouye_2026_sympathies_2023` and
 `_2025`). There an attribute's average effect mixes respondents pulling in
 opposite directions, and knowing which way a given respondent leans helps
-predict their next choice. The exception near the top is a purchase,
-`zou_2020_ev_purchase` (new and used electric cars), where buyers weigh the
-same features differently.
+predict their next choice. The exceptions near the top are purchases:
+`zou_2020_ev_purchase` (new and used electric cars) and
+`gan_2026_alternative_meat` (plant-based and cultivated-meat burgers), where
+buyers weigh the same features differently.
 
 ```{r}
 #| label: tbl-q2-top
@@ -662,9 +664,13 @@ checked by the IRW team.
 - **A random IRT sample.** The `r nrow(irt_df)` IRT tables are a random draw from
   dichotomous core tables, not matched to the conjoint experiments by sample,
   domain or length.
-- **One version of the source.** Everything here is `irw_conjoint` v4.1 (489
-  tables). Later versions will add experiments; rerunning means changing the two
-  version strings at the top of `conjoint_compute.R`.
+- **One version of the source.** Everything here is `irw_conjoint` v4.2 and
+  `irw_conjoint_2` v1.0 (849 tables in all). Later versions will add
+  experiments; rerunning means changing the version strings at the top of
+  `conjoint_compute.R`.
+- **One table left out.** `joo_2026_descriptive_rep` meets the criteria but is
+  excluded: in its deposit every respondent's chosen candidate has the same
+  position in all six tasks, so its outcomes do not line up with its profiles.
 - **The widget.** Its pairs are a random 400 of the 6,980 tasks, its estimator
   is a simple difference in choice rates, and the published respondents are a
   2012 sample of U.S. adults.
@@ -676,7 +682,7 @@ checked by the IRW team.
 {{< include ../components/_data-version.qmd >}}
 
 Results were computed on `r format(date_run, "%B %d, %Y")` from
-`irw_conjoint` v4.1 and `irw_meta` v39.0. To regenerate:
+`irw_conjoint` v4.2, `irw_conjoint_2` v1.0 and `irw_meta` v41.0. To regenerate:
 
 ```r
 # 1. Re-run the compute script (from the project root)

@@ -39,12 +39,14 @@ library(furrr)
 
 set.seed(20261008)
 
-CONJ_VERSION  <- "irw_conjoint:v4_1"
-META_VERSION  <- "irw_meta:v39_0"
+# Conjoint spans shards (Redivis caps a dataset at 1,000 tables). Newest first:
+# a table is read from the first shard that has it, as the packages resolve names.
+CONJ_VERSIONS <- c("irw_conjoint_2:v1_0", "irw_conjoint:v4_2")
+META_VERSION  <- "irw_meta:v41_0"
 
 out_dir   <- "vignettes/conjoint_data"
 # Per-table fits are kept per source version, so a version change refits everything
-fits_dir  <- file.path(out_dir, "fits", gsub("[^A-Za-z0-9_]", "_", CONJ_VERSION))
+fits_dir  <- file.path(out_dir, "fits", gsub("[^A-Za-z0-9_]", "_", paste(CONJ_VERSIONS, collapse = "__")))
 fetch_dir <- file.path(out_dir, "fits", "rows")   # raw row cache, gitignored with fits/
 dir.create(fetch_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(fits_dir, recursive = TRUE, showWarnings = FALSE)
@@ -70,7 +72,7 @@ rows_url <- function(dataset, table, vars = NULL) {
          if (length(vars)) paste0("&selectedVariables=", paste(vars, collapse = ",")))
 }
 
-read_rows <- function(dataset, table, vars = NULL, cache = TRUE) {
+read_rows <- function(dataset, table, vars = NULL, cache = TRUE, missing_ok = FALSE) {
   f <- file.path(fetch_dir, paste0(gsub("[^A-Za-z0-9_]", "_", dataset), "__", table, ".csv.gz"))
   if (cache && file.exists(f)) return(fread(f))
   tmp <- tempfile(fileext = ".csv")
@@ -80,6 +82,7 @@ read_rows <- function(dataset, table, vars = NULL, cache = TRUE) {
     r <- tryCatch(curl::curl_fetch_disk(rows_url(dataset, table, vars), tmp, handle = h),
                   error = function(e) NULL)
     if (!is.null(r) && r$status_code == 200) break
+    if (!is.null(r) && r$status_code == 404 && missing_ok) return(NULL)
     if (!is.null(r) && r$status_code != 429) stop("HTTP ", r$status_code, " for ", table)
     Sys.sleep(3 * 2^k)
   }
@@ -87,6 +90,15 @@ read_rows <- function(dataset, table, vars = NULL, cache = TRUE) {
   d <- fread(tmp)
   if (cache) fwrite(d, f)
   d
+}
+
+# A conjoint table from whichever shard holds it (a 404 means "not in this shard").
+read_conj <- function(table) {
+  for (v in CONJ_VERSIONS) {
+    d <- read_rows(v, table, missing_ok = TRUE)
+    if (!is.null(d)) return(d)
+  }
+  stop(table, " is in none of ", paste(CONJ_VERSIONS, collapse = ", "))
 }
 
 # ==============================================================================
@@ -147,7 +159,7 @@ tasks_frame <- function(d) {
 # ==============================================================================
 
 message("A. HHY replication")
-hhy <- read_rows(CONJ_VERSION, "hainmueller_2014_immigrant")
+hhy <- read_conj("hainmueller_2014_immigrant")
 published <- fread(file.path(out_dir, "hhy_published_amce.csv"))
 
 hhy_attrs <- unique(published$attribute)
@@ -239,13 +251,18 @@ conj_bib  <- read_rows(META_VERSION, "conj_biblio", cache = FALSE)
 
 is_choice <- grepl("(^|;)choice(;|$)", conj_meta$outcomes)
 candidates <- conj_meta[is_choice & n_profiles == 2 & n_respondents * n_tasks >= MIN_TASKS]$table
+# Left out: in the deposit itself every respondent's chosen candidate has the
+# same index in all six tasks, and co-partisans are chosen 52% vs 48%. The
+# outcomes do not line up with the profiles (reported to Ben, 2026-10-10).
+EXCLUDE <- c("joo_2026_descriptive_rep")
+candidates <- setdiff(candidates, EXCLUDE)
 message("  candidates: ", length(candidates), " of ", nrow(conj_meta))
 
 conj_tables <- if (PILOT) unique(c("hainmueller_2014_immigrant", "kreps_2020_covid_vaccine",
                                     sample(setdiff(candidates, "hainmueller_2014_immigrant"), PILOT_N - 2))) else candidates
 
 fit_conj <- function(tab) {
-  d <- read_rows(CONJ_VERSION, tab)
+  d <- read_conj(tab)
   if (!all(c("id", "task", "profile", "choice") %in% names(d))) return(NULL)
   ids <- unique(d$id)
   if (length(ids) > MAX_N) d <- d[id %in% sample(ids, MAX_N)]
@@ -427,7 +444,7 @@ saveRDS(list(
   n_all_candidates = length(candidates),
   n_conj_tables    = nrow(conj_meta),
   irt_pool_n       = nrow(irt_pool),
-  versions         = c(conj = CONJ_VERSION, meta = META_VERSION),
+  versions         = c(conj = paste(CONJ_VERSIONS, collapse = " + "), meta = META_VERSION),
   pilot            = PILOT,
   date_run         = Sys.Date(),
   session          = sessionInfo()
