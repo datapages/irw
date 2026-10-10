@@ -392,6 +392,17 @@ tryCatch(
   irw_save_bibtex(unique(by_season$table), output_file = bib_file, source = "comp"),
   error = function(e) logf("bibtex generation failed:", conditionMessage(e))
 )
+# Two tables can cite one source (footbayes_england and footbayes_italy both cite
+# the footBayes package); keep one entry per distinct body so the page's
+# reference list does not repeat it.
+if (file.exists(bib_file)) {
+  bl <- readLines(bib_file)
+  starts <- grep("^@\\w+\\{", bl)
+  ends <- c(starts[-1] - 1, length(bl))
+  bodies <- vapply(seq_along(starts), function(i) paste(sub("^@\\w+\\{[^,]*,", "", bl[starts[i]:ends[i]]), collapse = "\n"), "")
+  drop <- unlist(lapply(which(duplicated(bodies)), function(i) starts[i]:ends[i]))
+  if (length(drop)) { writeLines(bl[-drop], bib_file); logf(length(which(duplicated(bodies))), "duplicate bibtex entries dropped") }
+}
 
 # Methods and literature cited on the page (checked against Crossref, 2026-10-02)
 manual_entries <- c(
