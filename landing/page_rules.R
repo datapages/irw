@@ -50,7 +50,14 @@ NONCORE <- data.frame(
   prefix  = c("simsyn",          "comps",                 "nominal",          "conj"),
   source  = c("sim",             "comp",                  "nom",              "conj"),
   stringsAsFactors = FALSE)
-PAGE_REF <- c(SHARD_REF, setNames(NONCORE$ref, NONCORE$dataset))
+# Conjoint is split across shards, because Redivis caps a dataset at 1,000
+# tables (ben-domingue/irw#2934; new tables go to the newest shard). irw_meta's
+# conj_metadata has one row per table and no shard column, so the emitter gives
+# each conj table the newest shard that lists it -- the packages resolve a name
+# the same way. NONCORE keeps only the first shard, so conj_metadata is read once.
+CONJ_SHARDS <- c(irw_conjoint = "irw_conjoint:5wjx", irw_conjoint_2 = "irw_conjoint_2:142p")
+PAGE_REF <- c(SHARD_REF, setNames(NONCORE$ref, NONCORE$dataset),
+              CONJ_SHARDS[setdiff(names(CONJ_SHARDS), NONCORE$dataset)])
 
 # The dictionary Sheets are hand-edited, so "missing" arrives in several spellings:
 # a real NA, an empty cell, or the literal text "NA" / "N/A" / "NULL". All of them
