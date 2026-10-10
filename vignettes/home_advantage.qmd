@@ -306,10 +306,12 @@ cancel and the model's prediction depends on $h$ alone.
   and the rest are draws. Home advantage moves probability from away wins to draws
   and from draws to home wins.
 
-To put every sport on one scale, we use the home side's **expected share of the
-points** for equal teams, counting a win as 1 and a draw as ½: $P(\text{home win}) +
-\tfrac{1}{2} P(\text{draw})$. It is 50% when there is no home advantage, and in a
-sport without draws it is just the home win probability. The figure shows it by
+To put every sport on one scale, we use the home side's **expected score** for
+equal teams, scoring a win as 1, a draw as ½ and a loss as 0, as in chess:
+$P(\text{home win}) + \tfrac{1}{2} P(\text{draw})$. This is a scoring of the
+outcome only; the margin of victory and the goals, runs or points scored in the game
+play no part in it or in the model. It is 50% when there is no home advantage, and
+in a sport without draws it is just the home win probability. The figure shows it by
 era; hover over a point for $h$ and the win, draw and loss probabilities behind it.
 
 ```{r}
@@ -363,7 +365,7 @@ league_538 <- unit_size |>
 ```{r}
 #| label: fig-size
 #| fig-height: 5.5
-#| fig-cap: "Home side's expected share of the points against an equally strong opponent (win = 1, draw = ½), by era. 50% means no home advantage. Precision-weighted over the seasons (or decades) in each era; 2020 and 2021 are left out. The three eras of a league are joined by a grey segment, darkest point most recent, so a dark point at the left end means home advantage has fallen; hover for the SE. League names are coloured by sport type: red for the North American leagues, blue for club football, green for internationals and rugby."
+#| fig-cap: "Home side's expected score against an equally strong opponent (win = 1, draw = ½, loss = 0), by era. 50% means no home advantage. Precision-weighted over the seasons (or decades) in each era; 2020 and 2021 are left out. The three eras of a league are joined by a grey segment, darkest point most recent, so a dark point at the left end means home advantage has fallen; hover for the SE. League names are coloured by sport type: red for the North American leagues, blue for club football, green for internationals and rugby."
 
 era_cols <- c("before 1950" = "grey75", "1950-1989" = "grey45", "1990-2019" = "black")
 pd <- era_size |>
@@ -374,7 +376,7 @@ pd <- era_size |>
                        "<br>equal teams: home win ", pct(p_win),
                        if_else(p_draw > 0.005, paste0(", draw ", pct(p_draw)), ""),
                        ", away win ", pct(p_loss),
-                       "<br>home share of points ", pct(share), " (SE ", fmt(100 * share_se, 1), " pts)",
+                       "<br>expected score ", pct(share), " (SE ", fmt(100 * share_se, 1), " pts)",
                        "<br>", n_units, if_else(grepl("intern|Rugby", league), " decades, ", " seasons, "),
                        format(n_games, big.mark = ","), " games"))
 # one row per league: the three eras sit on the same line, joined by a grey
@@ -386,7 +388,7 @@ p <- ggplot(pd, aes(share, league, text = text)) +
   geom_point(aes(colour = era), size = 2.6) +
   scale_colour_manual(values = era_cols) +
   scale_x_continuous(labels = function(x) paste0(round(100 * x), "%")) +
-  labs(x = "home side's expected share of the points, equal teams", y = NULL, colour = NULL)
+  labs(x = "home side's expected score, equal teams", y = NULL, colour = NULL)
 lab_groups <- distinct(pd, league, group) |> arrange(league)
 ggplotly(p, tooltip = "text") |>
   layout(legend = list(orientation = "h", y = -0.15)) |>
@@ -404,7 +406,7 @@ recent |>
             `Home win` = pct(p_win),
             Draw = if_else(p_draw > 0.005, pct(p_draw), "\u2014"),
             `Away win` = pct(p_loss),
-            `Home share of points` = pct(share)) |>
+            `Expected score` = pct(share)) |>
   relocate(h, .after = Series) |>
   knitr::kable(align = "lrrrrrr",
                caption = "1990-2019: home advantage h (SE), the odds ratio e^h, and what they imply for a game between two equally strong teams. A dash means the sport has (almost) no draws in this era.")
@@ -414,18 +416,17 @@ Every series has a home advantage, and they differ a great deal. In 1990-2019, t
 equally strong NBA teams would see the home side win
 `r iv(pct(r_of("Basketball (NBA)", "p_win")))` of the time; in the NFL,
 `r iv(pct(r_of("American football (NFL)", "p_win")))`. Hockey, which still had ties
-for much of this era, comes out at a home share of the points of
+for much of this era, comes out at a home expected score of
 `r iv(pct(r_of("Ice hockey (NHL)", "share")))`. Baseball's is the smallest:
 `r iv(pct(r_of("Baseball (MLB)", "p_win")))`, barely more than a coin flip. The
 largest are in international matches, rugby tests and men's football, where the
-home side takes about two-thirds of the points from an equal opponent.
+home side's expected score against an equal opponent is about two-thirds.
 
 The football numbers read differently because about a quarter to a third of games
 are drawn. Between two equal English sides, the home team wins
 `r iv(pct(r_of("England (all divisions)", "p_win")))`, the game is drawn
 `r iv(pct(r_of("England (all divisions)", "p_draw")))` and the away team wins
-`r iv(pct(r_of("England (all divisions)", "p_loss")))`. That is a home share of the
-points of `r iv(pct(r_of("England (all divisions)", "share")))`, about the same
+`r iv(pct(r_of("England (all divisions)", "p_loss")))`. That is a home expected score of `r iv(pct(r_of("England (all divisions)", "share")))`, about the same
 edge as in the NFL, even though the home side wins less than half its games. Serie A and men's
 international football are larger still: an equal visiting side wins only about one
 game in five.
@@ -433,7 +434,7 @@ game in five.
 Two cautions in reading the table. First, $h$ itself is comparable only within a
 model family. In the ordinal model a given $h$ shifts a latent scale with a draw
 band in the middle, so the same $h$ implies a smaller home *win* probability than
-it would in a sport without draws; the share of points is the comparable number.
+it would in a sport without draws; the expected score is the comparable number.
 Second, "equally strong" is a model statement. In a real league most games are not
 between equal teams, and the home side's actual win rate depends on the schedule.
 The point of $h$ is that it does not.
@@ -441,7 +442,7 @@ The point of $h$ is that it does not.
 ```{r}
 #| label: fig-size-538
 #| fig-height: 8
-#| fig-cap: "Home side's expected share of the points against an equal opponent, for the leagues in 538's club-football table (seasons 2016-2023 except 2020 and 2021), ±2 SE. All are club football, so the names take that colour."
+#| fig-cap: "Home side's expected score against an equal opponent, for the leagues in 538's club-football table (seasons 2016-2023 except 2020 and 2021), ±2 SE. All are club football, so the names take that colour."
 
 pd <- league_538 |>
   mutate(league = factor(league, levels = league),
@@ -455,7 +456,7 @@ p <- ggplot(pd, aes(share, league, text = text)) +
   geom_linerange(aes(xmin = share - 2 * share_se, xmax = share + 2 * share_se), colour = irw_blue, alpha = 0.6) +
   geom_point(colour = irw_blue, size = 1.6) +
   scale_x_continuous(labels = function(x) paste0(round(100 * x), "%")) +
-  labs(x = "home side's expected share of the points, equal teams", y = NULL)
+  labs(x = "home side's expected score, equal teams", y = NULL)
 ggplotly(p, tooltip = "text") |>
   colour_y_labels(levels(pd$league), rep("Club football", nlevels(pd$league)))
 ```
