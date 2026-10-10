@@ -104,6 +104,8 @@ Here is a first example wherein we fit an Elo model to data from the NFL.
 
 ```{r}
 #| echo: true
+#| fig-height: 9
+#| fig-width: 8
 library(elo)
 library(BradleyTerry2)
 
@@ -143,13 +145,16 @@ df_bt$agent_b <- factor(df_bt$agent_b)
 # Fit BT models by season. br = TRUE uses bias-reduced estimation: a team that
 # never won in a season (Cleveland in 2017) has no finite maximum-likelihood
 # strength, and this keeps its estimate on the same scale as everyone else.
+# Each season is a separate model with its own reference team, so the
+# coefficients are centred within season to make them comparable across years.
 bt_by_season <- lapply(split(df_bt, df_bt$season), function(season_df) {
   mod <- BTm(win, agent_a, agent_b, data = season_df, id = "team", br = TRUE)
   co <- coef(mod)
   names(co) <- gsub("team", "", names(co))
+  co <- c(co, setNames(0, setdiff(levels(season_df$agent_a), names(co))))  # the reference team
   data.frame(
     season = unique(season_df$season),
-    est = co,
+    est = co - mean(co),
     team = names(co),
     row.names = NULL
   )
@@ -158,40 +163,48 @@ bt_results <- do.call(rbind, bt_by_season)
 bt_by_team <- split(bt_results, bt_results$team)
 
 # ===== PLOTTING =====
-par(mfrow = c(2, 1), mgp = c(2.5, 0.7, 0), mar = c(4, 4, 2, 1))
+# Thirty-two labels at the right edge overwrite each other, so only the three
+# strongest and three weakest teams at the end of the window are drawn dark and
+# named; the rest are context. Labels are nudged apart where they would collide.
+spread_labels <- function(y, min_gap) {
+  o <- order(y); y_s <- y[o]
+  for (k in seq_along(y_s)[-1]) y_s[k] <- max(y_s[k], y_s[k - 1] + min_gap)
+  y[o] <- y_s; y
+}
+plot_teams <- function(by_team, xcol, ycol, min_gap, n_label = 3) {
+  final <- sapply(by_team, function(d) d[[ycol]][nrow(d)])
+  picked <- names(sort(final))[c(seq_len(n_label), length(final) - seq_len(n_label) + 1)]
+  for (team_data in by_team[setdiff(names(by_team), picked)])
+    lines(team_data[[xcol]], team_data[[ycol]], col = rgb(0, 0, 0, 0.15))
+  for (team_data in by_team[picked])
+    lines(team_data[[xcol]], team_data[[ycol]], col = rgb(0, 0, 0, 0.8), lwd = 1.5)
+  y_lab <- spread_labels(final[picked], min_gap)
+  x_lab <- sapply(by_team[picked], function(d) d[[xcol]][nrow(d)])
+  text(x_lab, y_lab, picked, pos = 4, cex = 0.7, xpd = TRUE)
+}
+
+par(mfrow = c(2, 1), mgp = c(2.5, 0.7, 0), mar = c(4, 4, 2, 2))
 
 # Plot 1: Elo ratings over time
-plot(NULL, 
+plot(NULL,
      xlim = c(0, 10),
-     ylim = c(1200,1800),
-     xlab = "Years since start of 2010 season", 
+     ylim = c(1200, 1800),
+     xlab = "Years since start of 2010 season",
      ylab = "Elo Rating",
      main = "NFL Team Elo Ratings (2010-2019)",
      xaxt = "n")
 axis(1, at = 0:10)
+plot_teams(elo_by_team, "year", "elo", min_gap = 40)
 
-for (team_data in elo_by_team) {
-  lines(team_data$year, team_data$elo, col = rgb(0, 0, 0, 0.3))
-  n <- nrow(team_data)
-  text(team_data$year[n], team_data$elo[n], team_data$team[n], 
-       pos = 4, cex = 0.6)
-}
-
-# Plot 2: Bradley-Terry coefficients by season
-plot(NULL, 
+# Plot 2: Bradley-Terry strengths by season, centred within season
+plot(NULL,
      xlim = c(2010, 2020),
-     ylim = range(bt_results$est,na.rm=TRUE),
-     xlab = "Season", 
-     ylab = "Bradley-Terry Coefficient",
+     ylim = range(bt_results$est, na.rm = TRUE) + c(-0.3, 0.6),
+     xlab = "Season",
+     ylab = "Strength (season-centred)",
      main = "NFL Team Strength by Season (Bradley-Terry Model)",
      xaxt = "n")
 axis(1, at = 2010:2019)
-
-for (team_data in bt_by_team) {
-  lines(team_data$season, team_data$est, col = rgb(0, 0, 0, 0.3))
-  n <- nrow(team_data)
-  text(team_data$season[n], team_data$est[n], team_data$team[n], 
-       pos = 4, cex = 0.6)
-}
+plot_teams(bt_by_team, "season", "est", min_gap = 0.4)
 ```
 :::
