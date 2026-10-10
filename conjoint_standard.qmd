@@ -131,20 +131,83 @@ irw.save_bibtex(["kreps_2020_covid_vaccine"], source="conj", output_file="conjoi
 ```
 :::
 
+## What the family holds
+
+{{< include _load-family-meta.qmd >}}
+
+```{r}
+#| label: conj-descriptives
+conj <- irw_meta_table("conj_metadata")
+outc <- irw_meta_table("conj_outcomes")
+for (v in c("n_respondents", "n_rows", "n_tasks", "n_profiles", "n_attributes")) conj[[v]] <- as.numeric(conj[[v]])
+n_conj       <- nrow(conj)
+n_resp_conj  <- sum(conj$n_respondents, na.rm = TRUE)
+n_judgements <- sum(conj$n_rows, na.rm = TRUE)
+med_resp     <- median(conj$n_respondents, na.rm = TRUE)
+
+## Outcome types: a table counts once per TYPE it has, not once per outcome
+## column (a design with four choice questions is still "choice").
+types_by_table <- tapply(outc$type, outc$table, function(x) sort(unique(x)))
+has_choice <- vapply(types_by_table, function(x) "choice" %in% x, logical(1))
+has_rating <- vapply(types_by_table, function(x) "rating" %in% x, logical(1))
+n_choice_only <- sum(has_choice & !has_rating)
+n_rating_only <- sum(!has_choice & has_rating)
+n_both        <- sum(has_choice & has_rating)
+
+## Countries: a multi-country study lists each code separated by ";", and
+## counts once for each. "unknown" is left out of the distinct count.
+country_long <- trimws(unlist(strsplit(as.character(conj$country), ";")))
+country_long <- country_long[!is.na(country_long) & country_long != "" & country_long != "unknown"]
+n_countries  <- length(unique(country_long))
+country_top  <- sort(table(country_long), decreasing = TRUE)[1:10]
+n_lang       <- length(setdiff(unique(trimws(unlist(strsplit(as.character(conj$display_language), ";")))),
+                               c("", "unknown", NA)))
+share_paired <- mean(conj$n_profiles == 2, na.rm = TRUE)
+share_single <- mean(conj$n_profiles == 1, na.rm = TRUE)
+```
+
+The family holds `r n_conj` tables: `r fmt_big(n_resp_conj)` respondents who together made `r fmt_big(n_judgements)` profile judgements. The median study has `r fmt_n(med_resp)` respondents. `r n_choice_only` tables record a choice between profiles only, `r n_rating_only` a rating of each profile only, and `r n_both` record both. Most designs show profiles in pairs (`r round(100 * share_paired)`% of tables have two profiles per task; `r round(100 * share_single)`% show one profile at a time), with around five tasks per respondent and six or seven randomised attributes. The experiments were fielded in `r n_countries` countries and displayed to respondents in `r n_lang` languages, so attribute labels in the tables are not all in English. Each table's design is described in `irw_metadata(source = "conj")`, and the `outcome` and `country` filters in `irw_filter()` select on the quantities summarised here.
+
+```{r}
+#| label: fig-conj-design
+#| fig-cap: "Conjoint tables by tasks per respondent, profiles per task and attributes per design."
+#| fig-height: 3.4
+#| fig-width: 9
+par(mfrow = c(1, 3))
+family_bar(table(cut(conj$n_tasks, c(0, 1, 2, 4, 6, 10, Inf), labels = c("1", "2", "3-4", "5-6", "7-10", "11+"), right = TRUE)),
+           xlab = "Tasks per respondent")
+family_bar(table(cut(conj$n_profiles, c(0, 1, 2, Inf), labels = c("1", "2", "3+"), right = TRUE)),
+           xlab = "Profiles per task")
+family_bar(table(cut(conj$n_attributes, c(0, 3, 5, 7, 9, Inf), labels = c("2-3", "4-5", "6-7", "8-9", "10+"), right = TRUE)),
+           xlab = "Attributes per design")
+```
+
+```{r}
+#| label: fig-conj-country
+#| fig-cap: "The ten countries with the most conjoint tables. A study fielded in several countries counts once for each."
+#| fig-height: 3.4
+#| fig-width: 7
+family_bar(country_top, xlab = "Country (ISO code)")
+```
+
 ## An example
 
 Bansak, Hainmueller and Hangartner (2016) asked 18,021 voters in 15 European countries to compare pairs of hypothetical asylum seekers. The average marginal component effect (AMCE) of an attribute level is the change in the probability that a profile is chosen when the attribute takes that level rather than a baseline, averaged over the other attributes. With the paper's baselines and its survey weights (top-coded at 6), a linear probability model on the IRW table gives the same AMCEs the paper reports: +0.13 for a doctor and +0.09 for a teacher (against unemployed), −0.11 for a Muslim (against Christian), and −0.15 for an economic migrant (against political persecution).
 
 ```{r}
-#| eval: false
+#| label: conj-example
 #| echo: true
+#| code-fold: false
+library(irw)
 d <- irw_fetch("bansak_2016_asylum", source = "conj")
 d$attr_occupation <- relevel(factor(d$attr_occupation), "Unemployed")
 d$attr_religion   <- relevel(factor(d$attr_religion), "Christian")
 d$attr_reason     <- relevel(factor(d$attr_reason), "Persecution for political views")
 fit <- lm(choice ~ attr_occupation + attr_religion + attr_reason, data = d,
           weights = pmin(cov_survey_weight, 6))
-coef(fit)
+# Standard errors clustered by respondent: each respondent made several choices.
+se <- sqrt(diag(sandwich::vcovCL(fit, cluster = ~id)))
+round(cbind(AMCE = coef(fit), SE = se), 3)
 ```
 
-The standard errors should be clustered by respondent, for example with `sandwich::vcovCL(fit, cluster = ~id)`, because each respondent made several choices.
+The estimates are computed from the IRW table when this page is built, so they can be checked against the paper.

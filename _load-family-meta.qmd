@@ -1,0 +1,40 @@
+```{r}
+#| label: load-family-meta
+#| include: false
+
+## Shared by the competitions, nominal and conjoint standards pages: each reads
+## its family's metadata table from the published irw_meta and summarises it in
+## a "What the family holds" section. Read from Redivis directly, by NAME (ids
+## rotate on every release, see _load-data-explore.qmd) and not through the irw
+## package, so the pages do not depend on the package version renv.lock pins.
+##
+## Failure: in CI a failed read stops the render, as landing/hero_stats.R does,
+## so a broken token cannot publish a page with empty descriptives. Locally it
+## errors too -- these sections have no fallback numbers to go stale.
+library(redivis)
+
+irw_meta_table <- function(name) {
+  tbl <- redivis$user("datapages")$dataset("irw_meta:bdxt")$table(name)
+  as.data.frame(tbl$to_tibble())
+}
+
+## Plain-language counts for the prose: "15.6 million", "1,747,349", "806".
+fmt_n <- function(x) format(round(x), big.mark = ",", scientific = FALSE, trim = TRUE)
+fmt_big <- function(x) {
+  if (x >= 1e9) return(paste0(format(round(x / 1e9, 1), nsmall = 1), " billion"))
+  if (x >= 1e6) return(paste0(format(round(x / 1e6, 1), nsmall = 1), " million"))
+  fmt_n(x)
+}
+
+## One muted fill for every bar on these pages: each chart shows one series, so
+## colour carries no identity and the number labels do the talking.
+family_fill <- "#5b6b86"
+family_bar <- function(counts, xlab, main = NULL) {
+  op <- par(mar = c(4, 4, if (is.null(main)) 1 else 2.5, 1), mgp = c(2.4, 0.7, 0))
+  on.exit(par(op))
+  b <- barplot(counts, col = family_fill, border = NA, ylim = c(0, max(counts) * 1.15),
+               xlab = xlab, ylab = "Tables", main = main, las = 1, cex.names = 0.75)
+  text(b, counts, labels = counts, pos = 3, cex = 0.8, xpd = TRUE)
+  invisible(b)
+}
+```

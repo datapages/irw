@@ -22,6 +22,35 @@ branch.
 
 Documentation related to the tables can be found [here](https://docs.google.com/spreadsheets/d/12tM4vADKcUm5LGOGRwQ5_HKkdYa3mZUaKbFUqgs2U_w/edit?gid=0#gid=0).
 
+## What the family holds
+
+{{< include _load-family-meta.qmd >}}
+
+```{r}
+#| label: nominal-descriptives
+nom <- irw_meta_table("nominal_metadata")
+for (v in c("n_responses", "n_participants", "n_items", "n_categories")) nom[[v]] <- as.numeric(nom[[v]])
+n_nom       <- nrow(nom)
+n_nom_resp  <- sum(nom$n_responses, na.rm = TRUE)
+n_nom_items <- sum(nom$n_items, na.rm = TRUE)
+is_enem     <- grepl("^enem", nom$table, ignore.case = TRUE)
+n_enem      <- sum(is_enem)
+share_enem  <- sum(nom$n_responses[is_enem], na.rm = TRUE) / n_nom_resp
+n_open      <- sum(nom$n_categories > 20, na.rm = TRUE)
+cat_counts  <- table(cut(nom$n_categories, breaks = c(0, 3, 4, 5, 6, 7, 10, 20, Inf),
+                         labels = c("3", "4", "5", "6", "7", "8-10", "11-20", "20+"), right = TRUE))
+```
+
+The family holds `r n_nom` tables, `r fmt_big(n_nom_resp)` responses to `r fmt_n(n_nom_items)` items. One source dominates: the `r n_enem` ENEM tables (Brazil's national secondary exam, one table per year and test booklet, each holding the letter every candidate marked) account for `r round(100 * share_enem)`% of the responses. The remaining tables are smaller and more varied: option-level records of multiple-choice tests, stimulus-identification tasks, and `r n_open` tables of constructed responses (essays, free-text answers, drawn responses) where the number of distinct categories runs into the hundreds or thousands because nearly every response is unique. Each table's own counts are in `irw_metadata(source = "nom")`.
+
+```{r}
+#| label: fig-nominal-categories
+#| fig-cap: "Nominal tables by number of distinct response categories. The 20+ group is the constructed-response tables."
+#| fig-height: 3.4
+#| fig-width: 7
+family_bar(cat_counts, xlab = "Distinct response categories per table")
+```
+
 ## An example
 
 Let's look at an example of how we can fit the nominal response model to a table (`preference_inventory_nom`) from the nominal branch of the IRW and generated category response functions for all items.
