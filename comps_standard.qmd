@@ -59,6 +59,42 @@ head(df)
 
 Documentation related to the tables (including table names as with `collegefb_2021and2022`) can be found [here](https://docs.google.com/spreadsheets/d/1WZZYyVC2cmw8CUJM69qP0F_ZlQjQfdkCZbdsG-8mUrs/edit?usp=sharing).
 
+## What the family holds
+
+{{< include _load-family-meta.qmd >}}
+
+```{r}
+#| label: comps-descriptives
+comps <- irw_meta_table("comps_metadata")
+comps$n_responses <- as.numeric(comps$n_responses)
+comps$n_actors    <- as.numeric(comps$n_actors)
+n_comps      <- nrow(comps)
+n_contests   <- sum(comps$n_responses, na.rm = TRUE)
+med_contests <- median(comps$n_responses, na.rm = TRUE)
+med_actors   <- median(comps$n_actors, na.rm = TRUE)
+n_kaggle     <- sum(grepl("^metakaggle_", comps$table))
+share_kaggle <- sum(comps$n_responses[grepl("^metakaggle_", comps$table)], na.rm = TRUE) / n_contests
+```
+
+The family holds `r n_comps` tables and `r fmt_big(n_contests)` contests in all. Tables range widely in size: the median table has `r fmt_n(med_contests)` contests between `r fmt_n(med_actors)` competitors, while the largest, Kaggle simulation leaderboards drawn from Meta Kaggle (`r n_kaggle` tables), hold millions of games each and account for `r round(100 * share_kaggle)`% of all contests. Each table's own counts are in `irw_metadata(source = "comp")` (columns `n_responses` and `n_actors`).
+
+```{r}
+#| label: fig-comps-sizes
+#| fig-cap: "Competition tables by number of contests and number of competitors (both on a log scale)."
+#| fig-height: 3.6
+#| fig-width: 9
+size_bucket <- function(x, breaks, labels) {
+  table(cut(x, breaks = breaks, labels = labels, right = FALSE))
+}
+par(mfrow = c(1, 2))
+family_bar(size_bucket(comps$n_responses, c(0, 1e3, 1e4, 1e5, 1e6, Inf),
+                       c("<1K", "1K-10K", "10K-100K", "100K-1M", "1M+")),
+           xlab = "Contests per table")
+family_bar(size_bucket(comps$n_actors, c(0, 10, 100, 1e3, 1e4, Inf),
+                       c("<10", "10-100", "100-1K", "1K-10K", "10K+")),
+           xlab = "Competitors per table")
+```
+
 ## An example
 
 Here is a first example wherein we fit an Elo model to data from the NFL.
