@@ -439,7 +439,7 @@ The point of $h$ is that it does not.
 ```{r}
 #| label: fig-size-538
 #| fig-height: 8
-#| fig-cap: "Home side's expected share of the points against an equal opponent, for the leagues in 538's club-football table (seasons 2016-2023 except 2020 and 2021), ±2 SE."
+#| fig-cap: "Home side's expected share of the points against an equal opponent, for the leagues in 538's club-football table (seasons 2016-2023 except 2020 and 2021), ±2 SE. All are club football, so the names take that colour."
 
 pd <- league_538 |>
   mutate(league = factor(league, levels = league),
@@ -454,7 +454,8 @@ p <- ggplot(pd, aes(share, league, text = text)) +
   geom_point(colour = irw_blue, size = 1.6) +
   scale_x_continuous(labels = function(x) paste0(round(100 * x), "%")) +
   labs(x = "home side's expected share of the points, equal teams", y = NULL)
-ggplotly(p, tooltip = "text")
+ggplotly(p, tooltip = "text") |>
+  colour_y_labels(levels(pd$league), rep("Club football", nlevels(pd$league)))
 ```
 
 The same measure across `r iv(nrow(league_538))` club leagues in the late 2010s
