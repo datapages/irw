@@ -140,9 +140,11 @@ df_bt$win <- as.numeric(df_bt$winner == 'agent_a')
 df_bt$agent_a <- factor(df_bt$agent_a)
 df_bt$agent_b <- factor(df_bt$agent_b)
 
-# Fit BT models by season
+# Fit BT models by season. br = TRUE uses bias-reduced estimation: a team that
+# never won in a season (Cleveland in 2017) has no finite maximum-likelihood
+# strength, and this keeps its estimate on the same scale as everyone else.
 bt_by_season <- lapply(split(df_bt, df_bt$season), function(season_df) {
-  mod <- BTm(win, agent_a, agent_b, data = season_df, id = "team")
+  mod <- BTm(win, agent_a, agent_b, data = season_df, id = "team", br = TRUE)
   co <- coef(mod)
   names(co) <- gsub("team", "", names(co))
   data.frame(
