@@ -363,7 +363,7 @@ league_538 <- unit_size |>
 ```{r}
 #| label: fig-size
 #| fig-height: 5.5
-#| fig-cap: "Home side's expected share of the points against an equally strong opponent (win = 1, draw = ½), by era, ±2 SE. 50% means no home advantage. Precision-weighted over the seasons (or decades) in each era; 2020 and 2021 are left out. League names are coloured by sport type: red for the North American leagues, blue for club football, green for internationals and rugby."
+#| fig-cap: "Home side's expected share of the points against an equally strong opponent (win = 1, draw = ½), by era. 50% means no home advantage. Precision-weighted over the seasons (or decades) in each era; 2020 and 2021 are left out. The three eras of a league are joined by a grey segment, darkest point most recent, so a dark point at the left end means home advantage has fallen; hover for the SE. League names are coloured by sport type: red for the North American leagues, blue for club football, green for internationals and rugby."
 
 era_cols <- c("before 1950" = "grey75", "1950-1989" = "grey45", "1990-2019" = "black")
 pd <- era_size |>
@@ -374,14 +374,16 @@ pd <- era_size |>
                        "<br>equal teams: home win ", pct(p_win),
                        if_else(p_draw > 0.005, paste0(", draw ", pct(p_draw)), ""),
                        ", away win ", pct(p_loss),
-                       "<br>home share of points ", pct(share),
+                       "<br>home share of points ", pct(share), " (SE ", fmt(100 * share_se, 1), " pts)",
                        "<br>", n_units, if_else(grepl("intern|Rugby", league), " decades, ", " seasons, "),
                        format(n_games, big.mark = ","), " games"))
-p <- ggplot(pd, aes(share, league, colour = era, text = text)) +
+# one row per league: the three eras sit on the same line, joined by a grey
+# segment, with the most recent era darkest; the SEs are in the hover text
+pd <- arrange(pd, league, era)
+p <- ggplot(pd, aes(share, league, text = text)) +
   geom_vline(xintercept = 0.5, colour = irw_grey) +
-  geom_linerange(aes(xmin = share - 2 * share_se, xmax = share + 2 * share_se),
-                 position = position_dodge(width = 0.6)) +
-  geom_point(size = 2, position = position_dodge(width = 0.6)) +
+  geom_path(aes(group = league), colour = "grey70", linewidth = 0.8) +
+  geom_point(aes(colour = era), size = 2.6) +
   scale_colour_manual(values = era_cols) +
   scale_x_continuous(labels = function(x) paste0(round(100 * x), "%")) +
   labs(x = "home side's expected share of the points, equal teams", y = NULL, colour = NULL)
