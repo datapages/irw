@@ -428,6 +428,37 @@ message("  conjoint tables with results: ", nrow(conj_summary), " of ", length(c
 message("  IRT tables with results: ", nrow(irt_summary), " of ", nrow(irt_tables))
 
 # ==============================================================================
+# 4. One divisive attribute: how consistently respondents pick a side
+# ==============================================================================
+
+# For the tables the page singles out, the share of respondents (with at least
+# three tasks where the two profiles differ on the attribute) who chose a given
+# side in at least `at_least` of those tasks. Study-specific by design; this is
+# evidence for one paragraph, not a general detector.
+side_rate <- function(d, attr, side, at_least = 1) {
+  d <- as.data.table(d)[!is.na(get(attr))]
+  d[, differs := .N == 2 && uniqueN(get(attr)) == 2 && any(get(attr) == side), by = .(id, task)]
+  ch <- d[differs == TRUE & choice == 1]
+  ch[, pick := get(attr) == side]
+  r <- ch[, .(rate = mean(pick), n = .N), by = id][n >= 3]
+  list(n = nrow(r), share = mean(r$rate >= at_least), never = mean(r$rate == 0))
+}
+sides <- tryCatch({
+  ti <- read_conj("titelman_2024_party_labels")
+  ti <- ti[trial_party_label == "Party Label" & cov_party_id_code %in% c(1, 2)]
+  ti[, own := fifelse(cov_party_id_code == 1, "Conservative Party", "Labour Party")]
+  ti[, same := attr_party == own]
+  ti_r <- side_rate(ti[, .(id, task, choice, attr_party = fifelse(same, "own", "other"))], "attr_party", "own", 0.9)
+  zou <- side_rate(read_conj("zou_2020_ev_purchase"), "attr_option", "EV")
+  gan <- read_conj("gan_2026_alternative_meat")
+  list(titelman_own_party = ti_r,
+       zou_ev    = zou,
+       gan_normal   = side_rate(gan, "attr_type", "Normal"),
+       gan_cultured = side_rate(gan, "attr_type", "Cell-cultured"))
+}, error = function(e) { message("  sides: ", conditionMessage(e)); NULL })
+str(sides)
+
+# ==============================================================================
 # Save combined output and references
 # ==============================================================================
 
@@ -438,6 +469,7 @@ saveRDS(list(
   hhy_amce         = as_tibble(hhy_amce),
   widget_tasks     = as_tibble(widget_tasks),
   support          = support,
+  sides            = sides,
   summary          = as_tibble(conj_summary),
   irt_summary      = as_tibble(irt_summary),
   candidate_tables = candidates,

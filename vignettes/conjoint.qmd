@@ -49,6 +49,7 @@ if (cache_ok) {
   widget_tasks     <- .cache$widget_tasks
   support          <- .cache$support
   candidate_tables <- .cache$candidate_tables
+  sides            <- .cache$sides
   date_run         <- .cache$date_run
   is_pilot         <- isTRUE(.cache$pilot)
   r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
@@ -575,21 +576,41 @@ p2 <- ggplot(both, aes(imv, family, text = paste0(table, "<br>IMV = ", round(imv
 ggplotly(p2, tooltip = "text")
 ```
 
+```{r}
+#| label: side-txt
+#| echo: false
+
+# Prose for a share of respondents; a missing value (cache built without the
+# check) prints a placeholder rather than failing the render.
+side_txt <- function(x) {
+  if (is.null(x) || is.na(x)) return("[share unavailable]")
+  if (x >= 0.65 && x < 0.75) return("seven in ten")
+  if (x >= 0.3 && x < 0.37) return("a third")
+  if (x >= 0.22 && x < 0.3) return("a quarter")
+  if (x >= 0.18 && x < 0.22) return("a fifth")
+  if (x >= 0.15 && x < 0.18) return("a sixth")
+  if (x >= 0.11 && x < 0.15) return("an eighth")
+  paste0(round(100 * x), "%")
+}
+```
+
 Why do preferences matter so much more in some experiments than in others? Look
 at what the tables near the top have in common. Each has one attribute that
 splits the sample. In `titelman_2024_party_labels` it is the candidate's
-party: among respondents who identify as Conservative or Labour, seven in ten
-chose their own party's candidate in at least nine of every ten tasks where
-the label was shown. `mummolo_2021_partisan_loyalty`,
+party: among respondents who identify as Conservative or Labour,
+`r side_txt(sides$titelman_own_party$share)` chose their own party's candidate
+in at least nine of every ten tasks where the label was shown. `mummolo_2021_partisan_loyalty`,
 `carey_2020_democracy_public_oct` and `driscoll_2023_court_curbing` also put a
 party label on candidates, and `inouye_2026_sympathies_2023` and `_2025` ask
 which side of a dispute deserves sympathy. The two purchase studies look
 different but work the same way. In `zou_2020_ev_purchase` the attribute is
-whether the car is electric or gasoline: a fifth of respondents chose the
-electric car every time the pair differed on it, and a sixth never did. In
+whether the car is electric or gasoline: `r side_txt(sides$zou_ev$share)` of
+respondents chose the electric car every time the pair differed on it, and
+`r side_txt(sides$zou_ev$never)` never did. In
 `gan_2026_alternative_meat` it is whether the burger is conventional,
-plant-based or cell-cultured: a quarter always took the conventional burger,
-and a quarter never took the cultured one.
+plant-based or cell-cultured: `r side_txt(sides$gan_normal$share)` always took
+the conventional burger, and `r side_txt(sides$gan_cultured$never)` never took
+the cultured one.
 
 An attribute like this does little for the average effect. When half the
 sample pulls one way and half the other, the AMCE sits near zero, and the
