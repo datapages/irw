@@ -365,41 +365,15 @@ a conjoint usually asks for. That point returns below.
 
 The IRW table `hainmueller_2014_immigrant` has one row per respondent, task
 and profile, with the respondent's choice and the profile's attributes in
-`attr_*` columns. It can be read without a Redivis account, from the same
-link its [table page](https://itemresponsewarehouse.org/tables/hainmueller_2014_immigrant/)
-offers:
-
-```{r}
-#| label: read-hhy
-#| eval: false
-#| code-fold: false
-
-url <- paste0("https://redivis.com/api/v1/tables/datapages.irw_conjoint:v4_2.",
-              "hainmueller_2014_immigrant/rows?format=csv")
-hhy <- read.csv(url)
-# with a Redivis account: irw::irw_fetch("hainmueller_2014_immigrant", source = "conj")
-```
-
-The AMCEs come from a linear probability model of the choice on every
-attribute, with standard errors clustered by respondent. Two combinations
-could never appear (the four high-skill professions without at least two years
-of college, and fleeing persecution from the six countries other than China,
-Sudan, Somalia and Iraq), so those two pairs of attributes get an interaction
-and each level's effect is averaged over the levels of its partner where both
-it and the baseline could occur. This is what the `cjoint` package does.
-
-```{r}
-#| label: hhy-model
-#| eval: false
-
-fit <- lm(choice ~ attr_education + attr_gender + attr_origin + attr_application_reason +
-            attr_profession + attr_job_experience + attr_job_plans + attr_prior_trips +
-            attr_language + attr_education:attr_profession +
-            attr_origin:attr_application_reason, data = hhy)
-V <- sandwich::vcovCL(fit, cluster = ~ id, type = "HC1")
-# then, for a restricted attribute, AMCE = main effect + the mean of its
-# interaction terms over the partner levels where it and the baseline can occur
-```
+`attr_*` columns. The [conjoint standard](../conjoint_standard.qmd) shows how
+to read such a table and fit the linear probability model, with standard
+errors clustered by respondent, that gives the AMCEs. This study needs one
+extra step: two combinations could never appear (the four high-skill
+professions without at least two years of college, and fleeing persecution
+from the six countries other than China, Sudan, Somalia and Iraq), so those two
+pairs of attributes get an interaction and each level's effect is averaged
+over the levels of its partner where both it and the baseline could occur,
+as the `cjoint` package does.
 
 ```{r}
 #| label: hhy-check
@@ -438,8 +412,11 @@ introduces:
 
 The IRW conjoint source holds `r r_n_conj` tables in version 4.1, which this page uses. We use
 those with a forced choice between exactly two profiles and at least 500
-usable tasks, where a usable task is one in which exactly one of the two
-profiles was chosen (this drops opt-out and unanswered tasks):
+usable tasks. A task is one choice screen: a respondent sees a pair of
+profiles and picks one, so a study with 1,000 respondents who each saw five
+pairs has 5,000 tasks. A usable task is one in which exactly one of the two
+profiles was chosen, which drops opt-outs and unanswered screens. The 500 is a
+total over all respondents, not a count per respondent:
 
 ```{r}
 #| label: filter-datasets
