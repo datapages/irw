@@ -14,6 +14,80 @@ This log begins in September 2026, when the page was created. The IRW is older
 than the log, and changes before then are recorded only in the repositories'
 commit history and in the versioned data itself.
 
+## 2026-10-11 — Conjoint data outgrew one dataset
+
+`irw_conjoint` is close to Redivis' limit of 1000 tables per dataset, so new
+conjoint experiments now go to a second dataset, `irw_conjoint_2`, which went
+live on 2026-10-09 and has been filling since; the first keeps the tables it
+already has. Conjoint is therefore a shard list, the arrangement core response
+data and item text already use: you never name a shard, you fetch a table by
+name with `source = "conj"` and the package resolves it, newest dataset first.
+The data are the same kind as before — respondents choosing between or rating
+randomly assembled profiles, mostly from replication deposits — and
+[the conjoint standard](conjoint_standard.qmd) describes the layout.
+
+Reading both datasets needs a package built from main. The released Python
+package, 0.7.4, knows only the first, so a table that lives in `irw_conjoint_2`
+is invisible to it; the R package's conjoint support has only ever been on
+main, where both datasets are registered. Until a Python release catches up,
+install from GitHub if you want the whole family.
+
+## 2026-10-10 — Conjoint tables get pages, and the standards pages say what each family holds
+
+Conjoint tables now have their own pages in the [/tables/](/tables/) index,
+built from the conjoint metadata. They are sized by rows, respondents, tasks,
+profiles and attributes rather than by items, and each carries a Design section
+giving the country, the languages, the randomization restrictions and every
+outcome's wording and scale. Tables in both conjoint datasets are covered: a
+table is listed under the newest dataset that holds it, the way the packages
+resolve a name.
+
+The competition, nominal and conjoint standards pages each gained a "What the
+family holds" section, read from that family's metadata table when the page is
+built, so it reports what is published rather than a figure typed in by hand;
+nothing on the site summarised these families before. The homepage banner's
+table line now counts conjoint tables alongside the competition and nominal
+ones. See [the competition standard](comps_standard.qmd),
+[the nominal data standard](nominal_standard.qmd) and
+[the conjoint standard](conjoint_standard.qmd).
+
+## 2026-10-10 — Four new analysis pages
+
+Three of them use competition and sports-trial data.
+[Are Competitions Transitive?](./vignettes/intransitivity.qmd) asks whether A
+beating B and B beating C tells you anything about A against C, across a
+century of team sports, Lichess chess, game-playing bots, human judgments and
+animal dominance, and shows why counting cycles — or a naive bootstrap —
+misleads.
+[Home Advantage](./vignettes/home_advantage.qmd) fits a Bradley-Terry model
+with a home term to every season back to the 1870s, asks whether the advantage
+has declined net of team strength, and measures how much of it vanished when
+the 2020-21 seasons were played in empty stadiums.
+[Who Takes the Hard Shot?](./vignettes/sports_trials.qmd) treats shots, kicks,
+passes and map-practice trials as items and finds that adjusting for which
+attempt was taken can hide skill in one sport and inflate it in another.
+
+The fourth,
+[Extending Algorithm Selection for Class Detection to Item Response Data](analysis/plenitude_replication.qmd),
+applies Sotoudeh and DiMaggio's (2021) released code and fitted models —
+trained on simulated survey modules — to 117 IRW tables. Their predictions
+track the validity criteria about as well as on the original data, but they
+nominate the same method for most tables, so the substantive claim carries over
+and the fitted prediction step does not.
+
+## 2026-10-08 — An assistant can reach every data family
+
+Python package 0.7.4. The MCP server was core-only; now `describe_table`,
+`fetch_table` and `get_citation` work out a table's data family from its name —
+names are unique across families — and report which family it came from, and
+`search_tables` takes a `source`. An assistant pointed at the server can
+therefore describe and fetch a competition, nominal, simulated or conjoint
+table, not only a core one. The two views that assume the core id/item/resp
+layout, wide and de-duplicated, are refused off core with a message saying so,
+and the server's filters stay core-only. `info()` in the Python API takes
+`source` for every family as well. Setup is on
+[Using an AI Assistant](agents.qmd).
+
 ## 2026-10-08 — Conjoint experiments, and five data families
 
 A new Redivis dataset, `irw_conjoint` (v3.0), holds 216 conjoint experiments,
@@ -30,6 +104,19 @@ With conjoint, the response data come in five *data families*: core, nominal,
 competitions, simulated and synthetic, and conjoint. The
 [standards overview](overview.qmd#families) defines them. The competition,
 nominal and conjoint standards are no longer labelled experimental. Refs #2887.
+
+## 2026-10-07 — Reading the warehouse needs a Redivis login, in R too
+
+In late September this site said the R package could read IRW data without a
+Redivis login. That was wrong: the test behind the claim used a cached login
+without knowing it, and an anonymous check on 2026-10-07 gets 401 on the
+dataset reads the package makes. The claim is reverted here and in the R
+package's README. Both packages and the MCP server need a free Redivis account,
+and a script or CI job needs a cached login or `REDIVIS_API_TOKEN`.
+
+One path genuinely needs no account: downloading a table under 100 MB as a CSV
+from its page on this site, which [Getting Started](getstarted.qmd) now says
+alongside the rest.
 
 ## 2026-10-05 — ENEM 2024 and 2025 ids corrected
 
