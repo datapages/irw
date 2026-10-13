@@ -2046,31 +2046,37 @@ categories are all in use, keeps
 ```{r}
 #| label: poly-dich-scatter
 #| eval: !expr poly_ok && !is.null(extra)
-#| fig-height: 5.2
-#| fig-width: 7
+#| fig-height: 6
+#| fig-width: 7.5
 
 sc <- bind_rows(
   dich |> transmute(table, I_X, I_dich, K = vapply(table, function(t) max(poly$items$K[poly$items$table == t]), numeric(1)),
                     n_items = vapply(table, function(t) poly$summary$n_items[poly$summary$table == t][1], numeric(1)), showcase = TRUE),
   ex_dich |> left_join(extra$tables |> select(table, K, n_items), by = "table") |> transmute(table, I_X, I_dich, K, n_items, showcase = FALSE)
-) |> mutate(share = I_dich / I_X, label = ifelse(showcase, poly_short[table], NA))
+) |> mutate(share = I_dich / I_X,
+            tip = sprintf("<b>%s</b>%s<br>%d items, %d categories<br>all categories kept: %s bits<br>every item cut to two: %s bits<br>kept: %s",
+                          table, ifelse(showcase, paste0(" (", poly_short[table], ")"), ""), n_items, K,
+                          fmt(I_X), fmt(I_dich), scales::percent(share, accuracy = 1)))
 lim <- c(0, max(sc$I_X) * 1.05)
-ggplot(sc, aes(I_X, I_dich)) +
+g_sc <- ggplot(sc, aes(I_X, I_dich)) +
   geom_abline(slope = 1, intercept = 0, colour = "grey60", linetype = "dashed") +
   geom_abline(slope = median(sc$share), intercept = 0, colour = "grey80") +
-  geom_point(aes(size = n_items, colour = factor(K)), alpha = 0.85) +
-  geom_text(aes(label = label), na.rm = TRUE, size = 3.6, colour = "grey20", hjust = -0.25, vjust = 0.5) +
+  geom_point(aes(size = n_items, colour = factor(K), text = tip), alpha = 0.85) +
   scale_colour_viridis_d(name = "categories", end = 0.85) +
-  scale_size_continuous(name = "items", range = c(1.8, 5), breaks = c(5, 10, 15)) +
+  scale_size_continuous(range = c(1.8, 5), guide = "none") +
   coord_equal(xlim = lim, ylim = lim) +
-  labs(x = "I(θ; X), all categories kept (bits)", y = "I(θ; X), every item cut to two at its best split (bits)",
-       title = wrap(sprintf("Dichotomising every item keeps a median %s of a test's bits across %d tables",
-                            scales::percent(median(sc$share), accuracy = 1), nrow(sc)), 58),
-       subtitle = wrap("Dashed: nothing lost. Solid grey: the median share. Tests with more categories per item sit no further from the line than four-category tests.", 75)) +
-  theme(legend.position = "right")
+  labs(x = "I(θ; X), all categories kept (bits)", y = "I(θ; X), every item cut to two (bits)",
+       title = sprintf("Dichotomising every item keeps a median %s of a test's bits across %d tables",
+                       scales::percent(median(sc$share), accuracy = 1), nrow(sc)))
+g_sc <- wl(g_sc, 60)
+ggplotly(g_sc, tooltip = "text") |>
+  layout(title = list(text = paste0("<b>", gsub("\n", "<br>", g_sc$labels$title), "</b>"), x = 0, xanchor = "left",
+                      font = list(size = 15)), margin = list(t = 70),
+         hoverlabel = list(align = "left"))
 ```
 
-The scatter puts the same losses on the absolute scale. The gap to the dashed
+The scatter puts the same losses on the absolute scale (dashed line: nothing
+lost; solid grey: the median share; hover over a dot for the table; larger dots are longer tests). The gap to the dashed
 line is I(θ; X | dichotomised X), the information in the merged distinctions
 that the other items do not already repeat. It grows with the test's total,
 roughly in proportion, so no table loses more than about a third of its bits
