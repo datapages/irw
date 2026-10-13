@@ -22,9 +22,9 @@ exact <- reg$collection[reg$kind == "instrument" & reg$coverage == "curated-only
 KIND_META <- tibble::tribble(
   ~kind,        ~heading,                     ~blurb,
   "design",     "Study &amp; instrument design",
-    "How the study was run, and what structure the data carries. Derived from the columns each table actually has, so these cover every documented table.",
+    "How the study was run, and what structure the data carries. Derived from the columns each table actually has, so these cover every documented table; the exceptions are `continuous_response` and `trials`, which are hand-curated.",
   "instrument", "Instrument family",
-    "Which measure was administered. These group together tables that record the same instrument under different names &mdash; 63 Big Five tables are spread across more than forty spellings of the construct name.",
+    "Which measure was administered. These group together tables that record the same instrument under different names &mdash; the Big Five tables alone are spread across more than forty spellings of the construct name.",
   "construct",  "Construct",
     "What is being measured, across instruments."
 )
@@ -95,10 +95,10 @@ cat(glue(
 library(irw)
 
 irw_collections()                    # what exists: kind, definition, coverage, size
-tabs <- irw_collection("depression") # 70 table names, and a note on coverage
+tabs <- irw_collection("depression") # table names, and a note on coverage
 
 # Narrow to a modellable corpus. Note irw_filter()'s default density = c(0.5, 1),
-# which is why 70 becomes 32 rather than the 41 that pass on sample size alone.
+# which drops more tables than the sample-size cut alone would.
 tabs <- irw_filter(collection = "depression", n_participants = c(500, Inf))
 
 dat <- irw_fetch(tabs)               # named list, one long-format table each
