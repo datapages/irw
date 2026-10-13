@@ -1051,6 +1051,96 @@ testing, and of Wordle solvers. The ending point is the real news, though:
 a full pass through this test leaves most of the uncertainty about which of
 64 groups a person belongs to unresolved.
 
+### What one answer does to the belief
+
+```{r}
+#| label: kl-steps
+#| fig-height: 4.6
+#| fig-width: 8.5
+
+# For each real respondent, replay the test's own order and track the posterior
+# over the 64 slices. The bits gained by an answer, H(before) - H(after), can
+# be negative; the KL divergence D(after || before) never is. Both average, over
+# the possible answers, to the expected bits of the item.
+h_bits <- function(p) { p <- p[p > 0]; -sum(p * log2(p)) }
+kl_replay <- function(r) {
+  st <- r$fixed$steps |> filter(step > 0)
+  PG <- s$group_probs[, st$item, drop = FALSE]
+  post <- rep(1 / nrow(PG), nrow(PG))
+  out <- lapply(seq_len(nrow(st)), function(k) {
+    lik <- if (st$response[k] == 1) PG[, k] else 1 - PG[, k]
+    new <- post * lik; new <- new / sum(new)
+    kl <- sum(new * log2(new / post)); drop <- h_bits(post) - h_bits(new)
+    post <<- new
+    tibble(step = k, item = lab_of(st$item[k]), kl = kl, drop = drop,
+           expected = st$expected_bits[k], surprisal = st$surprisal[k])
+  })
+  bind_rows(out) |> mutate(respondent = r$respondent, kind = r$kind)
+}
+kls <- bind_rows(lapply(reps, kl_replay))
+stopifnot(all(abs(kls$drop - bind_rows(lapply(reps, function(r) filter(r$fixed$steps, step > 0)))$actual_bits) < 1e-6))
+ab <- filter(kls, kind == "aberrant")
+long <- ab |> pivot_longer(c(kl, drop), names_to = "what", values_to = "bits") |>
+  mutate(what = factor(what, c("drop", "kl"), c("bits gained: H(before) − H(after)", "KL divergence: D(after ‖ before)")))
+pA <- ggplot(long, aes(step, bits, fill = what)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.65) +
+  geom_hline(yintercept = 0, colour = "grey40") +
+  scale_fill_manual(values = c(irw_accent, irw_red), name = NULL) +
+  scale_x_continuous(breaks = ab$step, labels = ab$item) +
+  labs(x = NULL, y = "bits", title = "The aberrant respondent, answer by answer") +
+  theme(legend.position = "top", legend.direction = "vertical",
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8))
+pB <- ggplot(kls, aes(kl, drop, colour = kind == "aberrant")) +
+  geom_abline(slope = 1, intercept = 0, colour = "grey70", linetype = "dashed") +
+  geom_hline(yintercept = 0, colour = "grey40") +
+  geom_point(size = 2.2, alpha = 0.8) +
+  scale_colour_manual(values = c(`FALSE` = irw_grey, `TRUE` = irw_red), labels = c("five typical respondents", "the aberrant respondent"), name = NULL) +
+  labs(x = "KL divergence D(after ‖ before), bits", y = "bits gained, H(before) − H(after)",
+       title = sprintf("All %d answers of the six respondents", nrow(kls))) +
+  theme(legend.position = "top", legend.direction = "vertical")
+wl(pA, 45) + wl(pB, 45) + plot_layout(widths = c(1.2, 1))
+```
+
+The game kept score with entropy: how many bits of uncertainty are left, and how
+many an answer removed. There is a second way to score an answer, by how far it
+*moved* the belief rather than by how much it *shrank* it. The distance from the
+belief before an answer, Q, to the belief after it, P, is the
+**Kullback–Leibler divergence**
+
+$$D(P \,\|\, Q) = \sum_{\text{slices}} P(\text{slice}) \log_2 \frac{P(\text{slice})}{Q(\text{slice})},$$
+
+the expected number of extra bits it costs to encode draws from P with a code
+built for Q. It is never negative, and it is zero only when nothing moved.
+
+The two scores agree on average and disagree answer by answer. Averaged over
+the answers a person might give, both equal the item's expected bits,
+I(slice; X~j~ | answers so far), so the mean curves in the previous figure would
+look the same under either. But a single answer is different. The left panel
+replays the aberrant respondent from the Surprise section in the test's own
+order. Their
+`r {k <- which.max(ab$kl); sprintf("answer to %s moves the belief by %s bits of divergence while removing %s bits of entropy", ab$item[k], fmt(ab$kl[k]), fmt(ab$drop[k]))}`:
+a surprising answer drags the posterior a long way and, in doing so, spreads it
+back out. On the first answer the two bars are equal, and always will be: from
+a flat belief over N slices, D(after ‖ flat) = log~2~ N − H(after), which is
+exactly the entropy removed. After that they come apart. The right panel makes
+the pattern general. The divergence is never negative, so no point lies left of
+zero; the bits gained can be, and the points below the horizontal line are the
+answers that left the person *less* pinned down than before, typical and
+aberrant respondents alike. The two scores are on the same scale (both average
+to the item's expected bits) but they measure different things: the dashed line
+of equality is a reference, not a bound.
+
+Most of the page's quantities are divergences in disguise. Mutual information
+I(θ; X) is D(P(θ, X) ‖ P(θ)P(X)), the divergence from the joint distribution to
+the one it would have if the test told you nothing. The redundancy of the five
+questions in [Five questions](#five-questions), Σ~j~ I(θ; X~j~) − I(θ; X), is
+the divergence from the fitted model to the model in which the items are
+independent. The surprisals of the Surprise section, summed over a person's
+answers, are the divergence from their empirical answer distribution to the
+model's. And the loss from merging an item's categories, later on the page, is
+the expected divergence from the full conditional distribution to the merged
+one. One idea, several units of measurement.
+
 ::: {.callout-note}
 ## Which information? The quantities on this page
 
@@ -1071,6 +1161,11 @@ differences between them. They are not interchangeable.
 - **Surprisal**: −log~2~ P(answer | answers so far), how unexpected one answer was.
   The [Surprise](#surprise) section conditions instead on all the person's other answers.
 - **I(θ; S)** and **I(θ; X | S)**: what the sum score keeps, and what it drops.
+- **KL divergence D(P ‖ Q)**: Σ P log~2~(P/Q), the cost in bits of using a code
+  built for Q when the truth is P. Never negative. Mutual information, the
+  realised movement of the belief after an answer, the redundancy between
+  items, and the loss from merging categories are all divergences; see
+  [What one answer does to the belief](#what-one-answer-does-to-the-belief).
 :::
 
 ## Now, the whole warehouse
