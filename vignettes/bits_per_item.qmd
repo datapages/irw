@@ -1978,20 +1978,33 @@ curve_k <- best |> group_by(table, k) |> summarise(share = median(share), .group
   mutate(test = factor(poly_short[table], poly_short))
 dich <- poly$dichotomised |> filter(rule == "best") |>
   mutate(share = I_dich / I_X, k = 2, test = factor(poly_short[table], poly_short))
+# Extra tables (bits_per_item_poly_extra.R): a random draw of dense polytomous tables, GPCM only.
+extra_path <- "bits_per_item_data/poly_extra_results.rds"
+extra <- if (file.exists(extra_path)) readRDS(extra_path) else NULL
+if (!is.null(extra)) {
+  ex_best <- extra$collapses |> mutate(share = I / I_full) |>
+    group_by(table, item, k) |> slice_max(I, n = 1, with_ties = FALSE) |> ungroup()
+  ex_curve <- ex_best |> group_by(table, k) |> summarise(share = median(share), .groups = "drop")
+  ex_ok <- extra$tables$table[extra$tables$converged]
+  ex_curve <- filter(ex_curve, table %in% ex_ok)
+  ex_dich <- extra$dichotomised |> filter(table %in% ex_ok) |> mutate(share = I_dich / I_X, k = 2)
+}
 ggplot(curve_k, aes(k, share, colour = test)) +
+  { if (!is.null(extra)) geom_line(data = ex_curve, aes(group = table), colour = "grey70", linewidth = 0.5, alpha = 0.8) } +
+  { if (!is.null(extra)) geom_point(data = ex_dich, aes(group = table), colour = "grey55", shape = 23, size = 2.2, fill = "white", alpha = 0.8) } +
   geom_line(linewidth = 1.1) +
   geom_point(aes(shape = "a typical item (the median)"), size = 2.6) +
   geom_point(data = dich, aes(shape = "the whole test, every item cut to two"), size = 4, fill = "white", stroke = 1.4) +
   scale_colour_manual(values = c(Rosenberg = irw_accent, Extraversion = irw_blue, `GAD-7` = irw_red), name = NULL) +
   scale_shape_manual(values = c("a typical item (the median)" = 16, "the whole test, every item cut to two" = 23), name = NULL) +
   scale_y_continuous(labels = scales::percent, limits = c(0.5, 1), breaks = seq(0.5, 1, 0.1)) +
-  scale_x_continuous(breaks = 2:5) +
+  scale_x_continuous(breaks = 2:7) +
   labs(x = "answer categories kept (the best way of merging neighbours)", y = "share of the bits kept",
        title = wrap(sprintf("Merging an item's answers down to two keeps a median %s of its bits; doing it to every item in a test keeps %s–%s of the test's bits",
                             scales::percent(median(best$share[best$k == 2]), accuracy = 1),
                             scales::percent(min(dich$share), accuracy = 1),
                             scales::percent(max(dich$share), accuracy = 1)), 72),
-       subtitle = wrap("Each line ends at 100%: all of the item's categories kept. The diamonds sit above the lines because, over a whole test, what one item loses is partly made up by the others.", 90)) +
+       subtitle = wrap(sprintf("Each line ends at 100%%: all of the item's categories kept. The diamonds sit above the lines because, over a whole test, what one item loses is partly made up by the others.%s", if (is.null(extra)) "" else sprintf(" Grey: %d further warehouse tables with 4–7 categories, GPCM only.", nrow(extra$tables))), 90)) +
   guides(colour = guide_legend(order = 1, override.aes = list(shape = 16)), shape = guide_legend(order = 2)) +
   theme(legend.position = "top", legend.box = "vertical", legend.spacing.y = unit(0, "pt"))
 ```
@@ -2028,6 +2041,7 @@ are not categories used" point, put in bits: almost all of the GAD-7's
 information is in whether a symptom is present at all. Extraversion, whose
 categories are all in use, keeps
 `r scales::percent(dich$share[dich$table == "bfi_goldberg_1992_extraversion"], accuracy = 1)`.
+`r if (!is.null(extra)) sprintf("The grey lines are a random draw of %d further warehouse tables with 4–7 categories (GPCM only, no reverse keying, which mutual information ignores). They tell the same story: cutting a typical item to two keeps %s–%s of its bits, three categories keep a median %s, and cutting every item in a test to two keeps %s–%s of the test's bits.", length(ex_ok), scales::percent(min(ex_curve$share[ex_curve$k == 2]), accuracy = 1), scales::percent(max(ex_curve$share[ex_curve$k == 2]), accuracy = 1), scales::percent(median(ex_curve$share[ex_curve$k == 3]), accuracy = 1), scales::percent(min(ex_dich$share), accuracy = 1), scales::percent(max(ex_dich$share), accuracy = 1))`
 
 ```{r}
 #| label: poly-table
