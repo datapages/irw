@@ -139,17 +139,45 @@ ds_ref <- c(
 ## One listing of every shard, shared by the explorer (urls) and the lookup
 ## (table_ds_ref). The lookup used to live in _load-data.qmd, which listed all
 ## six shards and fetched biblio a second time on every render (irw#1719, 17.4).
-listing <- names(ds_ref) |>
-  map(\(d) redivis$user("datapages")$dataset(d)$list_tables() |>
-        map(\(t) tibble(table = t$name, url = t$properties$url, ds_ref = ds_ref[[d]])) |>
-        list_rbind()) |>
+list_shard <- \(d, ref) redivis$user("datapages")$dataset(d)$list_tables() |>
+  map(\(t) tibble(table = t$name, url = t$properties$url, ds_ref = ref)) |>
+  list_rbind()
+listing <- map2(names(ds_ref), ds_ref, list_shard) |>
   list_rbind() |>
   mutate(table = str_to_lower(table))
 urls <- listing |> select(table, url) |> mutate(url = str_remove(url, "\\?.*$"))
-ojs_define(table_ds_ref = listing |> select(table, ds_ref))
 
-## The data dictionary for the lookup, from the same biblio fetch as above.
-data_index <- biblio |>
+## The other families (datapages/irw#343). Each keeps its own `<prefix>_biblio`
+## in irw_meta, with the same columns as `biblio`, and its tables live in their
+## own Redivis datasets; `source` is the spelling the packages' `source =`
+## argument takes. Conjoint is split across two shards (ben-domingue/irw#2934);
+## a table listed in both gets the newest, as the packages resolve it. Mirrors
+## NONCORE / CONJ_SHARDS in landing/page_rules.R.
+families <- tribble(
+  ~dataset,            ~ref,                      ~biblio,          ~source,
+  "irw_competitions",  "irw_competitions:cmd7",   "comps_biblio",   "comp",
+  "irw_nominal",       "irw_nominal:614n",        "nominal_biblio", "nom",
+  "irw_simsyn",        "irw_simsyn:0btg",         "simsyn_biblio",  "sim",
+  "irw_conjoint",      "irw_conjoint:5wjx",       "conj_biblio",    "conj",
+  "irw_conjoint_2",    "irw_conjoint_2:142p",     NA,               "conj"
+)
+family_listing <- map2(families$dataset, families$ref, list_shard) |>
+  list_rbind() |>
+  mutate(table = str_to_lower(table)) |>
+  slice_tail(n = 1, by = table)
+## Shard lookup for the embed in "Look up a single dataset", every source.
+ojs_define(table_ds_ref = bind_rows(listing, family_listing) |> select(table, ds_ref))
+
+## The data dictionary for the lookup: the core biblio fetched above plus each
+## family's biblio, tagged with its `source`. Table names are unique across all
+## sources (the nominal tables were renamed *_nom for this), so one flat index.
+family_biblio <- families |>
+  filter(!is.na(biblio)) |>
+  pmap(\(biblio, source, ...) irw_meta$table(biblio)$to_tibble() |>
+         mutate(across(everything(), as.character), source = source)) |>
+  list_rbind()
+data_index <- bind_rows(biblio |> mutate(across(everything(), as.character), source = "core"),
+                        family_biblio) |>
   rename(dataset = `table`, url = URL__for_data_, license = `Derived_License`,
          description = Description, reference = Reference_x, doi = DOI__for_paper_) |>
   mutate(dataset = str_remove(dataset, ".R.ata$")) |>

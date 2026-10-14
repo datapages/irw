@@ -644,7 +644,7 @@ viewof license_vals = tag_checkbox("license")
 
 ## Look up a single dataset
 
-Below we show an example dataset and illustrations of how to access the data programmatically. You can also explore the data [here](https://redivis.com/datasets/as2e-cv7jb41fd/tables).
+Below we show an example dataset and illustrations of how to access the data programmatically. You can also explore the data [here](https://redivis.com/datasets/as2e-cv7jb41fd/tables). The search covers every [data family](overview.qmd#families): tables from the [competition](comps_standard.qmd), [nominal](nominal_standard.qmd), [conjoint](conjoint_standard.qmd) and [simulated](simsyn.qmd) families are listed with their family after the name, and the citation hint carries the `source` the packages need to fetch them.
 
 Individual tables also have their own citable pages, listed at [IRW table pages](/tables/) and linked from the panel above where one exists.
 
@@ -674,6 +674,7 @@ dataset_map = createDatasetMap(data_index);
 viewof dataset_name = {
   const allNames = Array.from(dataset_map.keys());
   let selectedName = allNames[0];
+  const familyOf = (name) => source_labels[dataset_map.get(name)?.source] ?? "";
 
   // Attach list to body so it's never clipped by layout overflow
   const list = document.createElement("div");
@@ -708,6 +709,13 @@ viewof dataset_name = {
     for (const name of matches.slice(0, 300)) {
       const item = document.createElement("div");
       item.textContent = name;
+      const fam = familyOf(name);
+      if (fam) {
+        const tag = document.createElement("span");
+        tag.textContent = fam;
+        tag.style.cssText = "float:right;color:#888;font-size:11px;";
+        item.appendChild(tag);
+      }
       item.style.cssText = "padding:5px 10px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0;";
       item.onmousedown = (e) => {
         e.preventDefault();
@@ -761,11 +769,16 @@ function findDatasetInfo(dictionary, datasetName) {
   return {
     reference: dictRow?.reference || "Reference not available",
     BibTex: dictRow?.BibTex || "BibTeX not available",
-    doi: dictRow?.doi
+    doi: dictRow?.doi,
+    source: dictRow?.source || "core"
   };
 }
 
 dataset_info = findDatasetInfo(dictionary, dataset_name);
+
+// The family each `source` code names, for the dropdown and the hint. Core
+// tables carry no label: they are the default everywhere.
+source_labels = ({comp: "competitions", nom: "nominal", conj: "conjoint", sim: "simulated"})
 
 // Create the display elements with reference and BibTeX
 display = {
@@ -893,7 +906,7 @@ display = {
             font-size: 0.9em;
             transition: background-color 0.2s;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          ">To cite using IRW's R package</button>
+          ">To cite using the IRW packages</button>
 
           <div class="r-citation" style="
             display: none;
@@ -910,7 +923,8 @@ display = {
               border-left: 3px solid #4287f5;
               margin-bottom: 10px;
             ">
-              > <code>irw_citation('${dataset_name}')</code>
+              R: <code>irw_save_bibtex("${dataset_name}", "refs.bib"${dataset_info.source === "core" ? "" : `, source = "${dataset_info.source}"`})</code><br>
+              Python: <code>irw.save_bibtex("${dataset_name}", "refs.bib"${dataset_info.source === "core" ? "" : `, source="${dataset_info.source}"`})</code>
             </div>
           </div>
         </div>
