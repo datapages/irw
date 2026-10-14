@@ -873,9 +873,18 @@ licence_terms <- function(lic) {
 # A conjoint table's design (conj_metadata's design columns, conj_outcomes'
 # wording), in the codes data/conjoint/README.md defines. "unknown" is shown as
 # such: it means no source states the fact, and the README forbids guessing.
+# The topic tags (irw#2954) lead: `domain` is what the study is about, one or
+# more codes joined with ";" (primary first), and `choice_object` what one
+# profile represents. They are shown as the codes the packages filter on
+# (irw_filter(source = "conj", domain = ...)), with underscores as spaces.
 CONJ_PROVENANCE <- c(recorded = "recorded in the deposit",
                      inferred = "inferred from row order",
                      unknown  = "unknown")
+conj_tag_text <- function(v) {
+  v <- chr(v)
+  if (!nzchar(v)) return("")
+  paste(gsub("_", " ", trimws(strsplit(v, ";", fixed = TRUE)[[1]]), fixed = TRUE), collapse = ", ")
+}
 design_html <- function(x) {
   m <- x$m
   restr <- chr(m$restrictions)
@@ -888,6 +897,8 @@ design_html <- function(x) {
     restr_txt <- paste0(restr_txt, ": ", chr(m$restrictions_note))
   prov <- function(v) { v <- chr(v); if (v %in% names(CONJ_PROVENANCE)) CONJ_PROVENANCE[[v]] else v }
   out <- kv_rows(list(
+    list("Topic",                    conj_tag_text(m$domain)),
+    list("A profile represents",     conj_tag_text(m$choice_object)),
     list("Country",                  gsub(";", ", ", chr(m$country))),
     list("Language shown",           gsub(";", ", ", chr(m$display_language))),
     list("Language of stored levels", gsub(";", ", ", chr(m$label_language))),

@@ -164,9 +164,20 @@ n_lang       <- length(setdiff(unique(trimws(unlist(strsplit(as.character(conj$d
                                c("", "unknown", NA)))
 share_paired <- mean(conj$n_profiles == 2, na.rm = TRUE)
 share_single <- mean(conj$n_profiles == 1, na.rm = TRUE)
+
+## Topic tags (irw#2954): `domain` is one or more codes joined with ";", primary
+## first, so a table counts once for each; `choice_object` is one code per table.
+## The pipeline tags every table, so the counts are over the whole family.
+has_tags     <- all(c("domain", "choice_object") %in% names(conj))
+domain_long  <- if (has_tags) trimws(unlist(strsplit(as.character(conj$domain), ";"))) else character(0)
+domain_long  <- domain_long[!is.na(domain_long) & domain_long != ""]
+domain_top   <- sort(table(domain_long), decreasing = TRUE)
+n_multi      <- if (has_tags) sum(grepl(";", conj$domain, fixed = TRUE)) else 0
+object_tab   <- if (has_tags) sort(table(trimws(conj$choice_object)), decreasing = TRUE) else table(character(0))
+share_person <- if (has_tags) mean(trimws(conj$choice_object) == "person", na.rm = TRUE) else NA
 ```
 
-The family holds `r n_conj` tables: `r fmt_big(n_resp_conj)` respondents who together made `r fmt_big(n_judgements)` profile judgements. The median study has `r fmt_n(med_resp)` respondents. `r n_choice_only` tables record a choice between profiles only, `r n_rating_only` a rating of each profile only, and `r n_both` record both. Most designs show profiles in pairs (`r round(100 * share_paired)`% of tables have two profiles per task; `r round(100 * share_single)`% show one profile at a time), with around five tasks per respondent and six or seven randomised attributes. The experiments were fielded in `r n_countries` countries and displayed to respondents in `r n_lang` languages, so attribute labels in the tables are not all in English. Each table's design is described in `irw_metadata(source = "conj")`, and the `outcome` and `country` filters in `irw_filter()` select on the quantities summarised here.
+The family holds `r n_conj` tables: `r fmt_big(n_resp_conj)` respondents who together made `r fmt_big(n_judgements)` profile judgements. The median study has `r fmt_n(med_resp)` respondents. `r n_choice_only` tables record a choice between profiles only, `r n_rating_only` a rating of each profile only, and `r n_both` record both. Most designs show profiles in pairs (`r round(100 * share_paired)`% of tables have two profiles per task; `r round(100 * share_single)`% show one profile at a time), with around five tasks per respondent and six or seven randomised attributes. The experiments were fielded in `r n_countries` countries and displayed to respondents in `r n_lang` languages, so attribute labels in the tables are not all in English. Each table's design is described in `irw_metadata(source = "conj")`, and the `outcome`, `country`, `domain` and `choice_object` filters in `irw_filter()` select on the quantities summarised here.
 
 ```{r}
 #| label: fig-conj-design
@@ -189,6 +200,62 @@ family_bar(table(cut(conj$n_attributes, c(0, 3, 5, 7, 9, Inf), labels = c("2-3",
 #| fig-width: 7
 family_bar(country_top, xlab = "Country (ISO code)")
 ```
+
+### What the studies are about
+
+Users look for conjoint data by subject before anything else ("the immigration conjoints"), and nothing in a design record says what a study is about. Every table therefore carries two **topic tags**, which the packages filter on: `domain`, the setting of the study, and `choice_object`, what one profile represents. The vocabularies are closed and the codes are in the table below; the tagging rules, including the seams between neighbouring domains, are in the [conjoint README](https://github.com/ben-domingue/irw/blob/main/data/conjoint/README.md#topic-tags). A domain is the setting, not the manipulated attribute: a candidate conjoint that varies the candidate's gender is `candidate_choice`. `r n_multi` tables sit in two domains and are listed under both, primary first. Tags are judgement calls made from the study descriptions and are corrected when shown wrong, so a borderline study may sit under a neighbouring domain.
+
+```{r}
+#| label: fig-conj-domain
+#| fig-cap: "Conjoint tables by domain. A table with two domains counts once for each."
+#| fig-height: 5.2
+#| fig-width: 8
+#| eval: !expr has_tags
+op <- par(mar = c(4, 13, 1, 1), mgp = c(2.4, 0.7, 0))
+d <- rev(domain_top)
+b <- barplot(d, horiz = TRUE, col = family_fill, border = NA, las = 1, cex.names = 0.8,
+             xlim = c(0, max(d) * 1.15), xlab = "Tables", names.arg = gsub("_", " ", names(d)))
+text(d, b, labels = d, pos = 4, cex = 0.8, xpd = TRUE)
+par(op)
+```
+
+| `domain` | |
+|---|---|
+| `candidate_choice` | people judged for public office: candidates, legislators, ministers, judges, nominees |
+| `immigration_asylum` | immigrant, refugee and naturalisation applicants; migration and border policy |
+| `climate_energy_environment` | climate, energy, transport, agricultural and food policy, land use, conservation |
+| `international_economy` | trade agreements, foreign investment, loans, foreign aid, international organisations |
+| `democracy_institutions` | regime and institution design, electoral rules, deliberation, lobbying, participation |
+| `foreign_policy_security` | military intervention, nuclear and cyber threats by states, sanctions, alliances |
+| `health_covid` | vaccines, triage, COVID restrictions, health services, clinical vignettes, insurance |
+| `tax_welfare_economy` | tax plans, welfare programmes and recipients, basic income, redistribution |
+| `consumer_products` | goods and consumer services: food as a purchase, vehicles, appliances, travel |
+| `social_identity_interpersonal` | judgments of ordinary people and groups: neighbours, roommates, dating profiles |
+| `labour_hiring` | job applicants, hiring and admissions, job offers, pay |
+| `crime_justice_policing` | policing, crime scenarios, sentencing, protests, security versus liberty |
+| `technology_ai_privacy` | AI and algorithmic systems, surveillance, privacy, apps, digital ID |
+| `political_communication` | news items, ads, statements, speeches, when the artefact itself is judged |
+| `parties_platforms` | parties, manifestos, coalition agreements as the unit of choice |
+| `public_administration` | bureaucrats, public services, e-government, performance information |
+| `corruption_accountability` | corruption, bribery, scandal, clientelism, pledge-breaking |
+| `housing_neighbourhoods` | housing developments, city plans, neighbourhood composition |
+| `other` | residual: academia, education, bioethics, charities, survey methodology |
+
+`choice_object` says what a profile is: `person` (a candidate, applicant, patient or neighbour; `r if (has_tags) round(100 * share_person) else "most"`% of tables), `policy`, `scenario` (a situation or case), `product_service`, `place`, `organisation` or `message` (a text or media artefact judged as such). A news story describing a candidate is a `person`, not a `message`; `message` is for when the artefact itself is what the respondent judges.
+
+::: {.panel-tabset}
+## R
+```r
+irw_filter(source = "conj", domain = "immigration_asylum")
+irw_filter(source = "conj", domain = c("candidate_choice", "parties_platforms"), choice_object = "person")
+table(irw_metadata(source = "conj")$choice_object)
+```
+## Python
+```python
+irw.filter(source="conj", domain="immigration_asylum")
+irw.describe_filter("domain", source="conj")  # the vocabulary, with counts
+```
+:::
 
 ## An example
 
