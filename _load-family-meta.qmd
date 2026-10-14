@@ -74,8 +74,17 @@ family_table_list <- function(prefix, dataset, source, cols) {
   lic[vapply(lic, blank, logical(1))] <- ""
   url[is.na(url)] <- ""
 
-  cell <- function(v) {
-    if (is.numeric(v) || !any(is.na(suppressWarnings(as.numeric(v[!is.na(v) & nzchar(v)]))))) {
+  ## A column is numeric when every non-blank value parses as a number; its
+  ## header and cells then share the right-aligned `num` class, so the two
+  ## stay in step (a text column under a `num` header drifted on the live page).
+  is_num <- function(v) {
+    v <- v[!is.na(v) & nzchar(trimws(as.character(v)))]
+    length(v) > 0 && !any(is.na(suppressWarnings(as.numeric(v))))
+  }
+  numeric_col <- vapply(names(cols), function(cn) is_num(md[[cn]]), logical(1))
+  cell <- function(cn) {
+    v <- md[[cn]]
+    if (numeric_col[[cn]]) {
       n <- suppressWarnings(as.numeric(v))
       out <- ifelse(is.na(n), "", format(n, big.mark = ",", scientific = FALSE, trim = TRUE))
       paste0("<td class=\"num\">", out, "</td>")
@@ -87,11 +96,12 @@ family_table_list <- function(prefix, dataset, source, cols) {
   src_cell <- ifelse(grepl("^https?://", url),
     paste0("<a href=\"", esc_html(url), "\" target=\"_blank\" rel=\"noopener\">link</a>"),
     esc_html(url))
-  body <- paste0("<tr><td>", name_cell, "</td>",
-                 do.call(paste0, lapply(names(cols), function(cn) cell(md[[cn]]))),
+  body <- paste0("<tr><td class=\"name\">", name_cell, "</td>",
+                 do.call(paste0, lapply(names(cols), cell)),
                  "<td>", esc_html(lic), "</td><td>", src_cell, "</td></tr>", collapse = "\n")
-  head <- paste0("<th>Table</th>",
-                 paste0("<th class=\"num\">", esc_html(unname(cols)), "</th>", collapse = ""),
+  head <- paste0("<th class=\"name\">Table</th>",
+                 paste0("<th", ifelse(numeric_col, " class=\"num\"", ""), ">",
+                        esc_html(unname(cols)), "</th>", collapse = ""),
                  "<th>Licence</th><th>Source</th>")
   n <- nrow(md)
   cat("\n```{=html}\n")
@@ -114,10 +124,13 @@ family_table_list <- function(prefix, dataset, source, cols) {
     "<style>.family-list-filter{width:100%;padding:8px 10px;margin-bottom:10px;font-size:15px;",
     "border:1px solid #ccc;border-radius:4px;box-sizing:border-box}",
     ".family-list-scroll{max-height:480px;overflow:auto;border:1px solid #e2e2e2;border-radius:4px}",
-    ".family-table{width:100%;border-collapse:collapse;font-size:14px}",
+    ".family-table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px;margin:0}",
     ".family-table th,.family-table td{padding:6px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}",
-    ".family-table th{position:sticky;top:0;background:#fff;border-bottom:2px solid #ccc;font-weight:600}",
+    ".family-table th{position:sticky;top:0;z-index:1;background:#fff;border-bottom:2px solid #ccc;font-weight:600}",
     ".family-table th.num,.family-table td.num{text-align:right;white-space:nowrap}",
+    ".family-table td{overflow-wrap:anywhere}",
+    ".family-table .name{white-space:nowrap}",
+    ".family-table .name code{white-space:nowrap;word-break:normal;overflow-wrap:normal;background:none;padding:0}",
     ".family-table tr:hover td{background:#f7f7f7}",
     ".family-list-count{color:#666;font-size:14px;margin-top:8px}</style>\n"))
   cat("\n```\n")
