@@ -67,7 +67,9 @@ no `variables` column. The same licence, known-issue and tombstone rules apply.
 - **Nominal** (`nom`): the record set adds `text`. A `x_nom` table and core
   table `x` link to each other when both have a page.
 - **Conjoint** (`conj`): sized as rows (respondent x task x profile), respondents,
-  tasks, profiles and attributes from `conj_metadata`; a Design section gives its
+  tasks, profiles and attributes from `conj_metadata`; a Design section opens with
+  its topic tags (`domain`, what the study is about, and `choice_object`, what a
+  profile represents; irw#2954, codes from `data/conjoint/README.md`) and gives its
   country, languages, randomization restrictions and task/profile provenance in
   the codes of `data/conjoint/README.md`, and each outcome's wording and scale
   from `conj_outcomes`. The record set is `id`, `task`, `profile`, `choice`,
