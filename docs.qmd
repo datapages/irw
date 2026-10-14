@@ -2,7 +2,7 @@
 title: "Data documentation"
 ---
 
-Click on each dataset's name to see its description, license, citation, and link to its original source. Code used to create these data can be found [here](https://github.com/ben-domingue/irw/tree/main/data).
+Click on each dataset's name to see its description, license, citation, and link to its original source. Code used to create these data can be found [here](https://github.com/ben-domingue/irw/tree/main/data). The list covers every [data family](overview.qmd#families): a table from the [competition](comps_standard.qmd), [nominal](nominal_standard.qmd), [conjoint](conjoint_standard.qmd) or [simulated](simsyn.qmd) family names its family under the dataset name, with the `source` argument the packages need to fetch or cite it.
 
 **Every dataset here has been modified.** IRW does not redistribute source files: each one is reshaped into the [IRW data standard](standard.qmd) — long format, one row per person-item response, with columns renamed and non-response material dropped. The processing script for a given dataset is the record of exactly what was changed, and is linked above. The license shown beside each description is the **source's** license, which continues to govern reuse of that dataset: where it carries a non-commercial restriction, that restriction travels with IRW's copy.
 
@@ -99,7 +99,18 @@ library(stringr)
 library(glue)
 library(redivis)
 
-biblio <- redivis$user("datapages")$dataset("irw_meta:bdxt:latest")$table("biblio")$to_tibble()
+irw_meta <- redivis$user("datapages")$dataset("irw_meta:bdxt:latest")
+biblio <- irw_meta$table("biblio")$to_tibble()
+
+# The other families' biblio tables carry the same columns (datapages/irw#343,
+# item 3). `source` is the packages' spelling and labels the row below.
+family_biblio <- c(comps_biblio = "comp", nominal_biblio = "nom",
+                   conj_biblio = "conj", simsyn_biblio = "sim")
+biblio <- bind_rows(
+  biblio |> mutate(across(everything(), as.character), source = "core"),
+  imap(family_biblio, \(src, tb) irw_meta$table(tb)$to_tibble() |>
+         mutate(across(everything(), as.character), source = src)) |> list_rbind())
+family_label <- c(comp = "competitions", nom = "nominal", conj = "conjoint", sim = "simulated")
 
 # Load datasets
 data_index <- biblio |>
@@ -250,6 +261,11 @@ document.getElementById('searchBar').addEventListener('input', searchDatasets);
   border-bottom: 2px solid #ccc;
   font-weight: 600;
 }
+.dataset-family {
+  color: #666;
+  font-size: 13px;
+  font-weight: normal;
+}
 .dataset-table tr:hover {
   background-color: #f7f7f7;
 }
@@ -304,6 +320,10 @@ license_html <- function(x) {
 
 row <- function(ds) {
   lic <- license_html(ds$license)
+  # A non-core table names its family under the name, with the `source` the
+  # packages need to fetch it; core tables are the default and say nothing.
+  fam <- if (ds$source == "core") "" else
+    glue('<br><span class="dataset-family">{family_label[[ds$source]]} &middot; source = "{ds$source}"</span>')
   bibtex <- ds$BibTex  # Use BibTex column directly
   escaped_bibtex <- if (!is.na(bibtex) && bibtex != "") gsub("'", "\\\\'", bibtex) else ""
 
@@ -327,7 +347,7 @@ row <- function(ds) {
   glue(
     '
     <tr class="dataset-item">
-      <td><strong>{ds$dataset}</strong></td>
+      <td><strong>{ds$dataset}</strong>{fam}</td>
       <td>{ds$description} {lic} <i>{ds$reference}</i></td>
       <td>{src}</td>
       <td>{citation_button}</td>
