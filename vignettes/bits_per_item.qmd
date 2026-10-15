@@ -1,13 +1,18 @@
 ---
 title: "Bits per Item: How Much Does a Test Tell You About a Person?"
 description: |
-  A test is a sequence of questions asked about someone we cannot see. Each
-  answer narrows down where that person sits on the trait being measured.
-  Information theory lets us count that narrowing in bits, the same unit that
-  tells you how much a Wordle guess cuts down the list of possible words. We
-  play the game on three real tests, then measure the bits delivered by more
-  than two hundred dichotomous tests in the Item Response Warehouse, and
-  close with three tests whose answers come in ordered categories.
+  A test is a sequence of questions asked about something we cannot see: not
+  the person, who is right in front of us, but the trait we want to measure.
+  Each answer narrows down where that person sits on it. Information theory
+  counts that narrowing in bits, Shannon's unit for the length of the shortest
+  message that would tell someone the answer. One bit is what you learn from a
+  yes/no question that splits the remaining possibilities in half, so a test
+  worth two bits has done the work of two ideally placed yes/no questions about
+  where the person stands, and a test worth ten has done the work of ten. We
+  play this out on three real tests, then
+  measure the bits delivered by more than two hundred dichotomous tests in the
+  Item Response Warehouse, and close with three tests whose answers come in
+  ordered categories.
 date: today
 bibliography: bits_per_item_data/references.bib
 nocite: |
@@ -168,8 +173,12 @@ exactly which group they are in. How much is that worth? Information theory
 measures it with **entropy**, written **H**: how uncertain you are about
 something before you find out, counted as roughly the number of yes/no
 questions you would need, on average, to pin it down. Here the something is
-which group a person is in, and with perfect cuts the bits the test gives are
-exactly the entropy of the groups. Groups holding shares p of the population
+which group a person is in. It has to be a *which* question: a trait like θ
+is continuous and can never be pinned down exactly, so we always count bits
+about which of a fixed set of groups a person falls in. Once the groups are
+fine enough, the number of bits a test delivers no longer depends on how fine
+they are, which is what lets us talk about a test's bits at all. With perfect
+cuts the bits the test gives are exactly the entropy of the groups. Groups holding shares p of the population
 have H = −Σ p log~2~ p. One cut at the median makes two halves: 1 bit (each half holds
 p = ½ of people, so −½ log~2~ ½ − ½ log~2~ ½ = ½ + ½ = 1). Three cuts at
 the quartiles make four quarters: 2 bits (4 × −¼ log~2~ ¼ = 4 × ½ = 2). In general k cuts are worth at most
@@ -362,8 +371,8 @@ could produce and two quantities decide how much the test tells you about a
 person:
 
 - **Spread**, H(X): how varied the patterns are across the population.
-- **Noise**, H(X | θ): how varied they would be for one person, answering again
-  and again.
+- **Noise**, H(X | θ): how varied they would be for one value of θ, as if a
+  person at that θ answered again and again.
 
 The information about the person is what is left: **I(θ; X) = H(X) − H(X | θ)**,
 in bits.
@@ -527,28 +536,54 @@ post3 <- sweep(pxt3g, 2, w3, "*") / marg3                 # P(theta | pattern), 
 var3 <- as.vector(post3 %*% gth$theta^2 - (post3 %*% gth$theta)^2)
 sd3 <- sqrt(sum(marg3 * var3))                              # RMS posterior SD, population SD = 1
 score_fill <- c(`0` = "#d1e5f0", `1` = "#92c5de", `2` = "#4393c3", `3` = irw_blue)
-p_top <- ggplot(area, aes(theta, fill = factor(score), group = pattern)) +
-  geom_ribbon(aes(ymin = ymin, ymax = ymax), colour = "white", linewidth = 0.4) +
-  geom_text(data = labs3, aes(theta, mid, label = pattern), inherit.aes = FALSE,
-            family = "mono", size = 3.6, colour = if_else(labs3$score >= 2, "white", "grey15")) +
-  scale_fill_manual(values = score_fill, name = "number correct") +
-  scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
-  scale_x_continuous(expand = c(0, 0)) +
-  labs(x = "θ", y = "chance of each pattern",
-       title = sprintf("Three questions, 8 possible answer patterns, %s bits about the person", fmt(H3 - N3)),
-       subtitle = wrap(sprintf("Top: read straight up from any θ to see the patterns a person there would give, answering again and again. Bottom: the same mix averaged over the population. Bits = spread of the bottom bars, H(X) = %s, minus the average spread of a vertical slice of the top panel, H(X | θ) = %s. Items, in pattern order: %s.",
-                          fmt(H3), fmt(N3), paste(top3$label, collapse = ", ")), 78)) +
-  theme(legend.position = "top")
+noise_theta <- -colSums(pxt3 * log2(pxt3))                 # H(X | theta) at each grid point
+# Top panel: stacked P(pattern | theta). Hovering at any theta lists every pattern's
+# share there (x unified hover) plus H(X | theta) at that theta.
+p_top <- plot_ly() |>
+  add_trace(x = th3, y = rep(0, length(th3)), customdata = noise_theta, type = "scatter",
+            mode = "lines", line = list(width = 0), showlegend = FALSE, hoverinfo = "all",
+            hovertemplate = "<b>θ = %{x:.2f}</b>, H(X | θ) here = %{customdata:.2f} bits<extra></extra>")
+seen_score <- character(0)
+for (i in seq_along(key3)) {
+  sc <- as.character(rowSums(X3)[i])
+  p_top <- add_trace(p_top, x = th3, y = pxt3[i, ], type = "scatter", mode = "lines",
+                     stackgroup = "one", fillcolor = score_fill[[sc]],
+                     line = list(color = "white", width = 0.6),
+                     name = paste(sc, "correct"), legendgroup = sc,
+                     showlegend = !(sc %in% seen_score),
+                     hovertemplate = sprintf("<span style='font-family:monospace'>%s</span>  %%{y:.1%%}<extra></extra>", key3[i]))
+  seen_score <- c(seen_score, sc)
+}
+p_top <- p_top |>
+  add_text(data = labs3, x = ~theta, y = ~mid, text = ~pattern, hoverinfo = "skip", showlegend = FALSE,
+           textfont = list(family = "monospace", size = 13, color = if_else(labs3$score >= 2, "white", "#262626"))) |>
+  layout(xaxis = list(title = "θ", hoverformat = ".2f", range = c(-3, 3), zeroline = FALSE),
+         yaxis = list(title = "chance of each pattern", tickformat = ".0%", range = c(0, 1), zeroline = FALSE))
 bars3 <- tibble(pattern = factor(key3, key3), p = marg3, score = factor(rowSums(X3)))
-p_bot <- ggplot(bars3, aes(pattern, p, fill = score)) +
-  geom_col(width = 0.75, show.legend = FALSE) +
-  geom_text(aes(label = fmt(p, 2)), vjust = -0.4, size = 3.3) +
-  scale_fill_manual(values = score_fill) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
-  labs(x = "pattern (1 = correct)", y = "population share") +
-  theme(axis.text.x = element_text(family = "mono"), panel.grid.major.x = element_blank())
-p_top / p_bot + plot_layout(heights = c(2.2, 1))
+p_bot <- plot_ly(bars3, x = ~pattern, y = ~p, type = "bar", width = NULL,
+                 marker = list(color = unname(score_fill[as.character(bars3$score)])),
+                 text = fmt(bars3$p, 2), textposition = "outside", cliponaxis = FALSE,
+                 showlegend = FALSE,
+                 hovertemplate = "%{y:.1%} of the population<extra></extra>") |>
+  layout(xaxis = list(title = "pattern (1 = correct)", tickfont = list(family = "monospace")),
+         yaxis = list(title = "population share", range = c(0, max(marg3) * 1.2), zeroline = FALSE))
+subplot(p_top, p_bot, nrows = 2, heights = c(0.68, 0.32), margin = 0.07,
+        titleX = TRUE, titleY = TRUE) |>
+  layout(title = list(text = sprintf("<b>Three questions, 8 possible answer patterns, %s bits about the person</b>", fmt(H3 - N3)),
+                      x = 0, xanchor = "left", font = list(size = 15)),
+         hovermode = "x unified", hoverlabel = list(align = "left"),
+         legend = list(orientation = "h", y = 1.04, yanchor = "bottom", x = 1, xanchor = "right",
+                       title = list(text = "number correct:  ")),
+         margin = list(t = 85)) |>
+  config(displayModeBar = FALSE)
 ```
+
+<small>Top: hover anywhere on θ, or read straight up from it, to see the mix of
+patterns a person there would give, answering again and again. Bottom: the same
+mix averaged over the population. Bits = spread of the bottom bars,
+H(X) = `r fmt(H3)`, minus the average spread of a vertical slice of the top
+panel, H(X | θ) = `r fmt(N3)`. Items, in pattern order:
+`r paste(top3$label, collapse = ", ")`.</small>
 
 Read the top panel straight up from any point on θ. Far to the left almost
 everyone gives `r key3[1]`; far to the right almost everyone gives
@@ -697,8 +732,9 @@ and how fast the uncertainty about them falls.
 
 ### Guess the person
 
-Somewhere in the population below is one person, and your job is to find out
-which of the 64 slices they are in by asking questions from a real test.
+Somewhere in the population below is one person, and your job in this game is
+to find out which of the 64 slices they are in by asking questions from a real
+test.
 Before any question there are 6 bits to find. After each answer the slices are
 re-shaded, darker where the person is now more likely to be, and a line traces
 the same thing as a density over θ. The counter shows how many bits that
@@ -1047,11 +1083,25 @@ Every order ends in the same place, because the same answers have been given.
 What changes is how fast you get there. Asking the most informative question
 next, given what is already known, buys in three questions what the fixed
 order needs several more to reach. This is the logic of computerised adaptive
-testing, and of Wordle solvers. The ending point is the real news, though:
+testing, and of [Wordle solvers](https://www.youtube.com/watch?v=v68zYyaEmEA).
+The ending point is the real news, though:
 a full pass through this test leaves most of the uncertainty about which of
 64 groups a person belongs to unresolved.
 
 ### What one answer does to the belief
+
+The guessing game above kept score with entropy: how many bits of uncertainty
+about θ are left, and how many an answer removed. That score measures how much an answer
+*narrowed* the belief about θ, the drop in the entropy of the posterior over
+the slices. It says nothing about where the belief went. There is a second way
+to score an answer, by how far it *moved* the belief rather than by how much it
+narrowed it. The distance from the belief before an answer, Q, to the belief
+after it, P, is the **Kullback–Leibler divergence**
+
+$$D(P \,\|\, Q) = \sum_{\text{slices}} P(\text{slice}) \log_2 \frac{P(\text{slice})}{Q(\text{slice})},$$
+
+the expected number of extra bits it costs to encode draws from P with a code
+built for Q. It is never negative, and it is zero only when nothing moved.
 
 ```{r}
 #| label: kl-steps
@@ -1069,11 +1119,12 @@ kl_replay <- function(r) {
   post <- rep(1 / nrow(PG), nrow(PG))
   out <- lapply(seq_len(nrow(st)), function(k) {
     lik <- if (st$response[k] == 1) PG[, k] else 1 - PG[, k]
+    p_ans <- sum(post * lik)                     # chance of this answer under the belief before it
     new <- post * lik; new <- new / sum(new)
     kl <- sum(new * log2(new / post)); drop <- h_bits(post) - h_bits(new)
     post <<- new
-    tibble(step = k, item = lab_of(st$item[k]), kl = kl, drop = drop,
-           expected = st$expected_bits[k], surprisal = st$surprisal[k])
+    tibble(step = k, item = lab_of(st$item[k]), response = st$response[k], p_ans = p_ans,
+           kl = kl, drop = drop, expected = st$expected_bits[k], surprisal = st$surprisal[k])
   })
   bind_rows(out) |> mutate(respondent = r$respondent, kind = r$kind)
 }
@@ -1101,26 +1152,18 @@ pB <- ggplot(kls, aes(kl, drop, colour = kind == "aberrant")) +
 wl(pA, 45) + wl(pB, 45) + plot_layout(widths = c(1.2, 1))
 ```
 
-The game kept score with entropy: how many bits of uncertainty are left, and how
-many an answer removed. There is a second way to score an answer, by how far it
-*moved* the belief rather than by how much it *shrank* it. The distance from the
-belief before an answer, Q, to the belief after it, P, is the
-**Kullback–Leibler divergence**
-
-$$D(P \,\|\, Q) = \sum_{\text{slices}} P(\text{slice}) \log_2 \frac{P(\text{slice})}{Q(\text{slice})},$$
-
-the expected number of extra bits it costs to encode draws from P with a code
-built for Q. It is never negative, and it is zero only when nothing moved.
-
+The figure scores every answer of six real respondents both ways, once by
+entropy removed and once by divergence.
 The two scores agree on average and disagree answer by answer. Averaged over
 the answers a person might give, both equal the item's expected bits,
-I(slice; X~j~ | answers so far), so the mean curves in the previous figure would
-look the same under either. But a single answer is different. The left panel
+I(slice; X~j~ | answers so far), so the mean curves in
+[Watching uncertainty fall](#watching-uncertainty-fall) would look the same
+under either. But a single answer is different. The left panel
 replays the aberrant respondent from the Surprise section in the test's own
 order. Their
-`r {k <- which.max(ab$kl); sprintf("answer to %s moves the belief by %s bits of divergence while removing %s bits of entropy", ab$item[k], fmt(ab$kl[k]), fmt(ab$drop[k]))}`:
-a surprising answer drags the posterior a long way and, in doing so, spreads it
-back out. On the first answer the two bars are equal, and always will be: from
+`r {k <- which.max(ab$kl - ab$drop); sprintf("answer to %s, %s that the belief at that point gave only a %s chance, moves the belief by %s bits of divergence while %s %s bits of entropy", ab$item[k], if (ab$response[k] == 1) "a correct answer" else "a wrong answer", scales::percent(ab$p_ans[k], accuracy = 1), fmt(ab$kl[k]), if (ab$drop[k] < 0) "*adding*" else "removing", fmt(abs(ab$drop[k])))}`:
+an answer that runs against the belief drags the posterior a long way and, in
+doing so, spreads it back out. On the first answer the two bars are equal, and always will be: from
 a flat belief over N slices, D(after ‖ flat) = log~2~ N − H(after), which is
 exactly the entropy removed. After that they come apart. The right panel makes
 the pattern general. The divergence is never negative, so no point lies left of
