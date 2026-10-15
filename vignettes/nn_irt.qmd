@@ -255,28 +255,44 @@ for t, d in data.items():
 
 ```{python}
 #| code-fold: true
-#| code-summary: "IMV table"
+#| code-summary: "IMV chart"
 rows = []
 for t, pr in preds.items():
     y = pr["y"]
-    base = pr["2PL"]
     for name, p in pr.items():
-        if name == "y" or np.isnan(p).all():
+        if name in ("y", "2PL") or np.isnan(p).all():
             continue
-        rows.append({"table": t, "model": name,
-                     "log-loss": log_loss(y, p),
-                     "IMV vs 2PL": imv(y, base, p),
-                     "IMV vs Rasch": imv(y, pr["Rasch"], p)})
+        rows.append({"table": t, "model": name, "log-loss": log_loss(y, p),
+                     "IMV vs 2PL": imv(y, pr["2PL"], p)})
 res = pd.DataFrame(rows)
-tab = res.pivot(index="model", columns="table", values="IMV vs 2PL")
-tab = tab.reindex([m for m in list(nn_specs) + ["mirt_2pl", "mirt_monopoly", "mirt_lpe"]
-                   if m in tab.index])[TABLES]
-tab.round(4).style.format("{:+.4f}", na_rep="").background_gradient(cmap="RdBu", vmin=-0.05, vmax=0.05, axis=None)
+order = [m for m in ["Rasch", "MIRT k=2", "MLP small", "MLP large",
+                     "mirt_2pl", "mirt_monopoly", "mirt_lpe"] if m in set(res.model)]
+labels = {"mirt_2pl": "mirt 2PL", "mirt_monopoly": "mirt monotonic poly.", "mirt_lpe": "mirt LPE"}
+colour = {m: ("#2a78d6" if not m.startswith("mirt_") else "#eb6834") for m in order}
+
+fig, axes = plt.subplots(1, len(TABLES), figsize=(11, 3.6), sharex=True, sharey=True)
+for ax, t in zip(axes, TABLES):
+    sub = res[res.table == t].set_index("model").reindex(order)
+    ypos = np.arange(len(order))[::-1]
+    ax.barh(ypos, sub["IMV vs 2PL"], color=[colour[m] for m in order], height=0.65)
+    ax.axvline(0, color="0.3", lw=0.8)
+    ax.set_title(t.replace("_", " ").replace("borges brazil residency 2024 cbt", "residency exam")
+                 .replace("encceja 2024 ef lp", "ENCCEJA LP").replace("psychoneurotic inventory", "Woodworth"),
+                 fontsize=9)
+    ax.set_yticks(ypos, [labels.get(m, m) for m in order], fontsize=8)
+    ax.tick_params(axis="x", labelsize=8)
+    ax.grid(axis="x", color="0.9", lw=0.6); ax.set_axisbelow(True)
+    for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+axes[0].set_xlabel("IMV relative to PyTorch 2PL", fontsize=8, loc="left")
+from matplotlib.patches import Patch
+fig.legend(handles=[Patch(color="#2a78d6", label="PyTorch (MAP)"), Patch(color="#eb6834", label="R mirt (MML)")],
+           loc="lower right", ncol=2, fontsize=8, frameon=False)
+plt.tight_layout(rect=(0, 0.06, 1, 1)); plt.show()
 ```
 
-Positive values mean the model predicts held-out responses better than the
-PyTorch 2PL on that table; the 2PL row is zero by construction. The `mirt_`
-rows are R's `mirt` fit by marginal maximum likelihood on the same training
+Bars to the right of zero mean the model predicts held-out responses better
+than the PyTorch 2PL on that table (which is the zero line, so it has no bar).
+The orange bars are R's `mirt` fit by marginal maximum likelihood on the same training
 cells, with each held-out cell predicted by its posterior-predictive
 probability (the item curve integrated over the person's posterior): the 2PL
 again, as the marginal-likelihood anchor for the PyTorch 2PL; the monotonic
@@ -287,8 +303,12 @@ one latent dimension, which is the opposite move from the networks above.
 
 ```{python}
 #| code-fold: true
-#| code-summary: "Held-out log-loss"
-res.pivot(index="model", columns="table", values="log-loss").reindex(tab.index)[TABLES].round(4)
+#| code-summary: "The numbers: IMV vs 2PL and held-out log-loss"
+ll2 = pd.Series({t: log_loss(pr["y"], pr["2PL"]) for t, pr in preds.items()}, name="2PL")
+imv_tab = res.pivot(index="model", columns="table", values="IMV vs 2PL").reindex(order)[TABLES]
+ll_tab = res.pivot(index="model", columns="table", values="log-loss").reindex(order)[TABLES]
+ll_tab = pd.concat([ll2.to_frame().T, ll_tab])
+pd.concat({"IMV vs 2PL": imv_tab.round(4), "held-out log-loss": ll_tab.round(4)})
 ```
 
 Three things stand out.
