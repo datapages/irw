@@ -166,57 +166,140 @@ th {
   }
 }
 
-// Link cards: a grid of bordered cards, each a title, a line of description
-// and a button. Used by othersites.qmd and the standards hub (overview.qmd).
-.card-grid {
+// Compact entry lists (ben-domingue/irw site redesign, 2026-10): the
+// vignettes, research, related-resources, standards-hub and collections pages
+// all list things as one row each -- a title, a short line, and a right-hand
+// meta column -- instead of a grid of cards. A row that has more to say is a
+// <details class="entry"> whose <summary> is the row and whose .entry-body is
+// the rest; a row with nothing to expand is a <div class="entry entry-static">.
+// Links inside a summary still navigate; clicking elsewhere on the row expands.
+.entry-list {
+  border-top: 1px solid #dee2e6;
+  margin-bottom: 2rem;
+}
+.entry {
+  border-bottom: 1px solid #dee2e6;
+}
+.entry > summary, .entry-static > .entry-row {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "title meta" "teaser meta";
+  gap: 0.15rem 1.25rem;
+  align-items: baseline;
+  padding: 0.65rem 0;
+  list-style: none;
 }
-@media (max-width: 768px) {
-  .card-grid { grid-template-columns: 1fr; }
-}
-.site-card {
-  border: 1px solid #dee2e6;
-  border-left: 4px solid #2780e3;
-  border-radius: 6px;
-  padding: 1rem 1.25rem;
-  background: #fff;
-  transition: box-shadow 0.15s;
-  display: flex;
-  flex-direction: column;
-}
-.site-card:hover {
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-}
-.card-title {
-  font-size: 1rem;
+.entry > summary { cursor: pointer; }
+.entry > summary::-webkit-details-marker { display: none; }
+.entry > summary:hover { background: #f8f9fa; }
+.entry-title {
+  grid-area: title;
   font-weight: 600;
-  margin-bottom: 0.3rem;
-  line-height: 1.4;
+  line-height: 1.35;
 }
-.card-title a {
+.entry-title a {
   color: #212529;
   text-decoration: none;
 }
-.card-title a:hover { color: #2780e3; }
-.card-desc {
+.entry-title a:hover { color: #2780e3; text-decoration: underline; }
+.entry-teaser {
+  grid-area: teaser;
   font-size: 0.85rem;
   color: #495057;
-  flex: 1;
-  line-height: 1.5;
-  margin-bottom: 0.75rem;
+  line-height: 1.45;
 }
-.card-links {
-  margin-top: auto;
-  padding-top: 0.75rem;
+.entry-meta {
+  grid-area: meta;
+  font-size: 0.78rem;
+  color: #6c757d;
+  text-align: right;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+// The expand hint: a chevron that turns when open.
+.entry > summary .entry-meta::after {
+  content: "\25BE";
+  display: inline-block;
+  margin-left: 0.5rem;
+  color: #adb5bd;
+  transition: transform 0.15s;
+}
+.entry[open] > summary .entry-meta::after { transform: rotate(180deg); }
+.entry-body {
+  padding: 0 0 0.9rem;
+  font-size: 0.88rem;
+  color: #495057;
+  line-height: 1.55;
+  max-width: 62rem;
+}
+.entry-body p { margin: 0 0 0.5rem; }
+.entry-body p:last-child { margin-bottom: 0; }
+.entry-cite { font-size: 0.8rem; color: #6c757d; }
+.entry-cite a { color: #2780e3; text-decoration: none; }
+.entry-cite a:hover { text-decoration: underline; }
+.entry-links { margin-top: 0.5rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.entry-pkg {
+  font-size: 0.72rem;
+  font-family: var(--bs-font-monospace, monospace);
+  background: #f1f3f5;
+  color: #495057;
+  border: 1px solid #dee2e6;
+  border-radius: 3px;
+  padding: 0 0.35rem;
+  margin-left: 0.25rem;
+}
+.entry-tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6c757d;
+  margin-right: 0.5rem;
+}
+.badge-oa {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.05rem 0.45rem;
+  border-radius: 20px;
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #b8dac3;
+  vertical-align: middle;
+  margin-left: 0.35rem;
+  letter-spacing: 0.02em;
+}
+// "Expand all" control above a list of <details> entries.
+.entry-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin: -0.5rem 0 0.35rem;
+}
+.entry-controls button {
+  font: inherit;
+  font-size: 0.78rem;
+  color: #6c757d;
+  background: none;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 0.15rem 0.6rem;
+  cursor: pointer;
+}
+.entry-controls button:hover { color: #212529; border-color: #adb5bd; }
+@media (max-width: 640px) {
+  .entry > summary, .entry-static > .entry-row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "title" "teaser" "meta";
+    gap: 0.2rem;
+  }
+  .entry-meta { text-align: left; white-space: normal; }
 }
 .card-btn {
   display: inline-block;
   font-size: 0.78rem;
   font-weight: 500;
-  padding: 0.25rem 0.7rem;
+  padding: 0.2rem 0.65rem;
   border-radius: 4px;
   text-decoration: none;
   border: 1px solid #2780e3;
@@ -229,3 +312,5 @@ th {
   background: #2780e3;
   color: #fff;
 }
+.card-btn.muted { border-color: #6c757d; color: #6c757d; }
+.card-btn.muted:hover { background: #6c757d; color: #fff; }
