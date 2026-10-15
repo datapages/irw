@@ -43,6 +43,14 @@ pip install irw
 That is the same list `.github/workflows/quarto_publish.yaml` installs, so CI
 always has it and a fresh maintainer machine usually does not.
 
+`vignettes/nn_irt.qmd` is the exception: it needs PyTorch, which CI does not
+install. The page sets `execute: freeze: true` and its outputs are committed
+under `_freeze/vignettes/nn_irt/`, so CI serves the frozen results. To re-run
+it, make a venv with CPU torch (`pip install torch --index-url
+https://download.pytorch.org/whl/cpu`, plus the list above), run
+`Rscript vignettes/nn_irt_mirt_compute.R` for the offline `mirt` fits, then
+`quarto render vignettes/nn_irt.qmd` with that venv's python on PATH.
+
 `irw` comes from PyPI now rather than from `git+`, which is a change in kind
 worth knowing: **a render installs the last released version, not whatever is on
 Python-pkg's `main`.** So a fix that has been merged but not tagged will not
