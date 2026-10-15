@@ -422,7 +422,12 @@ plt.tight_layout(rect=(0, 0.07, 1, 1)); plt.show()
 Each panel is one model; each bar is one table, coloured by the kind of
 instrument and grouped so that the groups can be compared. Bars to the right
 of zero mean the model predicts held-out responses better than the PyTorch 2PL
-on that table (the 2PL is the zero line, so it has no panel). The `mirt` panels
+on that table (the 2PL is the zero line, so it has no panel).
+
+One panel needs reading first: **`mirt 2PL` is the same model as the zero
+line and its bars are not zero.** They are all positive and range from nothing
+to 0.03. That is the difference between two estimators of one model, not
+between two models, and it is taken apart below. The `mirt` panels
 are R's `mirt` fit by marginal maximum likelihood on the same training
 cells, with each held-out cell predicted by its posterior-predictive
 probability (the item curve integrated over the person's posterior): the 2PL
@@ -476,11 +481,30 @@ the ADQ), and it failed to converge on three of the longer tables. Changing
 the shape of the item curve while keeping one dimension is not where the
 predictable signal is either.
 
-**The `mirt` 2PL column is an estimator effect, and it is largest on short
+**The `mirt` 2PL panel is an estimator effect, and it is largest on short
 tests.** The same 2PL fit by marginal maximum likelihood beats the gradient
 descent fit by 0.03 on the 25-item COVID knowledge test, 0.009 on the 30-item
 ENCCEJA and the 18-item financial literacy test, and by nothing on the
-116-item residency exam. With a free slope per item, a normal prior on
+116-item residency exam. Plotting that gap against the number of items makes
+the pattern plain.
+
+```{python}
+#| code-fold: true
+#| code-summary: "Estimator gap against test length"
+gap = imv_tab["mirt_2pl"]
+n_items = pd.Series({t: int(data[t].iid.max() + 1) for t in gap.index})
+fig, ax = plt.subplots(figsize=(6, 3.6))
+ax.scatter(n_items, gap, s=28, color=[group_colour[GROUP_OF[t]] for t in gap.index])
+for t in gap.index:
+    if gap[t] > 0.008 or n_items[t] > 100:
+        ax.annotate(SHORT[t], (n_items[t], gap[t]), fontsize=7, xytext=(4, 2), textcoords="offset points")
+ax.axhline(0, color="0.3", lw=0.8)
+ax.set(xlabel="items per table (after subsampling)", ylabel="IMV of mirt 2PL over PyTorch 2PL")
+ax.grid(color="0.9", lw=0.6); ax.set_axisbelow(True)
+for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+plt.tight_layout(); plt.show()
+```
+ With a free slope per item, a normal prior on
 $\theta$ alone does not bound the product $a_i\theta_p$: trained to
 convergence the network's slopes grow and its person estimates shrink
 (their spread is 0.4 on the short tests against 0.56 on the residency exam),
