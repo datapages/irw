@@ -345,6 +345,7 @@ kv_rows <- function(pairs) {
 # implying the IRW holds one.
 STANDARD_URL  <- "https://github.com/ben-domingue/irw/blob/main/datastandard.md"
 CONJ_STANDARD_URL <- "https://itemresponsewarehouse.org/conjoint_standard.html"
+RANK_STANDARD_URL <- "https://itemresponsewarehouse.org/rankings_standard.html"
 STANDARD_COLS <- c("id", "item", "resp", "resp_raw", "wave", "treat", "rt", "date",
                    "rater", "item_family", "cluster_id", "block_id", "std_baseline")
 columns_note <- function(x) {
@@ -357,6 +358,15 @@ columns_note <- function(x) {
     "<code>choice</code>/<code>rating</code> outcomes; <code>attr_</code> columns holding ",
     "each attribute level as displayed) is defined in the <a href=\"", CONJ_STANDARD_URL,
     "\">IRW conjoint standard</a>. What the outcomes asked is under Design above.</p>\n"))
+  # A rankings table keeps the core names, but resp is a position as recorded:
+  # skips are gaps and a candidate marked twice is two rows (rankings standard).
+  if (identical(x$src, "rank")) return(paste0(
+    "<p class=\"note\">The layout (one row per respondent, ranking and marked position; ",
+    "<code>resp</code> the position as recorded, 1 = first choice; <code>item</code> a candidate ",
+    "code <code>c01</code>, <code>c02</code>, … or a reserved value) is defined in the <a href=\"",
+    RANK_STANDARD_URL, "\">IRW rankings standard</a>. Skipped positions are gaps and ",
+    "duplicate marks are kept, so compress with <code>irw_rank_compress()</code> / ",
+    "<code>irw.rank_compress()</code> before a person-by-item pivot.</p>\n"))
   std <- x$variables[x$variables %in% STANDARD_COLS | startsWith(x$variables, "std_baseline")]
   first <- if (length(std)) paste0(
     paste0("<code>", vapply(std, esc, character(1)), "</code>", collapse = ", "),
@@ -707,6 +717,7 @@ build_croissant <- function(x) {
     comp = c("agent_a", "agent_b", "winner"),
     nom  = c("id", "item", "resp", "text"),
     conj = c("id", "task", "profile", "choice", "rating"),
+    rank = c("id", "task", "item", "resp"),
     c("id", "item", "resp"))
   core <- intersect(std, x$variables)
   fields <- lapply(core, function(v) {
@@ -789,6 +800,8 @@ build_croissant <- function(x) {
         "One row per comparison between two agents, per the IRW competitions format."
         else if (x$src == "conj")
         "One row per respondent, task and profile, per the IRW conjoint format."
+        else if (x$src == "rank")
+        "One row per respondent, ranking and marked position (resp = the position, as recorded), per the IRW rankings format."
         else "One row per person-item response, per the IRW data standard.",
       field = fields
     ))
@@ -976,10 +989,29 @@ build_page <- function(x) {
     list("Responses per item",        num_fmt(x$m$responses_per_item)),
     list("Density",                   num_fmt(x$m$density)),
     list("Longitudinal",              x$m$longitudinal),
-    # Conjoint (irw#2887): conj_metadata counts rows, not responses.
-    list("Respondents",               num_fmt(x$m$n_respondents)),
-    list("Rows (one per respondent, task and profile)", num_fmt(x$m$n_rows)),
-    list("Tasks per respondent (most)", num_fmt(x$m$n_tasks)),
+    # Conjoint (irw#2887): conj_metadata counts rows, not responses. Rankings
+    # (irw#3024) shares n_respondents/n_rows/n_tasks with its own meaning, so
+    # each family labels them itself.
+    list(if (x$src == "rank") "Rankers" else "Respondents", num_fmt(x$m$n_respondents)),
+    list(if (x$src == "rank") "Marked positions (one row each)" else "Rows (one per respondent, task and profile)",
+         num_fmt(x$m$n_rows)),
+    list(if (x$src == "rank") "Rankings per respondent" else "Tasks per respondent (most)",
+         num_fmt(x$m$n_tasks)),
+    # Rankings design record (data/rankings/README.md, "Design record").
+    list("Counting method",           x$m$method),
+    list("Seats",                     x$m$seats),
+    list("Positions offered",         num_fmt(x$m$n_positions)),
+    list("Candidates",                num_fmt(x$m$n_candidates)),
+    list("Ballots cast",              num_fmt(x$m$n_ballots_cast)),
+    list("Ballots with marks",        num_fmt(x$m$n_ballots_with_marks)),
+    list("Duplicate marks",           num_fmt(x$m$n_duplicate_marks)),
+    list("Overvotes",                 num_fmt(x$m$n_overvotes)),
+    list("Write-ins",                 num_fmt(x$m$n_writeins)),
+    list("Write-in allowed",          x$m$write_in_allowed),
+    list("Candidate order",           x$m$candidate_order),
+    list("Jurisdiction",              x$m$jurisdiction),
+    list("Contest date",              x$m$date),
+    list("Office",                    x$m$office),
     list("Profiles per task",         num_fmt(x$m$n_profiles)),
     list("Attributes",                num_fmt(x$m$n_attributes)),
     list("Tasks with no profile chosen", num_fmt(x$m$n_optout_tasks))))
@@ -1308,13 +1340,21 @@ main <- function() {
   # The non-core sources keep their own metadata/biblio (and, for nom, tags;
   # for conj, outcomes) tables in irw_meta, with no `dataset` column of their own.
   outc <- data.frame(table = character(0), outcome = character(0), stringsAsFactors = FALSE)
+  meta_tabs <- vapply(meta_ds$list_tables(), function(t) t$name, character(1))
   for (i in seq_len(nrow(NONCORE))) {
     pf <- NONCORE$prefix[i]
+    # An optional family (page_rules.R) whose metadata is not in irw_meta yet
+    # gets no pages this publish, and says so, rather than stopping the render.
+    if (isTRUE(NONCORE$optional[i]) &&
+        !all(paste0(pf, c("_metadata", "_biblio")) %in% meta_tabs)) {
+      message("[landing] ", pf, "_metadata/_biblio not in irw_meta yet; no ",
+              NONCORE$dataset[i], " pages this publish")
+      next
+    }
     m2 <- as_df(meta_ds$table(paste0(pf, "_metadata")))
     m2$dataset <- NONCORE$dataset[i]
     md  <- bind_fill(md,  m2)
     bib <- bind_fill(bib, as_df(meta_ds$table(paste0(pf, "_biblio"))))
-    meta_tabs <- vapply(meta_ds$list_tables(), function(t) t$name, character(1))
     tname <- paste0(pf, "_tags")
     if (tname %in% meta_tabs) tg <- bind_fill(tg, as_df(meta_ds$table(tname)))
     # conj_outcomes: one row per table x outcome column (what was asked, its scale).
@@ -1488,6 +1528,10 @@ main <- function() {
       num_fmt(mrow$n_tasks), " tasks of ", num_fmt(mrow$n_profiles),
       if (identical(num_fmt(mrow$n_profiles), "1")) " profile" else " profiles",
       " varying on ", num_fmt(mrow$n_attributes), " attributes.")
+    else if (src == "rank") paste0(
+      num_fmt(mrow$n_rows), " marked positions from ",
+      num_fmt(mrow$n_respondents), " rankers over ",
+      num_fmt(mrow$n_items), " options.")
     else paste0(
       num_fmt(mrow$n_responses), if (src == "sim") " simulated" else "", " responses from ",
       num_fmt(mrow$n_participants), " respondents to ",
@@ -1518,7 +1562,8 @@ main <- function() {
       doi = doi, doi_url = doi_url,
       keywords = c(unname(unlist(tags)),
                    switch(src, sim = "simulated data", comp = "paired comparisons",
-                          nom = "nominal responses", conj = "conjoint experiment", NULL)),
+                          nom = "nominal responses", conj = "conjoint experiment",
+                          rank = "ranked-choice ballots", NULL)),
       src = src, twin = unname(twin_of[k]), family = family_of[[k]],
       outcomes = outc[outc$.k == k, , drop = FALSE],
       truth_cols = grep("^cov_true_", vars, value = TRUE),
@@ -1574,8 +1619,8 @@ main <- function() {
       urls <- c(urls, page_url)
     }
     rows[[length(rows) + 1]] <- list(table = x$table, slug = slug, shard = shard,
-                                     # conj has no responses; its count is rows
-                                     n_responses = if (src == "conj") mrow$n_rows else mrow$n_responses,
+                                     # conj and rank have no responses; their count is rows
+                                     n_responses = if (src %in% c("conj", "rank")) mrow$n_rows else mrow$n_responses,
                                      license = x$license, issue = x$issue)
     if (!nzchar(x$rows_url)) too_big <- c(too_big, x$table)
   }

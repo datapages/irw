@@ -45,11 +45,19 @@ SHARD_REF <- c(
 # Conjoint (irw_conjoint, ben-domingue/irw#2887) has no item/resp either: its
 # metadata counts respondents, tasks and profiles, and carries design fields
 # (country, languages, randomization restrictions) plus a conj_outcomes table.
+# Rankings (irw_rank, ben-domingue/irw#3024) keeps the core column names, but
+# resp is a position and a repeated id x item is a duplicate mark; its
+# rank_metadata carries the design record (method, seats, positions, ballots
+# cast and with marks). `optional` = TRUE: the family's tables were released
+# before rank_metadata reached irw_meta (pipeline stage 18, irw#3029), so the
+# emitter skips the family, with a message, while the table is absent instead
+# of failing the publish. The other families' tables are required.
 NONCORE <- data.frame(
-  dataset = c("irw_simsyn",      "irw_competitions",      "irw_nominal",      "irw_conjoint"),
-  ref     = c("irw_simsyn:0btg", "irw_competitions:cmd7", "irw_nominal:614n", "irw_conjoint:5wjx"),
-  prefix  = c("simsyn",          "comps",                 "nominal",          "conj"),
-  source  = c("sim",             "comp",                  "nom",              "conj"),
+  dataset  = c("irw_simsyn",      "irw_competitions",      "irw_nominal",      "irw_conjoint",      "irw_rank"),
+  ref      = c("irw_simsyn:0btg", "irw_competitions:cmd7", "irw_nominal:614n", "irw_conjoint:5wjx", "irw_rank:93f5"),
+  prefix   = c("simsyn",          "comps",                 "nominal",          "conj",              "rank"),
+  source   = c("sim",             "comp",                  "nom",              "conj",              "rank"),
+  optional = c(FALSE,             FALSE,                   FALSE,              FALSE,               TRUE),
   stringsAsFactors = FALSE)
 # Conjoint is split across shards, because Redivis caps a dataset at 1,000
 # tables (ben-domingue/irw#2934; new tables go to the newest shard). irw_meta's

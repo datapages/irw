@@ -1,0 +1,331 @@
+---
+title: "The Rankings Data Standard"
+---
+
+In a ranking, each respondent puts a fixed set of named options in order: a voter marks first, second and third choices on a ranked-choice ballot, a Eurovision juror ranks every song in a show, a survey asks which of five policies matters most and which least. The options are the same things for every respondent, each appears once per ranking, and the response is a **position**, not a score. These tables form the rankings [data family](overview.qmd#families) in the IRW (`source = "rank"`).
+
+A table belongs here when each respondent orders a fixed set of options: ranked-choice ballots (instant-runoff, single transferable vote, sequential elections), jury rankings, rank-order lists such as school or job choices, and survey questions that ask for a ranking. Not here: a comparison between two fixed things ([competitions](comps_standard.qmd)), profiles assembled at random from attributes ([conjoint](conjoint_standard.qmd)), a single pick from a list (core or [nominal](nominal_standard.qmd)), and best-worst scaling, which follows the conjoint discrete-choice rules. A Q-sort, where positions are forced into a fixed shape with ties, is a cousin and is not in scope.
+
+## The data standard
+
+One row per respondent × task × marked position. The core column names are kept so that core tooling reads the table, but `resp` is a rank.
+
+| column | | meaning |
+|---|---|---|
+| `id` | required | The ballot or respondent, re-keyed 1..n in source order. Never a voter identifier. |
+| `task` | required | Which ranking, when a respondent gave more than one (several contests on one ballot, several ranking questions). `1` throughout a one-contest table. |
+| `item` | required | The option ranked: a candidate code (`c01`, `c02`, …, below), one of the reserved values `(write-in)` and `(overvote)`, or, for options that are not people, the option text as shown. A Eurovision table's items are the performing countries' ISO codes. |
+| `resp` | required | The position marked, `1` = first choice, **as recorded**. |
+| `cov_<name>` | optional | Ballot- or respondent-level columns from the source, as text, repeated on every row of the ballot: `cov_precinct`, `cov_ballot_style`, `cov_jury_country`. |
+| `trial_<name>` | optional | Task-level details, if any (question order, survey arm). |
+
+Two rules decide what a user sees when pivoting a rankings table, and both are departures from what a person × item pivot assumes:
+
+- **Skipped positions are gaps, not rows.** A ballot marked at positions 1 and 3 keeps `resp` 1 and 3; nothing is renumbered. A ballot with no marks has no rows at all, so the design record (below) keeps the number of ballots cast as well as the number with marks.
+- **Duplicate marks are kept as recorded.** A candidate marked at positions 1 and 2 gives two rows with the same `item` and different `resp`. Counting rules for duplicates differ by jurisdiction (most treat the later mark as a skip), so the table does not apply one. This is the one place a rankings table breaks the one-row-per-`id × item` habit, and it is why `irw_fetch()` / `irw.fetch()` with `dedup = TRUE` leaves these tables alone.
+
+Within one `id × task`, positions are unique: an overvote (more than one candidate marked at the same position) is already one row, with `item = "(overvote)"`, since the source does not say which candidates were marked. `(write-in)` is a row with that item unless the source names the written-in candidate. Both reserved values are spelled the same in every table, like `(not shown)` in the conjoint family.
+
+The packages apply the common counting rule on request. `irw_rank_compress()` in R and `irw.rank_compress()` in Python take each ranking in `resp` order, drop an item's later marks (the reserved values are never dropped: two write-in rows are usually two different people), and renumber `resp` 1..k so that the gaps close. `drop_repeats = FALSE` closes the gaps and keeps the repeats.
+
+### Candidate codes
+
+Candidate names are personal names in public records and are not stored anywhere in the IRW. Within a contest, the distinct names as printed in the public source file are sorted case-insensitively and coded `c01`, `c02`, …; the reserved values are left out of the sort. Anyone holding the source file can rebuild the mapping from the rule and the processing script, and nothing else (party, incumbency, ballot position) is kept about a candidate. Options that are not people, such as songs, policies or schools, are stored as the text shown.
+
+### Further rules
+
+- **One contest per table:** one option set, one electorate, one date. A survey with several ranking questions is one table, with `task` telling them apart.
+- **At least 50 rankers** per table, rather than the core family's 100 respondents, because a ranker over three or more options contributes several positions ([ben-domingue/irw#3031](https://github.com/ben-domingue/irw/pull/3031)).
+- **Licence** as elsewhere in the IRW: CC0, CC BY, CC BY-SA or CC BY-NC. Public election records are public records in their own right; the deposit's licence is what the table carries.
+- **Table names:** election tables are `rcv_<jurisdiction>_<yyyymmdd>_<office>` (`rcv_burlington_20060307_mayor`); other rankings use the usual `author_year_topic` (`eurovision_2016_final`).
+
+The builder's version of the standard, with the processing scripts, the validator and the rulings that shaped it, is [`data/rankings/`](https://github.com/ben-domingue/irw/tree/main/data/rankings) in the IRW repository.
+
+## What each table means
+
+The tables share one layout but not one meaning: how many positions a ballot offered, how many seats were filled and which counting rule applied all change what a position means. Each table has a **design record**, returned by `irw_metadata(source = "rank")` / `irw.metadata(source="rank")` beside the counts computed from the data:
+
+| field | |
+|---|---|
+| `n_respondents`, `n_rows`, `n_tasks`, `n_items`, `max_resp`, `n_duplicate_marks` | computed from the table: rankers, marked positions, rankings per respondent, distinct options (reserved values included), the highest position marked, and rows beyond the first per `id × task × item` |
+| `method` | `irv` (single winner), `stv` (proportional, multi-winner), `sequential` (multi-winner by repeated IRV), `jury`, `survey`, `rank_order_list`, or `unknown` |
+| `seats` | winners to be chosen; `na` for a ranking that is not an election |
+| `n_positions`, `n_candidates` | positions offered on the ballot and distinct candidate codes |
+| `n_ballots_cast`, `n_ballots_with_marks` | rows in the source file, and ballots with at least one row (the table's number of ids) |
+| `n_overvotes`, `n_writeins` | counts of those rows |
+| `write_in_allowed`, `candidate_order` | `yes`/`no`/`unknown`; `fixed`, `rotated` or `unknown` |
+| `jurisdiction`, `date`, `office`, `collection`, `source_file` | where the contest and the file came from |
+
+When no source states a fact the value is `unknown`, never a guess. One consequence for analysis: exhaustion and truncation rates (how many ballots ran out of marks before the final round, how many voters used fewer positions than offered) take `n_ballots_with_marks` as the denominator, not `n_ballots_cast`. A New York City export lists every ballot of the primary, including precincts where the contest was not on the ballot, so the cast count there overstates the electorate.
+
+## Accessing the rankings data
+
+The rankings data are in the Redivis dataset [`irw_rank`](https://stanford.redivis.com/datasets/93f5-2tsx5983r) and can be accessed from both the R and Python `irw` packages. Tables can be listed, fetched, described and cited in both; `source = "rank"` selects the family.
+
+::: panel-tabset
+## R
+```{r}
+#| eval: false
+#| echo: true
+library(irw)
+
+# View available rankings tables
+irw_list_tables(source = "rank")
+
+# Fetch a table: one row per juror x ranked song
+df <- irw_fetch("eurovision_2016_final", source = "rank")
+head(df)
+
+# The design record of every table
+meta <- irw_metadata(source = "rank")
+meta[meta$method == "irv", c("table", "n_candidates", "n_positions", "n_ballots_with_marks")]
+
+# Apply the common counting rule: drop repeated marks, close the gaps
+b <- irw_rank_compress(irw_fetch("rcv_burlington_20060307_mayor", source = "rank"))
+table(b$item[b$resp == 1])   # first choices
+
+# Citations
+irw_save_bibtex("eurovision_2016_final", source = "rank", output_file = "rankings.bib")
+```
+
+## Python
+
+```{python}
+#| eval: false
+#| echo: true
+#| python.reticulate: false
+import irw
+
+# View available rankings tables
+irw.list_tables(source="rank")
+
+# Fetch a table: one row per juror x ranked song
+df = irw.fetch("eurovision_2016_final", source="rank")
+df.head()
+
+# The design record of every table
+meta = irw.metadata(source="rank")
+meta.loc[meta.method == "irv", ["table", "n_candidates", "n_positions", "n_ballots_with_marks"]]
+
+# Apply the common counting rule: drop repeated marks, close the gaps
+b = irw.rank_compress(irw.fetch("rcv_burlington_20060307_mayor", source="rank"))
+b.loc[b.resp == 1, "item"].value_counts()   # first choices
+
+# Citations
+irw.save_bibtex(["eurovision_2016_final"], source="rank", output_file="rankings.bib")
+```
+:::
+
+### From a table to a model
+
+Plackett–Luce and Mallows models want each ranking as an ordered list of options. Compress first, drop the reserved rows (an overvote names no candidate, and write-ins are usually many different people), then split by ballot. In R, with the `PlackettLuce` package:
+
+```{r}
+#| eval: false
+#| echo: true
+library(irw)
+d <- irw_rank_compress(irw_fetch("rcv_burlington_20060307_mayor", source = "rank"))
+d <- d[!d$item %in% c("(write-in)", "(overvote)"), ]
+d <- d[order(d$id, d$resp), ]
+ballots <- split(d$item, d$id)               # each ballot's options, first choice first
+R <- PlackettLuce::as.rankings(ballots, input = "orderings")
+fit <- PlackettLuce::PlackettLuce(R)
+coef(fit, log = FALSE)                       # worth of each candidate code
+```
+
+The same steps in Python give a list of lists for `choix` or a hand-written likelihood: `d.sort_values(["id", "resp"]).groupby("id")["item"].agg(list)`.
+
+## What the family holds
+
+{{< include _load-family-meta.qmd >}}
+
+```{r}
+#| label: rank-presence
+## The family's metadata tables reach irw_meta through stage 18 of the metadata
+## pipeline (ben-domingue/irw#3029) and the next irw_meta release. Until then
+## the section below is skipped rather than rendered empty. Absence is told
+## apart from a failed read: the listing itself still errors on a bad token,
+## as the other family pages do.
+irw_meta_names <- vapply(redivis$user("datapages")$dataset("irw_meta:bdxt")$list_tables(),
+                         function(t) t$name, character(1))
+has_rank <- all(c("rank_metadata", "rank_biblio") %in% irw_meta_names)
+rank_pending <- !has_rank   # `!expr !x` is a YAML tag clash
+## The worked example below reads a cached result (see its compute script).
+ex <- readRDS(file.path("rankings_example", "eurovision_positions.rds"))
+```
+
+```{r}
+#| label: rank-pending
+#| eval: !expr rank_pending
+#| results: asis
+cat("The counts for this section come from `rank_metadata` in the IRW metadata, which the",
+    "metadata pipeline builds from the released tables. The family's first tables were",
+    "released on 2026-10-15 and the metadata follows on the next scheduled run; this",
+    "section fills in then. Until it does, `irw_list_tables(source = \"rank\")` lists",
+    "what is live.\n")
+```
+
+```{r}
+#| label: rank-descriptives
+#| eval: !expr has_rank
+rk <- irw_meta_table("rank_metadata")
+for (v in c("n_respondents", "n_rows", "n_tasks", "n_items", "max_resp", "n_duplicate_marks",
+            "n_positions", "n_candidates", "n_ballots_cast", "n_ballots_with_marks",
+            "n_overvotes", "n_writeins")) rk[[v]] <- suppressWarnings(as.numeric(rk[[v]]))
+n_rank     <- nrow(rk)
+n_rankers  <- sum(rk$n_respondents, na.rm = TRUE)
+n_marks    <- sum(rk$n_rows, na.rm = TRUE)
+med_rank   <- median(rk$n_respondents, na.rm = TRUE)
+method     <- as.character(rk$method); method[is.na(method) | method == ""] <- "unknown"
+method_tab <- sort(table(method), decreasing = TRUE)
+n_election <- sum(method %in% c("irv", "stv", "sequential"))
+n_jury     <- sum(method == "jury")
+n_dupe     <- sum(rk$n_duplicate_marks > 0, na.rm = TRUE)
+## Positions used, as a share of positions offered: the mean marks per ballot
+## over n_positions, for tables where both are known.
+use <- (rk$n_rows / rk$n_respondents) / rk$n_positions
+use <- use[is.finite(use)]
+n_full     <- sum(use >= 0.95)
+```
+
+```{r}
+#| label: rank-prose
+#| eval: !expr has_rank
+#| results: asis
+cat(sprintf(paste(
+  "The family holds %d tables: %s rankers who together marked %s positions.",
+  "The median table has %s rankers. %d tables are elections (instant-runoff, single",
+  "transferable vote or sequential), %d are jury rankings, and the rest are survey",
+  "or rank-order-list data. In %d of the %d tables at least one ranker marked the same",
+  "option twice, so the stored rows carry duplicate marks as the standard requires.",
+  "In %d tables rankers used, on average, at least 95%% of the positions offered;",
+  "the others are truncated ballots, where most voters stop before the last position.",
+  "Each table's design record is in `irw_metadata(source = \"rank\")`.\n"),
+  n_rank, fmt_big(n_rankers), fmt_big(n_marks), fmt_n(med_rank), n_election, n_jury,
+  n_dupe, n_rank, n_full))
+```
+
+```{r}
+#| label: fig-rank-design
+#| eval: !expr has_rank
+#| fig-cap: "Rankings tables by counting method, options per contest and positions offered on the ballot."
+#| fig-height: 3.4
+#| fig-width: 9
+par(mfrow = c(1, 3))
+family_bar(method_tab, xlab = "Method")
+family_bar(table(cut(rk$n_items, c(0, 3, 5, 8, 12, 20, Inf), labels = c("2-3", "4-5", "6-8", "9-12", "13-20", "21+"), right = TRUE)),
+           xlab = "Options per contest")
+family_bar(table(cut(rk$n_positions, c(0, 3, 5, 10, 20, Inf), labels = c("1-3", "4-5", "6-10", "11-20", "21+"), right = TRUE)),
+           xlab = "Positions offered")
+```
+
+```{r}
+#| label: rank-list-heading
+#| eval: !expr has_rank
+#| results: asis
+cat("### Every table in the family\n\nEach table links to its own page, with the design record, citation, licence and fetch snippets.\n")
+```
+
+```{r}
+#| label: rank-table-list
+#| eval: !expr has_rank
+#| results: asis
+family_table_list("rank", "irw_rank", "rank",
+                  c(method = "Method", n_respondents = "Rankers", n_items = "Options",
+                    n_positions = "Positions", n_rows = "Marks", jurisdiction = "Jurisdiction"))
+```
+
+## An example: where the information sits in a ranking
+
+A ranking is usually modelled from the top down. The Plackett–Luce model, the workhorse for data like these, treats a ranking as a sequence of choices: the first choice from all the options, the second from those that remain, and so on, each with a probability proportional to the chosen option's worth. That reads a ranking from one end. The question here is whether the information in a ranking sits at that end.
+
+The table is `eurovision_2016_final`: `r ex$n_jurors` jurors, one from each national jury, each ranking all `r ex$n_acts` acts in the final except their own country's. Two curves over the `r ex$n_acts` positions of the ballot. The first is agreement by slot: the entropy, across jurors, of which act occupies each position, divided by its maximum, log(`r ex$n_acts`), so that 1 means every act is equally likely at that slot and lower means the jurors agree. The second is what a top-down model can use: a Plackett–Luce fit on four fifths of the jurors, scored on the held-out fifth at each position against the uniform choice among the acts still available, and reported as a likelihood-ratio gain against chance, exp(mean log-likelihood difference per choice) − 1. The same fit on the reversed lists, worst act first, is scored the same way and mapped back to the original positions. (The equivalent-coin IMV used elsewhere on this site does not apply to a 26-way choice, where even chance sits below the IMV's reference point.)
+
+```{r}
+#| label: rank-example-numbers
+#| include: false
+fig_cap <- sprintf("eurovision_2016_final (irw_rank %s). Left: at each ballot position, the share of jurors who put the slot's most common act there; the dotted line is chance (1/26). Middle: the same agreement as the normalised entropy of the slot's occupant, where 1 means any act is as likely as any other. Right: the held-out gain against chance of a Plackett-Luce fit at each position, fitted top-down and bottom-up.", ex$version)
+f <- function(x) sprintf("%+.2f", round(x, 2) + 0)   # + 0 avoids "-0.00"
+top_h <- ex$entropy[1]; mid_h <- max(ex$entropy, na.rm = TRUE); bot_h <- ex$entropy[ex$n_acts]
+pct <- function(x) sprintf("%.0f%%", 100 * x)
+mid <- which.max(ex$entropy)
+fwd1 <- ex$gain_fwd[1]; fwd_last5 <- mean(ex$gain_fwd[(ex$n_acts - 5):(ex$n_acts - 1)], na.rm = TRUE)
+rev1 <- ex$gain_rev[1]; rev_last5 <- mean(ex$gain_rev[(ex$n_acts - 5):(ex$n_acts - 1)], na.rm = TRUE)
+```
+
+```{r}
+#| label: fig-rank-positions
+#| fig-cap: !expr fig_cap
+#| fig-height: 3.6
+#| fig-width: 11
+pos <- seq_len(ex$n_acts)
+op <- par(mfrow = c(1, 3), mar = c(4, 4.2, 1.5, 1), mgp = c(2.4, 0.7, 0))
+plot(pos, 100 * ex$modal_share, type = "b", pch = 16, col = family_fill, las = 1,
+     ylim = c(0, 100 * max(ex$modal_share, na.rm = TRUE) * 1.08), xlab = "Ballot position (1 = best)",
+     ylab = "Jurors putting the slot's most common act there (%)",
+     main = "Agreement by slot", font.main = 1, cex.main = 1)
+abline(h = 100 / ex$n_acts, lty = 3, col = "grey60")
+text(ex$n_acts / 2, 100 / ex$n_acts, "chance (1 in 26)", pos = 1, cex = 0.8, col = "grey40")
+plot(pos, ex$entropy, type = "b", pch = 16, col = family_fill, las = 1,
+     ylim = c(min(ex$entropy, na.rm = TRUE) - 0.02, 1), xlab = "Ballot position (1 = best)",
+     ylab = "Entropy of the occupant / log(26)   (1 = no agreement)",
+     main = "The same thing, as spread", font.main = 1, cex.main = 1)
+abline(h = 1, lty = 3, col = "grey60")
+rev_col <- "#b26a3a"
+rng <- range(c(ex$gain_fwd, ex$gain_rev, 0), na.rm = TRUE)
+plot(pos, ex$gain_fwd, type = "b", pch = 16, col = family_fill, las = 1, ylim = rng,
+     xlab = "Ballot position (1 = best)", ylab = "Held-out gain against chance",
+     main = "What a Plackett-Luce fit can use", font.main = 1, cex.main = 1)
+lines(pos, ex$gain_rev, type = "b", pch = 17, col = rev_col)
+abline(h = 0, lty = 3, col = "grey60")
+legend("top", legend = c("fitted top-down", "fitted bottom-up (reversed lists)"),
+       col = c(family_fill, rev_col), pch = c(16, 17), lty = 1, bty = "n", cex = 0.85)
+par(op)
+```
+
+
+Read the left panel first. At the first slot, `r pct(ex$modal_share[1])` of the jurors put the same act there, and at the last slot `r pct(ex$modal_share[ex$n_acts])` put the same act there; chance would be `r pct(1 / ex$n_acts)`. In the middle of the ballot the most common act at a slot holds only `r pct(ex$modal_share[mid])` of the jurors, so the occupant of, say, position `r mid` is close to a draw among the acts that are left. The middle panel says the same thing on a scale that counts the whole distribution rather than its mode: the normalised entropy is `r sprintf("%.2f", top_h)` at the first slot and `r sprintf("%.2f", bot_h)` at the last, against `r sprintf("%.2f", mid_h)` in the middle, where 1 would mean no agreement at all. Lower means more agreement, so the U is agreement at both ends and little in between. Jurors know which acts they liked and which they did not; the order of the acts they felt nothing about is nearly arbitrary.
+
+The right panel is what a top-down model makes of that. Its gain against chance is `r f(fwd1)` at the first position and falls to about zero over the last positions (`r f(fwd_last5)` on average over the five before the last, which is forced). It reads the agreement at the top and is blind to the agreement at the bottom, because by the time it reaches the last slots the acts the jurors agreed to put last are the only ones left, and a sequence of choices from the top has nothing to say about their order. The same model fitted bottom-up is the mirror image: `r f(rev_last5)` over those same slots and `r f(rev1)` at the first position. The two fits rank the acts almost identically (Spearman `r sprintf("%.2f", ex$rho_fwd_vs_rev)`), so they agree about the acts and differ only in which end of the ballot they can see.
+
+Positions are not equally informative, a ranking is built from both ends, and a top-down model reads only one of them. That is the reason the table stores positions exactly as recorded and leaves renumbering to `irw_rank_compress()`: what a position means depends on the analysis, and a stored table should not decide it. This is a one-table illustration, not a claim about the family; the family vignette will carry the claims. The figure is computed by [`rankings_example/eurovision_positions_compute.R`](https://github.com/datapages/irw/blob/main/rankings_example/eurovision_positions_compute.R) (5-fold cross-validation, `PlackettLuce::PlackettLuce()`, a juror's own country left out of their choice set) and cached, since the fitting package is not part of the site build; it is rerun by hand when the table changes.
+
+### Checking the table against a certified count
+
+The 2006 mayoral election in Burlington, Vermont was decided by instant-runoff voting among six candidates, with five positions on the ballot. The city certified a final round of 4,761 votes to 3,986. An instant-runoff count written against the IRW table reproduces it, and the two stored facts the count needs are the two the standard is strict about: an `(overvote)` row exhausts the ballot at that position under Burlington's rules, and a candidate's repeated mark is skipped. The table is read straight from Redivis, so the tallies below are computed from the released data when this page is built.
+
+```{r}
+#| label: rank-example
+#| echo: true
+#| code-fold: false
+library(redivis)
+d <- as.data.frame(redivis$user("datapages")$dataset("irw_rank:93f5")$table("rcv_burlington_20060307_mayor")$to_tibble())
+d <- d[order(d$id, d$resp), ]
+
+# Each ballot as an ordered list of candidate codes, under the city's rules:
+# stop at an overvote, skip a candidate already ranked, ignore write-ins.
+ballot <- function(items) {
+  out <- character(0)
+  for (it in items) {
+    if (it == "(overvote)") break
+    if (it == "(write-in)" || it %in% out) next
+    out <- c(out, it)
+  }
+  out
+}
+ballots <- lapply(split(d$item, d$id), ballot)
+
+# Instant runoff: count first preferences among the candidates still standing,
+# eliminate the last, repeat until someone has a majority of the continuing ballots.
+alive <- setdiff(unique(d$item), c("(overvote)", "(write-in)"))
+repeat {
+  first <- vapply(ballots, function(b) { b <- b[b %in% alive]; if (length(b)) b[1] else NA_character_ }, "")
+  tally <- sort(table(factor(first, levels = alive)), decreasing = TRUE)
+  cat(sprintf("%-12s", names(tally)), "\n", sprintf("%-12d", as.integer(tally)),
+      " exhausted:", sum(is.na(first)), "\n")
+  if (tally[1] > sum(tally) / 2 || length(alive) == 2) break
+  alive <- setdiff(alive, names(tally)[length(tally)])
+}
+```
+
+The winner's final-round tally matches the certified count exactly and the runner-up's is within one vote. Without the overvote rows the final round would be three votes off, and without skipping repeated marks a few ballots would be counted twice for the same candidate. Most voters marked two positions or all five, so about a thousand ballots are exhausted by the last round: that number is only meaningful against the design record's `n_ballots_with_marks`, not against `n_ballots_cast`. The candidate codes are alphabetical, so `c01` is the candidate whose name sorts first in the public file, not the winner by construction.

@@ -15,8 +15,8 @@
 #     across all tables -- plus n_tables_itemtext, the tables with a row in
 #     itemtext_metadata (case-insensitive, as in 11_status.R, so the hero and
 #     the status page agree).
-#   - n_tables_comp, n_tables_nom, n_tables_conj: table counts for the
-#     competition, nominal and conjoint families, for one small line on the
+#   - n_tables_comp, n_tables_nom, n_tables_conj, n_tables_rank: table counts for the
+#     competition, nominal, conjoint and rankings families, for one small line on the
 #     hero. Omitted on a failed read.
 #   - category_breakdown: tables bucketed by their own aggregate n_categories
 #     (2/3/4/5/6/7+, excluding <2 and >=12), with n_items and n_responses summed
@@ -56,7 +56,7 @@ if (inherits(got, "error")) {
 
 meta <- as.data.frame(got$meta)
 
-# Table counts for the competition, nominal and conjoint families: a small line
+# Table counts for the competition, nominal, conjoint and rankings families: a small line
 # under the hero's table count, not part of the totals above. Their metadata
 # sits in irw_meta beside the core table, where the irw package reads it for
 # source = "comp" / "nom" / "conj". Soft on failure -- a missing count just
@@ -86,6 +86,7 @@ totals$n_tables_itemtext <- sum(key(meta$table) %in% key(got$itemtext$table))
 totals$n_tables_comp <- count_branch("comps_metadata")
 totals$n_tables_nom  <- count_branch("nominal_metadata")
 totals$n_tables_conj <- count_branch("conj_metadata")
+totals$n_tables_rank <- count_branch("rank_metadata")
 
 MIN_CATEGORIES <- 2   # single-category (no-variance) tables excluded
 MAX_CATEGORIES <- 11  # inclusive; >=12 categories excluded, per paper Sec. 2.2

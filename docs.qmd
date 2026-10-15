@@ -2,7 +2,7 @@
 title: "Data documentation"
 ---
 
-Click on each dataset's name to see its description, license, citation, and link to its original source. Code used to create these data can be found [here](https://github.com/ben-domingue/irw/tree/main/data). The list covers every [data family](overview.qmd#families): a table from the [competition](comps_standard.qmd), [nominal](nominal_standard.qmd), [conjoint](conjoint_standard.qmd) or [simulated](simsyn.qmd) family names its family under the dataset name, with the `source` argument the packages need to fetch or cite it.
+Click on each dataset's name to see its description, license, citation, and link to its original source. Code used to create these data can be found [here](https://github.com/ben-domingue/irw/tree/main/data). The list covers every [data family](overview.qmd#families): a table from the [competition](comps_standard.qmd), [nominal](nominal_standard.qmd), [conjoint](conjoint_standard.qmd), [rankings](rankings_standard.qmd) or [simulated](simsyn.qmd) family names its family under the dataset name, with the `source` argument the packages need to fetch or cite it.
 
 **Every dataset here has been modified.** IRW does not redistribute source files: each one is reshaped into the [IRW data standard](standard.qmd) — long format, one row per person-item response, with columns renamed and non-response material dropped. The processing script for a given dataset is the record of exactly what was changed, and is linked above. The license shown beside each description is the **source's** license, which continues to govern reuse of that dataset: where it carries a non-commercial restriction, that restriction travels with IRW's copy.
 
@@ -105,12 +105,17 @@ biblio <- irw_meta$table("biblio")$to_tibble()
 # The other families' biblio tables carry the same columns (datapages/irw#343,
 # item 3). `source` is the packages' spelling and labels the row below.
 family_biblio <- c(comps_biblio = "comp", nominal_biblio = "nom",
-                   conj_biblio = "conj", simsyn_biblio = "sim")
+                   conj_biblio = "conj", simsyn_biblio = "sim", rank_biblio = "rank")
+# rank_biblio reaches irw_meta after the family's tables did (datapages/irw#355):
+# an absent table is skipped, every other family's biblio is required as before.
+irw_meta_names <- map_chr(irw_meta$list_tables(), \(t) t$name)
+family_biblio <- family_biblio[names(family_biblio) != "rank_biblio" |
+                               names(family_biblio) %in% irw_meta_names]
 biblio <- bind_rows(
   biblio |> mutate(across(everything(), as.character), source = "core"),
   imap(family_biblio, \(src, tb) irw_meta$table(tb)$to_tibble() |>
          mutate(across(everything(), as.character), source = src)) |> list_rbind())
-family_label <- c(comp = "competitions", nom = "nominal", conj = "conjoint", sim = "simulated")
+family_label <- c(comp = "competitions", nom = "nominal", conj = "conjoint", rank = "rankings", sim = "simulated")
 
 # Load datasets
 data_index <- biblio |>

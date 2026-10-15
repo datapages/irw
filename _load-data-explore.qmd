@@ -154,14 +154,23 @@ urls <- listing |> select(table, url) |> mutate(url = str_remove(url, "\\?.*$"))
 ## argument takes. Conjoint is split across two shards (ben-domingue/irw#2934);
 ## a table listed in both gets the newest, as the packages resolve it. Mirrors
 ## NONCORE / CONJ_SHARDS in landing/page_rules.R.
+##
+## `optional`: a family whose biblio may not be in irw_meta yet. Rankings
+## (datapages/irw#355) was released on Redivis before its metadata reached
+## irw_meta (stage 18 of the pipeline, ben-domingue/irw#3029); its tables are
+## listed from the shard either way, and the index gains them once rank_biblio
+## exists. Every other family's biblio is required: a failed read stops the
+## render, as it always has.
 families <- tribble(
-  ~dataset,            ~ref,                      ~biblio,          ~source,
-  "irw_competitions",  "irw_competitions:cmd7",   "comps_biblio",   "comp",
-  "irw_nominal",       "irw_nominal:614n",        "nominal_biblio", "nom",
-  "irw_simsyn",        "irw_simsyn:0btg",         "simsyn_biblio",  "sim",
-  "irw_conjoint",      "irw_conjoint:5wjx",       "conj_biblio",    "conj",
-  "irw_conjoint_2",    "irw_conjoint_2:142p",     NA,               "conj"
+  ~dataset,            ~ref,                      ~biblio,          ~source, ~optional,
+  "irw_competitions",  "irw_competitions:cmd7",   "comps_biblio",   "comp",  FALSE,
+  "irw_nominal",       "irw_nominal:614n",        "nominal_biblio", "nom",   FALSE,
+  "irw_simsyn",        "irw_simsyn:0btg",         "simsyn_biblio",  "sim",   FALSE,
+  "irw_conjoint",      "irw_conjoint:5wjx",       "conj_biblio",    "conj",  FALSE,
+  "irw_conjoint_2",    "irw_conjoint_2:142p",     NA,               "conj",  FALSE,
+  "irw_rank",          "irw_rank:93f5",           "rank_biblio",    "rank",  TRUE
 )
+irw_meta_names <- map_chr(irw_meta$list_tables(), \(t) t$name)
 family_listing <- map2(families$dataset, families$ref, list_shard) |>
   list_rbind() |>
   mutate(table = str_to_lower(table)) |>
@@ -173,7 +182,7 @@ ojs_define(table_ds_ref = bind_rows(listing, family_listing) |> select(table, ds
 ## family's biblio, tagged with its `source`. Table names are unique across all
 ## sources (the nominal tables were renamed *_nom for this), so one flat index.
 family_biblio <- families |>
-  filter(!is.na(biblio)) |>
+  filter(!is.na(biblio), !optional | biblio %in% irw_meta_names) |>
   pmap(\(biblio, source, ...) irw_meta$table(biblio)$to_tibble() |>
          mutate(across(everything(), as.character), source = source)) |>
   list_rbind()
