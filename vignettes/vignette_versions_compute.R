@@ -129,6 +129,10 @@ VIGNETTE_DIR <- "vignettes"
 # reflects the last run that fed it.
 CACHES <- list(
   "2pl_across_datasets"    = "2pldata/2pl_across_datasets_results.rds",
+  "bits_per_item"          = c("bits_per_item_data/bits_per_item_results.rds",
+                               "bits_per_item_data/sufficiency_results.rds",
+                               "bits_per_item_data/poly_results.rds",
+                               "bits_per_item_data/poly_extra_results.rds"),
   "asymmetric_irt"         = c("asymmetric_irt_data/asymmetric_irt_results.rds",
                                "asymmetric_irt_data/convergence_sim.rds",
                                "asymmetric_irt_data/example_itemfit.rds",

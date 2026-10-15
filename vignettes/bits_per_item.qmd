@@ -1,0 +1,2327 @@
+---
+title: "Bits per Item: How Much Does a Test Tell You About a Person?"
+description: |
+  A test is a sequence of questions asked about something we cannot see: not
+  the person, who is right in front of us, but the trait we want to measure.
+  Each answer narrows down where that person sits on it. Information theory
+  counts that narrowing in bits, Shannon's unit for the length of the shortest
+  message that would tell someone the answer. One bit is what you learn from a
+  yes/no question that splits the remaining possibilities in half, so a test
+  worth two bits has done the work of two ideally placed yes/no questions about
+  where the person stands, and a test worth ten has done the work of ten. We
+  play this out on three real tests, then
+  measure the bits delivered by more than two hundred dichotomous tests in the
+  Item Response Warehouse, and close with three tests whose answers come in
+  ordered categories.
+date: today
+bibliography: bits_per_item_data/references.bib
+nocite: |
+  @*
+format:
+  html:
+    toc: true
+    toc-depth: 2
+execute:
+  echo: false
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(plotly)
+library(patchwork)
+
+theme_set(theme_minimal(base_size = 14) +
+            theme(plot.title = element_text(face = "bold", size = 14),
+                  plot.title.position = "plot",
+                  panel.grid.minor = element_blank()))
+irw_blue   <- "#2166ac"   # the population of theta groups
+irw_red    <- "#d73027"   # surprise / the aberrant respondent
+irw_grey   <- "grey50"
+irw_accent <- "#1b9e77"   # information gained, everywhere on this page
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+cache_path <- "bits_per_item_data/bits_per_item_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache           <- readRDS(cache_path)
+  summary_df       <- .cache$summary
+  summary_df$construct_type <- sub(",.*$", "", summary_df$construct_type)
+  items_df         <- .cache$items
+  curves_df        <- .cache$curves
+  showcases        <- .cache$showcases
+  candidate_tables <- .cache$candidate_tables
+  date_run         <- .cache$date_run
+  is_pilot         <- isTRUE(.cache$pilot)
+  failures         <- unique(sub("^\\S+ \\S+ ", "", .cache$failures))
+  r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
+  r_n_tables_run   <- length(.cache$tables_attempted %||% candidate_tables)
+} else {
+  summary_df <- tibble(table = character(), model = character(), I_X = numeric(),
+                       I_S = numeric(), rho_marginal = numeric(), n_items = integer())
+  items_df <- tibble(); curves_df <- tibble(); showcases <- list(); failures <- character()
+  candidate_tables <- character()
+  date_run         <- Sys.Date()
+  is_pilot         <- FALSE
+  r_all_candidates <- 0L
+  r_n_tables_run   <- 0L
+}
+
+suff_path <- "bits_per_item_data/sufficiency_results.rds"
+suff <- if (file.exists(suff_path)) readRDS(suff_path)$showcases else NULL
+poly_path <- "bits_per_item_data/poly_results.rds"
+poly <- if (file.exists(poly_path)) readRDS(poly_path) else NULL
+poly_ok <- !is.null(poly)
+sim_path <- "bits_per_item_data/reliability_sim_results.rds"
+rel_sim <- if (file.exists(sim_path)) readRDS(sim_path)$sim else NULL
+knitr::opts_chunk$set(eval = cache_ok)
+# Every ggplot printed on this page goes through wl().
+registerS3method("knit_print", "ggplot", function(x, ...) print(wl(x)), envir = asNamespace("knitr"))
+
+h2 <- function(p) { p <- pmin(pmax(p, 1e-12), 1 - 1e-12); -(p * log2(p)) - ((1 - p) * log2(1 - p)) }
+show_titles <- c(fitz_2024_numeracy       = "Numeracy (11 items)",
+                 machivallianism_test_vcl = "Vocabulary checklist (16 words)",
+                 frac20                   = "Fraction subtraction (20 items)")
+main <- "fitz_2024_numeracy"
+two  <- filter(summary_df, model == "2PL")
+fmt  <- function(x, d = 2) formatC(x, format = "f", digits = d)
+wrap <- function(x, w = 95) if (is.null(x)) x else stringr::str_wrap(x, w)
+# Wrap long titles, subtitles and axis labels so they fit the figure width.
+wl <- function(p, w = 72) {
+  for (nm in c("title", "subtitle", "x")) {
+    lab <- p$labels[[nm]]
+    if (is.character(lab)) p$labels[[nm]] <- wrap(lab, if (nm == "title") w else round(w * 1.15))
+  }
+  p
+}
+```
+
+```{r}
+#| label: cache-warning
+#| eval: true
+#| output: asis
+
+if (!cache_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Cache not found** — figures and tables will not appear. Generate results ",
+  "by running the compute script, then re-render:\n\n",
+  "```r\nRscript vignettes/bits_per_item_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+```{r}
+#| label: pilot-warning
+#| eval: true
+#| output: asis
+
+if (cache_ok && is_pilot) cat(
+  "::: {.callout-warning}\n",
+  "**Draft preview, partial run.** This render uses a partial sample of ",
+  r_n_tables_run, " tables out of ", r_all_candidates, " eligible tables. ",
+  "All numbers here are real computed results, but treat the distributions ",
+  "as a small, noisy preview. Re-run `bits_per_item_compute.R` without ",
+  "`PILOT=1` to scale up.\n",
+  ":::\n", sep = ""
+)
+```
+
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the
+analysis design, and the writing below — was produced largely by Claude
+(Anthropic), working from a task specification and with human review.
+Treat the methodological choices and interpretations accordingly, and
+check the compute script (`bits_per_item_compute.R`) directly if you're relying
+on the numbers here.
+:::
+
+```{r}
+#| label: ojs-data
+
+ojs_payload <- lapply(names(showcases), function(nm) {
+  s <- showcases[[nm]]
+  list(
+    key = nm, title = unname(show_titles[nm]), instrument = s$instrument,
+    items = s$items[, c("label", "text", "label0", "label1", "a", "b", "bits")],
+    pg = unname(round(s$group_probs, 5)),
+    # group edges on the theta scale; the two open-ended tail groups are drawn to +/- 3.2
+    bounds = pmin(pmax(s$group_bounds, -3.2), 3.2)
+  )
+})
+names(ojs_payload) <- names(showcases)
+ojs_define(showcases_r = ojs_payload, accent_r = irw_accent, blue_r = irw_blue)
+```
+
+## Cutting up the population
+
+Start with an imaginary test whose questions are perfect. People are spread
+along θ, the trait being measured, in the familiar bell shape. Each question
+is a **cut**: everyone above it answers right, everyone below answers wrong.
+Asking it tells you which side of the cut a person is on, and nothing else.
+
+**Click on the chart to place a cut** (or use the slider), and watch the bits.
+The cuts chop the population into groups, and a person's answers tell you
+exactly which group they are in. How much is that worth? Information theory
+measures it with **entropy**, written **H**: how uncertain you are about
+something before you find out, counted as roughly the number of yes/no
+questions you would need, on average, to pin it down. Here the something is
+which group a person is in. It has to be a *which* question: a trait like θ
+is continuous and can never be pinned down exactly, so we always count bits
+about which of a fixed set of groups a person falls in. Once the groups are
+fine enough, the number of bits a test delivers no longer depends on how fine
+they are, which is what lets us talk about a test's bits at all. With perfect
+cuts the bits the test gives are exactly the entropy of the groups. Groups holding shares p of the population
+have H = −Σ p log~2~ p. One cut at the median makes two halves: 1 bit (each half holds
+p = ½ of people, so −½ log~2~ ½ − ½ log~2~ ½ = ½ + ½ = 1). Three cuts at
+the quartiles make four quarters: 2 bits (4 × −¼ log~2~ ¼ = 4 × ½ = 2). In general k cuts are worth at most
+log~2~(k + 1) bits, reached only when they make equal groups.
+
+Then turn up the **blur**. A blurred cut is a real question: near the cut,
+people sometimes land on the wrong side, so the answer is partly luck. The
+luck is noise, and it comes off the top.
+
+```{ojs}
+cx_pnorm = x => {
+  const t = 1 / (1 + 0.3275911 * Math.abs(x) / Math.SQRT2);
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x / 2);
+  return x >= 0 ? (1 + y) / 2 : (1 - y) / 2;
+}
+cx_qnorm = p => {   // Acklam's approximation
+  const a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02, 1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00];
+  const b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02, 6.680131188771972e+01, -1.328068155288572e+01];
+  const c = [-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00, -2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00];
+  const d = [7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00, 3.754408661907416e+00];
+  const lo = 0.02425;
+  if (p < lo) { const q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
+  if (p > 1 - lo) { const q = Math.sqrt(-2 * Math.log(1 - p));
+    return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5]) / ((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1); }
+  const q = p - 0.5, r = q * q;
+  return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q / (((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+}
+cx_M = 400
+cx_nodes = Array.from({length: cx_M}, (_, i) => cx_qnorm((i + 0.5) / cx_M))
+cx_h2 = p => (p <= 0 || p >= 1) ? 0 : -(p * Math.log2(p)) - (1 - p) * Math.log2(1 - p)
+cx_ent = ps => -ps.reduce((s, p) => s + (p > 0 ? p * Math.log2(p) : 0), 0)
+cx_shares = cuts => {
+  const c = [...cuts].sort((x, y) => x - y);
+  const edges = [0, ...c.map(cx_pnorm), 1];
+  return edges.slice(1).map((e, i) => e - edges[i]);
+}
+// Exact I(theta; X) for k cuts with logistic blur s (s = 0: perfect cuts).
+cx_info = (cuts, s) => {
+  const k = cuts.length;
+  if (k === 0) return {I: 0, H: 0, N: 0, live: 1};
+  if (s === 0) {
+    const sh = cx_shares(cuts), H = cx_ent(sh);
+    return {I: H, H, N: 0, live: sh.filter(p => p > 1e-9).length};
+  }
+  const n = 1 << k, px = new Float64Array(n), d = new Float64Array(n);
+  let noise = 0;
+  for (const t of cx_nodes) {
+    d.fill(0); d[0] = 1;
+    for (let j = 0; j < k; j++) {
+      const p = 1 / (1 + Math.exp(-(t - cuts[j]) / s)), step = 1 << j;
+      noise += cx_h2(p);
+      for (let i = 0; i < step; i++) { d[i + step] = d[i] * p; d[i] *= 1 - p; }
+    }
+    for (let i = 0; i < n; i++) px[i] += d[i] / cx_M;
+  }
+  noise /= cx_M;
+  const H = cx_ent(Array.from(px));
+  return {I: H - noise, H, N: noise, live: Array.from(px).filter(p => p > 0.001).length};
+}
+cx_max = 12
+mutable cx_cuts = []
+cx_add = t => { if (cx_cuts.length < cx_max) mutable cx_cuts = [...cx_cuts, Math.round(t * 100) / 100]; }
+cx_numeracy = { const it = showcases_r["fitz_2024_numeracy"].items;
+  const a = [...it.a].sort((x, y) => x - y), med = a[Math.floor(a.length / 2)];
+  return {cuts: it.b.map(b => Math.round(b * 100) / 100).slice(0, cx_max), blur: Math.round(20 / med) / 20}; }
+cx_setblur = v => { viewof cx_blur.value = v; viewof cx_blur.dispatchEvent(new Event("input", {bubbles: true})); }
+```
+
+```{ojs}
+viewof cx_blur = Inputs.range([0, 1.5], {step: 0.05, value: 0, label: "Blur (0 = perfect cuts)"})
+viewof cx_place = Inputs.range([-3, 3], {step: 0.05, value: 0, label: "New cut at θ ="})
+viewof cx_b1 = Inputs.button([
+  ["Add cut", () => cx_add(cx_place)],
+  ["Undo", () => { mutable cx_cuts = cx_cuts.slice(0, -1); }],
+  ["Clear", () => { mutable cx_cuts = []; }]
+])
+viewof cx_b2 = Inputs.button([
+  ["Median", () => { mutable cx_cuts = [0]; }],
+  ["Quartiles", () => { mutable cx_cuts = [0, -0.67, 0.67]; }],
+  ["Octiles", () => { mutable cx_cuts = [0, -0.67, 0.67, -1.15, -0.32, 0.32, 1.15]; }],
+  ["3 near the median", () => { mutable cx_cuts = [0, -0.1, 0.1]; }],
+  ["3 in the low tail", () => { mutable cx_cuts = [-1.5, -1.8, -2.1]; }],
+  ["Numeracy test", () => { mutable cx_cuts = cx_numeracy.cuts; cx_setblur(cx_numeracy.blur); }]
+], {label: "Try"})
+```
+
+```{ojs}
+cx_res = cx_info(cx_cuts, cx_blur)
+cx_rows = cx_cuts.map((c, i) => {
+  const before = i === 0 ? 0 : cx_info(cx_cuts.slice(0, i), cx_blur).I;
+  const after = cx_info(cx_cuts.slice(0, i + 1), cx_blur).I;
+  const prev = cx_cuts.slice(0, i), pc = cx_pnorm(c);
+  const lo = Math.max(0, ...prev.map(cx_pnorm).filter(q => q <= pc)), hi = Math.min(1, ...prev.map(cx_pnorm).filter(q => q > pc));
+  return {"#": i + 1, "θ": c.toFixed(2),
+    "group it splits": `${((hi - lo) * 100).toFixed(0)}% → ${((pc - lo) * 100).toFixed(0)}% + ${((hi - pc) * 100).toFixed(0)}%`,
+    "bits added": (after - before).toFixed(3), "on its own": cx_info([c], cx_blur).I.toFixed(3)};
+})
+cx_plot = {
+  const W = Math.min(width, 680), mL = 20, mR = 20, dom = [-3.2, 3.2];
+  const xs = d3.range(dom[0], dom[1] + 1e-9, 0.02);
+  const dn = x => Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI);
+  const sorted = [...cx_cuts].sort((x, y) => x - y), edges = [dom[0], ...sorted, dom[1]];
+  const groups = edges.slice(1).map((e, i) => ({x1: edges[i], x2: e, g: i,
+    share: cx_pnorm(e === dom[1] ? 9 : e) - cx_pnorm(edges[i] === dom[0] ? -9 : edges[i])}));
+  const area = groups.flatMap(gr => xs.filter(x => x >= gr.x1 && x <= gr.x2).concat([gr.x2])
+    .map(x => ({x, y: dn(x), g: gr.g})));
+  const s = cx_blur;
+  const plt = Plot.plot({
+    width: W, height: 230, marginLeft: mL, marginRight: mR, marginTop: 26, marginBottom: 40,
+    x: {domain: dom, label: "θ: the trait being measured (low → high)", labelAnchor: "center", labelArrow: "none"},
+    y: {domain: [0, 0.46], axis: null},
+    marks: [
+      Plot.areaY(area, {x: "x", y: "y", z: "g", fill: d => d.g % 2 ? "#92c5de" : "#d1e5f0", curve: "linear"}),
+      s > 0 ? Plot.rect(cx_cuts, {x1: c => c - 2.2 * s, x2: c => c + 2.2 * s, y1: 0, y2: 0.42, fill: "#d73027", fillOpacity: 0.08}) : null,
+      Plot.ruleX(cx_cuts, {x: c => c, y1: 0, y2: 0.42, stroke: "#d73027", strokeWidth: 1.8}),
+      Plot.text(cx_cuts.map((c, i) => ({c, i})), {x: "c", y: 0.42, text: d => String(d.i + 1), dy: -8, fill: "#d73027", fontWeight: "bold"}),
+      Plot.text(groups.filter(gr => gr.share > 0.04), {x: gr => (Math.max(gr.x1, -2.6) + Math.min(gr.x2, 2.6)) / 2, y: 0.03,
+        text: gr => (gr.share * 100).toFixed(0) + "%", fill: "#333", fontSize: 11}),
+      Plot.ruleY([0])
+    ]
+  });
+  plt.style.cursor = "crosshair";
+  plt.addEventListener("click", e => {
+    const [px] = d3.pointer(e, plt);
+    const t = dom[0] + (px - mL) / (W - mL - mR) * (dom[1] - dom[0]);
+    if (t > -3.1 && t < 3.1) cx_add(t);
+  });
+  return plt;
+}
+cx_ceiling = Math.log2(cx_cuts.length + 1)
+cx_readout = html`<div style="font-size:0.95rem; max-width:680px;">
+  <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:0.3rem 1rem;">
+    <span><b style="color:${accent_r}; font-size:1.15rem;">${cx_res.I.toFixed(2)} bits</b> from ${cx_cuts.length} cut${cx_cuts.length === 1 ? "" : "s"}</span>
+    <span>ceiling for ${cx_cuts.length} cut${cx_cuts.length === 1 ? "" : "s"}: log₂(${cx_cuts.length + 1}) = ${cx_ceiling.toFixed(2)} bits</span></div>
+  <div style="height:14px; background:#e9ecef; border-radius:3px; overflow:hidden; margin:4px 0; position:relative;">
+    <div style="height:100%; width:${Math.min(100, cx_res.I / Math.log2(cx_max + 1) * 100)}%; background:${accent_r};"></div>
+    <div style="position:absolute; top:0; bottom:0; left:${cx_ceiling / Math.log2(cx_max + 1) * 100}%; border-left:2px dashed #333;"></div></div>
+  <div style="color:#555; font-size:0.88rem;">As certain as knowing which of <b>${Math.pow(2, cx_res.I).toFixed(1)}</b> equal groups the person is in.</div>
+  <div style="color:#888; font-size:0.8rem; margin-top:2px;">Bar: bits so far, on a scale to log₂(${cx_max + 1}), the most ${cx_max} cuts can give. Dashed: the ceiling for this many cuts.${cx_blur > 0 ? " Pale red bands: where a blurred cut is uncertain (from a 10% to a 90% chance of answering right)." : ""}</div></div>`
+html`<div>${cx_plot}${cx_readout}</div>`
+```
+
+```{ojs}
+cx_rows.length ? html`<div style="max-width:680px; font-size:0.9rem;">
+  <table class="table table-sm" style="margin-bottom:0.3rem;">
+    <thead><tr><th>#</th><th>cut at θ</th><th>group it splits</th>
+      <th style="text-align:right;">bits added</th><th style="text-align:right;">on its own</th></tr></thead>
+    <tbody>${cx_rows.map(r => html`<tr><td>${r["#"]}</td><td>${r["θ"]}</td><td>${r["group it splits"]}</td>
+      <td style="text-align:right;">${r["bits added"]}</td><td style="text-align:right;">${r["on its own"]}</td></tr>`)}</tbody>
+  </table>
+  <div style="color:#666; font-size:0.82rem;"><b>Bits added</b>: what the cut adds given the answers to the cuts
+  above it in the table, I(θ; X<sub>k</sub> | X<sub>1</sub>, …, X<sub>k−1</sub>), averaged over what those answers could be.
+  This column adds up to the total, and it depends on the order the cuts were placed.
+  <b>On its own</b>: what the cut would be worth if it were the only question, I(θ; X<sub>k</sub>).
+  This column does not add up to the total: cuts share information.</div></div>` :
+  html`<p style="color:#666;"><i>No cuts yet. Click the chart.</i></p>`
+```
+
+Some things to try:
+
+- **Median, then add another cut at 0.** The second cut adds nothing: it asks
+  a question that has already been answered. Redundancy is the first way bits
+  are lost.
+- **Quartiles.** Each cut's "bits added" depends on what was there before. The
+  first cut is worth a full bit; the next two split halves, and are worth half a
+  bit each, because each only matters for the half of the population it falls in.
+- **3 near the median.** Cuts at −0.1, 0 and +0.1. The outer two each split
+  off a sliver of about 4% of people, so together the three are worth 1.40
+  bits, well short of the 2 that three spread-out cuts can give. A cut close to
+  an existing one asks nearly the same question.
+- **3 in the low tail.** Each cut splits off a sliver. Cuts where few people
+  are say little about most people.
+- **Quartiles, then blur.** The bits fall below 2 even though the cuts are
+  perfectly placed. Near each cut the answer is now partly luck, and luck says
+  nothing about the person. The next section measures that luck.
+- **Numeracy test.** Cuts at the difficulty of each of its items, blurred by
+  its typical slope. They pile up between about −1 and −0.5, and blurred, the
+  whole test is worth little more than one well-placed perfect question. The
+  real test, with each item's own slope, carries `r fmt(two$I_X[two$table == main])` bits.
+
+
+## Answer patterns
+
+Everything on this page comes from one object: the **answer pattern**, which
+we denote **X**. It is the string of right and wrong answers a person gives,
+X = (X~1~, …, X~J~) for a test of J items, with X~j~ = 1 for a right answer to
+item j and 0 for a wrong one. List every pattern a test
+could produce and two quantities decide how much the test tells you about a
+person:
+
+- **Spread**, H(X): how varied the patterns are across the population.
+- **Noise**, H(X | θ): how varied they would be for one value of θ, as if a
+  person at that θ answered again and again.
+
+The information about the person is what is left: **I(θ; X) = H(X) − H(X | θ)**,
+in bits.
+
+Both are entropies, computed from pattern probabilities. Write p(x) for the
+share of the population that would give pattern x, and p(x | θ) for the chance
+that a person at θ gives it. Then
+
+- **H(X) = −Σ~x~ p(x) log~2~ p(x)**, summed over all 2^J^ patterns. Under an
+  IRT model, p(x) is the average of p(x | θ) over the population:
+  p(x) = ∫ p(x | θ) g(θ) dθ, with g the distribution of θ.
+- **H(X | θ) = ∫ g(θ) [−Σ~x~ p(x | θ) log~2~ p(x | θ)] dθ**: the same entropy
+  for a person at a fixed θ, averaged over the population. Because the model
+  treats answers as independent once θ is fixed, p(x | θ) is a product over
+  items and this reduces to a sum over items, ∫ g(θ) Σ~j~ h(P~j~(θ)) dθ, where
+  P~j~(θ) is the chance of a right answer to item j and
+  h(p) = −p log~2~ p − (1 − p) log~2~(1 − p).
+
+These entropies have a concrete reading as message lengths (Chris Olah's
+[Visual Information Theory](https://colah.github.io/posts/2015-09-Visual-Information/)
+builds this up with pictures). The shortest code
+for sending a message that we observed pattern x is −log~2~ p(x) bits long,
+so H(X) is the average length of that message when the
+receiver does not know θ, and H(X | θ) is its average length when both sides
+know θ. The difference is how much knowing θ shortens the message, which is the
+same as how much the message tells you about θ. Equivalently, if you had to
+send which of the 64 slices someone is in, seeing their answers first would cut
+that message by I(θ; X) bits on average.
+
+Our p(x) is the model's version of what the
+[Dutch identity vignette](dutch_identity.qmd) calls *manifest probabilities*.
+There they are estimated from how often each pattern was actually observed,
+and then modelled; here they are computed from the fitted IRT model. The dots
+in the five-question chart below are the observed version. That vignette
+studies their shape; this one counts their spread. The worked example under the five-question chart below goes
+through every step of this calculation for one pattern.
+
+The cuts above were the special case with no noise. Now we build
+this up on a real numeracy test: one question first, then three, five, and the
+whole test.
+
+### One question
+
+With one question there are only two patterns, right and wrong. To picture the
+population we cut θ, the trait being measured, into **64 slices, each holding
+the same share of people**: narrow in the crowded middle, wide in the thin
+tails. Pinning down one slice out of 64 would take 6 bits, since 2^6^ = 64.
+
+```{r}
+#| label: patterns-setup
+
+s <- showcases[[main]]
+top5 <- s$items |> arrange(desc(bits)) |> slice(1:5)
+gth <- s$grid                                    # the 2PL's N(0, 1) quadrature grid
+# P(correct | theta) for a set of items: length(theta) x items
+p_items <- function(it, theta) plogis(outer(theta, it$a) - matrix(it$a * it$b, length(theta), nrow(it), byrow = TRUE))
+# P(pattern | theta) for 0/1 pattern rows: patterns x theta
+pat_given_theta <- function(X, P) exp(X %*% t(log(P)) + (1 - X) %*% t(log(1 - P)))
+```
+
+```{r}
+#| label: bit-strip
+#| fig-height: 5.6
+#| fig-width: 7.5
+
+pg <- s$group_probs
+pick3 <- s$items |> arrange(desc(bits)) |> slice(c(1, ceiling(n() / 2), n()))
+bnd <- pmin(pmax(s$group_bounds, -3.2), 3.2)
+cells <- tibble(g = 1:64, x1 = bnd[-65], x2 = bnd[-1])
+short_q <- function(t) paste0("“", substr(t, 1, 52), ifelse(nchar(t) > 52, "…", ""), "”")
+rows <- tibble(row = c("A perfect (Guttman) item at the median", short_q(pick3$text)),
+               a = c(Inf, pick3$a), b = c(0, pick3$b), bits = c(1, pick3$bits)) |>
+  mutate(row = factor(row, levels = row),
+         lab = paste0(fmt(bits), if_else(bits == 1, " bit", " bits")),
+         par = if_else(is.infinite(a), "perfect step\nat θ = 0",
+                       sprintf("slope %s\nlocation %s", fmt(a, 1), fmt(b, 1))),
+         side = factor(paste0(lab, "\n", par)))
+rows$side <- factor(rows$side, levels = rows$side)
+strip <- bind_rows(
+  mutate(cells, row = rows$row[1], p = rep(c(0, 1), each = 32)),
+  bind_rows(lapply(seq_len(nrow(pick3)), function(i) mutate(cells, row = rows$row[i + 1], p = pg[, pick3$item[i]])))
+) |> mutate(row = factor(row, levels = levels(rows$row)))
+th <- seq(-3.2, 3.2, by = 0.02)
+irf <- bind_rows(lapply(seq_len(nrow(rows)), function(i) {
+  r <- rows[i, ]
+  tibble(row = r$row, side = r$side, theta = th,
+         p = if (is.infinite(r$a)) as.numeric(th >= r$b) else plogis(r$a * (th - r$b)))
+}))
+dens <- tidyr::crossing(side = rows$side, theta = th) |> mutate(d = dnorm(theta) / dnorm(0))
+p_strip <- ggplot(strip) +
+  geom_rect(aes(xmin = x1, xmax = x2, ymin = 0, ymax = 1, fill = p), colour = "white", linewidth = 0.15) +
+  facet_grid(row ~ ., switch = "y", labeller = labeller(row = label_wrap_gen(30))) +
+  scale_fill_gradient(low = "#f4f6fa", high = irw_blue, limits = c(0, 1),
+                      name = "P(yes / correct) in each slice",
+                      guide = guide_colourbar(title.position = "top")) +
+  scale_x_continuous(limits = c(-3.2, 3.2), breaks = -3:3, expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(x = "θ, cut into 64 equally likely slices", y = NULL) +
+  theme(panel.grid = element_blank(), axis.text.y = element_blank(),
+        strip.text.y.left = element_text(angle = 0, hjust = 1, size = 10),
+        strip.placement = "outside", legend.position = "bottom", legend.key.width = unit(1, "cm"),
+        legend.key.height = unit(0.3, "cm"), legend.title = element_text(size = 10),
+        panel.spacing.y = unit(0.6, "lines"))
+p_irf <- ggplot(irf, aes(theta, p)) +
+  geom_area(data = dens, aes(theta, d), fill = "grey88", inherit.aes = FALSE) +
+  geom_vline(data = filter(rows, is.finite(b)), aes(xintercept = b), linetype = "dashed", colour = irw_grey) +
+  geom_line(colour = irw_blue, linewidth = 1.1) +
+  facet_grid(side ~ .) +
+  scale_x_continuous(limits = c(-3.2, 3.2), breaks = c(-2, 0, 2), expand = c(0, 0)) +
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 1), expand = c(0, 0)) +
+  labs(x = "θ", y = "P(correct)") +
+  theme(strip.text.y = element_text(angle = 0, hjust = 0, size = 9.5, colour = "grey20"),
+        panel.grid.minor = element_blank(),
+        panel.spacing.y = unit(0.6, "lines"), axis.text = element_text(size = 9))
+(p_strip + p_irf + plot_layout(widths = c(1.9, 1), guides = "keep")) +
+  plot_annotation(
+    title = wrap(sprintf("A perfect item halves the population; the best real numeracy item manages %s of a bit",
+                         fmt(max(s$items$bits))), 72),
+    subtitle = wrap("Left: each question's answer, shaded by how likely people in each slice are to get it right. Right: the same item's response curve over the population (grey). Steep curves split cleanly; curves that rise away from the crowd split it unevenly. Far right: I(θ; Xⱼ), the item's bits on its own, with its slope and location.", 85),
+    theme = theme(plot.title = element_text(face = "bold", size = 14)))
+```
+
+A bit is the information in the answer to a question whose two answers are
+equally likely and which splits the possibilities cleanly. The top row of the
+figure does exactly that: it cuts 64 slices to 32. Real items don't split the sample so cleanly, for two reasons.
+Their split is blurred, because people in the same group sometimes answer
+differently. And their split is often off-centre, because easy items mostly
+separate the lowest groups from everyone else. Both can be read off
+the item response curves on the right: a shallow slope blurs the split, and a
+curve that rises away from the bulk of the population (grey) splits it
+unevenly. In pattern terms, the
+spread is the entropy of the answer across the population, the noise is the
+entropy of the answer for someone at a fixed θ, and the information is the gap:
+<small>I(θ; X~j~) = h(P̄~j~) − E~θ~[h(P~j~(θ))], with h(p) = −p log~2~ p − (1−p) log~2~(1−p).</small>
+Neither term can exceed one bit.
+
+### Three questions
+
+```{r}
+#| label: patterns-three
+#| fig-height: 7.2
+#| fig-width: 7.5
+
+top3 <- top5[1:3, ]
+th3 <- seq(-3, 3, by = 0.02)
+X3 <- as.matrix(expand.grid(rep(list(0:1), 3)))
+X3 <- X3[order(rowSums(X3), -X3 %*% c(4, 2, 1)), ]
+key3 <- apply(X3, 1, paste, collapse = "")
+pxt3 <- pat_given_theta(X3, p_items(top3, th3))           # 8 x theta
+area <- tibble(pattern = rep(key3, times = length(th3)), theta = rep(th3, each = 8),
+               p = as.vector(pxt3), score = rep(rowSums(X3), times = length(th3))) |>
+  group_by(theta) |> mutate(ymax = cumsum(p), ymin = ymax - p) |> ungroup()   # 000 at the bottom
+labs3 <- area |> filter(abs(theta) <= 2.6) |> group_by(pattern) |>
+  slice_max(p, n = 1, with_ties = FALSE) |> ungroup() |> mutate(mid = (ymin + ymax) / 2)
+w3 <- gth$w
+marg3 <- as.vector(pat_given_theta(X3, p_items(top3, gth$theta)) %*% w3)
+H3 <- -sum(marg3 * log2(marg3))
+pxt3g <- pat_given_theta(X3, p_items(top3, gth$theta))
+N3 <- -sum((pxt3g * log2(pxt3g)) %*% w3)
+post3 <- sweep(pxt3g, 2, w3, "*") / marg3                 # P(theta | pattern), 8 x nodes
+var3 <- as.vector(post3 %*% gth$theta^2 - (post3 %*% gth$theta)^2)
+sd3 <- sqrt(sum(marg3 * var3))                              # RMS posterior SD, population SD = 1
+score_fill <- c(`0` = "#d1e5f0", `1` = "#92c5de", `2` = "#4393c3", `3` = irw_blue)
+noise_theta <- -colSums(pxt3 * log2(pxt3))                 # H(X | theta) at each grid point
+# Top panel: stacked P(pattern | theta). Hovering at any theta lists every pattern's
+# share there (x unified hover) plus H(X | theta) at that theta.
+p_top <- plot_ly() |>
+  add_trace(x = th3, y = rep(0, length(th3)), customdata = noise_theta, type = "scatter",
+            mode = "lines", line = list(width = 0), showlegend = FALSE, hoverinfo = "all",
+            hovertemplate = "<b>θ = %{x:.2f}</b>, H(X | θ) here = %{customdata:.2f} bits<extra></extra>")
+seen_score <- character(0)
+for (i in seq_along(key3)) {
+  sc <- as.character(rowSums(X3)[i])
+  p_top <- add_trace(p_top, x = th3, y = pxt3[i, ], type = "scatter", mode = "lines",
+                     stackgroup = "one", fillcolor = score_fill[[sc]],
+                     line = list(color = "white", width = 0.6),
+                     name = paste(sc, "correct"), legendgroup = sc,
+                     showlegend = !(sc %in% seen_score),
+                     hovertemplate = sprintf("<span style='font-family:monospace'>%s</span>  %%{y:.1%%}<extra></extra>", key3[i]))
+  seen_score <- c(seen_score, sc)
+}
+p_top <- p_top |>
+  add_text(data = labs3, x = ~theta, y = ~mid, text = ~pattern, hoverinfo = "skip", showlegend = FALSE,
+           textfont = list(family = "monospace", size = 13, color = if_else(labs3$score >= 2, "white", "#262626"))) |>
+  layout(xaxis = list(title = "θ", hoverformat = ".2f", range = c(-3, 3), zeroline = FALSE),
+         yaxis = list(title = "chance of each pattern", tickformat = ".0%", range = c(0, 1), zeroline = FALSE))
+bars3 <- tibble(pattern = factor(key3, key3), p = marg3, score = factor(rowSums(X3)))
+p_bot <- plot_ly(bars3, x = ~pattern, y = ~p, type = "bar", width = NULL,
+                 marker = list(color = unname(score_fill[as.character(bars3$score)])),
+                 text = fmt(bars3$p, 2), textposition = "outside", cliponaxis = FALSE,
+                 showlegend = FALSE,
+                 hovertemplate = "%{y:.1%} of the population<extra></extra>") |>
+  layout(xaxis = list(title = "pattern (1 = correct)", tickfont = list(family = "monospace")),
+         yaxis = list(title = "population share", range = c(0, max(marg3) * 1.2), zeroline = FALSE))
+subplot(p_top, p_bot, nrows = 2, heights = c(0.68, 0.32), margin = 0.07,
+        titleX = TRUE, titleY = TRUE) |>
+  layout(title = list(text = sprintf("<b>Three questions, 8 possible answer patterns, %s bits about the person</b>", fmt(H3 - N3)),
+                      x = 0, xanchor = "left", font = list(size = 15)),
+         hovermode = "x unified", hoverlabel = list(align = "left"),
+         legend = list(orientation = "h", y = 1.04, yanchor = "bottom", x = 1, xanchor = "right",
+                       title = list(text = "number correct:  ")),
+         margin = list(t = 85)) |>
+  config(displayModeBar = FALSE)
+```
+
+<small>Top: hover anywhere on θ, or read straight up from it, to see the mix of
+patterns a person there would give, answering again and again. Bottom: the same
+mix averaged over the population. Bits = spread of the bottom bars,
+H(X) = `r fmt(H3)`, minus the average spread of a vertical slice of the top
+panel, H(X | θ) = `r fmt(N3)`. Items, in pattern order:
+`r paste(top3$label, collapse = ", ")`.</small>
+
+Read the top panel straight up from any point on θ. Far to the left almost
+everyone gives `r key3[1]`; far to the right almost everyone gives
+`r key3[8]`. In between, a person at a fixed θ could give several patterns,
+and which one comes out is partly luck. Perfect cuts would allow only four of
+the eight patterns: the ones in which every item a person gets right is easier
+than every item they get wrong. Blur is what lets the other four appear. That luck, which has nothing to do
+with differences between people, is the noise, H(X | θ) =
+`r fmt(N3)` bits on average. The bottom panel is what you see when you do not
+know θ: the mix averaged over everyone, whose entropy, the spread, is
+H(X) = `r fmt(H3)` bits. The information is the gap, `r fmt(H3 - N3)` bits,
+and it comes entirely from the mix *changing* along θ. If every θ produced the
+same mix, the top panel would be flat bands, the spread and the noise would be
+equal, and seeing a pattern would tell you nothing about the person.
+
+In the language of measurement error, `r fmt(H3 - N3)` bits is how far three
+answers narrow down θ. If θ and the evidence about it were jointly normal, each
+bit would halve the standard error, so `r fmt(H3 - N3)` bits would leave an
+error of 2^−`r fmt(H3 - N3)`^ ≈ `r fmt(2^-(H3 - N3))` population SDs, a
+reliability of about `r fmt(1 - 4^-(H3 - N3))`. Computed exactly from the
+model, the typical error after these three answers (the root-mean-square
+posterior SD) is `r fmt(sd3)` SDs. The two differ a little because answers
+are not normal; [Reliability in bits](#reliability-in-bits) takes this up.
+
+### Five questions
+
+```{r}
+#| label: patterns
+#| fig-height: 4.6
+#| fig-width: 7.5
+
+pt <- s$patterns |> mutate(rank = row_number())
+P5 <- p_items(top5, gth$theta)
+X5 <- do.call(rbind, lapply(strsplit(pt$pattern, ""), as.integer))
+pxt5 <- pat_given_theta(X5, P5)                       # patterns x theta nodes
+stopifnot(max(abs(as.vector(pxt5 %*% gth$w) - pt$implied)) < 1e-8)
+spread_j <- -pt$implied * log2(pt$implied)
+noise_j <- -as.vector((pxt5 * log2(pxt5)) %*% gth$w)
+pbar5 <- colSums(gth$w * P5)
+sum_Ij5 <- sum(h2(pbar5) - colSums(gth$w * h2(P5)))   # items' bits, each on its own
+tc5 <- sum(h2(pbar5)) - sum(spread_j)                 # sum_j H(X_j) - H(X)
+H5 <- sum(spread_j); H5_noise <- sum(noise_j)
+post5 <- sweep(pxt5, 2, gth$w, "*"); post5 <- post5 / rowSums(post5)
+q_theta <- function(pr, q) gth$theta[which(cumsum(pr) >= q)[1]]
+pt <- pt |> mutate(
+  spread = spread_j, noise = noise_j, net = spread - noise,
+  who = sapply(seq_len(n()), function(i) sprintf("θ mean %s, middle 80%% %s to %s",
+          fmt(sum(post5[i, ] * gth$theta), 1), fmt(q_theta(post5[i, ], .1), 1), fmt(q_theta(post5[i, ], .9), 1))),
+  answers = sapply(seq_len(n()), function(i) paste(sprintf("%s: %s", top5$label,
+          if_else(X5[i, ] == 1, "correct", "incorrect")), collapse = "<br>")),
+  tip = sprintf("<b>pattern %s</b><br>%s<br><br>model probability %s<br>observed %s (%s of %s)<br>who gives it: %s<br><br>spread  −p log₂ p = %s bits<br>noise = %s bits<br>net = %s bits",
+                pattern, answers, fmt(implied, 3), fmt(observed, 3),
+                format(round(observed * n_obs), big.mark = ","), format(n_obs, big.mark = ","),
+                who, fmt(spread, 3), fmt(noise, 3), fmt(net, 3)))
+g <- ggplot(pt, aes(rank, implied, text = tip)) +
+  geom_col(fill = irw_blue, width = 0.8) +
+  geom_point(aes(y = observed), colour = "black", size = 1.8) +
+  scale_x_continuous(breaks = pt$rank, labels = pt$pattern, expand = c(0.01, 0.01)) +
+  labs(x = "answer pattern on the 5 most informative items (1 = correct)", y = "probability",
+       title = sprintf("Five questions, 32 possible answer patterns, %s bits about the person", fmt(H5 - H5_noise))) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, family = "mono", size = 8))
+g <- wl(g, 55)
+ggplotly(g, tooltip = "text") |>
+  layout(title = list(text = paste0("<b>", gsub("\n", "<br>", g$labels$title), "</b>"), x = 0, xanchor = "left",
+                      font = list(size = 15)), margin = list(t = 70),
+         hoverlabel = list(align = "left"))
+```
+
+Bars: the model's probability of each pattern. Dots: the share of the
+`r format(pt$n_obs[1], big.mark = ",")` respondents who actually gave it.
+Items, in pattern order: `r paste(top5$label, collapse = ", ")`. **Hover over
+a bar** to see its pieces: which answers the pattern contains, who tends to
+give it, and how much it contributes to the spread, to the noise, and to the
+net bits. Summed over the 32 bars, the spread is `r fmt(H5)` bits and the
+noise `r fmt(H5_noise)`, leaving `r fmt(H5 - H5_noise)` bits about the person.
+Most of the spread is noise; a person's response pattern offers only limited
+information about θ.
+
+The five items' bits taken one at a time add up to `r fmt(sum_Ij5)`, more than
+the `r fmt(H5 - H5_noise)` they give together: they partly ask the same thing.
+The overlap, `r fmt(sum_Ij5 - (H5 - H5_noise))` bits, is exactly
+Σ~j~ H(X~j~) − H(X), which measures how far the patterns are from what
+independent items would produce. That is the departure from the independence
+model in the [Dutch identity vignette](dutch_identity.qmd#section-2-log-manifest-probabilities-and-the-independence-baseline),
+counted in bits. The trait that makes items agree with each other is also what
+makes their information overlap.
+
+```{r}
+#| label: worked-example
+#| results: asis
+
+i_ex <- 1                                                # the most likely pattern
+x_ex <- X5[i_ex, ]
+th_ex <- c(-1, 0, 1)
+P_ex <- p_items(top5, th_ex)                             # 3 x 5
+p_ans <- t(ifelse(matrix(x_ex, 3, 5, byrow = TRUE) == 1, P_ex, 1 - P_ex))   # 5 x 3
+prod_ex <- apply(p_ans, 2, prod)
+tab <- tibble(item = top5$label, answer = if_else(x_ex == 1, "correct", "incorrect"),
+              `θ = −1` = fmt(p_ans[, 1], 3), `θ = 0` = fmt(p_ans[, 2], 3), `θ = +1` = fmt(p_ans[, 3], 3))
+tab <- bind_rows(tab, tibble(item = "**product**", answer = "",
+                             `θ = −1` = paste0("**", fmt(prod_ex[1], 3), "**"),
+                             `θ = 0` = paste0("**", fmt(prod_ex[2], 3), "**"),
+                             `θ = +1` = paste0("**", fmt(prod_ex[3], 3), "**")))
+cat("::: {.callout-tip collapse=\"true\"}\n## How one bar is computed: pattern ", pt$pattern[i_ex], "\n\n", sep = "")
+cat("**1. The chance of the pattern for one person.** The model gives each item a probability of a correct answer ",
+    "that depends on θ. For a person at a given θ, the chance of the whole pattern is the product of the chances ",
+    "of its five answers, because the model treats answers as independent once θ is fixed. Here it is for three people:\n\n", sep = "")
+print(knitr::kable(tab, align = "llrrr"))
+cat("\n\n**2. Average over the population.** Do the same at every θ and average the products, weighting each θ by ",
+    "how many people sit there (a normal curve, on an ", nrow(gth), "-point grid). That average, ", fmt(pt$implied[i_ex], 3),
+    ", is the height of the bar. ", fmt(100 * pt$observed[i_ex], 0), "% of respondents actually gave this pattern.\n\n", sep = "")
+cat("**3. Spread.** Each bar adds −p log₂ p to the spread: here −", fmt(pt$implied[i_ex], 3), " × log₂ ",
+    fmt(pt$implied[i_ex], 3), " = ", fmt(pt$spread[i_ex], 3), " bits. Summed over all 32 bars that is H(X) = ",
+    fmt(H5), " bits.\n\n", sep = "")
+cat("**4. Noise.** The same calculation *within* each θ, using the products from step 1 instead of the average, ",
+    "then averaged over the population: ", fmt(pt$noise[i_ex], 3), " bits from this pattern, H(X | θ) = ",
+    fmt(H5_noise), " bits in all. This is how unpredictable the pattern is even for someone whose θ we know.\n\n", sep = "")
+cat("**5. Information.** Spread minus noise: I(θ; X) = ", fmt(H5), " − ", fmt(H5_noise), " = ", fmt(H5 - H5_noise),
+    " bits. A single bar's net can be negative; only the total has to be positive.\n:::\n", sep = "")
+```
+
+### The whole test
+
+The numeracy test has `r nrow(s$items)` items, so `r format(2^nrow(s$items), big.mark = ",")`
+possible patterns: too many to draw, but not too many to count. The same
+calculation gives a spread of
+`r fmt(two$H_X[two$table == main])` bits, noise of
+`r fmt(two$H_X_given_theta[two$table == main])` bits, and so
+`r fmt(two$I_X[two$table == main])` bits about the person. Adding six items to
+the five above bought about
+`r fmt(two$I_X[two$table == main] - (H5 - H5_noise))` bits more. The sum score
+gathers the `r format(2^nrow(s$items), big.mark = ",")` patterns into
+`r nrow(s$items) + 1` piles, one per score (the score distribution plotted in the
+[Dutch identity vignette](dutch_identity.qmd#section-1-the-manifest-probabilities-directly),
+whose Section 4 shows its shape under the Rasch model), and keeps
+`r fmt(two$I_S[two$table == main])` of those bits; [Is the sum score enough?](#is-the-sum-score-enough)
+asks what the piling loses. For long tests the patterns cannot be listed, and
+the same quantities are estimated by simulation (see
+[How the warehouse numbers were computed](#how-the-warehouse-numbers-were-computed)).
+
+## One person, one answer at a time
+
+So far everything has been an average over the population. Now follow one
+person through the test: what each answer buys, how surprising each answer is,
+and how fast the uncertainty about them falls.
+
+### Guess the person
+
+Somewhere in the population below is one person, and your job in this game is
+to find out which of the 64 slices they are in by asking questions from a real
+test.
+Before any question there are 6 bits to find. After each answer the slices are
+re-shaded, darker where the person is now more likely to be, and a line traces
+the same thing as a density over θ. The counter shows how many bits that
+answer bought.
+
+Pick a question from the table; they are ranked by how many bits they are
+*expected* to give. Then either answer it yourself, as the person might, or let
+the simulated person answer. At the start we secretly draw one simulated
+person from the population; they answer with the probabilities the model
+gives someone in their slice. You can reveal where they are at any point.
+The "best" and "worst" buttons ask the remaining question with the most or the
+fewest expected bits, and the simulated person answers it.
+
+```{ojs}
+sc = showcases_r
+keys = Object.keys(sc)
+viewof tbl = Inputs.select(keys, {label: "Test", value: keys[0], format: k => sc[k].title})
+```
+
+```{ojs}
+S = {
+  const s = sc[tbl];
+  return {items: transpose(s.items).map((d, j) => ({...d, j})), pg: s.pg, bounds: s.bounds, title: s.title};
+}
+h2 = p => (p <= 0 || p >= 1) ? 0 : -(p * Math.log2(p)) - (1 - p) * Math.log2(1 - p)
+entropy = post => -post.reduce((s, p) => s + (p > 0 ? p * Math.log2(p) : 0), 0)
+mutable hist = []
+mutable hidden = Math.floor(Math.random() * 64)
+reset_on_test = { tbl; mutable hist = []; mutable hidden = Math.floor(Math.random() * 64); return tbl; }
+posterior_of = hs => {
+  let p = Array(64).fill(1 / 64);
+  for (const h of hs) {
+    const like = S.pg.map(row => h.x === 1 ? row[h.j] : 1 - row[h.j]);
+    const z = p.reduce((s, v, g) => s + v * like[g], 0);
+    p = p.map((v, g) => v * like[g] / z);
+  }
+  return p;
+}
+post = { reset_on_test; return posterior_of(hist); }
+exp_bits = j => h2(post.reduce((s, v, g) => s + v * S.pg[g][j], 0)) -
+                post.reduce((s, v, g) => s + v * h2(S.pg[g][j]), 0)
+asked = new Set(hist.map(h => h.j))
+remaining = S.items.filter(d => !asked.has(d.j))
+  .map(d => ({...d, expected: exp_bits(d.j)}))
+  .sort((a, b) => b.expected - a.expected)
+answer = (j, x) => {
+  const p1 = post.reduce((s, v, g) => s + v * S.pg[g][j], 0);
+  const p_obs = x === 1 ? p1 : 1 - p1;
+  mutable hist = [...hist, {j, x, expected: exp_bits(j), before: entropy(post), surprisal: -Math.log2(p_obs)}];
+}
+hidden_answer = j => Math.random() < S.pg[hidden][j] ? 1 : 0
+```
+
+```{ojs}
+viewof pick = Inputs.table(remaining, {
+  columns: ["expected", "text"],
+  header: {text: "Question", expected: "Exp. bits"},
+  format: {expected: x => x.toFixed(3), text: (t, i, data) => t ?? data[i].label},
+  width: {expected: 80},
+  multiple: false,
+  required: false,
+  rows: 8,
+  layout: "fixed"
+})
+```
+
+```{ojs}
+chosen = pick ?? remaining[0]
+viewof act = Inputs.button(chosen ? [
+    [`Answer: ${chosen.label1}`, () => answer(chosen.j, 1)],
+    [`Answer: ${chosen.label0}`, () => answer(chosen.j, 0)],
+    ["Let the simulated person answer", () => answer(chosen.j, hidden_answer(chosen.j))]
+  ] : [["No questions left", () => null]])
+viewof act2 = Inputs.button([
+    ["Ask the best question", () => { if (remaining.length) { const j = remaining[0].j; answer(j, hidden_answer(j)); } }],
+    ["Ask the worst question", () => { if (remaining.length) { const j = remaining[remaining.length - 1].j; answer(j, hidden_answer(j)); } }],
+    ["Start over", () => { mutable hist = []; mutable hidden = Math.floor(Math.random() * 64); }]
+  ])
+viewof reveal = Inputs.toggle({label: "Show where the simulated person is"})
+```
+
+```{ojs}
+bits_left = entropy(post)
+gained = 6 - bits_left
+theta_plot = {
+  const b = S.bounds;
+  // Bars never move: each slice is drawn at the population's height. Its shade
+  // is the chance that this person is in it. The line is the updated density.
+  const slices = post.map((v, g) => ({g, p: v, x1: b[g], x2: b[g + 1],
+    pop: (1 / 64) / (b[g + 1] - b[g]), dens: v / (b[g + 1] - b[g])}));
+  const line = slices.flatMap(d => [{x: d.x1, y: d.dens}, {x: d.x2, y: d.dens}]);
+  const top = Math.max(0.42, ...slices.map(d => d.dens));
+  return Plot.plot({
+    width: Math.min(width, 680), height: 250, marginBottom: 40, marginTop: 24,
+    x: {domain: [-3.2, 3.2], label: "θ: the trait the test measures (low → high)", labelAnchor: "center", labelArrow: "none"},
+    y: {domain: [0, top * 1.08], axis: null},
+    color: {type: "linear", domain: [0, Math.max(2 / 64, ...post)], range: ["#f4f7fb", "#08306b"]},
+    marks: [
+      Plot.rectY(slices, {x1: "x1", x2: "x2", y: "pop", fill: "p", inset: 0.3,
+        title: d => `slice ${d.g + 1} of 64\nθ from ${d.x1.toFixed(2)} to ${d.x2.toFixed(2)}\nchance the person is here: ${(d.p * 100).toFixed(1)}%`}),
+      hist.length ? Plot.line(line, {x: "x", y: "y", stroke: "#111", strokeWidth: 1.6}) : null,
+      reveal ? Plot.ruleX([(slices[hidden].x1 + slices[hidden].x2) / 2], {stroke: "#d73027", strokeWidth: 2.5}) : null,
+      reveal ? Plot.text([slices[hidden]], {x: d => (d.x1 + d.x2) / 2, y: top * 1.08, text: () => "the simulated person", dy: -4, lineAnchor: "bottom", fill: "#d73027"}) : null,
+      Plot.ruleY([0])
+    ]
+  });
+}
+theta_key = html`<div style="font-size:0.85rem; color:#444; display:flex; flex-wrap:wrap; gap:0.4rem 1.2rem; max-width:680px; margin-bottom:2px;">
+  <span><svg width="44" height="10"><defs><linearGradient id="kg"><stop offset="0" stop-color="#eef2f8"/><stop offset="1" stop-color="#08306b"/></linearGradient></defs><rect width="44" height="10" fill="url(#kg)" stroke="#ccc"/></svg>
+    the population in 64 equal slices, shaded by the chance this person is in each (light → dark: less → more likely)</span>
+  <span><svg width="26" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="#111" stroke-width="1.6"/></svg>
+    where this person probably is, as a density (appears after the first answer)</span>
+</div>`
+counter = html`<div style="font-size:0.95rem; max-width:680px;">
+  <div style="display:flex; justify-content:space-between;">
+    <span><b style="color:${accent_r}">${gained.toFixed(2)} bits gained</b></span>
+    <span>${bits_left.toFixed(2)} of 6 bits left</span></div>
+  <div style="font-size:0.9rem; margin-top:2px;">About as certain as knowing the person is in one of
+    <b>${Math.pow(2, bits_left).toFixed(Math.pow(2, bits_left) < 10 ? 1 : 0)}</b> equally likely slices (from 64).<sup>*</sup></div>
+  <div style="height:14px; background:#e9ecef; border-radius:3px; overflow:hidden; margin:4px 0;">
+    <div style="height:100%; width:${Math.max(0, gained) / 6 * 100}%; background:${accent_r};"></div></div>
+  <div style="color:#666; font-size:0.85rem;">${hist.length} question${hist.length === 1 ? "" : "s"} asked.
+  Before any answer every slice has the same shade: all are equally likely.
+  Each answer darkens the slices that would most likely give it, and lightens the rest.</div>
+  <div style="color:#666; font-size:0.8rem; margin-top:4px;"><sup>*</sup> An effective count, 2<sup>bits left</sup>.
+  The chances are rarely spread evenly over a set of slices and zero elsewhere; they form a bump with tails.
+  The count says how many equally likely slices would leave the same uncertainty (entropy) as that bump.</div></div>`
+p1_now = chosen ? post.reduce((s, v, g) => s + v * S.pg[g][chosen.j], 0) : null
+bars = chosen ? Plot.plot({
+  width: Math.min(width, 380), height: 140, marginLeft: 90,
+  x: {domain: [0, 1], label: "probability, given what we know", grid: true},
+  y: {label: null},
+  marks: [
+    Plot.barX([{r: chosen.label1, p: p1_now}, {r: chosen.label0, p: 1 - p1_now}],
+      {y: "r", x: "p", fill: blue_r}),
+    Plot.text([{r: chosen.label1, p: p1_now}, {r: chosen.label0, p: 1 - p1_now}],
+      {y: "r", x: "p", text: d => (d.p * 100).toFixed(0) + "%", dx: 16})
+  ]
+}) : html``
+log_rows = hist.map((h, i) => ({
+  "#": i + 1,
+  answer: h.x === 1 ? S.items[h.j].label1 : S.items[h.j].label0,
+  "expected bits": h.expected.toFixed(3),
+  surprisal: h.surprisal.toFixed(2),
+  question: S.items[h.j].text ?? S.items[h.j].label
+}))
+html`<div style="display:flex; flex-wrap:wrap; gap:1.5rem; align-items:flex-start;">
+  <div>${theta_key}${theta_plot}${counter}</div>
+  <div style="flex:1; min-width:260px;">
+    ${chosen ? html`<p style="margin-bottom:0.3rem;"><b>Next question:</b> ${chosen.text ?? chosen.label}</p>
+    <p style="color:#666; margin-top:0; font-size:0.9rem;">Expected to give
+    <b style="color:${accent_r}">${chosen.expected.toFixed(3)} bits</b>, out of a possible 1:
+    I(θ; X<sub>j</sub> | answers so far).</p>${bars}` :
+    html`<p>Every question has been asked.</p>`}
+  </div></div>`
+```
+
+```{ojs}
+hist.length ? Inputs.table(log_rows, {rows: 6, layout: "fixed",
+  width: {"#": 35, answer: 90, "expected bits": 100, surprisal: 80}}) : html``
+```
+
+A few things show up quickly. No real question is worth anywhere near a full
+bit: the best ones promise about half a bit at most. A full bit would take a
+perfectly sharp (Guttman) item whose cut falls exactly in the middle of what we
+currently believe, splitting the remaining possibilities in half. Questions
+lose value as you go, because the easy distinctions have already been made.
+And now and then the shading spreads *out* after an answer. That happens when
+the person says something the model did not expect.
+
+
+### Surprise
+
+```{r}
+#| label: surprise
+#| fig-height: 4.2
+#| fig-width: 7.5
+
+reps <- s$replays
+lab_of <- function(it) s$items$label[match(it, s$items$item)]
+# Leave-one-out surprisal: -log2 P(x_j | every other answer), with the posterior
+# over the 2^K theta groups built from all items except j. Order plays no part;
+# items are shown easiest to hardest only for reading.
+loo_surprisal <- function(x, PG) {
+  ll <- log(PG) %*% diag(x, length(x)) + log(1 - PG) %*% diag(1 - x, length(x))  # groups x items
+  tot <- rowSums(ll)
+  vapply(seq_along(x), function(j) {
+    lp <- tot - ll[, j]; post <- exp(lp - max(lp)); post <- post / sum(post)
+    p1 <- sum(post * PG[, j])
+    -log2(if (x[j] == 1) p1 else 1 - p1)
+  }, numeric(1))
+}
+ord_b <- order(s$items$b)
+surp <- bind_rows(lapply(reps, function(r) {
+  x <- r$responses[s$items$item[ord_b]]
+  tibble(respondent = r$respondent, kind = r$kind, step = seq_along(x), item = lab_of(names(x)),
+         surprisal = loo_surprisal(x, s$group_probs[, names(x), drop = FALSE]), response = unname(x))
+}))
+ord_items <- surp |> filter(kind == "aberrant") |> arrange(step) |> pull(item)
+b_of <- s$items$b[match(ord_items, s$items$label)]
+a_of <- s$items$a[match(ord_items, s$items$label)]
+ab <- filter(surp, kind == "aberrant") |> mutate(answer = if_else(response == 1, "correct", "incorrect"))
+ab_resp <- reps[[which(sapply(reps, `[[`, "kind") == "aberrant")]]
+n_easy_miss <- sum(ab$response[1:3] == 0)
+n_hard_hit <- sum(ab$response[(nrow(ab) - 2):nrow(ab)] == 1)
+# for the text: the easiest item, and the aberrant respondent's most surprising miss
+ab_x <- ab |> mutate(a = a_of[step], b = b_of[step])
+ez <- ab_x[1, ]
+mm <- ab_x |> filter(response == 0, step != 1) |> slice_max(surprisal, n = 1)
+ggplot(surp, aes(step, surprisal, group = respondent)) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = irw_grey) +
+  geom_step(data = filter(surp, kind != "aberrant"), colour = irw_grey, alpha = 0.5,
+            direction = "mid") +
+  geom_step(data = ab, colour = irw_red, linewidth = 1, direction = "mid") +
+  geom_point(data = ab, aes(shape = answer), colour = irw_red, fill = "white", size = 2.6, stroke = 1.2) +
+  scale_shape_manual(values = c(correct = 16, incorrect = 21), name = "aberrant respondent's answer") +
+  scale_x_continuous(breaks = seq_along(ord_items),
+                     labels = sprintf("%s\na = %s\nb = %s", ord_items, formatC(a_of, format = "f", digits = 1),
+                                      formatC(b_of, format = "f", digits = 1))) +
+  labs(x = "questions, from easiest (left) to hardest (right)",
+       y = "surprisal (bits)",
+       title = sprintf("The aberrant respondent misses %d of the 3 easiest questions and gets %d of the 3 hardest right",
+                       n_easy_miss, n_hard_hit),
+       subtitle = sprintf("Red: the respondent with the worst person-fit (Zh = %s, sum score %d of %d). Grey: five typical respondents. Surprisal = −log₂ P(answer | all their other answers). Dashed: 1 bit, a fair coin flip.",
+                          fmt(ab_resp$zh, 1), ab_resp$sum_score, nrow(s$items))) +
+  theme(legend.position = "top", axis.text.x = element_text(size = 7.5))
+```
+
+The surprisal of an answer is −log~2~ of the probability the model gave it.
+An answer the model thought had a 50% chance costs 1 bit of surprise; one it
+thought had a 1-in-8 chance costs 3 bits. Here each answer is judged against
+*everything else the person answered*: hide one answer, work out from the
+others where the person probably sits, and ask how likely the hidden answer
+was from there. Nothing depends on the order of asking; the questions are
+lined up from easiest to hardest only so the pattern is easy to read.
+
+Most answers from typical respondents sit around or below a bit, because their
+other answers place them well and each answer agrees with that placement. The
+red respondent's answers disagree with each other. The rest of the pattern says
+"able enough for the hard questions", which makes the misses on the easy ones
+very unlikely, and vice versa, so the surprise lands on exactly the answers
+that do not fit. This is the logic of person-fit statistics such as Zh, one
+answer at a time.
+
+Surprisal depends on an item's slope as well as its difficulty. The easiest
+question, `r ez$item` (a = `r fmt(ez$a, 1)`, b = `r fmt(ez$b, 1)`), is also
+one of the flattest, so even fairly able people miss it now and then; the red
+respondent's miss costs `r fmt(ez$surprisal, 1)` bits. Their miss on
+`r mm$item` (a = `r fmt(mm$a, 1)`, b = `r fmt(mm$b, 1)`), which is harder but
+much steeper, costs `r fmt(mm$surprisal, 1)`: anyone the rest of the answers
+place above its location almost never gets it wrong. Leaving one answer out
+also changes the evidence. A miss on a steep item pulls the estimate of θ down
+more than a miss on a flat one, so it makes the person's other misses look less
+surprising.
+
+Elsewhere on the page, as in the game above, surprisal is judged against
+the answers *so far*. That version depends on order, and it adds up: the
+surprisals of one ordering sum to the surprisal of the whole pattern. The
+leave-one-out version does not add up that way, but it gives each answer one
+number whatever the order, which is what a question about fit needs.
+
+<!-- Expected versus actual: commented out 2026-10-06 (Ben); restore by removing this wrapper and the eval/include lines.
+
+### Expected versus actual
+
+```{r}
+#| label: expected-actual
+#| eval: false
+#| include: false
+#| fig-height: 4.6
+#| fig-width: 7.5
+
+ea <- bind_rows(lapply(reps[c(3, which(sapply(reps, `[[`, "kind") == "aberrant"))], function(r) {
+  st <- r$fixed$steps[-1, ]
+  lbl <- s$items$label[match(st$item, s$items$item)]
+  tibble(who = if (r$kind == "aberrant") "Aberrant respondent" else "Typical respondent (median score)",
+         step = st$step, item = lbl, expected = st$expected_bits, actual = st$actual_bits)
+})) |>
+  pivot_longer(c(expected, actual), names_to = "kind", values_to = "bits") |>
+  mutate(kind = factor(kind, c("expected", "actual"), c("expected bits", "bits actually gained")))
+tot <- ea |> group_by(who, kind) |> summarise(bits = sum(bits), .groups = "drop")
+ggplot(ea, aes(factor(step), bits, fill = kind)) +
+  geom_hline(yintercept = 0, colour = "grey30") +
+  geom_col(position = position_dodge(width = 0.75), width = 0.7) +
+  facet_wrap(~ factor(who, c("Typical respondent (median score)", "Aberrant respondent")), ncol = 1) +
+  scale_fill_manual(values = c("expected bits" = "grey75", "bits actually gained" = irw_accent), name = NULL,
+                    labels = c("expected bits: I(θ; Xⱼ | earlier answers)", "bits actually gained: H(θ | before) − H(θ | after)")) +
+  labs(x = "question, in test order", y = "bits",
+       title = "Information is a promise on average: a single answer can even lose bits",
+       subtitle = sprintf("Totals over the test. Typical: expected %s, gained %s. Aberrant: expected %s, gained %s.",
+                          fmt(tot$bits[tot$who != "Aberrant respondent" & tot$kind == "expected bits"]),
+                          fmt(tot$bits[tot$who != "Aberrant respondent" & tot$kind == "bits actually gained"]),
+                          fmt(tot$bits[tot$who == "Aberrant respondent" & tot$kind == "expected bits"]),
+                          fmt(tot$bits[tot$who == "Aberrant respondent" & tot$kind == "bits actually gained"]))) +
+  theme(legend.position = "top")
+```
+
+The expected bits of an item are an average over everyone who might be
+answering. For a particular person, the drop in uncertainty can be larger
+(a surprising answer that rules out a lot) or negative (an answer that
+contradicts what earlier answers suggested, spreading the posterior back
+out). Averaged over people, actual gains equal expected gains. That is the
+sense in which I(θ; X) is a property of the test and the population, not of
+any one respondent.
+
+-->
+
+### Watching uncertainty fall
+
+```{r}
+#| label: uncertainty
+#| fig-height: 4.4
+#| fig-width: 7.5
+
+unc <- s$uncertainty |>
+  mutate(order = factor(order, c("fixed", "random", "adaptive"),
+                        c("test's own order", "random order", "adaptive: most informative next")))
+trails <- bind_rows(lapply(reps, function(r) tibble(respondent = r$respondent,
+                                                     k = r$fixed$steps$step, entropy = r$fixed$steps$entropy)))
+end_bits <- 6 - filter(unc, k == max(k))$mean_entropy[1]
+ad3 <- filter(unc, order == "adaptive: most informative next", k == 3)$mean_entropy
+fx3 <- filter(unc, order == "test's own order", k == 3)$mean_entropy
+ggplot() +
+  geom_line(data = trails, aes(k, entropy, group = respondent), colour = irw_grey, alpha = 0.35) +
+  geom_line(data = unc, aes(k, mean_entropy, colour = order, linetype = order), linewidth = 1.1) +
+  scale_colour_manual(values = c(irw_blue, irw_grey, "black"), name = NULL) +
+  scale_linetype_manual(values = c("solid", "dashed", "solid"), name = NULL) +
+  scale_y_continuous(limits = c(NA, 6.05), breaks = 0:6) +
+  scale_x_continuous(breaks = 0:nrow(s$items)) +
+  labs(x = "questions asked", y = "bits left: H(slice | answers so far)",
+       title = sprintf("After all %d numeracy questions, about %s of the 6 bits are resolved",
+                       nrow(s$items), fmt(end_bits, 1)),
+       subtitle = sprintf("Starts at 6 bits: before any answer, all 64 slices are equally likely (log₂ 64 = 6). Finer slices would raise the start, but not the drop. Mean over 500 simulated respondents. Adaptive ordering front-loads the gains (%s vs %s bits left after 3 questions). Faint lines: six real respondents.",
+                          fmt(ad3), fmt(fx3))) +
+  theme(legend.position = "top")
+```
+
+The faint lines for real respondents do not only fall. A single answer can
+*increase* the uncertainty, and it mostly happens after a surprising answer:
+one that the person's answers so far made unlikely. Such an answer pulls belief
+away from where it had settled and spreads it back out. The red respondent from
+the Surprise section has the largest of these rises. On average, though, an
+answer can never add uncertainty, which is why the mean lines only fall.
+
+Every order ends in the same place, because the same answers have been given.
+What changes is how fast you get there. Asking the most informative question
+next, given what is already known, buys in three questions what the fixed
+order needs several more to reach. This is the logic of computerised adaptive
+testing, and of [Wordle solvers](https://www.youtube.com/watch?v=v68zYyaEmEA).
+The ending point is the real news, though:
+a full pass through this test leaves most of the uncertainty about which of
+64 groups a person belongs to unresolved.
+
+### What one answer does to the belief
+
+The guessing game above kept score with entropy: how many bits of uncertainty
+about θ are left, and how many an answer removed. That score measures how much an answer
+*narrowed* the belief about θ, the drop in the entropy of the posterior over
+the slices. It says nothing about where the belief went. There is a second way
+to score an answer, by how far it *moved* the belief rather than by how much it
+narrowed it. The distance from the belief before an answer, Q, to the belief
+after it, P, is the **Kullback–Leibler divergence**
+
+$$D(P \,\|\, Q) = \sum_{\text{slices}} P(\text{slice}) \log_2 \frac{P(\text{slice})}{Q(\text{slice})},$$
+
+the expected number of extra bits it costs to encode draws from P with a code
+built for Q. It is never negative, and it is zero only when nothing moved.
+
+```{r}
+#| label: kl-steps
+#| fig-height: 4.6
+#| fig-width: 8.5
+
+# For each real respondent, replay the test's own order and track the posterior
+# over the 64 slices. The bits gained by an answer, H(before) - H(after), can
+# be negative; the KL divergence D(after || before) never is. Both average, over
+# the possible answers, to the expected bits of the item.
+h_bits <- function(p) { p <- p[p > 0]; -sum(p * log2(p)) }
+kl_replay <- function(r) {
+  st <- r$fixed$steps |> filter(step > 0)
+  PG <- s$group_probs[, st$item, drop = FALSE]
+  post <- rep(1 / nrow(PG), nrow(PG))
+  out <- lapply(seq_len(nrow(st)), function(k) {
+    lik <- if (st$response[k] == 1) PG[, k] else 1 - PG[, k]
+    p_ans <- sum(post * lik)                     # chance of this answer under the belief before it
+    new <- post * lik; new <- new / sum(new)
+    kl <- sum(new * log2(new / post)); drop <- h_bits(post) - h_bits(new)
+    post <<- new
+    tibble(step = k, item = lab_of(st$item[k]), response = st$response[k], p_ans = p_ans,
+           kl = kl, drop = drop, expected = st$expected_bits[k], surprisal = st$surprisal[k])
+  })
+  bind_rows(out) |> mutate(respondent = r$respondent, kind = r$kind)
+}
+kls <- bind_rows(lapply(reps, kl_replay))
+stopifnot(all(abs(kls$drop - bind_rows(lapply(reps, function(r) filter(r$fixed$steps, step > 0)))$actual_bits) < 1e-6))
+ab <- filter(kls, kind == "aberrant")
+long <- ab |> pivot_longer(c(kl, drop), names_to = "what", values_to = "bits") |>
+  mutate(what = factor(what, c("drop", "kl"), c("bits gained: H(before) − H(after)", "KL divergence: D(after ‖ before)")))
+pA <- ggplot(long, aes(step, bits, fill = what)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.65) +
+  geom_hline(yintercept = 0, colour = "grey40") +
+  scale_fill_manual(values = c(irw_accent, irw_red), name = NULL) +
+  scale_x_continuous(breaks = ab$step, labels = ab$item) +
+  labs(x = NULL, y = "bits", title = "The aberrant respondent, answer by answer") +
+  theme(legend.position = "top", legend.direction = "vertical",
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8))
+pB <- ggplot(kls, aes(kl, drop, colour = kind == "aberrant")) +
+  geom_abline(slope = 1, intercept = 0, colour = "grey70", linetype = "dashed") +
+  geom_hline(yintercept = 0, colour = "grey40") +
+  geom_point(size = 2.2, alpha = 0.8) +
+  scale_colour_manual(values = c(`FALSE` = irw_grey, `TRUE` = irw_red), labels = c("five typical respondents", "the aberrant respondent"), name = NULL) +
+  labs(x = "KL divergence D(after ‖ before), bits", y = "bits gained, H(before) − H(after)",
+       title = sprintf("All %d answers of the six respondents", nrow(kls))) +
+  theme(legend.position = "top", legend.direction = "vertical")
+wl(pA, 45) + wl(pB, 45) + plot_layout(widths = c(1.2, 1))
+```
+
+The figure scores every answer of six real respondents both ways, once by
+entropy removed and once by divergence.
+The two scores agree on average and disagree answer by answer. Averaged over
+the answers a person might give, both equal the item's expected bits,
+I(slice; X~j~ | answers so far), so the mean curves in
+[Watching uncertainty fall](#watching-uncertainty-fall) would look the same
+under either. But a single answer is different. The left panel
+replays the aberrant respondent from the Surprise section in the test's own
+order. Their
+`r {k <- which.max(ab$kl - ab$drop); sprintf("answer to %s, %s that the belief at that point gave only a %s chance, moves the belief by %s bits of divergence while %s %s bits of entropy", ab$item[k], if (ab$response[k] == 1) "a correct answer" else "a wrong answer", scales::percent(ab$p_ans[k], accuracy = 1), fmt(ab$kl[k]), if (ab$drop[k] < 0) "*adding*" else "removing", fmt(abs(ab$drop[k])))}`:
+an answer that runs against the belief drags the posterior a long way and, in
+doing so, spreads it back out. On the first answer the two bars are equal, and always will be: from
+a flat belief over N slices, D(after ‖ flat) = log~2~ N − H(after), which is
+exactly the entropy removed. After that they come apart. The right panel makes
+the pattern general. The divergence is never negative, so no point lies left of
+zero; the bits gained can be, and the points below the horizontal line are the
+answers that left the person *less* pinned down than before, typical and
+aberrant respondents alike. The two scores are on the same scale (both average
+to the item's expected bits) but they measure different things: the dashed line
+of equality is a reference, not a bound.
+
+Most of the page's quantities are divergences in disguise. Mutual information
+I(θ; X) is D(P(θ, X) ‖ P(θ)P(X)), the divergence from the joint distribution to
+the one it would have if the test told you nothing. The redundancy of the five
+questions in [Five questions](#five-questions), Σ~j~ I(θ; X~j~) − I(θ; X), is
+the divergence from the fitted model to the model in which the items are
+independent. The surprisals of the Surprise section, summed over a person's
+answers, are the divergence from their empirical answer distribution to the
+model's. And the loss from merging an item's categories, later on the page, is
+the expected divergence from the full conditional distribution to the merged
+one. One idea, several units of measurement.
+
+::: {.callout-note}
+## Which information? The quantities on this page
+
+Several different "bits" have now appeared, and the rest of the page leans on the
+differences between them. They are not interchangeable.
+
+- **I(θ; X)**: what the full answer pattern says about the person, on average
+  over the population. This is "the test's information" in the warehouse
+  figures.
+- **I(θ; X~j~)**: what one item says *on its own*. Items repeat each other, so
+  these do not add up to the test's total: I(θ; X) ≤ Σ~j~ I(θ; X~j~).
+- **I(θ; X~j~ | answers so far)**: what one more item is expected to add, given
+  the particular answers already seen. These are the "expected bits" in the game
+  above, and the same item is worth less once earlier answers have done its job.
+- **Bits gained by one answer**: H(θ | before) − H(θ | after). This is a realised
+  change, not an average, so it can be negative. Averaged over possible answers
+  it equals the expected bits.
+- **Surprisal**: −log~2~ P(answer | answers so far), how unexpected one answer was.
+  The [Surprise](#surprise) section conditions instead on all the person's other answers.
+- **I(θ; S)** and **I(θ; X | S)**: what the sum score keeps, and what it drops.
+- **KL divergence D(P ‖ Q)**: Σ P log~2~(P/Q), the cost in bits of using a code
+  built for Q when the truth is P. Never negative. Mutual information, the
+  realised movement of the belief after an answer, the redundancy between
+  items, and the loss from merging categories are all divergences; see
+  [What one answer does to the belief](#what-one-answer-does-to-the-belief).
+:::
+
+## Now, the whole warehouse
+
+So far one test has carried the story: an 11-item numeracy test (the game also
+offers two others). From here on we zoom out from one table to a much bigger
+pool, running the same calculations on `r n_distinct(two$table)` tests from the
+Item Response Warehouse, so that the questions become ones about tests in
+general: how many bits a typical test delivers, and what drives the
+differences. The first part below says which tables went in and how they were
+processed; the rest shows the results.
+
+### How the warehouse numbers were computed
+
+Selection started from every dichotomous IRW table with 5–60 items and at
+least 500 respondents. Each candidate was then fetched and checked. Tables
+with waves or treatment arms were restricted to one administration: the
+earliest wave, then the control arm. Tables with repeated person–item rows
+(trial-level tasks) were excluded, as were tables with response density below
+0.8. ENEM tables were left out for this version. That left
+`r r_all_candidates` tables, of which `r n_distinct(two$table)` produced
+results (`r length(failures)` failed: `r paste(unique(sub(" .*", "", failures)), collapse = ", ")`,
+where every respondent gives the same answer to every item). Tables with more
+than 10,000 respondents were randomly subsampled to 10,000
+(`r sum(two$subsampled)` tables). Items answered by fewer than half the
+respondents, and items with no variance, were dropped.
+
+For each table we fit Rasch and 2PL models with `mirt`, using a lognormal(0, 1)
+prior on 2PL slopes, and read the latent distribution from each fit: N(0, σ²)
+with σ² estimated for Rasch, N(0, 1) for 2PL. All quantities are integrals over
+that distribution on an 81-point grid spanning ±6 SD. In bits:
+
+- **I(θ; S)**, the information in the sum score, via the Lord–Wingersky recursion.
+- **I(θ; X)**, the information in the full response pattern. It is exact by
+  enumerating all patterns when there are 16 or fewer items, and Monte Carlo
+  above that (standard error below 0.005 bits). For Rasch the two are equal,
+  because the sum score is sufficient.
+- **H(X | θ)**, the noise, and H(X) = I(θ; X) + H(X | θ).
+- Marginal reliability, the reliability of EAP sum scores, and their Gaussian
+  bit equivalents −½ log~2~(1 − ρ).
+- Per-item bits, length curves, and a sum-score model check.
+
+Validation checks (entropy edge cases, single items under 1 bit, Rasch
+sufficiency, I(θ; S) ≤ I(θ; X) on every table, Monte Carlo against enumeration,
+binned against continuous, simulation recovery, grid stability) are in
+`bits_per_item_checks.R`. All passed.
+
+### How many bits do tests carry?
+
+```{r}
+#| label: corpus
+#| fig-height: 4
+#| fig-width: 7.5
+
+med <- median(two$I_X)
+p <- ggplot(two, aes(I_X)) +
+  geom_histogram(binwidth = 0.1, boundary = 0, fill = irw_accent, colour = "white") +
+  geom_vline(xintercept = med, linetype = "dashed") +
+  annotate("text", x = med + 0.03, y = Inf, vjust = 1.5, hjust = 0,
+           label = sprintf("median %s bits", fmt(med))) +
+  scale_x_continuous(breaks = seq(0, 3, 0.5)) +
+  labs(x = "information about the person, I(θ; X), in bits (2PL)", y = "tables",
+       title = "Most tests tell you less than 2 bits about a person",
+       subtitle = sprintf("%d dichotomous IRW tables; %d of them give less than 2 bits. Less than 2 bits means fewer than 4 equally likely groups resolved.",
+                          nrow(two), sum(two$I_X < 2)))
+p
+```
+
+Across `r nrow(two)` tables, the median test delivers `r fmt(med)` bits about
+the person it measures: about as much as learning which half of the
+population someone is in. The most informative,
+`r arrange(two, desc(I_X))$table[1]` (`r arrange(two, desc(I_X))$n_items[1]` items),
+reaches `r fmt(max(two$I_X))` bits. Tests are short and noisy relative to the
+population spread, and bits grow only logarithmically with precision: each
+extra bit requires halving the standard error.
+
+```{r}
+#| label: corpus-items
+#| fig-height: 4.6
+#| fig-width: 7.5
+
+ceil <- tibble(n = 5:60, bits = log2(5:60 + 1))
+share_ceiling <- two$I_X / log2(two$n_items + 1)
+lo_items <- loess(I_X ~ n_items, data = two, span = 0.75)
+sm <- tibble(n = seq(min(two$n_items), max(two$n_items), by = 0.5))
+sm_pred <- predict(lo_items, data.frame(n_items = sm$n), se = TRUE)
+sm <- mutate(sm, fit = sm_pred$fit, lo = fit - 2 * sm_pred$se.fit, hi = fit + 2 * sm_pred$se.fit)
+sm_at <- function(k) predict(lo_items, data.frame(n_items = k))
+g_items <- ggplot(two, aes(n_items, I_X)) +
+  geom_line(data = ceil, aes(n, bits), colour = "grey30", linetype = "dashed") +
+  annotate("text", x = 40, y = log2(41) + 0.35, label = "ceiling: n perfect items, log₂(n + 1)",
+           size = 3.4, colour = "grey30") +
+  geom_ribbon(data = sm, aes(x = n, ymin = lo, ymax = hi), inherit.aes = FALSE, fill = "grey60", alpha = 0.25) +
+  geom_point(aes(text = sprintf("%s\n%d items\nI = %.2f bits", table, n_items, I_X)),
+             colour = irw_accent, alpha = 0.7, size = 1.8) +
+  geom_line(data = sm, aes(n, fit), inherit.aes = FALSE, colour = "grey15", linewidth = 1) +
+  scale_x_continuous(breaks = c(5, 10, 20, 30, 40, 50, 60)) +
+  scale_y_continuous(limits = c(0, 6.2), breaks = 0:6) +
+  labs(x = "number of items", y = "I(θ; X), bits (2PL)",
+       title = sprintf("Longer tests give more bits, but the median test reaches only %s of what that many perfect items could",
+                       scales::percent(median(share_ceiling), accuracy = 1)))
+g_items <- wl(g_items, 60)
+g_items$labels$title <- gsub("\n", "<br>", g_items$labels$title)
+ggplotly(g_items, tooltip = "text") |>
+  layout(title = list(text = paste0("<b>", g_items$labels$title, "</b>"), x = 0, xanchor = "left",
+                      font = list(size = 15)), margin = list(t = 70))
+```
+
+The dashed line is a hard ceiling. On a single trait, n items that never make
+mistakes can produce only n + 1 different answer patterns, so they carry at
+most log~2~(n + 1) bits, reached when the items cut the population into n + 1
+equal parts. Real tables sit far below it, a median of
+`r scales::percent(median(share_ceiling), accuracy = 1)` of the way up. The
+missing bits are lost to noise, not to test length: answers are probabilistic,
+so the same person could produce many patterns.
+
+The solid line is a smoothed average (loess, with a band of ±2 standard
+errors). Typical bits do rise with length, from about
+`r fmt(sm_at(5), 1)` at 5 items to `r fmt(sm_at(20), 1)` at 20 and
+`r fmt(sm_at(40), 1)` at 40, but far more slowly than the ceiling, which
+climbs from `r fmt(log2(6), 1)` to `r fmt(log2(41), 1)` bits over the same
+range. Beyond about 40 items the line levels off, though only
+`r sum(two$n_items > 40)` tables are that long, so the band widens there.
+[Diminishing returns](#diminishing-returns) follows the same question inside
+individual tests.
+
+## Reliability in bits
+
+Reliability and bits measure related things. If θ and a score were jointly
+normal, with the score's correlation with θ equal to √ρ, the information
+between them would be exactly −½ log~2~(1 − ρ). Item responses are binary, not
+normal, so the question is how far real tests depart from that curve, and
+why. We look first at synthetic tests, where we control the items, and then at
+the warehouse.
+
+Turning that formula around, b bits corresponds to a reliability of
+1 − 4^−b^. To see what that buys, simulate people from the Gaussian picture
+and compare each person's true rank with the rank the score gives them.
+
+```{r}
+#| label: rank-panels
+#| fig-height: 6.6
+#| fig-width: 7.5
+
+set.seed(20261006)
+bits_show <- c(0, 1, 2, 3, 4, 6)
+rank_stats <- function(b, n = 1e6) {
+  r <- sqrt(1 - 4^-b)
+  th <- rnorm(n); sc <- r * th + sqrt(1 - r^2) * rnorm(n)
+  c(rho = r^2, rank_err = 100 * mean(abs(pnorm(th) - pnorm(sc))),
+    concord = 0.5 + asin(r) / pi)          # P(pair in the right order), exact
+}
+rs <- as_tibble(t(sapply(bits_show, rank_stats))) |> mutate(bits = bits_show)
+rs <- rs |> mutate(lab = sprintf("%s %s · reliability %s\ntypical rank error %s points\n%.1f%% of pairs in the right order",
+                                 bits, if_else(bits == 1, "bit", "bits"), signif(rho, 4),
+                                 if_else(rank_err < 1, sprintf("%.1f", rank_err), sprintf("%.2g", rank_err)),
+                                 100 * concord),
+                   lab = factor(lab, lab))
+dots <- rs |> select(bits, lab) |> rowwise() |>
+  reframe(lab = lab, th = rnorm(600)) |>
+  left_join(select(rs, lab, rho), by = "lab") |>
+  mutate(sc = sqrt(rho) * th + sqrt(1 - rho) * rnorm(n()),
+         x = 100 * pnorm(th), y = 100 * pnorm(sc))
+ggplot(dots, aes(x, y)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_point(alpha = 0.5, size = 0.9) +
+  facet_wrap(~ lab, ncol = 3) +
+  scale_x_continuous(breaks = c(0, 50, 100)) + scale_y_continuous(breaks = c(0, 50, 100)) +
+  labs(x = "person's true rank in the population (percentile)",
+       y = "rank the test gives them (percentile)",
+       title = "How well a test ranks people, by how much it tells you about them",
+       subtitle = sprintf("Each panel: 600 simulated people, θ and score jointly normal. On the dashed line the ranking is perfect; each extra bit halves the scatter around it. Rank errors are in percentile points. The median warehouse test carries %s bits; the most informative, %s.",
+                          fmt(median(two$I_X)), fmt(max(two$I_X)))) +
+  theme(strip.text = element_text(hjust = 0, size = 9), panel.spacing = unit(0.8, "lines"))
+```
+
+Most of what a ranking needs arrives in the first bit or two: one bit already
+puts five pairs in six in the right order. The panels show the Gaussian
+picture, which is the dashed curve below. The warehouse tests sit a little
+above that curve, so their bits are only approximately where they land in these
+panels.
+
+::: {.callout-tip collapse="true"}
+## Why does reliability undercount the bits?
+
+Reliability sees only the *variance* of what is still uncertain about θ after
+the answers. Bits see its whole *shape*. Among all distributions with a given
+variance, the normal is the most uncertain one, so the Gaussian formula
+−½ log~2~(1 − ρ) describes the worst case: with θ normal, the true information
+is at least that much, and equal to it only when every posterior is normal
+and has the same width. Real tests break that in two ways, the two departures
+in the simulation below.
+
+**Sharp items leave lumpy posteriors.** Take one perfect cut at the median. It
+is worth exactly 1 bit: you learn which half the person is in. But the top
+half of a normal distribution has variance 1 − 2/π ≈
+`r fmt(1 - 2 / pi)`, so as a reliability the cut is worth only
+`r fmt(2 / pi)`, and the Gaussian formula turns that into
+`r fmt(-0.5 * log2(1 - 2 / pi))` bits. The hard edge at the cut is very
+informative, but it does not shrink the variance much.
+
+**Uneven precision.** A test whose items bunch at one end is precise there and
+vague elsewhere. Reliability averages the error *variances*; information, in
+effect, averages their *logarithms*. The average of the logs is larger than
+the log of the average, so uneven precision is worth more bits than its
+average error suggests, and the gap grows as the unevenness does.
+
+A technical note: the marginal reliability used here is built from Fisher
+information, a large-sample approximation, rather than from exact posterior
+variances. The two track each other closely in these data, but the guarantee
+above is strictly for the posterior-variance version.
+:::
+
+```{r}
+#| label: reliability-sim
+#| fig-height: 5.6
+#| fig-width: 7.5
+
+sim_sum <- rel_sim |> group_by(kind) |>
+  summarise(dev_lo = min(I_X - gauss), dev_hi = max(I_X - gauss), .groups = "drop")
+sim_dev <- rel_sim |> group_by(kind, n_items) |> summarise(dev = mean(I_X - gauss), .groups = "drop")
+curve_s <- tibble(rho = seq(0, 0.97, by = 0.005), bits = -0.5 * log2(1 - rho))
+ggplot(rel_sim, aes(rho, I_X, colour = kind)) +
+  geom_line(data = curve_s, aes(rho, bits), inherit.aes = FALSE, colour = "grey30", linetype = "dashed") +
+  geom_point(aes(size = n_items), alpha = 0.6) +
+  scale_colour_manual(values = c(moderate = irw_blue, `sharp items` = irw_red, `one tail` = "#e6a100"),
+                      labels = c(moderate = "moderate items, spread across θ",
+                                 `sharp items` = "3 near-Guttman items",
+                                 `one tail` = "items bunched at the high end"),
+                      name = NULL) +
+  scale_size_continuous(range = c(1, 3.5), breaks = c(5, 20, 60), name = "items") +
+  labs(x = "marginal reliability", y = "I(θ; X), bits",
+       title = "In simulation, ordinary items follow the Gaussian curve; sharp items and one-sided tests rise above it",
+       subtitle = sprintf("Synthetic 2PL tests, θ ~ N(0, 1), 5–60 items, 10 random draws each. Gap above the curve: moderate %s–%s bits; sharp %s–%s; one tail %s–%s.",
+                          fmt(max(0, sim_sum$dev_lo[sim_sum$kind == "moderate"])), fmt(sim_sum$dev_hi[sim_sum$kind == "moderate"]),
+                          fmt(sim_sum$dev_lo[sim_sum$kind == "sharp items"]), fmt(sim_sum$dev_hi[sim_sum$kind == "sharp items"]),
+                          fmt(sim_sum$dev_lo[sim_sum$kind == "one tail"]), fmt(sim_sum$dev_hi[sim_sum$kind == "one tail"]))) +
+  guides(colour = guide_legend(nrow = 2, override.aes = list(size = 3))) +
+  theme(legend.position = "top", legend.box = "vertical")
+```
+
+With ordinary items, moderately discriminating and spread across θ, the
+Gaussian formula is close: reliability tells you the bits. Two departures push
+tests above the curve. A few **near-Guttman items** split the population almost
+deterministically. That is worth bits a reliability coefficient, built on
+squared error, undercounts. The effect is largest in short tests
+(`r fmt(sim_dev$dev[sim_dev$kind == "sharp items" & sim_dev$n_items == 5])` bits at 5 items)
+and fades as ordinary items accumulate
+(`r fmt(sim_dev$dev[sim_dev$kind == "sharp items" & sim_dev$n_items == 60])` at 60).
+Items **bunched in one tail** make the score precise at one end and vague
+elsewhere, and that gap grows with test length
+(`r fmt(sim_dev$dev[sim_dev$kind == "one tail" & sim_dev$n_items == 5])` →
+`r fmt(sim_dev$dev[sim_dev$kind == "one tail" & sim_dev$n_items == 60])` bits).
+
+```{r}
+#| label: reliability
+#| fig-height: 5
+#| fig-width: 7.5
+
+curve_df <- tibble(rho = seq(0, 0.97, by = 0.005), bits = -0.5 * log2(1 - rho))
+refs <- tibble(rho = c(0.8, 0.9, 0.95), bits = -0.5 * log2(1 - rho))
+dev <- two$I_X - two$bits_rho_marginal
+max_a_tbl <- tapply(items_df$a, items_df$table, max)
+g <- ggplot(two, aes(rho_marginal, I_X)) +
+  geom_line(data = curve_df, aes(rho, bits), colour = "grey30", linetype = "dashed") +
+  geom_point(aes(text = sprintf("%s\n%d items\nρ = %.2f\nI = %.2f bits", table, n_items, rho_marginal, I_X)),
+             colour = irw_accent, alpha = 0.7, size = 1.8) +
+  geom_point(data = refs, aes(rho, bits), shape = 21, fill = "white", size = 3) +
+  geom_text(data = refs, aes(rho, bits, label = sprintf("ρ = %.2f\n%.2f bits", rho, bits)),
+            nudge_x = -0.07, nudge_y = 0.12, size = 3.2) +
+  labs(x = "marginal reliability (2PL)", y = "I(θ; X), bits",
+       title = sprintf("Reliability predicts bits closely, but the Gaussian formula undercounts by a median %s bits",
+                       fmt(median(dev))),
+       subtitle = "Dashed: −½ log₂(1 − ρ), the information if θ and its estimate were jointly normal.")
+gauss_note <- "Dashed line: −½ log₂(1 − ρ), the information if θ and its estimate were jointly normal. Hover a point for the table."
+g <- wl(g, 55)
+g$labels$title <- gsub("\n", "<br>", g$labels$title)
+g$labels$subtitle <- NULL
+ggplotly(g, tooltip = "text") |>
+  layout(title = list(text = paste0("<b>", g$labels$title, "</b>"), x = 0, xanchor = "left",
+                      font = list(size = 15)), margin = list(t = 70))
+```
+
+`r gauss_note`
+
+On the Gaussian curve, a reliability of .80 is worth `r fmt(-0.5 * log2(0.2))` bits, .90 is worth `r fmt(-0.5 * log2(0.1))`,
+and .95 is worth `r fmt(-0.5 * log2(0.05))`. The tables follow the curve
+(correlation `r fmt(cor(two$I_X, two$bits_rho_marginal))`), but almost all sit
+above it: the exact information exceeds the Gaussian value in
+`r sum(dev > 0)` of `r nrow(two)` tables, by up to `r fmt(max(dev))` bits.
+Binary responses are not normal. The gap tracks the sharpest item in the
+table (Spearman correlation `r fmt(cor(two$I_X - two$bits_rho_marginal, max_a_tbl[two$table], method = "spearman"))`
+with the largest slope): a near-deterministic item splits the population
+cleanly, which is worth bits that a reliability coefficient, built on
+squared error, does not register.
+
+## Diminishing returns
+
+```{r}
+#| label: length
+#| fig-height: 4.6
+#| fig-width: 7.5
+
+kmax <- 40
+med_curve <- curves_df |>
+  group_by(k) |> filter(n() >= 20) |>
+  summarise(random = median(random_mean), greedy = median(greedy), n = n(), .groups = "drop") |>
+  filter(k <= kmax)
+first <- curves_df |> filter(k == 1) |> pull(random_mean) |> median()
+g5_all <- curves_df |> group_by(table) |> mutate(n = max(k), full = random_mean[k == n]) |>
+  ungroup() |> filter(k == 5) |> mutate(greedy_share = greedy / full, random_share = random_mean / full)
+g5 <- filter(g5_all, n >= 15)
+at10 <- med_curve$random[med_curve$k == 10]
+ggplot() +
+  geom_line(data = filter(curves_df, k <= kmax), aes(k, random_mean, group = table),
+            colour = irw_grey, alpha = 0.15) +
+  geom_line(data = med_curve, aes(k, random, linetype = "median, random order"),
+            colour = irw_accent, linewidth = 1.3) +
+  geom_line(data = med_curve, aes(k, greedy, linetype = "median, greedy order"),
+            colour = "black", linewidth = 0.9) +
+  scale_linetype_manual(values = c("median, random order" = "solid", "median, greedy order" = "dashed"), name = NULL) +
+  labs(x = "number of items in the sum score", y = "I(θ; Sₖ), bits",
+       title = sprintf("The first item gives a median %s bits; the first ten together only %s",
+                       fmt(first), fmt(at10)),
+       subtitle = sprintf("Faint: each table's curve, mean of 5 random item orders. Medians use only lengths reached by at least 20 tables (k ≤ %d).",
+                          max(med_curve$k))) +
+  theme(legend.position = "top")
+```
+
+Each additional item adds less than the one before, because it mostly repeats
+what earlier items already said about the person. The greedy order (best
+item first, then the item that adds most to it, and so on) shows how much of a
+test's information a short form could keep. Among the
+`r nrow(g5)` tables with at least 15 items, the 5 greedy items carry a median
+`r scales::percent(median(g5$greedy_share), accuracy = 1)` of the full sum
+score's bits; 5 random items carry `r scales::percent(median(g5$random_share), accuracy = 1)`.
+
+One curiosity: for a sum score, more items is not always better. Adding a
+flat item to an unweighted sum adds noise without adding signal, so the
+curve can turn down. In `r sum(g5_all$greedy_share > 1)` tables the best
+five items alone carry more information than the full sum score, up to
+`r fmt(max(g5_all$greedy_share), 1)` times as much
+(`r g5_all$table[which.max(g5_all$greedy_share)]`).
+
+## Where do the bits come from?
+
+```{r}
+#| label: item-bits
+#| fig-height: 4.4
+#| fig-width: 7.5
+
+ib <- items_df |> filter(is.finite(b))
+pa <- ggplot(ib, aes(a, bits)) +
+  geom_bin_2d(bins = 50) +
+  scale_fill_gradient(low = "#e5f5f0", high = irw_accent, trans = "log10", name = "items") +
+  scale_x_log10() +
+  labs(x = "discrimination a (log scale)", y = "I(θ; Xⱼ), the item alone (bits)")
+pb <- ggplot(filter(ib, abs(b) < 6), aes(b, bits)) +
+  geom_bin_2d(bins = 50) +
+  scale_fill_gradient(low = "#e5f5f0", high = irw_accent, trans = "log10", name = "items") +
+  labs(x = "difficulty b (θ units)", y = NULL) +
+  guides(fill = "none")
+(pa | pb) + plot_layout(guides = "collect") +
+  plot_annotation(title = wrap(sprintf("Bits need both a sharp item and a central one; the median item gives %s bits",
+                                  fmt(median(items_df$bits), 2))),
+                  subtitle = sprintf("%s items from %d tables (2PL).", format(nrow(items_df), big.mark = ","),
+                                     n_distinct(items_df$table)))
+```
+
+An item's bits depend on two things. Discrimination is how sharply the item
+separates people just below its difficulty from people just above. Position
+is where that cut falls. A highly discriminating item placed far in a tail
+still says little about most people, because nearly everyone gives the same
+answer to it. The ceiling is 1 bit, reached only by a perfectly sharp item at
+the population median.
+
+## What does sum-scoring cost?
+
+```{r}
+#| label: sum-gap
+#| fig-height: 4.6
+#| fig-width: 7.5
+
+two <- mutate(two, gap = I_X - I_S, gap_prop = gap / I_X)
+sd_log_a <- tapply(log(items_df$a), items_df$table, sd)
+two$sd_log_a <- as.vector(sd_log_a[two$table])
+lo_gap <- loess(gap_prop ~ sd_log_a, data = two, span = 0.75)
+sm_gap <- tibble(x = seq(min(two$sd_log_a), max(two$sd_log_a), length.out = 200)) |>
+  mutate(y = predict(lo_gap, data.frame(sd_log_a = x)))
+g_gap <- ggplot(two, aes(sd_log_a, gap_prop)) +
+  geom_point(aes(text = sprintf("%s\n%d items\nspread of log slopes %.2f\nsum score loses %.0f%% (%.3f of %.2f bits)",
+                                table, n_items, sd_log_a, 100 * gap_prop, gap, I_X)),
+             colour = irw_accent, alpha = 0.7, size = 1.8) +
+  geom_line(data = sm_gap, aes(x, y), inherit.aes = FALSE, colour = "grey15", linewidth = 1) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "spread of item slopes in the table (SD of log a)",
+       y = "I(θ; X | S) as a share of I(θ; X)",
+       title = sprintf("Using the sum score instead of the full pattern costs a median %s of the bits, more when slopes differ",
+                       scales::percent(median(two$gap_prop), accuracy = 1)))
+g_gap <- wl(g_gap, 60)
+g_gap$labels$title <- gsub("\n", "<br>", g_gap$labels$title)
+ggplotly(g_gap, tooltip = "text") |>
+  layout(title = list(text = paste0("<b>", g_gap$labels$title, "</b>"), x = 0, xanchor = "left",
+                      font = list(size = 15)), margin = list(t = 70))
+```
+
+The gap between the full pattern and the sum score has a name: it is the
+conditional mutual information I(θ; X | S), the information about θ in *which*
+items a person got right beyond *how many*. Under the Rasch model it is zero:
+the sum score carries every bit the pattern carries. Under the 2PL it is
+not: with the item parameters known, the sufficient statistic for θ is the
+slope-weighted score Σ~j~ a~j~X~j~, which carries every bit the pattern does,
+I(θ; Σ~j~ a~j~X~j~) = I(θ; X). The gap is therefore exactly the cost of
+weighting every item equally when the 2PL says items with higher slopes
+deserve more weight ([Is the sum score enough?](#is-the-sum-score-enough)
+takes this further). The loss is small: a median of
+`r scales::percent(median(two$gap_prop), accuracy = 1)` of the pattern's
+information. It exceeds a quarter in `r sum(two$gap_prop > 0.25)` tables.
+As the figure shows, the loss tracks how unequal the slopes are (Spearman correlation
+`r fmt(cor(two$gap_prop, two$sd_log_a, method = "spearman"))`
+with the spread of log slopes): tables that mix very sharp items with very
+flat ones lose the most.
+
+## Is the sum score enough?
+
+Every score is computed from the answers, so θ → X → S is a chain: the score
+can only know what the answers know. That is the **data processing
+inequality**, I(θ; S) ≤ I(θ; X). The chain rule splits the full pattern's
+information exactly into what the score keeps and what it drops:
+
+<small>I(θ; X) = I(θ; S) + I(θ; X | S).</small>
+
+A statistic is **sufficient** for θ exactly when nothing is dropped,
+I(θ; X | S) = 0, *whatever the population* [@cover2006elements, §2.9].
+Equivalently, once you know the score, the rest of the pattern says nothing more
+about the person. Under the Rasch model the sum score is sufficient; under the
+2PL the slope-weighted score Σ a~j~x~j~ is, and the plain sum is not.
+
+```{r}
+#| label: suff-bars
+#| fig-height: 3.6
+#| fig-width: 7.5
+
+lad <- suff[[main]]$ladder
+bars <- bind_rows(
+  tibble(model = lad$model, part = "kept by the score: I(θ; S)", bits = lad$I_S),
+  tibble(model = lad$model, part = "dropped by the score: I(θ; X | S)", bits = pmax(lad$I_X_given_S, 0))
+) |>
+  mutate(model = factor(model, c("Rasch", "2PL")),
+         part = factor(part, c("dropped by the score: I(θ; X | S)", "kept by the score: I(θ; S)")))
+full <- lad |> mutate(model = factor(model, c("Rasch", "2PL")))
+ggplot(bars, aes(bits, model, fill = part)) +
+  geom_col(width = 0.55) +
+  geom_errorbarh(data = full, aes(xmin = 0, xmax = I_X, y = model), inherit.aes = FALSE,
+                 height = 0.75, colour = "grey30") +
+  geom_text(data = full, aes(x = I_X, y = model, label = sprintf("I(θ; X) = %s", fmt(I_X, 3))),
+            inherit.aes = FALSE, hjust = -0.08, size = 3.6) +
+  annotate("text", x = lad$I_X[lad$model == "2PL"], y = 2.42, hjust = 1, size = 3.4, colour = irw_red,
+           label = sprintf("I(θ; X | S) = %s bits", fmt(lad$I_X_given_S[lad$model == "2PL"], 3))) +
+  scale_fill_manual(values = c("kept by the score: I(θ; S)" = irw_accent,
+                               "dropped by the score: I(θ; X | S)" = irw_red), name = NULL) +
+  scale_x_continuous(limits = c(0, max(full$I_X) * 1.35), expand = c(0, 0)) +
+  labs(x = "bits about θ (numeracy test)", y = NULL,
+       title = "Under Rasch the sum score keeps every bit; under the 2PL a sliver is lost",
+       subtitle = "θ → X → S. The bracket is everything the full answer pattern says about the person.") +
+  theme(legend.position = "top", panel.grid.major.y = element_blank())
+```
+
+### For every population
+
+Sufficiency is a statement about every prior, not just the population we
+happened to sample. To see that, we hold each model's item parameters fixed and
+recompute the information under 16 different populations: normal
+distributions centred anywhere from −1.5 to 1.5 with SDs of 0.5, 1 and 2, plus
+a two-humped mixture.
+
+```{r}
+#| label: suff-sweep
+#| fig-height: 7.2
+#| fig-width: 7.5
+
+sw <- bind_rows(lapply(suff, `[[`, "sweep")) |>
+  mutate(test = show_titles[table],
+         test = if_else(table == "frac20", "Fraction subtraction (top 12 of 20 items)", test),
+         sd_lab = if_else(prior_kind == "mixture", "bimodal mixture", paste0("SD ", prior_sd)),
+         x = if_else(prior_kind == "mixture", 2.4, prior_mean),
+         model = factor(model, c("Rasch", "2PL")))
+rng <- sw |> filter(model == "2PL") |> group_by(test) |>
+  summarise(lo = min(I_X_given_S), hi = max(I_X_given_S), .groups = "drop")
+p_sweep <- ggplot(sw, aes(x, I_X_given_S, colour = sd_lab, shape = model, group = interaction(sd_lab, model))) +
+  geom_hline(yintercept = 0, colour = "grey40") +
+  geom_line(data = filter(sw, prior_kind == "normal"), linewidth = 0.7) +
+  geom_point(size = 2.2) +
+  facet_wrap(~ test, ncol = 1, scales = "free_y") +
+  scale_y_continuous(n.breaks = 3) +
+  scale_x_continuous(breaks = c(-1.5, -0.5, 0, 0.5, 1.5, 2.4),
+                     labels = c("−1.5", "−0.5", "0", "0.5", "1.5", "bimodal")) +
+  scale_colour_manual(values = c("SD 0.5" = "#9ecae1", "SD 1" = irw_blue, "SD 2" = "#08306b",
+                                 "bimodal mixture" = irw_red), name = "population") +
+  scale_shape_manual(values = c(Rasch = 1, `2PL` = 16), name = "model") +
+  labs(x = "population mean of θ", y = "I(θ; X | S), bits",
+       title = "Rasch's sum score loses nothing in any population; the 2PL's loss depends on who is tested",
+       subtitle = sprintf("Rasch: zero to machine precision in all 48 cases. 2PL: %s.",
+                          paste(sprintf("%s %s–%s bits", sub(" \\(.*", "", rng$test), fmt(rng$lo, 3), fmt(rng$hi, 3)), collapse = "; "))) +
+  theme(legend.position = "top", legend.box = "horizontal", legend.title = element_text(size = 10),
+        legend.text = element_text(size = 9), panel.spacing.y = unit(1, "lines"))
+th <- seq(-4, 4, length.out = 200)
+shapes <- bind_rows(
+  tibble(prior = "N(0, 0.5²)", theta = th, d = dnorm(th, 0, 0.5)),
+  tibble(prior = "N(0, 1²)", theta = th, d = dnorm(th, 0, 1)),
+  tibble(prior = "N(0, 2²)", theta = th, d = dnorm(th, 0, 2)),
+  tibble(prior = "bimodal", theta = th, d = 0.5 * dnorm(th, -1.5, 0.5) + 0.5 * dnorm(th, 1.5, 0.5))
+) |> mutate(prior = factor(prior, unique(prior)))
+p_shapes <- ggplot(shapes, aes(theta, d, colour = prior)) +
+  geom_line(linewidth = 0.8, show.legend = FALSE) +
+  facet_wrap(~ prior, nrow = 1) +
+  scale_colour_manual(values = c("#9ecae1", irw_blue, "#08306b", irw_red)) +
+  labs(x = NULL, y = NULL) +
+  theme_void(base_size = 10) + theme(strip.text = element_text(size = 9))
+wl(p_sweep) / p_shapes + plot_layout(heights = c(6, 1))
+```
+
+The populations matter in two ways. First, the total I(θ; X) changes a lot with
+the population: a narrow population has less to resolve, and a population far
+from the items' difficulties gets mostly uninformative answers. Second, under
+the 2PL the share of that information hiding in *which* items were answered
+moves with it, because which items are informative depends on where people are.
+Under Rasch none of this touches sufficiency: the gap is zero for every
+population, as the definition requires.
+
+### Compression
+
+```{r}
+#| label: suff-ladder
+#| fig-height: 4.8
+#| fig-width: 7.5
+
+ladr <- bind_rows(lapply(suff, `[[`, "ladder")) |> filter(model == "Rasch") |>
+  mutate(test = show_titles[table],
+         test = if_else(table == "frac20", "Fraction subtraction (top 12 items)", test))
+lad_long <- bind_rows(
+  transmute(ladr, test, step = "H(X), patterns", bits = H_X),
+  transmute(ladr, test, step = "H(S), score", bits = H_S),
+  transmute(ladr, test, step = "I(θ; S) = I(θ; X)", bits = I_S)
+) |> mutate(step = factor(step, rev(unique(step))))
+ggplot(lad_long, aes(bits, step, fill = step)) +
+  geom_col(width = 0.7) +
+  geom_text(aes(label = fmt(bits)), hjust = -0.15, size = 3.5) +
+  facet_wrap(~ test, ncol = 1) +
+  scale_fill_manual(values = c("H(X), patterns" = "grey70", "H(S), score" = "grey45",
+                               "I(θ; S) = I(θ; X)" = irw_accent), guide = "none") +
+  scale_x_continuous(limits = c(0, max(lad_long$bits) * 1.12), expand = c(0, 0)) +
+  labs(x = "bits (Rasch)", y = NULL,
+       title = sprintf("Under Rasch, the score throws away %s–%s bits of pattern entropy and not one bit about the person",
+                       fmt(min(ladr$H_X - ladr$H_S), 1), fmt(max(ladr$H_X - ladr$H_S), 1)),
+       subtitle = "H(X): entropy of the answer patterns. H(S): entropy of the sum score. I(θ; S): what the score says about the person, which under Rasch equals I(θ; X).") +
+  theme(panel.grid.major.y = element_blank())
+```
+
+Under Rasch the sum score is a **minimal sufficient statistic**: it collapses
+up to 2^n^ patterns into n + 1 scores, the most compression possible without
+losing anything about θ. For the numeracy test that is 2,048 patterns into 12
+scores. In bits, the patterns carry `r fmt(ladr$H_X[ladr$table == main])` bits
+of entropy, the score `r fmt(ladr$H_S[ladr$table == main])`, and both carry the
+same `r fmt(ladr$I_S[ladr$table == main], 3)` bits about the person. Everything
+else the patterns say is noise as far as θ is concerned. That last step is
+special to Rasch. Under the 2PL the sum score is no longer sufficient, and the
+same compression costs some bits about the person (a median of
+`r scales::percent(median(two$gap_prop), accuracy = 1)` across the warehouse,
+from [What does sum-scoring cost?](#what-does-sum-scoring-cost)); the
+compression that loses nothing is to the slope-weighted score instead.
+
+### Same score, different patterns
+
+```{r}
+#| label: suff-same-score
+#| fig-height: 5.2
+#| fig-width: 7.5
+
+ss <- suff[[main]]$same_score
+bs <- suff[[main]]$by_s
+k_show <- sort(unique(ss$s))[1]
+n_show <- 15
+items_lab <- s$items$label
+top <- ss |> filter(s == k_show, rank <= n_show)
+cells <- bind_rows(lapply(seq_len(nrow(top)), function(i)
+  tibble(rank = top$rank[i], item = seq_along(items_lab),
+         x = as.integer(strsplit(top$pattern[i], "")[[1]]))))
+n_k <- choose(length(items_lab), k_show)
+info_k <- bs |> filter(s == k_show) |> select(model, H_X_given_s, I_X_given_s)
+p_cells <- ggplot(cells, aes(item, rank, fill = factor(x))) +
+  geom_tile(colour = "white", linewidth = 0.6) +
+  scale_fill_manual(values = c("0" = "#e8ecf2", "1" = irw_blue), labels = c("incorrect", "correct"), name = NULL) +
+  scale_y_reverse(breaks = 1:n_show) +
+  scale_x_continuous(breaks = seq_along(items_lab), labels = items_lab, expand = c(0, 0)) +
+  labs(x = NULL, y = "pattern rank") +
+  theme(panel.grid = element_blank(), axis.text.x = element_text(angle = 90, vjust = 0.5, size = 8),
+        legend.position = "top")
+p_prob <- ggplot(top, aes(p_given_s, rank)) +
+  geom_col(orientation = "y", fill = "grey55", width = 0.75) +
+  scale_y_reverse() +
+  scale_x_continuous(n.breaks = 2) +
+  labs(x = "P(pattern | score)", y = NULL) +
+  theme(axis.text.y = element_blank(), panel.grid.major.y = element_blank())
+(p_cells | p_prob) + plot_layout(widths = c(3, 1)) +
+  plot_annotation(
+    title = wrap(w = 72, sprintf("%s patterns share a score of %d; telling them apart is %s bits of entropy and %s bits about θ",
+                    format(n_k, big.mark = ","), k_show, fmt(info_k$H_X_given_s[info_k$model == "Rasch"], 1),
+                    fmt(abs(info_k$I_X_given_s[info_k$model == "Rasch"]), 0))),
+    subtitle = wrap(sprintf("Numeracy test, Rasch. The %d most likely of the %s patterns with %d correct. Under the 2PL the same patterns carry %s bits about θ.",
+                       n_show, format(n_k, big.mark = ","), k_show, fmt(info_k$I_X_given_s[info_k$model == "2PL"], 3)), 83))
+```
+
+Many patterns share each score: under Rasch, H(X | S = `r k_show`) is
+`r fmt(info_k$H_X_given_s[info_k$model == "Rasch"], 2)` bits. Yet
+I(θ; X | S = `r k_show`) is zero, because the probability of each pattern
+*given its score* does not depend on θ at all. Two people with the same score
+but very different θ produce these patterns in exactly the same proportions.
+This θ-free conditional distribution is what conditional maximum likelihood
+estimates item parameters from.
+
+### Where misfit lives
+
+```{r}
+#| label: suff-misfit
+#| fig-height: 5
+#| fig-width: 7.5
+
+wsh <- suff[[main]]$within_score_hist
+rsp <- suff[[main]]$respondents
+show_s <- sort(unique(rsp$sum_score))
+hh <- wsh |> filter(s %in% show_s) |> mutate(mid = (lo + hi) / 2, s_lab = paste("score", s))
+rsp <- rsp |> mutate(s_lab = paste("score", sum_score),
+                     who = if_else(kind == "aberrant", "aberrant respondent", "typical respondents"))
+ab_w <- filter(rsp, kind == "aberrant")
+ggplot(hh, aes(mid, mass)) +
+  geom_col(fill = "grey65", width = 0.24) +
+  geom_vline(data = rsp, aes(xintercept = within_surprisal, colour = who), linewidth = 1) +
+  facet_wrap(~ factor(s_lab, paste("score", show_s)), ncol = 1, strip.position = "left", scales = "free_y") +
+  scale_colour_manual(values = c("aberrant respondent" = irw_red, "typical respondents" = "black"), name = NULL) +
+  labs(x = "within-score surprisal, −log₂ P(pattern | score), bits (Rasch; no θ involved)", y = NULL,
+       title = sprintf("Only %s of the %s patterns with a score of %d %s stranger than the aberrant respondent's",
+                       ab_w$n_patterns_stranger, format(ab_w$n_patterns_at_score, big.mark = ","), ab_w$sum_score,
+                       if (ab_w$n_patterns_stranger == 1) "is" else "are"),
+       subtitle = sprintf("Numeracy test. Grey: how surprising patterns are among everyone with that score. Lines: the six respondents from the Surprise section. The aberrant pattern scores %s bits.",
+                          fmt(ab_w$within_surprisal, 1))) +
+  theme(legend.position = "top", strip.text.y.left = element_text(angle = 0), axis.text.y = element_blank(),
+        panel.grid.major.y = element_blank())
+```
+
+The θ-free part of the data is where fit lives. A pattern can be very
+surprising *given its score* while saying nothing about the person's level. This
+is a different surprisal from the one in the [Surprise](#surprise) section,
+which asked how unexpected each answer was given where the person's other
+answers placed them on θ.
+Here θ never enters. The question is only whether this arrangement of correct
+answers is a plausible one for someone with this many correct answers. Recall
+the aberrant respondent from the [Surprise](#surprise) section: the person
+with the worst person-fit in the numeracy data (Zh = `r fmt(ab_resp$zh, 1)`),
+who misses `r n_easy_miss` of the 3 easiest questions yet gets
+`r n_hard_hit` of the 3 hardest right. By this measure their pattern is among
+the least plausible at their score: right on hard items, wrong on easy ones,
+the reverse of what the score leads you to expect.
+
+### The Fisher view
+
+```{r}
+#| label: suff-fisher
+#| fig-height: 4.4
+#| fig-width: 7.5
+
+fi <- suff[[main]]$fisher |> filter(abs(theta) <= 4)
+f2 <- filter(fi, model == "2PL") |>
+  pivot_longer(c(test_info, sum_score_info), names_to = "what", values_to = "info") |>
+  mutate(what = factor(what, c("test_info", "sum_score_info"),
+                       c("full answer pattern (test information)", "sum score only")))
+fr <- filter(fi, model == "Rasch") |>
+  pivot_longer(c(test_info, sum_score_info), names_to = "what", values_to = "info")
+loss_peak <- f2 |> pivot_wider(names_from = what, values_from = info) |>
+  mutate(loss = 1 - `sum score only` / `full answer pattern (test information)`)
+main_p <- ggplot(f2, aes(theta, info, colour = what, linetype = what)) +
+  geom_line(linewidth = 1.1) +
+  scale_colour_manual(values = c(irw_blue, irw_red), name = NULL) +
+  scale_linetype_manual(values = c("solid", "dashed"), name = NULL) +
+  labs(x = "θ", y = "Fisher information",
+       title = sprintf("Under the 2PL the sum score loses up to %s of the Fisher information at some θ",
+                       scales::percent(max(loss_peak$loss), accuracy = 1)),
+       subtitle = "Numeracy test. Inset: under Rasch the two curves are the same curve.") +
+  theme(legend.position = "top")
+inset <- ggplot(fr, aes(theta, info, colour = what, linetype = what)) +
+  geom_line(linewidth = 0.8, show.legend = FALSE) +
+  scale_colour_manual(values = c(irw_blue, irw_red)) +
+  scale_linetype_manual(values = c("solid", "dashed")) +
+  labs(x = NULL, y = NULL, title = "Rasch") +
+  theme_minimal(base_size = 9) + theme(plot.title = element_text(size = 9, face = "bold"),
+                                       axis.text.y = element_blank(), panel.grid.minor = element_blank())
+wl(main_p) + inset_element(inset, left = 0.68, bottom = 0.55, right = 0.99, top = 0.98)
+```
+
+Two classical facts say the same thing in other units. A sufficient statistic
+preserves the Kullback–Leibler divergence between the response distributions of
+any two values of θ, so any two people are exactly as distinguishable from their
+score as from their full patterns. And it preserves Fisher information at every
+θ, so the score's test information function equals the full data's. Under
+the 2PL the plain sum score loses a little of both, and the slope-weighted
+score keeps both [@cover2006elements].
+
+## From groups to continuous θ
+
+```{r}
+#| label: bins
+#| fig-height: 3.8
+#| fig-width: 7.5
+
+bc <- bind_rows(lapply(names(showcases), function(nm) {
+  b <- showcases[[nm]]$bin_convergence
+  cont <- b$bits[!is.finite(b$K)]
+  tibble(test = show_titles[nm], K = b$K[is.finite(b$K)], bits = b$bits[is.finite(b$K)], cont = cont)
+}))
+ggplot(bc, aes(K, bits, colour = test)) +
+  geom_hline(aes(yintercept = cont, colour = test), linetype = "dashed", alpha = 0.6) +
+  geom_line(linewidth = 1) + geom_point(size = 2) +
+  scale_x_continuous(breaks = 1:8, labels = function(k) paste0(k, "\n(", 2^k, ")")) +
+  scale_colour_manual(values = c(irw_blue, irw_accent, "black"), name = NULL) +
+  labs(x = "K: number of bits needed to name a group (number of groups)", y = "I(group; X), bits",
+       title = "By 64 groups, counting groups captures essentially all the information about θ",
+       subtitle = "Dashed: information about continuous θ. Binned information never exceeds it.") +
+  theme(legend.position = "top")
+```
+
+The game above asks "which of 64 groups?". The warehouse numbers ask about θ
+itself, a continuous quantity. These are close: information about the group
+can never exceed information about θ, since knowing θ tells you the group, and
+it converges to it as the groups get finer. With 2 groups the numeracy test
+gives `r fmt(showcases[[main]]$bin_convergence$bits[1])` bits. With 64 it gives
+`r fmt(showcases[[main]]$bin_convergence$bits[6], 3)`, against
+`r fmt(tail(showcases[[main]]$bin_convergence$bits, 1), 3)` for continuous θ.
+Because the tests deliver only one or two bits, six bits of groups is far
+more resolution than any of them can use.
+
+## More than right and wrong
+
+Many tables in the warehouse do not record right and wrong answers. They record
+a choice among ordered categories: *strongly disagree* to *strongly agree*,
+*not at all* to *nearly every day*. Everything above carries over to such
+items. Two things are new: the ceiling on what one item can deliver, and a
+question that right-or-wrong items never raise, how many categories an item
+needs. Rather than the whole warehouse, this section works through three
+familiar instruments under the generalized partial credit model (GPCM), the
+polytomous counterpart of the 2PL.
+
+```{r}
+#| label: poly-setup
+#| eval: !expr poly_ok
+
+poly_titles <- c(rosenberg_selfesteem           = "Rosenberg self-esteem (10 items, 4 categories)",
+                 bfi_goldberg_1992_extraversion = "Extraversion, Big Five (10 items, 5 categories)",
+                 su_2024_gad7                   = "GAD-7 anxiety (7 items, 4 categories)")
+poly_short  <- c(rosenberg_selfesteem = "Rosenberg", bfi_goldberg_1992_extraversion = "Extraversion",
+                 su_2024_gad7 = "GAD-7")
+p_sum  <- poly$summary |> mutate(test = factor(poly_titles[table], poly_titles))
+p_it   <- poly$items   |> mutate(test = factor(poly_titles[table], poly_titles))
+p_cl   <- poly$collapses
+p_sc   <- poly$showcase
+p_gpcm <- filter(p_it, model == "GPCM")
+p_info <- poly$info
+rev_txt <- function(t) paste(p_info[[t]]$reversed, collapse = ", ")
+gp_I <- function(t) p_sum$I_X[p_sum$table == t & p_sum$model == "GPCM"]
+cat_cols <- c("#d1e5f0", "#92c5de", "#4393c3", "#2166ac", "#08306b")
+```
+
+The three are the Rosenberg self-esteem scale [@rosenberg1965society] (10
+statements, four categories from *strongly disagree* to *strongly agree*), the
+ten extraversion items of a Big Five inventory (five categories), and the GAD-7
+anxiety screener (seven symptoms, from *not at all* to *nearly every day* over
+the last two weeks). Each was subsampled to 10,000 respondents. Half the
+Rosenberg and extraversion items are worded against the trait ("I certainly
+feel useless at times", "I keep in the background"), and the warehouse stores
+them as answered; we reversed them before fitting (Rosenberg items
+`r rev_txt("rosenberg_selfesteem")`; extraversion
+`r rev_txt("bfi_goldberg_1992_extraversion")`). Reversal changes nothing about
+how many bits an item carries; it only makes a higher category mean more of the
+trait on every item.
+
+### One item, four bins
+
+```{r}
+#| label: poly-one-item
+#| eval: !expr poly_ok
+#| fig-height: 4.4
+#| fig-width: 7.5
+
+ros <- filter(p_gpcm, table == "rosenberg_selfesteem")
+j1 <- which.max(ros$I)
+j1_item <- ros$item[j1]
+j1_text <- p_sc$items$text[p_sc$items$item == j1_item]
+gpj <- p_sc$group_probs[, match(j1_item, p_sc$items$item), ]
+d1 <- expand.grid(g = 1:64, k = 1:4) |>
+  mutate(p = gpj[cbind(g, k)], cat = factor(p_sc$category_labels[k], rev(p_sc$category_labels)))
+ggplot(d1, aes(g, p, fill = cat)) +
+  geom_col(width = 1, colour = "white", linewidth = 0.1) +
+  scale_fill_manual(values = setNames(cat_cols[c(1, 2, 3, 5)], p_sc$category_labels), name = NULL,
+                    breaks = p_sc$category_labels) +
+  scale_x_continuous(breaks = c(1, 64), labels = c("lowest\nself-esteem", "highest\nself-esteem"),
+                     expand = c(0, 0.5)) +
+  scale_y_continuous(labels = scales::percent, expand = c(0, 0)) +
+  labs(x = "the population in 64 equally likely slices", y = "chance of each answer",
+       title = sprintf("A four-category item can deliver at most 2 bits; Rosenberg's best delivers %s",
+                       fmt(ros$I[j1])),
+       subtitle = wrap(sprintf("\"%s\" (GPCM). Its answers carry %s bits of entropy; %s of them are noise, answers that vary among people at the same level.",
+                               j1_text, fmt(ros$H_model[j1]), fmt(ros$H_model[j1] - ros$I[j1])), 90)) +
+  theme(legend.position = "top", panel.grid.major.x = element_blank(),
+        plot.margin = margin(5.5, 30, 5.5, 5.5))
+```
+
+A right-or-wrong item asks one yes/no question, so it can deliver at most 1
+bit. Four categories sort people into four bins, which is the three-cut case
+from the opening widget. Telling four equally full bins apart takes two yes/no
+questions (upper half or lower half? then upper or lower within it?), so the
+ceiling is 2 bits. In general it is log~2~ K: 1.58 bits for three categories,
+2.32 for five. The ceiling is reached only by an item whose
+categories are perfectly sharp and equally full. The decomposition is the one
+used throughout, I(θ; X~j~) = H(X~j~) − H(X~j~ | θ). The only difference is
+that the noise term is now a category entropy,
+−Σ~k~ P~k~(θ) log~2~ P~k~(θ), averaged over the population. The figure shows
+why it is large. Even among the most self-assured slice of people, the
+statement draws a mix of *agree* and *strongly agree*, and that mix is noise as
+far as θ is concerned.
+
+Some of that noise is not luck. People differ in how they use a response
+scale: some favour the extremes, others the midpoint, whatever their level of
+the trait. A one-dimensional model has nowhere to put those response styles
+except H(X~j~ | θ). The answers carry information about something, but not about θ.
+
+### Categories offered, categories used
+
+```{r}
+#| label: poly-ceiling
+#| eval: !expr poly_ok
+#| fig-height: 7.4
+#| fig-width: 7.5
+
+pc <- p_gpcm |>
+  group_by(test) |> mutate(lab = sub("^item_", "", item), lab = reorder(paste(test, lab), I)) |> ungroup()
+ggplot(pc, aes(y = lab)) +
+  geom_vline(aes(xintercept = log2K), linetype = "dashed", colour = "grey30") +
+  geom_segment(aes(x = 0, xend = I, yend = lab), colour = irw_accent, linewidth = 1.6) +
+  geom_point(aes(x = H_obs, shape = "observed category entropy, H(Xⱼ)"), colour = "grey35", size = 2.2) +
+  geom_point(aes(x = I, shape = "information about θ, I(θ; Xⱼ)"), colour = irw_accent, size = 2.4) +
+  facet_wrap(~ test, ncol = 1, scales = "free_y") +
+  scale_y_discrete(labels = function(x) sub(".* ", "", x)) +
+  scale_shape_manual(values = c("observed category entropy, H(Xⱼ)" = 1, "information about θ, I(θ; Xⱼ)" = 16),
+                     name = NULL) +
+  scale_x_continuous(limits = c(0, 2.45), expand = c(0, 0)) +
+  labs(x = "bits per item (GPCM). Dashed: the ceiling, log₂ K", y = NULL,
+       title = sprintf("Items offer 2 or 2.3 bits, answers use a median of %s, and θ gets a median of %s",
+                       fmt(median(pc$H_obs)), fmt(median(pc$I))),
+       subtitle = "The gap from the dashed line to the open circle is categories offered but not used; from the circle to the bar's end, answers that vary for reasons other than θ.") +
+  theme(legend.position = "top", panel.grid.major.y = element_blank(), strip.text = element_text(hjust = 0))
+```
+
+```{r}
+#| label: poly-ceiling-numbers
+#| eval: !expr poly_ok
+
+gad <- filter(p_gpcm, table == "su_2024_gad7")
+ext <- filter(p_gpcm, table == "bfi_goldberg_1992_extraversion")
+# share answering "not at all" or "several days" per GAD-7 item (full table, from the scouting pass)
+gad_low <- read.csv("bits_per_item_data/poly_scout_items.csv") |> filter(table == "su_2024_gad7") |>
+  group_by(item) |> summarise(low = sum(n[resp <= 1]) / sum(n), .groups = "drop")
+```
+
+The label on the scale sets the ceiling, log~2~ K. A tighter ceiling comes from
+the data: the entropy of the answers actually given, H(X~j~). If respondents use
+only two of an item's five categories, the item cannot deliver much more than 1
+bit, whatever its label. The GAD-7 makes the point. Its four categories offer 2
+bits per item, but in this general-population sample
+`r scales::percent(min(gad_low$low), accuracy = 1)`–`r scales::percent(max(gad_low$low), accuracy = 1)`
+of people answer each item *not at all* or *several days*, so the answers carry only
+`r fmt(min(gad$H_obs))`–`r fmt(max(gad$H_obs))` bits of entropy, and θ gets
+`r fmt(min(gad$I))`–`r fmt(max(gad$I))` of them. The extraversion items use
+nearly all of their 2.32 bits (`r fmt(min(ext$H_obs))`–`r fmt(max(ext$H_obs))`),
+yet deliver only `r fmt(min(ext$I))`–`r fmt(max(ext$I))` bits about θ. Their
+categories are all in use; most of that use is noise. Across the three tables
+a single polytomous item delivers a median of `r fmt(median(pc$I))` bits, against a
+median of `r fmt(median(items_df$bits))` for a dichotomous item in the warehouse.
+That is more than one right-or-wrong question, and a long way below the ceiling.
+
+### How many categories do you need?
+
+```{r}
+#| label: poly-collapse
+#| eval: !expr poly_ok
+#| fig-height: 5.6
+#| fig-width: 7.5
+
+g_cl <- p_cl |> filter(model == "GPCM") |> mutate(share = I / I_full)
+best <- g_cl |> group_by(table, item, k) |> slice_max(I, n = 1, with_ties = FALSE) |> ungroup()
+# Two contrasting Rosenberg items: the one whose best two-category version keeps the most, and the least.
+r2 <- best |> filter(table == "rosenberg_selfesteem", k == 2) |> arrange(desc(share))
+pair <- c(r2$item[1], r2$item[nrow(r2)])
+txt <- function(it) p_sc$items$text[p_sc$items$item == it]
+lab_pair <- setNames(c(sprintf("\"%s\"", txt(pair[1])), sprintf("\"%s\"", txt(pair[2]))), pair)
+curve_k <- best |> group_by(table, k) |> summarise(share = median(share), .groups = "drop") |>
+  mutate(test = factor(poly_short[table], poly_short))
+dich <- poly$dichotomised |> filter(rule == "best") |>
+  mutate(share = I_dich / I_X, k = 2, test = factor(poly_short[table], poly_short))
+# Extra tables (bits_per_item_poly_extra.R): a random draw of dense polytomous tables, GPCM only.
+extra_path <- "bits_per_item_data/poly_extra_results.rds"
+extra <- if (file.exists(extra_path)) readRDS(extra_path) else NULL
+if (!is.null(extra)) {
+  ex_best <- extra$collapses |> mutate(share = I / I_full) |>
+    group_by(table, item, k) |> slice_max(I, n = 1, with_ties = FALSE) |> ungroup()
+  ex_curve <- ex_best |> group_by(table, k) |> summarise(share = median(share), .groups = "drop")
+  ex_ok <- extra$tables$table[extra$tables$converged]
+  ex_curve <- filter(ex_curve, table %in% ex_ok)
+  ex_dich <- extra$dichotomised |> filter(table %in% ex_ok) |> mutate(share = I_dich / I_X, k = 2)
+}
+ggplot(curve_k, aes(k, share, colour = test)) +
+  { if (!is.null(extra)) geom_line(data = ex_curve, aes(group = table), colour = "grey70", linewidth = 0.5, alpha = 0.8) } +
+  { if (!is.null(extra)) geom_point(data = ex_dich, aes(group = table), colour = "grey55", shape = 23, size = 2.2, fill = "white", alpha = 0.8) } +
+  geom_line(linewidth = 1.1) +
+  geom_point(aes(shape = "a typical item (the median)"), size = 2.6) +
+  geom_point(data = dich, aes(shape = "the whole test, every item cut to two"), size = 4, fill = "white", stroke = 1.4) +
+  scale_colour_manual(values = c(Rosenberg = irw_accent, Extraversion = irw_blue, `GAD-7` = irw_red), name = NULL) +
+  scale_shape_manual(values = c("a typical item (the median)" = 16, "the whole test, every item cut to two" = 23), name = NULL) +
+  scale_y_continuous(labels = scales::percent, limits = c(0.5, 1), breaks = seq(0.5, 1, 0.1)) +
+  scale_x_continuous(breaks = 2:7) +
+  labs(x = "answer categories kept (the best way of merging neighbours)", y = "share of the bits kept",
+       title = wrap(sprintf("Merging an item's answers down to two keeps a median %s of its bits; doing it to every item in a test keeps %s–%s of the test's bits",
+                            scales::percent(median(best$share[best$k == 2]), accuracy = 1),
+                            scales::percent(min(dich$share), accuracy = 1),
+                            scales::percent(max(dich$share), accuracy = 1)), 72),
+       subtitle = wrap(sprintf("Each line ends at 100%%: all of the item's categories kept. The diamonds sit above the lines because, over a whole test, what one item loses is partly made up by the others.%s", if (is.null(extra)) "" else sprintf(" Grey: %d further warehouse tables with 4–7 categories, GPCM only.", nrow(extra$tables))), 90)) +
+  guides(colour = guide_legend(order = 1, override.aes = list(shape = 16)), shape = guide_legend(order = 2)) +
+  theme(legend.position = "top", legend.box = "vertical", legend.spacing.y = unit(0, "pt"))
+```
+
+Merging adjacent categories (counting *agree* and *strongly agree* as one
+answer, say) is a function of the response, so by the data processing
+inequality it can only lose information. The chain rule says exactly how much:
+the loss is I(θ; X~j~ | merged X~j~), the information in the distinction the
+merge erases. A four-category item has seven ways to merge adjacent categories
+and a five-category item fifteen. We evaluated each under the fitted model,
+without refitting.
+
+The answer depends on the item. For
+`r lab_pair[pair[1]]` the best two-way split keeps
+`r scales::percent(r2$share[1], accuracy = 1)` of the item's bits. For
+`r lab_pair[pair[2]]` it keeps
+`r scales::percent(r2$share[nrow(r2)], accuracy = 1)`.
+
+Over a whole test the losses are smaller, because the items overlap. Taken one
+at a time, Rosenberg's ten items carry `r fmt(sum(ros$I))` bits between them,
+but the test as a whole carries only `r fmt(gp_I("rosenberg_selfesteem"))`: most
+of what each item says, the other nine already say. So when a merge erases a
+fine distinction on one item (*agree* against *strongly agree*, say), the other
+items have already placed the person roughly, and the lost distinction would
+mostly have repeated them. Merging every Rosenberg item down to two keeps
+`r scales::percent(dich$share[dich$table == "rosenberg_selfesteem"], accuracy = 1)`
+of the test's bits, against
+`r scales::percent(curve_k$share[curve_k$table == "rosenberg_selfesteem" & curve_k$k == 2], accuracy = 1)`
+for a typical item on its own. Dichotomizing every GAD-7 item at its
+best split (in practice, *not at all* against everything else) keeps
+`r scales::percent(dich$share[dich$table == "su_2024_gad7"], accuracy = 1)` of
+the test's `r fmt(gp_I("su_2024_gad7"))` bits. That is the "categories offered
+are not categories used" point, put in bits: almost all of the GAD-7's
+information is in whether a symptom is present at all. Extraversion, whose
+categories are all in use, keeps
+`r scales::percent(dich$share[dich$table == "bfi_goldberg_1992_extraversion"], accuracy = 1)`.
+`r if (!is.null(extra)) sprintf("The grey lines are a random draw of %d further warehouse tables with 4–7 categories (GPCM only, no reverse keying, which mutual information ignores). They tell the same story: cutting a typical item to two keeps %s–%s of its bits, three categories keep a median %s, and cutting every item in a test to two keeps %s–%s of the test's bits.", length(ex_ok), scales::percent(min(ex_curve$share[ex_curve$k == 2]), accuracy = 1), scales::percent(max(ex_curve$share[ex_curve$k == 2]), accuracy = 1), scales::percent(median(ex_curve$share[ex_curve$k == 3]), accuracy = 1), scales::percent(min(ex_dich$share), accuracy = 1), scales::percent(max(ex_dich$share), accuracy = 1))`
+
+```{r}
+#| label: poly-dich-scatter
+#| eval: !expr poly_ok && !is.null(extra)
+#| fig-height: 6
+#| fig-width: 7.5
+
+sc <- bind_rows(
+  dich |> transmute(table, I_X, I_dich, K = vapply(table, function(t) max(poly$items$K[poly$items$table == t]), numeric(1)),
+                    n_items = vapply(table, function(t) poly$summary$n_items[poly$summary$table == t][1], numeric(1)), showcase = TRUE),
+  ex_dich |> left_join(extra$tables |> select(table, K, n_items), by = "table") |> transmute(table, I_X, I_dich, K, n_items, showcase = FALSE)
+) |> mutate(share = I_dich / I_X,
+            tip = sprintf("<b>%s</b>%s<br>%d items, %d categories<br>all categories kept: %s bits<br>every item cut to two: %s bits<br>kept: %s",
+                          table, ifelse(showcase, paste0(" (", poly_short[table], ")"), ""), n_items, K,
+                          fmt(I_X), fmt(I_dich), scales::percent(share, accuracy = 1)))
+lim <- c(0, max(sc$I_X) * 1.05)
+g_sc <- ggplot(sc, aes(I_X, I_dich)) +
+  geom_abline(slope = 1, intercept = 0, colour = "grey60", linetype = "dashed") +
+  geom_abline(slope = median(sc$share), intercept = 0, colour = "grey80") +
+  geom_point(aes(size = n_items, colour = factor(K), text = tip), alpha = 0.85) +
+  scale_colour_viridis_d(name = "categories", end = 0.85) +
+  scale_size_continuous(range = c(1.8, 5), guide = "none") +
+  coord_equal(xlim = lim, ylim = lim) +
+  labs(x = "I(θ; X), all categories kept (bits)", y = "I(θ; X), every item cut to two (bits)",
+       title = sprintf("Dichotomising every item keeps a median %s of a test's bits across %d tables",
+                       scales::percent(median(sc$share), accuracy = 1), nrow(sc)))
+g_sc <- wl(g_sc, 60)
+ggplotly(g_sc, tooltip = "text") |>
+  layout(title = list(text = paste0("<b>", gsub("\n", "<br>", g_sc$labels$title), "</b>"), x = 0, xanchor = "left",
+                      font = list(size = 15)), margin = list(t = 70),
+         hoverlabel = list(align = "left"))
+```
+
+The scatter puts the same losses on the absolute scale (dashed line: nothing
+lost; solid grey: the median share; hover over a dot for the table; larger dots are longer tests). The gap to the dashed
+line is I(θ; X | dichotomised X), the information in the merged distinctions
+that the other items do not already repeat. It grows with the test's total,
+roughly in proportion, so no table loses more than about a third of its bits
+and no table escapes the loss.
+
+```{r}
+#| label: poly-table
+#| eval: !expr poly_ok
+#| results: asis
+
+tab <- p_sum |> filter(model == "GPCM") |>
+  left_join(filter(poly$dichotomised, rule == "best") |> select(table, I_dich), by = "table") |>
+  transmute(Test = poly_titles[table],
+            `I(θ; X)` = fmt(I_X), `bits per item` = fmt(bits_per_item),
+            `share of Σ log₂ K` = scales::percent(efficiency, accuracy = 1),
+            `−½ log₂(1 − ρ)` = fmt(bits_rho_marginal),
+            `dichotomized` = fmt(I_dich))
+print(knitr::kable(tab, align = "lrrrrr",
+  caption = "The three tests under the GPCM. Share of Σ log₂ K: I(θ; X) as a share of the most the items could deliver. −½ log₂(1 − ρ): the Gaussian bits implied by marginal reliability. Dichotomized: I(θ; X) with every item cut at its best split."))
+```
+
+## Limitations
+
+- **Model dependence.** Every number is computed from a fitted model, not from
+  the data directly. If a 2PL is wrong for a table (guessing, multiple
+  dimensions, local dependence), the bits are wrong too. The sum-score check
+  gives one warning sign: model-implied and observed score distributions
+  diverge by more than 0.1 bit (KL) in `r sum(two$sum_kl_bits > 0.1, na.rm = TRUE)` tables.
+- **Local dependence and sharp items.** Even with a slope prior,
+  `r n_distinct(items_df$table[items_df$a > 5])` tables have at least one item
+  with a slope above 5, often near-duplicate items. Such pairs make the model
+  treat a repeated answer as two independent pieces of evidence, which
+  inflates the bits.
+- **Unidimensionality.** We fit one trait per table. A multidimensional test
+  carries information about several traits, and the numbers here count only
+  what projects onto the first.
+- **The population matters.** Information is relative to the spread of
+  people taking the test. The same items given to a more homogeneous group
+  would deliver fewer bits, because there is less uncertainty to resolve to
+  begin with.
+- **Subsampling and missing data.** Large tables were subsampled to 10,000
+  respondents; that affects parameter precision, not the definition of the
+  quantity. Items answered by fewer than half the respondents were dropped,
+  and I(θ; X) treats every respondent as answering every remaining item.
+- **Convergence.** `r sum(!two$converged)` 2PL fit
+  (`r paste(two$table[!two$converged], collapse = ", ")`) did not meet `mirt`'s
+  convergence criterion; its results are included but should be read with care.
+- **Enumeration in the sufficiency section.** Its quantities enumerate every
+  answer pattern on a θ grid, so they are limited to 16 items. For the
+  fraction-subtraction test they use the 12 items with the highest expected
+  bits. The within-score surprisal needs no θ grid and uses all items.
+- **Scope.** The warehouse-wide numbers cover only dichotomous items, and no
+  ENEM tables in this version. The polytomous section uses three tables, chosen
+  by hand, not a sample of the warehouse's polytomous tables.
+- **Polytomous models and choices.** The polytomous bits depend on the model as
+  much as the dichotomous ones do. The section reports the generalized partial
+  credit model; under the partial credit and graded response models a test's
+  bits change by up to
+  `r if (poly_ok) with(subset(poly$summary, model %in% c("PCM", "GPCM", "GRM")), fmt(max(tapply(I_X, table, function(x) diff(range(x)))), 2))` bits. Negatively worded items were reversed before
+  fitting. Every category was kept, including GAD-7's sparse top category
+  (*nearly every day*, under 1.5% of answers on every item), which leaves its
+  estimates the least precise. Merged
+  categories were evaluated under the model fitted to the full categories,
+  without refitting. That isolates what the distinction is worth under one
+  model, but a model refitted to the merged data could tell a slightly different
+  story. `r if (poly_ok) with(subset(poly$summary, model %in% c("PCM", "GPCM", "GRM")), sprintf("%d of %d polytomous fits converged", sum(converged), length(converged)))`. Rosenberg and the GAD-7 were enumerated
+  exactly (up to 4^10^ = 1,048,576 patterns); extraversion (5^10^ patterns) used
+  Monte Carlo (standard error under 0.005 bits).
+
+## Reproducibility
+
+{{< include ../components/_source-links.qmd >}}
+
+{{< include ../components/_data-version.qmd >}}
+
+Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+# 0. Optional: re-scan IRW for eligible tables (writes scout_tables.csv)
+source("vignettes/bits_per_item_scout.R")
+
+# 1. Validation checks, then the compute script (from the project root)
+source("vignettes/bits_per_item_checks.R")
+source("vignettes/bits_per_item_compute.R")
+
+# 1b. The polytomous section (three tables; checks are the "P" block above)
+source("vignettes/bits_per_item_poly_compute.R")
+
+# 2. Re-render this page
+quarto::quarto_render("vignettes/bits_per_item.qmd")
+```
+
+::: {.callout-tip}
+To cite the datasets used, run:
+
+```r
+irw_save_bibtex(unique(summary_df$table), output_file = "bits_per_item_data/references.bib")
+```
+:::
+
+Visual inspiration: 3Blue1Brown, ["Solving Wordle using information
+theory"](https://www.youtube.com/watch?v=v68zYyaEmEA). No material from the
+video is reused here.
+
+---
+
+## References
+
+::: {#refs}
+:::
