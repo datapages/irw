@@ -2,92 +2,9 @@
 title: "Vignettes"
 ---
 
-```{=html}
-<style>
-.vignette-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-}
-@media (max-width: 768px) {
-  .vignette-grid { grid-template-columns: 1fr; }
-}
-.vignette-card {
-  border: 1px solid #dee2e6;
-  border-left: 4px solid #2780e3;
-  border-radius: 6px;
-  padding: 1.1rem 1.4rem;
-  background: #fff;
-  transition: box-shadow 0.15s;
-  display: flex;
-  flex-direction: column;
-}
-.vignette-card:hover {
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-}
-.vignette-lang {
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #6c757d;
-  margin-bottom: 0.5rem;
-}
-.vignette-title {
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-  line-height: 1.4;
-}
-.vignette-title a {
-  color: #212529;
-  text-decoration: none;
-}
-.vignette-title a:hover { color: #2780e3; }
-.vignette-question {
-  font-size: 0.85rem;
-  color: #495057;
-  font-style: italic;
-  line-height: 1.5;
-  flex: 1;
-  margin-bottom: 0.75rem;
-}
-.vignette-packages {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: auto;
-}
-.vignette-pkg {
-  font-size: 0.75rem;
-  font-family: monospace;
-  background: #f1f3f5;
-  color: #495057;
-  border: 1px solid #dee2e6;
-  border-radius: 3px;
-  padding: 0.1rem 0.4rem;
-}
-.vignette-cite {
-  font-size: 0.78rem;
-  color: #6c757d;
-  margin-bottom: 0.6rem;
-}
-.vignette-cite a {
-  color: #2780e3;
-  text-decoration: none;
-}
-.vignette-cite a:hover {
-  text-decoration: underline;
-}
-.vignette-group-desc {
-  color: #495057;
-  margin-bottom: 1rem;
-}
-</style>
-```
-
 These vignettes show how to work with IRW data for common psychometric tasks.
+Each row is one vignette: click its title to read it, or click anywhere else
+on the row for a longer description and the key papers behind it.
 
 ::: {.callout-note}
 Many of the vignettes below — including the dataset search, compute scripts,
@@ -98,49 +15,64 @@ interpretations accordingly, and check the underlying compute scripts
 directly if you're relying on the numbers shown.
 :::
 
+```{=html}
+<script>
+function toggleEntries(btn) {
+  var open = btn.dataset.state !== 'open';
+  document.querySelectorAll('details.entry').forEach(function (d) { d.open = open; });
+  btn.dataset.state = open ? 'open' : 'closed';
+  btn.textContent = open ? 'Collapse all' : 'Expand all';
+}
+</script>
+```
+
 ## R
 
 Each of these vignettes uses the [`irw` R package](https://itemresponsewarehouse.github.io/Rpkg/) to fetch data and walks through a complete analysis. They fall into four rough genres, grouped below.
+
+<div class="entry-controls"><button type="button" onclick="toggleEntries(this)">Expand all</button></div>
 
 ### Tutorials
 
 Introductions to a technique or tool, worked through on one example dataset.
 
-<div class="vignette-grid">
+<div class="entry-list">
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./imv.qmd">Calculating IMV Values</a></div>
-<div class="vignette-question">How much does a 2PL improve on a 1PL for a given dataset? A short worked example computing cross-validated InterModel Vigorish (IMV) for one dataset, with a pointer to an interactive app for building intuition about what IMV values mean.</div>
-<div class="vignette-cite">Key paper: <a href="https://doi.org/10.1007/s11336-024-09977-2" target="_blank">Domingue et al. (2025), Psychometrika</a></div>
-<div class="vignette-cite">Also see: <a href="https://intermodelvigorish.github.io/shinysite/" target="_blank">the IMV Shiny app</a>, for building intuition about what different IMV values mean</div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">mirt</span>
-<span class="vignette-pkg">imv</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./imv.qmd">Calculating IMV Values</a></span>
+<span class="entry-teaser">How much does a 2PL improve on a 1PL for a given dataset?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">mirt</span><span class="entry-pkg">imv</span></span>
+</summary>
+<div class="entry-body">
+<p>A short worked example computing cross-validated InterModel Vigorish (IMV) for one dataset, with a pointer to an interactive app for building intuition about what IMV values mean.</p>
+<p class="entry-cite">Key paper: <a href="https://doi.org/10.1007/s11336-024-09977-2" target="_blank">Domingue et al. (2025), Psychometrika</a></p>
+<p class="entry-cite">Also see: <a href="https://intermodelvigorish.github.io/shinysite/" target="_blank">the IMV Shiny app</a>, for building intuition about what different IMV values mean</p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./diffsim.qmd">Simulating Item Difficulties</a></div>
-<div class="vignette-question">How can I simulate item difficulties that reflect real-world distributions rather than idealized assumptions? Draws from a pooled empirical distribution built from 145+ IRW datasets via <code>irw_simu_diff()</code>, instead of assuming a normal or uniform shape.</div>
-<div class="vignette-cite">Key paper: <a href="https://doi.org/10.31234/osf.io/jbhxy_v2" target="_blank">Zhang et al. (2025), PsyArXiv</a></div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./diffsim.qmd">Simulating Item Difficulties</a></span>
+<span class="entry-teaser">How can I simulate item difficulties that reflect real-world distributions rather than idealized assumptions?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span></span>
+</summary>
+<div class="entry-body">
+<p>Draws from a pooled empirical distribution built from 145+ IRW datasets via <code>irw_simu_diff()</code>, instead of assuming a normal or uniform shape.</p>
+<p class="entry-cite">Key paper: <a href="https://doi.org/10.31234/osf.io/jbhxy_v2" target="_blank">Zhang et al. (2025), PsyArXiv</a></p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./cfa.qmd">Conducting CFA with IRW Data</a></div>
-<div class="vignette-question">How do I fit a multi-factor CFA model to an IRW personality dataset? Walks through a full lavaan workflow on a Big Five dataset — cleaning, reshaping to wide format, and building a multi-factor model directly from item-naming conventions — that generalizes to most other multi-scale IRW tables.</div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">lavaan</span>
-<span class="vignette-pkg">psych</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./cfa.qmd">Conducting CFA with IRW Data</a></span>
+<span class="entry-teaser">How do I fit a multi-factor CFA model to an IRW personality dataset?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">lavaan</span><span class="entry-pkg">psych</span></span>
+</summary>
+<div class="entry-body">
+<p>Walks through a full lavaan workflow on a Big Five dataset — cleaning, reshaping to wide format, and building a multi-factor model directly from item-naming conventions — that generalizes to most other multi-scale IRW tables.</p>
 </div>
-</div>
+</details>
 
 </div>
 
@@ -148,55 +80,54 @@ Introductions to a technique or tool, worked through on one example dataset.
 
 Broad scans checking whether an assumption standard IRT models rely on actually holds, across hundreds of real IRW tables at once, rather than in a single example dataset.
 
-<div class="vignette-grid">
+<div class="entry-list">
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./dimensionality.qmd">Dimensionality Across IRW</a></div>
-<div class="vignette-question">How often does the unidimensionality assumption behind standard IRT models actually hold up across real IRW instruments, and does it vary by construct type? Compares two exploratory diagnostics — the eigenvalue ratio and parallel analysis — across hundreds of tables and finds they disagree sharply on how often it holds.</div>
-<div class="vignette-cite">Key paper: <a href="https://doi.org/10.1007/BF02289447" target="_blank">Horn (1965), Psychometrika</a> (parallel analysis)</div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">psych</span>
-<span class="vignette-pkg">ggplot2</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./dimensionality.qmd">Dimensionality Across IRW</a></span>
+<span class="entry-teaser">How often does the unidimensionality assumption behind standard IRT models actually hold up across real IRW instruments, and does it vary by construct type?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">psych</span><span class="entry-pkg">ggplot2</span></span>
+</summary>
+<div class="entry-body">
+<p>Compares two exploratory diagnostics — the eigenvalue ratio and parallel analysis — across hundreds of tables and finds they disagree sharply on how often it holds.</p>
+<p class="entry-cite">Key paper: <a href="https://doi.org/10.1007/BF02289447" target="_blank">Horn (1965), Psychometrika</a> (parallel analysis)</p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./local_dependence.qmd">Local Dependence Across IRW</a></div>
-<div class="vignette-question">After fitting the standard unidimensional IRT model, how often are item pairs still residually correlated (local dependence / testlet effects), and does it concentrate in particular item formats? Flags pairs via Yen's Q3 statistic across ~800 tables and checks two known testlet structures as a sanity check.</div>
-<div class="vignette-cite">Key paper: Yen (1984), Applied Psychological Measurement (Q3 statistic)</div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">mirt</span>
-<span class="vignette-pkg">ggplot2</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./local_dependence.qmd">Local Dependence Across IRW</a></span>
+<span class="entry-teaser">After fitting the standard unidimensional IRT model, how often are item pairs still residually correlated, and does it concentrate in particular item formats?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">mirt</span><span class="entry-pkg">ggplot2</span></span>
+</summary>
+<div class="entry-body">
+<p>Flags locally dependent pairs (testlet effects) via Yen's Q3 statistic across ~800 tables and checks two known testlet structures as a sanity check.</p>
+<p class="entry-cite">Key paper: Yen (1984), Applied Psychological Measurement (Q3 statistic)</p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./lsirm_interaction_maps.qmd">Latent Space Item Response Models</a></div>
-<div class="vignette-question">The Rasch model assumes local independence, but a standard fit gives no warning when that assumption fails. LSIRM adds a single respondent-item distance term and turns the same question into a picture: an "interaction map" where items and respondents sharing unexplained structure are pulled close together. Fit to 16 IRW tables, it splits by response format so cleanly it forced a validity check on the estimator itself.</div>
-<div class="vignette-cite">Key paper: Jeon, Jin, Schweinberger &amp; Baugh (2021), Psychometrika (LSIRM)</div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">lsirm12pl</span>
-<span class="vignette-pkg">ggplot2</span>
-<span class="vignette-pkg">plotly</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./lsirm_interaction_maps.qmd">Latent Space Item Response Models</a></span>
+<span class="entry-teaser">The Rasch model assumes local independence, but a standard fit gives no warning when that assumption fails. Can a latent space model turn the question into a picture?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">lsirm12pl</span><span class="entry-pkg">ggplot2</span><span class="entry-pkg">plotly</span></span>
+</summary>
+<div class="entry-body">
+<p>LSIRM adds a single respondent-item distance term and produces an "interaction map" where items and respondents sharing unexplained structure are pulled close together. Fit to 16 IRW tables, it splits by response format so cleanly it forced a validity check on the estimator itself.</p>
+<p class="entry-cite">Key paper: Jeon, Jin, Schweinberger &amp; Baugh (2021), Psychometrika (LSIRM)</p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./gender_dif.qmd">Gender DIF Across IRW Datasets</a></div>
-<div class="vignette-question">How prevalent is gender DIF across a diverse collection of real-world datasets, and do Mantel-Haenszel and logistic regression methods agree on which items are flagged? Runs both DIF families side by side on every IRW dataset with a gender/sex covariate.</div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">difR</span>
-<span class="vignette-pkg">ggplot2</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./gender_dif.qmd">Gender DIF Across IRW Datasets</a></span>
+<span class="entry-teaser">How prevalent is gender DIF across a diverse collection of real-world datasets, and do Mantel-Haenszel and logistic regression methods agree on which items are flagged?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">difR</span><span class="entry-pkg">ggplot2</span></span>
+</summary>
+<div class="entry-body">
+<p>Runs both DIF families side by side on every IRW dataset with a gender/sex covariate.</p>
 </div>
-</div>
+</details>
 
 </div>
 
@@ -204,95 +135,92 @@ Broad scans checking whether an assumption standard IRT models rely on actually 
 
 Takes a specific claim or theoretical result from a published paper and checks whether it holds up against real IRW data.
 
-<div class="vignette-grid">
+<div class="entry-list">
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./dutch_identity.qmd">The Dutch Identity</a></div>
-<div class="vignette-question">What does Holland's (1990) Dutch Identity reveal about the structure of IRT models — and does it hold in real data? Six sections moving from raw manifest probabilities to a Rasch-model diagnostic and a test of Holland's conservation-of-complexity law.</div>
-<div class="vignette-cite">Key paper: <a href="https://doi.org/10.1007/BF02294739" target="_blank">Holland (1990), Psychometrika</a></div>
-<div class="vignette-cite">Also see: <a href="https://intermodelvigorish.github.io/shinysite/" target="_blank">the IMV Shiny app</a>, for the IMV values used in Section 6</div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">mirt</span>
-<span class="vignette-pkg">imv</span>
-<span class="vignette-pkg">ggplot2</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./dutch_identity.qmd">The Dutch Identity</a></span>
+<span class="entry-teaser">What does Holland's (1990) Dutch Identity reveal about the structure of IRT models, and does it hold in real data?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">mirt</span><span class="entry-pkg">imv</span><span class="entry-pkg">ggplot2</span></span>
+</summary>
+<div class="entry-body">
+<p>Six sections moving from raw manifest probabilities to a Rasch-model diagnostic and a test of Holland's conservation-of-complexity law.</p>
+<p class="entry-cite">Key paper: <a href="https://doi.org/10.1007/BF02294739" target="_blank">Holland (1990), Psychometrika</a></p>
+<p class="entry-cite">Also see: <a href="https://intermodelvigorish.github.io/shinysite/" target="_blank">the IMV Shiny app</a>, for the IMV values used in Section 6</p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./hf_reliability_paradox.qmd">The Reliability Paradox in Cognitive-Control Tasks</a></div>
-<div class="vignette-question">Do congruent/incongruent difference scores in IRW cognitive-control tasks show the same reliability collapse Hedge, Powell & Sumner (2018) found in the lab? Tests four IRW tasks — Hearts &amp; Flowers, an alcohol Stroop, a stop-signal task, and three Self-Regulation Ontology tasks — for the same attenuation.</div>
-<div class="vignette-cite">Key paper: <a href="https://doi.org/10.3758/s13428-017-0935-1" target="_blank">Hedge, Powell &amp; Sumner (2018), Behavior Research Methods</a></div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">data.table</span>
-<span class="vignette-pkg">ggplot2</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./hf_reliability_paradox.qmd">The Reliability Paradox in Cognitive-Control Tasks</a></span>
+<span class="entry-teaser">Do congruent/incongruent difference scores in IRW cognitive-control tasks show the same reliability collapse Hedge, Powell &amp; Sumner (2018) found in the lab?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">data.table</span><span class="entry-pkg">ggplot2</span></span>
+</summary>
+<div class="entry-body">
+<p>Tests four IRW tasks — Hearts &amp; Flowers, an alcohol Stroop, a stop-signal task, and three Self-Regulation Ontology tasks — for the same attenuation.</p>
+<p class="entry-cite">Key paper: <a href="https://doi.org/10.3758/s13428-017-0935-1" target="_blank">Hedge, Powell &amp; Sumner (2018), Behavior Research Methods</a></p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./network_psych.qmd">Network Psychometrics vs. IRT</a></div>
-<div class="vignette-question">Under a single dominant common cause, network psychometrics and IRT make the same prediction — but do they actually agree on real data? Tests whether a network's node centrality tracks IRT discrimination across real IRW instruments, and whether disagreement concentrates in tables already flagged as multidimensional or locally dependent elsewhere on this site.</div>
-<div class="vignette-cite">Key paper: Epskamp, Maris, van Borkulo &amp; Borsboom (2018), in <em>The Wiley Handbook of Psychometric Testing</em></div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">bootnet</span>
-<span class="vignette-pkg">qgraph</span>
-<span class="vignette-pkg">mirt</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./network_psych.qmd">Network Psychometrics vs. IRT</a></span>
+<span class="entry-teaser">Under a single dominant common cause, network psychometrics and IRT make the same prediction. Do they actually agree on real data?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">bootnet</span><span class="entry-pkg">qgraph</span><span class="entry-pkg">mirt</span></span>
+</summary>
+<div class="entry-body">
+<p>Tests whether a network's node centrality tracks IRT discrimination across real IRW instruments, and whether disagreement concentrates in tables already flagged as multidimensional or locally dependent elsewhere on this site.</p>
+<p class="entry-cite">Key paper: Epskamp, Maris, van Borkulo &amp; Borsboom (2018), in <em>The Wiley Handbook of Psychometric Testing</em></p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./asymmetric_irt.qmd">Asymmetric IRT Models Across IRW</a></div>
-<div class="vignette-question">Do Shim &amp; Bonifay's (2026) asymmetric IRT models (LPE, RH, AO) actually beat a standard 2PL on real data, and does the direction of asymmetry track construct type? The original paper never fits any of the three to real item response data — this vignette runs a real-data IMV holdout comparison to fill that gap.</div>
-<div class="vignette-cite">Key paper: <a href="https://doi.org/10.1111/bmsp.70069" target="_blank">Shim &amp; Bonifay (2026), British Journal of Mathematical and Statistical Psychology</a></div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">mirt</span>
-<span class="vignette-pkg">imv</span>
-<span class="vignette-pkg">ggplot2</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./asymmetric_irt.qmd">Asymmetric IRT Models Across IRW</a></span>
+<span class="entry-teaser">Do Shim &amp; Bonifay's (2026) asymmetric IRT models (LPE, RH, AO) actually beat a standard 2PL on real data, and does the direction of asymmetry track construct type?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">mirt</span><span class="entry-pkg">imv</span><span class="entry-pkg">ggplot2</span></span>
+</summary>
+<div class="entry-body">
+<p>The original paper never fits any of the three to real item response data; this vignette runs a real-data IMV holdout comparison to fill that gap.</p>
+<p class="entry-cite">Key paper: <a href="https://doi.org/10.1111/bmsp.70069" target="_blank">Shim &amp; Bonifay (2026), British Journal of Mathematical and Statistical Psychology</a></p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./continuous_bounded.qmd">Bounded Continuous Responses</a></div>
-<div class="vignette-question">Slider and visual-analogue-scale items produce a response that's continuous but confined to a fixed range like [0,10] or [0,100] — does that boundedness actually matter for modeling? Compares Noel &amp; Dauvier's Beta IRT, Samejima's Continuous Response Model, and Mueller's Continuous Rating Scale Model against a naive linear baseline, on a full simulation grid and 11 real IRW tables — and finds the naive baseline loses badly on distributional fit but is often competitive on point predictions.</div>
-<div class="vignette-cite">Key paper: <a href="https://doi.org/10.1177/0146621605287691" target="_blank">No&euml;l &amp; Dauvier (2007), Applied Psychological Measurement</a> (Beta IRT)</div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">mirt</span>
-<span class="vignette-pkg">EstCRM</span>
-<span class="vignette-pkg">pcIRT</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./continuous_bounded.qmd">Bounded Continuous Responses</a></span>
+<span class="entry-teaser">Slider and visual-analogue-scale items give a continuous response confined to a fixed range. Does that boundedness actually matter for modeling?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">mirt</span><span class="entry-pkg">EstCRM</span><span class="entry-pkg">pcIRT</span></span>
+</summary>
+<div class="entry-body">
+<p>Compares Noel &amp; Dauvier's Beta IRT, Samejima's Continuous Response Model, and Mueller's Continuous Rating Scale Model against a naive linear baseline, on a full simulation grid and 11 real IRW tables — and finds the naive baseline loses badly on distributional fit but is often competitive on point predictions.</p>
+<p class="entry-cite">Key paper: <a href="https://doi.org/10.1177/0146621605287691" target="_blank">No&euml;l &amp; Dauvier (2007), Applied Psychological Measurement</a> (Beta IRT)</p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./guessing.qmd">Guessing in Multiple-Choice Data</a></div>
-<div class="vignette-question">When guessing is present in multiple-choice data, which correction actually helps out-of-sample, and when does the correction itself become a liability? Compares three published lenses on guessing — ability-based guessing (San Martín, Del Pino &amp; De Boeck, 2006), person-level purification (Torres Irribarra, Echeverría &amp; Espinoza, 2026), and a two-class "safety valve" mixture (Xiao, Ulitzsch, Zhang, Frank &amp; Domingue, 2026) — plus the standard Rasch/2PL/1PLg/3PL baselines, on 11 real IRW tables (eight ENEM admissions-exam tables and three from a literacy-intervention study) using out-of-sample IMV — and finds that estimating a guessing floor helps on every table, while fixing it at 1/m can cost you.</div>
-<div class="vignette-cite">Key papers: <a href="https://doi.org/10.1177/0146621605282773" target="_blank">San Martín, Del Pino &amp; De Boeck (2006), Applied Psychological Measurement</a>; Xiao, Ulitzsch, Zhang, Frank &amp; Domingue (2026)</div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">mirt</span>
-<span class="vignette-pkg">imv</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./guessing.qmd">Guessing in Multiple-Choice Data</a></span>
+<span class="entry-teaser">When guessing is present in multiple-choice data, which correction actually helps out-of-sample, and when does the correction itself become a liability?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">mirt</span><span class="entry-pkg">imv</span></span>
+</summary>
+<div class="entry-body">
+<p>Compares three published lenses on guessing — ability-based guessing (San Martín, Del Pino &amp; De Boeck, 2006), person-level purification (Torres Irribarra, Echeverría &amp; Espinoza, 2026), and a two-class "safety valve" mixture (Xiao, Ulitzsch, Zhang, Frank &amp; Domingue, 2026) — plus the standard Rasch/2PL/1PLg/3PL baselines, on 11 real IRW tables (eight ENEM admissions-exam tables and three from a literacy-intervention study) using out-of-sample IMV. Finds that estimating a guessing floor helps on every table, while fixing it at 1/m can cost you.</p>
+<p class="entry-cite">Key papers: <a href="https://doi.org/10.1177/0146621605282773" target="_blank">San Martín, Del Pino &amp; De Boeck (2006), Applied Psychological Measurement</a>; Xiao, Ulitzsch, Zhang, Frank &amp; Domingue (2026)</p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./esm_floor.qmd">What Is a Floor, Actually?</a></div>
-<div class="vignette-question">Experience-sampling responses pile up at the bottom of the scale, and a recent preprint argues that ignoring that pile biases the person-level correlations DSEM is fitted to estimate; its remedy is a censored model. But censoring is only one theory of what a floor is &mdash; a bounded link models the boundedness directly, and a graded model says the floor was never special. Measures how much floor mass IRW's intensive longitudinal tables actually carry, shows that the composite scores the field models hide almost all of it, and puts the three families against each other on a study that randomised participants to a Likert or a slider version of the same protocol &mdash; where carryover survives the choice of floor model and the correlation the preprint cares about does not.</div>
-<div class="vignette-cite">Key papers: <a href="https://osf.io/preprints/psyarxiv/3adgx" target="_blank">Beneath the Floor: Censored DSEM Models for Analyzing ESM Data with Floor Effects (2026), PsyArXiv preprint</a>; <a href="https://doi.org/10.3758/s13428-026-02992-4" target="_blank">Vollbracht, Ottenstein, Ecker &amp; Lischetzke (2026), Behavior Research Methods</a></div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">brms</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./esm_floor.qmd">What Is a Floor, Actually?</a></span>
+<span class="entry-teaser">Experience-sampling responses pile up at the bottom of the scale. Is a censored model the right theory of that floor, or is it a bounded link, or nothing special at all?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">brms</span></span>
+</summary>
+<div class="entry-body">
+<p>A recent preprint argues that ignoring the floor biases the person-level correlations DSEM is fitted to estimate, and its remedy is a censored model. But censoring is only one theory of what a floor is: a bounded link models the boundedness directly, and a graded model says the floor was never special. Measures how much floor mass IRW's intensive longitudinal tables actually carry, shows that the composite scores the field models hide almost all of it, and puts the three families against each other on a study that randomised participants to a Likert or a slider version of the same protocol — where carryover survives the choice of floor model and the correlation the preprint cares about does not.</p>
+<p class="entry-cite">Key papers: <a href="https://osf.io/preprints/psyarxiv/3adgx" target="_blank">Beneath the Floor: Censored DSEM Models for Analyzing ESM Data with Floor Effects (2026), PsyArXiv preprint</a>; <a href="https://doi.org/10.3758/s13428-026-02992-4" target="_blank">Vollbracht, Ottenstein, Ecker &amp; Lischetzke (2026), Behavior Research Methods</a></p>
 </div>
-</div>
+</details>
 
 </div>
 
@@ -300,101 +228,102 @@ Takes a specific claim or theoretical result from a published paper and checks w
 
 Applied methods and novel analyses that use IRW's breadth to ask a research question that a single dataset couldn't answer on its own.
 
-<div class="vignette-grid">
+<div class="entry-list">
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./intransitivity.qmd">Are Competitions Transitive? Cycles and Luck in Pairwise Data</a></div>
-<div class="vignette-question">If A beats B and B beats C, does A beat C? Across nearly every table in the competition collection (a century of team sports, Lichess chess, game-playing bots, human judgments and animal dominance), tests whether cycles are more common than a transitive Bradley-Terry model produces by chance, and shows why counting cycles, or a naive bootstrap, misleads.</div>
-<div class="vignette-cite">Also see: <a href="https://ben-domingue.github.io/irw-course/lessons/competitions.html" target="_blank">the course's competitions lesson</a></div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">MASS</span>
-<span class="vignette-pkg">ggplot2</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./intransitivity.qmd">Are Competitions Transitive? Cycles and Luck in Pairwise Data</a></span>
+<span class="entry-teaser">If A beats B and B beats C, does A beat C?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">MASS</span><span class="entry-pkg">ggplot2</span></span>
+</summary>
+<div class="entry-body">
+<p>Across nearly every table in the competition collection (a century of team sports, Lichess chess, game-playing bots, human judgments and animal dominance), tests whether cycles are more common than a transitive Bradley-Terry model produces by chance, and shows why counting cycles, or a naive bootstrap, misleads.</p>
+<p class="entry-cite">Also see: <a href="https://ben-domingue.github.io/irw-course/lessons/competitions.html" target="_blank">the course's competitions lesson</a></p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./2pl_across_datasets.qmd">2PL Parameters Across Datasets</a></div>
-<div class="vignette-question">What do discrimination parameters look like across many cognitive/educational datasets in the wild? Fits a 2PL to every eligible table and asks how consequential the Rasch model's a=1 constraint really is in practice.</div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">mirt</span>
-<span class="vignette-pkg">ggplot2</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./2pl_across_datasets.qmd">2PL Parameters Across Datasets</a></span>
+<span class="entry-teaser">What do discrimination parameters look like across many cognitive/educational datasets in the wild?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">mirt</span><span class="entry-pkg">ggplot2</span></span>
+</summary>
+<div class="entry-body">
+<p>Fits a 2PL to every eligible table and asks how consequential the Rasch model's a=1 constraint really is in practice.</p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./item_text_difficulty.qmd">Item Text and Difficulty</a></div>
-<div class="vignette-question">Can simple linguistic features of item wording predict proportion correct across cognitive datasets? Extracts features like length, negation, and complexity from item text and tests how much of item difficulty they explain, separate from substantive content.</div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">ggplot2</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./item_text_difficulty.qmd">Item Text and Difficulty</a></span>
+<span class="entry-teaser">Can simple linguistic features of item wording predict proportion correct across cognitive datasets?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">ggplot2</span></span>
+</summary>
+<div class="entry-body">
+<p>Extracts features like length, negation, and complexity from item text and tests how much of item difficulty they explain, separate from substantive content.</p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./sports_trials.qmd">Who Takes the Hard Shot? Skill and Selection in Sports Trial Data</a></div>
-<div class="vignette-question">Shooters, kickers and quarterbacks choose their attempts (or a coach or a practice system chooses for them), so raw success rates mix skill with the difficulty of what was attempted. Across NBA shots, NFL kicks and passes, soccer shots and adaptive map practice, how much does adjusting for the attempt change who looks good, and in which direction?</div>
-<div class="vignette-cite">Also see: <a href="https://ben-domingue.github.io/irw-course/lessons/trials.html" target="_blank">the course's trials lesson</a>, which uses the simulated <code>nbashots_sim</code></div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">lme4</span>
-<span class="vignette-pkg">splines</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./sports_trials.qmd">Who Takes the Hard Shot? Skill and Selection in Sports Trial Data</a></span>
+<span class="entry-teaser">Shooters, kickers and quarterbacks choose their attempts, so raw success rates mix skill with the difficulty of what was attempted. How much does adjusting for the attempt change who looks good?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">lme4</span><span class="entry-pkg">splines</span></span>
+</summary>
+<div class="entry-body">
+<p>Across NBA shots, NFL kicks and passes, soccer shots and adaptive map practice, asks how much adjusting for the attempt (or for a coach's or practice system's choice of attempt) changes who looks good, and in which direction.</p>
+<p class="entry-cite">Also see: <a href="https://ben-domingue.github.io/irw-course/lessons/trials.html" target="_blank">the course's trials lesson</a>, which uses the simulated <code>nbashots_sim</code></p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./home_advantage.qmd">Home Advantage: A Century and a Half of It, and a Season Without Crowds</a></div>
-<div class="vignette-question">Teams win more often at home. Fitting a Bradley-Terry model with a home term to every season of baseball, basketball, hockey, American football and English and Italian football back to the 1870s, how large is home advantage net of team strength, has it declined, and how much of it vanished when the 2020-21 seasons were played in empty stadiums?</div>
-<div class="vignette-cite">Also see: <a href="https://ben-domingue.github.io/irw-course/lessons/competitions.html" target="_blank">the course's competitions lesson</a>, which fits the same home term to one NBA season</div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">MASS</span>
-<span class="vignette-pkg">ggplot2</span>
-<span class="vignette-pkg">plotly</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./home_advantage.qmd">Home Advantage: A Century and a Half of It, and a Season Without Crowds</a></span>
+<span class="entry-teaser">Teams win more often at home. How large is home advantage net of team strength, has it declined, and how much of it vanished in empty stadiums?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">MASS</span><span class="entry-pkg">ggplot2</span><span class="entry-pkg">plotly</span></span>
+</summary>
+<div class="entry-body">
+<p>Fits a Bradley-Terry model with a home term to every season of baseball, basketball, hockey, American football and English and Italian football back to the 1870s, and compares the 2020-21 seasons played without crowds.</p>
+<p class="entry-cite">Also see: <a href="https://ben-domingue.github.io/irw-course/lessons/competitions.html" target="_blank">the course's competitions lesson</a>, which fits the same home term to one NBA season</p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./rt_imv.qmd">Response Time and Accuracy: An IMV Analysis</a></div>
-<div class="vignette-question">How much does knowing how fast a person responded improve predictions of whether they answered correctly, over and above IRT ability estimates? Uses cross-validated IMV to isolate the predictive value response time adds beyond ability alone.</div>
-<div class="vignette-cite">Key paper: <a href="https://doi.org/10.3102/10769986221099906" target="_blank">Domingue et al. (2022), Journal of Educational and Behavioral Statistics</a></div>
-<div class="vignette-cite">Also see: <a href="https://intermodelvigorish.github.io/shinysite/" target="_blank">the IMV Shiny app</a>, for building intuition about what different IMV values mean</div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">mirt</span>
-<span class="vignette-pkg">imv</span>
-<span class="vignette-pkg">splines</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./rt_imv.qmd">Response Time and Accuracy: An IMV Analysis</a></span>
+<span class="entry-teaser">How much does knowing how fast a person responded improve predictions of whether they answered correctly, over and above IRT ability estimates?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">mirt</span><span class="entry-pkg">imv</span><span class="entry-pkg">splines</span></span>
+</summary>
+<div class="entry-body">
+<p>Uses cross-validated IMV to isolate the predictive value response time adds beyond ability alone.</p>
+<p class="entry-cite">Key paper: <a href="https://doi.org/10.3102/10769986221099906" target="_blank">Domingue et al. (2022), Journal of Educational and Behavioral Statistics</a></p>
+<p class="entry-cite">Also see: <a href="https://intermodelvigorish.github.io/shinysite/" target="_blank">the IMV Shiny app</a>, for building intuition about what different IMV values mean</p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="./il_hte.qmd">Item-Level Heterogeneous Treatment Effects</a></div>
-<div class="vignette-question">When do items in an RCT outcome measure respond differently to treatment, and what does ignoring this do to treatment-by-covariate interaction estimates? Shows that item-level variation in treatment response can bias estimated interactions even when the average treatment effect looks fine.</div>
-<div class="vignette-cite">Key paper: <a href="https://doi.org/10.1002/pam.70025" target="_blank">Gilbert et al. (2025), Journal of Policy Analysis and Management</a></div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">lme4</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="./il_hte.qmd">Item-Level Heterogeneous Treatment Effects</a></span>
+<span class="entry-teaser">When do items in an RCT outcome measure respond differently to treatment, and what does ignoring this do to treatment-by-covariate interaction estimates?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">lme4</span></span>
+</summary>
+<div class="entry-body">
+<p>Shows that item-level variation in treatment response can bias estimated interactions even when the average treatment effect looks fine.</p>
+<p class="entry-cite">Key paper: <a href="https://doi.org/10.1002/pam.70025" target="_blank">Gilbert et al. (2025), Journal of Policy Analysis and Management</a></p>
 </div>
-</div>
+</details>
 
-<div class="vignette-card">
-<div class="vignette-lang">R</div>
-<div class="vignette-title"><a href="../analysis/plenitude_replication.qmd">Extending Algorithm Selection for Class Detection to Item Response Data</a></div>
-<div class="vignette-question">Can models trained on 198,000 simulated survey modules pick the right class-detection method for real item-response tables? Applies the released code and models to 117 IRW tables: the predictions track the validity criteria about as well as on the original data, but they recommend the same measure for most tables.</div>
-<div class="vignette-cite">Key paper: <a href="https://doi.org/10.1177/00491241211031273" target="_blank">Sotoudeh &amp; DiMaggio (2021), Sociological Methods &amp; Research</a></div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">fpc</span>
+<details class="entry">
+<summary>
+<span class="entry-title"><a href="../analysis/plenitude_replication.qmd">Extending Algorithm Selection for Class Detection to Item Response Data</a></span>
+<span class="entry-teaser">Can models trained on 198,000 simulated survey modules pick the right class-detection method for real item-response tables?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">fpc</span></span>
+</summary>
+<div class="entry-body">
+<p>Applies the released code and models to 117 IRW tables: the predictions track the validity criteria about as well as on the original data, but they recommend the same measure for most tables.</p>
+<p class="entry-cite">Key paper: <a href="https://doi.org/10.1177/00491241211031273" target="_blank">Sotoudeh &amp; DiMaggio (2021), Sociological Methods &amp; Research</a></p>
 </div>
-</div>
+</details>
 
 </div>
 
@@ -402,16 +331,13 @@ Applied methods and novel analyses that use IRW's breadth to ask a research ques
 
 These vignettes use the [`irw` Python package](https://github.com/itemresponsewarehouse/Python-pkg) to fetch data.
 
-<div class="vignette-grid">
+<div class="entry-list">
 
-<div class="vignette-card">
-<div class="vignette-lang">Python</div>
-<div class="vignette-title"><a href="./irt_python.qmd">IRT Models in Python</a></div>
-<div class="vignette-question">How do I fetch IRW data in Python and fit 1PL, 2PL, 3PL, and graded response models?</div>
-<div class="vignette-packages">
-<span class="vignette-pkg">irw</span>
-<span class="vignette-pkg">mirt</span>
-<span class="vignette-pkg">girth</span>
+<div class="entry entry-static">
+<div class="entry-row">
+<span class="entry-title"><a href="./irt_python.qmd">IRT Models in Python</a></span>
+<span class="entry-teaser">How do I fetch IRW data in Python and fit 1PL, 2PL, 3PL, and graded response models?</span>
+<span class="entry-meta"><span class="entry-pkg">irw</span><span class="entry-pkg">mirt</span><span class="entry-pkg">girth</span></span>
 </div>
 </div>
 
