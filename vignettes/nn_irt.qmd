@@ -43,6 +43,8 @@ import torch
 import irw
 from nn_irt_helpers import (TABLES, GROUPS, GROUP_OF, SHORT, prepare, fit, predict,
                             imv, log_loss, make_models, SEED)
+from nn_irt_chart import imv_stripchart_html
+from IPython.display import HTML, display
 
 Rasch, TwoPL, Bilinear, MLP = make_models()
 torch.set_num_threads(4)
@@ -392,42 +394,30 @@ order = [m for m in ["Rasch", "MIRT k=2", "MLP small", "MLP large",
 labels = {"mirt_2pl": "mirt 2PL", "mirt_monopoly": "mirt monotonic poly.", "mirt_lpe": "mirt LPE"}
 imv_tab = res.pivot(index="table", columns="model", values="IMV vs 2PL").reindex(TABLES)[order]
 
-# tables grouped, and within a group ordered by the MIRT gain
+# tables grouped, and within a group ordered by the MIRT gain (used by the table below)
 group_colour = dict(zip(GROUPS, ["#2a78d6", "#eb6834", "#2f9e6e", "#8e5bd6", "#c9a227"]))
 rows_order = []
 for g, ts in GROUPS.items():
     ts = [t for t in ts if t in imv_tab.index]
     rows_order += sorted(ts, key=lambda t: -imv_tab.loc[t, "MIRT k=2"])
 imv_tab = imv_tab.reindex(rows_order)
-ypos = np.arange(len(rows_order))[::-1]
-lim = float(np.nanmax(np.abs(imv_tab.values))) * 1.1
 
-fig, axes = plt.subplots(1, len(order), figsize=(13, 0.32 * len(rows_order) + 1.6), sharey=True)
-for ax, m in zip(axes, order):
-    ax.barh(ypos, imv_tab[m], color=[group_colour[GROUP_OF[t]] for t in rows_order], height=0.7)
-    ax.axvline(0, color="0.3", lw=0.8)
-    ax.set_xlim(-lim, lim)
-    ax.set_title(labels.get(m, m), fontsize=9)
-    ax.tick_params(axis="x", labelsize=7)
-    ax.grid(axis="x", color="0.9", lw=0.6); ax.set_axisbelow(True)
-    for sp in ("top", "right"): ax.spines[sp].set_visible(False)
-axes[0].set_yticks(ypos, [SHORT[t] for t in rows_order], fontsize=8)
-axes[0].set_xlabel("IMV relative to PyTorch 2PL", fontsize=8, loc="left")
-from matplotlib.patches import Patch
-fig.legend(handles=[Patch(color=c, label=g) for g, c in group_colour.items()],
-           loc="lower center", ncol=3, fontsize=8, frameon=False, bbox_to_anchor=(0.5, -0.01))
-plt.tight_layout(rect=(0, 0.07, 1, 1)); plt.show()
+records = [{"table": r.table, "short": SHORT[r.table], "group": GROUP_OF[r.table],
+            "model": r.model, "imv": round(float(r["IMV vs 2PL"]), 4)} for _, r in res.iterrows()]
+display(HTML(imv_stripchart_html(records, order, labels, group_colour)))
 ```
 
-Each panel is one model; each bar is one table, coloured by the kind of
-instrument and grouped so that the groups can be compared. Bars to the right
-of zero mean the model predicts held-out responses better than the PyTorch 2PL
-on that table (the 2PL is the zero line, so it has no panel).
+Each row is one model and each dot is one table, coloured by the kind of
+instrument. Dots to the right of zero mean the model predicts held-out
+responses better than the PyTorch 2PL on that table (the 2PL is the zero line,
+so it has no row). Hover over or tap a dot to pick out that table in every row
+and see its values; three Rasch losses beyond the edge of the window are drawn
+as triangles.
 
-One panel needs reading first: **`mirt 2PL` is the same model as the zero
-line and its bars are not zero.** They are all positive and range from nothing
-to 0.03. That is the difference between two estimators of one model, not
-between two models, and it is taken apart below. The `mirt` panels
+One row needs reading first: **`mirt 2PL` is the same model as the zero line
+and its dots are not at zero.** They are all to the right, from nothing to
+0.03. That is the difference between two estimators of one model, not between
+two models, and it is taken apart below. The `mirt` rows
 are R's `mirt` fit by marginal maximum likelihood on the same training
 cells, with each held-out cell predicted by its posterior-predictive
 probability (the item curve integrated over the person's posterior): the 2PL
