@@ -83,7 +83,12 @@ for (tb in tables) {
     fit <- tryCatch(fit_spec(wide, nm, fit_2pl),
       error = function(e) { message(tb, " ", nm, " failed: ", conditionMessage(e)); NULL })
     if (is.null(fit)) { res[[nm]] <- NA_real_; next }
-    if (nm == "mirt_2pl") fit_2pl <- fit
+    if (nm == "mirt_2pl") {
+      fit_2pl <- fit
+      co <- coef(fit, simplify = TRUE)$items      # slope-intercept: a1, d
+      fwrite(data.table(item = rownames(co), a = co[, "a1"], d = co[, "d"]),
+             file.path(DATA, paste0(tb, "_mirt_2pl_items.csv")))
+    }
     res[[nm]] <- predict_cells(fit, wide, test_long)
     cat(sprintf("%-28s %-14s %6.1fs  converged=%s\n", tb, nm,
                 as.numeric(difftime(Sys.time(), t0, units = "secs")),

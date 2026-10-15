@@ -18,13 +18,42 @@ TEST_FRAC = 0.2
 MAX_PERSONS = 5000   # larger tables are subsampled so every fit stays laptop-sized
 MAX_ITEMS = 116
 
-TABLES = [
-    "borges_brazil_residency_2024_cbt",
-    "encceja_2024_ef_lp",
-    "psychoneurotic_inventory",
-    "cdm_ecpe",
-    "art",
-]
+GROUPS = {
+    "Achievement / ability test": [
+        "borges_brazil_residency_2024_cbt", "encceja_2024_ef_lp",
+        "wolbers_2017_listening", "anunciacao_2024_intelligence_gmi", "psychtools_ability",
+        "fullscaleiq_vocab_options",
+    ],
+    "Knowledge test, heterogeneous content": [
+        "onah_2021_covid_knowledge", "ding_2020_covid_knowledge",
+        "bialowolski_2024_financial_literacy", "art",
+    ],
+    "Test with known multidimensional structure": [
+        "cdm_ecpe", "fullscaleiq_mentalrotation_options", "choi_2026_cmsce_2021_2",
+    ],
+    "Personality / clinical inventory": [
+        "psychoneurotic_inventory", "narcissistic_personality_inventory", "tma", "psychtools_epi",
+        "mcmi_mokken", "condon_2025_caq", "domaradzka_2018_adq_anhedonic_depression",
+        "pinheiro_2024_srq20", "elshafie_2020_edsc",
+    ],
+    "Developmental screener": ["dscore_asq_weber_2019", "dscore_denver_weber_2019"],
+}
+TABLES = [t for ts in GROUPS.values() for t in ts]
+GROUP_OF = {t: g for g, ts in GROUPS.items() for t in ts}
+SHORT = {
+    "borges_brazil_residency_2024_cbt": "residency exam (BR)", "encceja_2024_ef_lp": "ENCCEJA EF Portuguese",
+    "wolbers_2017_listening": "listening test (NL)",
+    "anunciacao_2024_intelligence_gmi": "GMI intelligence", "psychtools_ability": "psychTools ability",
+    "fullscaleiq_vocab_options": "FSIQ vocabulary",
+    "onah_2021_covid_knowledge": "COVID knowledge (Onah)",
+    "ding_2020_covid_knowledge": "COVID knowledge (Ding)", "bialowolski_2024_financial_literacy": "financial literacy",
+    "art": "author recognition", "cdm_ecpe": "ECPE grammar", "fullscaleiq_mentalrotation_options": "FSIQ mental rotation",
+    "choi_2026_cmsce_2021_2": "CMSCE medical exam", "psychoneurotic_inventory": "Woodworth inventory",
+    "narcissistic_personality_inventory": "NPI", "tma": "Taylor anxiety", "psychtools_epi": "Eysenck EPI",
+    "mcmi_mokken": "MCMI", "condon_2025_caq": "creative achievement", "domaradzka_2018_adq_anhedonic_depression": "ADQ anhedonia",
+    "pinheiro_2024_srq20": "SRQ-20", "elshafie_2020_edsc": "EDSC", "dscore_asq_weber_2019": "ASQ (D-score)",
+    "dscore_denver_weber_2019": "Denver (D-score)",
+}
 
 
 # ---------------------------------------------------------------- data ----
@@ -40,12 +69,15 @@ def load_table(name: str) -> pd.DataFrame:
         return pd.read_parquet(path)
     import irw
 
-    df = irw.fetch(name)[["id", "item", "resp"]].dropna()
+    df = irw.fetch(name, columns=["id", "item", "resp"]).dropna()
     df["id"] = df["id"].astype(str)
     df["item"] = df["item"].astype(str)
     df["resp"] = df["resp"].astype(int)
     df = df.drop_duplicates(["id", "item"]).reset_index(drop=True)
     vals = set(df["resp"].unique())
+    if vals == {1, 2}:            # forced-choice binaries coded 1/2 (e.g. the NPI)
+        df["resp"] = df["resp"] - 1
+        vals = {0, 1}
     if not vals <= {0, 1}:
         raise ValueError(f"{name} is not dichotomous: resp values {sorted(vals)}")
     df.to_parquet(path, index=False)
@@ -91,8 +123,22 @@ def subsample(df: pd.DataFrame, seed: int = SEED) -> pd.DataFrame:
 
 def prepare(name: str) -> pd.DataFrame:
     """Load, subsample, index and split one table; write the split for R."""
-    df = index_table(subsample(load_table(name)))
+    df = subsample(load_table(name))
+    # drop items that are constant (every respondent answered the same way):
+    # they carry no information and break mirt
+    var = df.groupby("item")["resp"].nunique()
+    df = df[df["item"].isin(var.index[var > 1])]
+    df = index_table(df)
     df["test"] = holdout_mask(df)
+    # an item constant within the training cells is unfittable: move one
+    # held-out cell of the minority response back into training
+    tr = df[~df.test]
+    nun = tr.groupby("iid")["resp"].nunique()
+    for iid in nun.index[nun < 2]:
+        only = tr.loc[tr.iid == iid, "resp"].iloc[0]
+        cand = df.index[(df.iid == iid) & df.test & (df.resp != only)]
+        if len(cand):
+            df.loc[cand[0], "test"] = False
     out = DATA / f"{name}_split.csv.gz"
     if not out.exists():
         df[["id", "item", "resp", "test"]].to_csv(out, index=False)
@@ -109,6 +155,7 @@ def equivalent_coin(ll: float) -> float:
     """w such that a coin with P(heads)=w has mean log-likelihood -ll."""
     from scipy.optimize import brentq
 
+    ll = min(ll, np.log(2) - 1e-9)   # a model worse than a coin counts as a coin
     f = lambda w: w * np.log(w) + (1 - w) * np.log(1 - w) + ll
     return brentq(f, 0.5, 1 - 1e-9)
 
@@ -126,48 +173,51 @@ def make_models():
     import torch.nn as nn
 
     class Rasch(nn.Module):
-        """logit P(correct) = theta_person - b_item."""
+        """logit P(correct) = theta_person + d_item  (d = -difficulty)."""
 
         def __init__(self, n_persons, n_items):
             super().__init__()
             self.theta = nn.Embedding(n_persons, 1)
-            self.b = nn.Embedding(n_items, 1)
+            self.d = nn.Embedding(n_items, 1)
             nn.init.normal_(self.theta.weight, std=0.1)
-            nn.init.normal_(self.b.weight, std=0.1)
+            nn.init.zeros_(self.d.weight)
 
         def forward(self, p, i):
-            return (self.theta(p) - self.b(i)).squeeze(-1)
+            return (self.theta(p) + self.d(i)).squeeze(-1)
 
     class TwoPL(nn.Module):
-        """logit P(correct) = a_item * (theta_person - b_item)."""
+        """logit P(correct) = a_item * theta_person + d_item.
+
+        Slope-intercept form, as mirt uses it. The slope is signed: items keyed
+        against the trait get a negative a rather than being forced to zero.
+        """
 
         def __init__(self, n_persons, n_items):
             super().__init__()
             self.theta = nn.Embedding(n_persons, 1)
-            self.b = nn.Embedding(n_items, 1)
-            self.log_a = nn.Embedding(n_items, 1)
+            self.a = nn.Embedding(n_items, 1)
+            self.d = nn.Embedding(n_items, 1)
             nn.init.normal_(self.theta.weight, std=0.1)
-            nn.init.normal_(self.b.weight, std=0.1)
-            nn.init.zeros_(self.log_a.weight)
+            nn.init.ones_(self.a.weight)
+            nn.init.zeros_(self.d.weight)
 
         def forward(self, p, i):
-            a = torch.exp(self.log_a(i))
-            return (a * (self.theta(p) - self.b(i))).squeeze(-1)
+            return (self.a(i) * self.theta(p) + self.d(i)).squeeze(-1)
 
     class Bilinear(nn.Module):
-        """MIRT: k-dimensional 2PL, logit = a_item . theta_person - b_item."""
+        """MIRT: k-dimensional 2PL, logit = a_item . theta_person + d_item."""
 
         def __init__(self, n_persons, n_items, k):
             super().__init__()
             self.theta = nn.Embedding(n_persons, k)
             self.a = nn.Embedding(n_items, k)
-            self.b = nn.Embedding(n_items, 1)
+            self.d = nn.Embedding(n_items, 1)
             nn.init.normal_(self.theta.weight, std=0.1)
-            nn.init.normal_(self.a.weight, std=0.1)
-            nn.init.normal_(self.b.weight, std=0.1)
+            nn.init.normal_(self.a.weight, mean=1.0 / k ** 0.5, std=0.1)
+            nn.init.zeros_(self.d.weight)
 
         def forward(self, p, i):
-            return (self.theta(p) * self.a(i)).sum(-1) - self.b(i).squeeze(-1)
+            return (self.theta(p) * self.a(i)).sum(-1) + self.d(i).squeeze(-1)
 
     class MLP(nn.Module):
         """Concatenate k-dim person and item embeddings, decode with an MLP of the given hidden widths."""
@@ -191,7 +241,7 @@ def make_models():
     return Rasch, TwoPL, Bilinear, MLP
 
 
-def fit(model, df, epochs=30, lr=0.05, batch=4096, person_decay=1.0, seed=SEED,
+def fit(model, df, epochs=80, lr=0.02, batch=4096, person_decay=1.0, seed=SEED,
         verbose=False):
     """Fit by minibatch Adam on the training cells.
 
