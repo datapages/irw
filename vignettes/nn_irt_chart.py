@@ -30,7 +30,11 @@ def imv_stripchart_html(records, models, labels, group_colour, div_id="imv-strip
 .imv-strip .legend span {{ display: inline-block; margin-right: 14px; }}
 .imv-strip .legend i {{ display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }}
 </style>
+<!-- Quarto pages load require.js; hide its define() while d3 loads, or d3
+     registers as an AMD module and the global d3 below is undefined. -->
+<script>window.__amdDefine = window.define; window.define = undefined;</script>
 <script src="{D3_URL}"></script>
+<script>window.define = window.__amdDefine;</script>
 <script>
 (function() {{
   const D = {payload};
