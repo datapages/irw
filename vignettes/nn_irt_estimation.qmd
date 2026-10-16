@@ -1,0 +1,356 @@
+---
+title: "Estimating the 2PL in torch: which estimator closes the gap to mirt?"
+description: |
+  The network comparison on the companion page found that a torch 2PL trails the
+  `mirt` 2PL by a small but consistent margin. Here we take that margin apart. We
+  fit the 2PL four ways in torch (gradient descent, alternating joint maximum
+  likelihood, EM, and direct maximisation of the marginal likelihood), with and
+  without a constraint that fixes the scale of the person parameters, and score
+  each against `mirt` on the same 24 IRW tables. The estimator explains the gap;
+  the scale constraint does not.
+date: today
+bibliography: nn_irt_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  eval: true
+  message: false
+  warning: false
+  freeze: true
+---
+
+```{python}
+#| label: setup
+#| code-summary: "Setup"
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import torch
+from nn_irt_helpers import TABLES, SHORT, DATA, prepare, fit, log_loss, make_models
+from imvpy import vanilla_imv
+from IPython.display import display
+
+Rasch, TwoPL, Bilinear, MLP = make_models()
+torch.set_num_threads(4)
+plt.rcParams["figure.dpi"] = 110
+```
+
+## Motivation
+
+The [companion page](nn_irt.qmd) fits a 2PL in PyTorch and compares it with the
+`mirt` 2PL on 24 tables. The torch model is slightly worse on most of them, and
+the margin is largest on the short tests. Two things differ between the two fits,
+and the companion page could not separate them. One is how the scale of the
+person parameters is set: the PyTorch 2PL puts a penalty on $\theta$, while
+`mirt` fixes its population variance by assumption. The other is the estimator:
+the PyTorch model is fit by gradient descent on the joint likelihood, with each
+person's $\theta$ treated as a parameter, while `mirt` integrates the persons out.
+
+This page separates the two. Every estimator below is fit to the same training
+cells and scored on the same held-out cells, and each is compared with `mirt` by
+the InterModel Vigorish.
+
+## The estimators
+
+Each estimator is a different way of fitting the same 2PL, $\operatorname{logit}
+P(y_{pi}=1) = a_i\theta_p + d_i$. Two of them come from the prior-or-constraint
+choice for the scale, and two from the estimator choice.
+
+- **Adam, prior.** Minibatch gradient descent on the joint log-likelihood plus
+  an $N(0,1)$ penalty on each $\theta_p$, stopped at the best held-out epoch.
+  This is the companion page's network.
+- **Adam, constrained.** The same network with $\theta$ standardised across
+  persons in the forward pass, so it has mean zero and SD one by construction,
+  and no penalty.
+- **Alternating JML, prior.** Joint maximum likelihood by block updates: with
+  the items fixed, a Newton step for every person's $\theta_p$ (with the
+  $N(0,1)$ penalty, so this is alternating MAP); with the persons fixed, a Newton
+  step for every item's $(a_i, d_i)$. Repeat.
+- **Alternating JML, constrained.** The same block updates without the penalty.
+  After each person update $\theta$ is standardised, and the scale is moved into
+  $a$ and $d$, which leaves the fitted probabilities unchanged.
+- **EM, marginal maximum likelihood.** The estimator `mirt` uses. The E-step
+  gives each person a posterior over a quadrature grid, given their training
+  cells; the M-step fits each item's $(a_i, d_i)$ by weighted logistic regression
+  on the grid. Held-out cells get the posterior-predictive probability.
+- **MML, L-BFGS.** Start from 200 EM iterations, then maximise the marginal
+  likelihood directly with `torch.optim.LBFGS` and autograd. Same model and
+  objective as EM; a different optimiser for the last step.
+
+Joint and alternating estimators predict with the point estimates of $\theta_p$
+(plug-in). EM and MML predict with the posterior. The Adam networks stop at their
+best held-out epoch, and the alternating JML fits stop at their best held-out
+sweep, which is the same rule and the same caveat: the held-out set also picks
+the stopping point.
+
+## The scale is fixed weakly by the penalty
+
+The prior version fixes the scale of $\theta$ only through the penalty. In the
+likelihood $a_i\theta_p$ is the only thing that matters, so the same fit can be
+written with a small $\theta$ and a large $a$, and the penalty pulls
+$\theta$ toward zero at a constant price. Alternating JML makes the drift easy to
+see. The run below uses no early stopping and records the person SD and the median
+slope every 100 sweeps on the residency exam.
+
+```{python}
+#| label: fig-drift
+#| code-summary: "Scale drift in the prior version of alternating JML"
+drift = pd.read_csv(DATA / "drift_borges_alt_jml.csv")
+fig, ax = plt.subplots(1, 2, figsize=(9, 3.6))
+ax[0].plot(drift.sweep, drift.theta_sd, color="#2a78d6")
+ax[0].set(xlabel="sweep", ylabel=r"SD of $\hat\theta$", title="person SD")
+ax[1].plot(drift.sweep, drift.median_a, color="#eb6834")
+ax[1].set(xlabel="sweep", ylabel="median slope $a$", title="item slopes")
+for a_ in ax:
+    for sp in ("top", "right"):
+        a_.spines[sp].set_visible(False)
+plt.tight_layout(); plt.show()
+print(drift.iloc[[0, 1, 5, 10, -1]].round(4).to_string(index=False))
+```
+
+Over 2000 sweeps the person SD falls from 0.55 to 0.04 and the median slope rises
+from 1.1 to 13. The held-out log-loss does not move, 0.5482 from sweep 100 to sweep 2000, because $a\theta$ is what the likelihood sees and it is nearly fixed while
+the two factors slide against each other. A penalty that weak does not
+identify the scale. The constrained version fixes it exactly, and that is the
+only difference between the two alternating fits.
+
+## Results: each estimator against mirt
+
+Each row is one table. The columns give the IMV of the `mirt` 2PL over each
+estimator, so a positive number means `mirt` predicts the held-out cells better
+than that estimator does.
+
+```{python}
+#| label: tbl-estimators
+#| code-summary: "IMV of mirt 2PL over each estimator, all tables"
+rows, stops = [], []
+for t in TABLES:
+    d = prepare(t)
+    te = d[d.test]
+    m = te[["id", "item"]].merge(pd.read_csv(DATA / f"{t}_mirt_preds.csv.gz", dtype={"id": str, "item": str}),
+                                 on=["id", "item"], how="left")
+    mirt = m["mirt_2pl"].values
+    e = pd.read_csv(DATA / f"{t}_estimation_preds.csv.gz")
+    tp = pd.read_csv(DATA / f"{t}_torch_preds.csv.gz")
+    y = e.y.values
+    est = {"Adam prior": tp["2PL"].values, "Adam constr.": tp["2PL (constr.)"].values,
+           "JML prior": e["alt JML (prior)"].values, "JML constr.": e["alt JML (constr.)"].values,
+           "EM": e["EM MML"].values, "MML L-BFGS": e["MML L-BFGS"].values}
+    r = {"table": SHORT[t]}
+    for k, p in est.items():
+        r[k] = vanilla_imv(p, mirt, y)
+    r["max |diff| MML"] = np.abs(est["MML L-BFGS"] - mirt).max()
+    rows.append(r)
+    info = pd.read_csv(DATA / f"{t}_estimation_info.csv")
+    jml = info[info.estimator.str.startswith("alt JML")]
+    for _, q in jml.iterrows():
+        stops.append({"table": SHORT[t], "estimator": q.estimator, "best_sweep": q.best_sweep,
+                      "stopped": q.stopped})
+res = pd.DataFrame(rows).set_index("table")
+summary = res.mean().rename("mean over tables")
+out = pd.concat([res.round(4), summary.round(4).to_frame().T])
+out
+```
+
+```{python}
+#| label: jml-stops
+#| code-summary: "Where the alternating JML fits stopped"
+S = pd.DataFrame(stops)
+print(S.groupby(["estimator", "stopped"]).size().unstack(fill_value=0).to_string())
+print()
+print(S.groupby("estimator")["best_sweep"].describe()[["50%", "max"]].to_string())
+```
+
+Three things stand out.
+
+**The torch MML matches mirt.** The L-BFGS fit, which maximises the same marginal
+likelihood `mirt` does, is within 0.0001 of `mirt` on average, and the EM fit
+within 0.0012. The two largest disagreements are on the ASQ and Denver
+screeners and on EDSC, where several items are nearly perfectly separated by the
+persons, so their parameters sit at magnitudes in the hundreds and the likelihood
+is very flat along them. On the ASQ and Denver screeners the torch fit has the
+higher marginal likelihood of the two. These are numerical differences on
+ill-determined items, and they do not change the picture: the same model,
+estimated by maximising the same objective, gives the same predictions.
+
+**The gap is the estimator.** The torch networks trail `mirt` by 0.005 on
+average when they are fit by Adam and by 0.008 when they are fit by alternating
+JML, and the MML fit closes the gap to about zero on the same tables. Optimiser
+quality is not the explanation either: the EM and L-BFGS fits both converge, and
+they agree with each other. What differs is whether the person parameters are
+integrated out or treated as known. That is the difference the companion page
+pointed to, and this page confirms it by reproducing `mirt` once the integration
+is in place.
+
+**Alternation does not help.** Alternating joint maximum likelihood is the
+textbook way to fit a joint model, and it is worse than the Adam fit on average,
+0.008 against 0.005 for the prior version and 0.018 against 0.007 for the
+constrained one. The reason is the one the incidental-parameter problem
+predicts. The held-out log-loss of the alternating fit is lowest within the first
+few sweeps on most tables. The best sweep falls within the first ten on 22 of
+24 tables for the prior version and on all 24 for the constrained one (medians
+three and two), and the constrained fit stopped on the patience rule rather
+than convergence on 18 tables. On the shorter tests the loss rises after that: on the COVID knowledge test it
+goes from 0.690 at sweep one to 0.81 by sweep ten and to 0.98 for the
+constrained version by sweep twenty, as some items separate the persons and their
+slopes run away. The held-out stopping rule then returns an estimate from the
+first few sweeps on those tables. The constrained fit is worst on the Onah test,
+with 20 training responses per person, where the gap to `mirt` is 0.185.
+
+## Constraining the scale
+
+The constrained versions are the other half of the question. Fixing $\theta$ at
+$N(0,1)$ removes the drift above, and the next figure checks whether it also
+recovers the item parameters on the residency exam. The `mirt` estimates are the
+reference. The top row is the prior version, scaled by the spread of
+$\hat\theta$; the bottom row is the constrained version, whose spread is one by
+construction.
+
+```{python}
+#| label: fig-recovery
+#| code-summary: "Item parameters: prior and constrained 2PL against mirt"
+t = "borges_brazil_residency_2024_cbt"
+d = prepare(t)
+ref = pd.read_csv(DATA / f"{t}_mirt_2pl_items.csv", dtype={"item": str})
+ref = ref.set_index("item").reindex(sorted(d["item"].unique()))
+n_p, n_i = int(d.pid.max() + 1), int(d.iid.max() + 1)
+fits = {"prior": fit(TwoPL(n_p, n_i), d)[0], "constrained": fit(TwoPL(n_p, n_i, constrained=True), d)[0]}
+fig, ax = plt.subplots(2, 2, figsize=(9, 8))
+for row, (label, net) in enumerate(fits.items()):
+    sd_theta = net.theta.weight.detach().numpy().std()
+    scale = sd_theta if label == "prior" else 1.0
+    a_hat = net.a.weight.detach().numpy().ravel() * scale
+    d_hat = net.d.weight.detach().numpy().ravel()
+    ax[row, 0].scatter(ref.d, d_hat, s=12)
+    ax[row, 0].set(xlabel="mirt 2PL intercept $d$", ylabel=f"PyTorch intercept $d$ ({label})")
+    ax[row, 1].scatter(ref.a, a_hat, s=12)
+    ax[row, 1].set(xlabel="mirt 2PL slope $a$", ylabel=f"PyTorch slope $a$ ({label})")
+    for a_ in ax[row]:
+        lo, hi = a_.get_xlim(); a_.plot([lo, hi], [lo, hi], "k--", lw=0.8)
+plt.tight_layout(); plt.show()
+```
+
+The intercepts agree closely in both versions, and the slopes agree after the
+scale is handled, with the constrained slopes about 9% above `mirt`'s and the
+rescaled prior slopes about 3% above. The constraint does what it is meant to:
+the scale is set, and nothing is left to drift.
+
+The constraint does not, however, close the gap in prediction, and on the
+networks it costs something. The table compares every network in both versions
+with the prior 2PL, which is the zero line, as on the companion page.
+
+```{python}
+#| label: tbl-constrained
+#| code-summary: "Constrained versus prior, every network, IMV against the prior 2PL"
+rows = []
+for t in TABLES:
+    d = prepare(t)
+    y = d[d.test].resp.values
+    tp = pd.read_csv(DATA / f"{t}_torch_preds.csv.gz")
+    base = tp["2PL"].values
+    r = {"table": SHORT[t]}
+    for name in ["Rasch", "2PL", "MIRT k=2", "MLP small", "MLP large"]:
+        r[f"{name}"] = vanilla_imv(base, tp[name].values, y)
+        r[f"{name} (constr.)"] = vanilla_imv(base, tp[f"{name} (constr.)"].values, y)
+    rows.append(r)
+res = pd.DataFrame(rows).set_index("table")
+out = pd.concat([res.round(4), res.mean().rename("mean over tables").round(4).to_frame().T])
+out
+```
+
+The constrained Rasch is the clearest case. It is worse than the prior Rasch on
+every one of the 24 tables, by 0.03 on average and by 0.19 on the Onah test. The
+prior Rasch lets the data set the spread of $\theta$: it comes out at 0.56 on the
+residency exam and 0.40 on the Onah test, so the penalty does not hold the scale
+at one. The constraint forces one, and the Rasch model has no slope to absorb the
+difference. The 2PL pays almost nothing for the same constraint, because its
+slopes can take up the scale. The wider networks are close to unchanged on
+average, with the constrained MIRT and MLPs within about 0.003 of the prior
+versions, but with losses on the short tests (the listening test, the Ding
+knowledge test and the psychTools ability test).
+
+The constraint does not stop the wide networks from overfitting, either. The
+figure refits the prior and constrained networks on the residency exam, for 30
+epochs each, and plots held-out loss by epoch.
+
+```{python}
+#| label: fig-curves
+#| code-summary: "Held-out loss by epoch, prior and constrained, residency exam"
+from nn_irt_helpers import nn_specs
+curves = {}
+for con in (False, True):
+    for name, mk in nn_specs(n_p, n_i, con).items():
+        _, h = fit(mk(), d, epochs=30)
+        curves[name + (" (constr.)" if con else "")] = h
+fig, ax = plt.subplots(figsize=(7, 4))
+for k, (name, h) in enumerate(c for c in curves.items() if not c[0].endswith("(constr.)")):
+    ax.plot(h.epoch, h.test, color=f"C{k}", label=name)
+    ax.plot(curves[name + " (constr.)"].epoch, curves[name + " (constr.)"].test, color=f"C{k}", ls="--")
+ax.set(xlabel="epoch", ylabel="held-out log-loss", title="solid: prior; dashed: constrained")
+ax.legend(fontsize=8, frameon=False)
+for sp in ("top", "right"):
+    ax.spines[sp].set_visible(False)
+plt.tight_layout(); plt.show()
+```
+
+The wide networks reach their best held-out loss early, and they climb after it
+in both versions. The constrained MIRT and large MLP bottom out at epochs five and
+eight and then climb by about 0.005 and 0.006. The constrained 2PL stays flat, as
+the prior one does. So fixing the scale changes how the scale is set, not whether
+the wide networks memorise their training cells, and early stopping is still what
+keeps them honest.
+
+## Limitations
+
+- **Two estimators are on a common footing; the networks are not.** The MML fits
+  are the same model as `mirt` and are compared directly. The Adam networks and
+  the alternating JML fits are different estimators of the same model, and their
+  gaps to `mirt` are gaps in estimation, not in the model.
+- **Stopping uses the held-out set.** The Adam networks and both alternating JML
+  fits pick their stopping point on the held-out cells, which flatters them
+  slightly. The MML fits do not use held-out data at all: they maximise the training
+  likelihood (EM, then four L-BFGS rounds).
+- **Items with extreme parameters.** On the ASQ, Denver and EDSC screeners several
+  items have parameters in the hundreds, and the marginal likelihood is flat along
+  them. Two correct maximisers can stop at different points there, which is why
+  the largest MML disagreements with `mirt` are on those tables.
+- **Dichotomous 2PL only.** The estimators here are for the 2PL on 0/1 responses,
+  and the multidimensional and nonlinear networks are not refit with them.
+
+## Reproducibility
+
+**Source code for this page:**
+[`nn_irt_estimation.qmd`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_estimation.qmd),
+[`nn_irt_estimation.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_estimation.py),
+[`nn_irt_estimation_compute.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_estimation_compute.py)
+and [`nn_irt_estimation_drift.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_estimation_drift.py),
+with the network fits in [`nn_irt_helpers.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_helpers.py).
+
+The estimator comparison and the drift trace are cached in
+`vignettes/nn_irt_data/` (`*_estimation_preds.csv.gz`, `*_estimation_info.csv`,
+`drift_borges_alt_jml.csv`), with the MML and Adam predictions and the `mirt`
+predictions from the companion page. The figures that refit a network do so on
+the residency exam at the page's seed, so they re-render without the caches. To
+regenerate the caches:
+
+```bash
+# 1. Adam networks, both versions, all tables (companion page's cache)
+python vignettes/nn_irt_torch_compute.py
+# 2. The 2PL three further ways on all tables, plus the drift trace
+python vignettes/nn_irt_estimation_compute.py
+python vignettes/nn_irt_estimation_drift.py
+# 3. The offline mirt predictions (companion page)
+Rscript vignettes/nn_irt_mirt_compute.R
+# 4. Re-render this page
+quarto render vignettes/nn_irt_estimation.qmd
+```
+
+## Acknowledgments
+
+Errors that remain are ours.
+
+## References

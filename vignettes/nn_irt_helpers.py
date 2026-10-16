@@ -167,7 +167,24 @@ def imv(y: np.ndarray, p0: np.ndarray, p1: np.ndarray) -> float:
     return (w1 - w0) / w0
 
 
-# -------------------------------------------------------------- models ----
+def theta_rows(model, p):
+    """Person parameters for the persons in p.
+
+    prior version (constrained=False): the raw embedding rows; identification
+    comes from the N(0,1) penalty applied in fit().
+
+    constrained version: every column of the embedding is standardised over
+    all persons (mean 0, SD 1) inside the forward pass, so theta is N(0,1) in
+    the sample by construction and no penalty is needed. The standardisation
+    uses the whole embedding, not each minibatch, so the constraint does not
+    depend on which persons happen to be in a batch.
+    """
+    w = model.theta.weight
+    if model.constrained:
+        w = (w - w.mean(0, keepdim=True)) / w.std(0, unbiased=False, keepdim=True)
+    return w[p]
+
+
 def make_models():
     import torch
     import torch.nn as nn
@@ -175,15 +192,16 @@ def make_models():
     class Rasch(nn.Module):
         """logit P(correct) = theta_person + d_item  (d = -difficulty)."""
 
-        def __init__(self, n_persons, n_items):
+        def __init__(self, n_persons, n_items, constrained=False):
             super().__init__()
+            self.constrained = constrained
             self.theta = nn.Embedding(n_persons, 1)
             self.d = nn.Embedding(n_items, 1)
             nn.init.normal_(self.theta.weight, std=0.1)
             nn.init.zeros_(self.d.weight)
 
         def forward(self, p, i):
-            return (self.theta(p) + self.d(i)).squeeze(-1)
+            return (theta_rows(self, p) + self.d(i)).squeeze(-1)
 
     class TwoPL(nn.Module):
         """logit P(correct) = a_item * theta_person + d_item.
@@ -192,8 +210,9 @@ def make_models():
         against the trait get a negative a rather than being forced to zero.
         """
 
-        def __init__(self, n_persons, n_items):
+        def __init__(self, n_persons, n_items, constrained=False):
             super().__init__()
+            self.constrained = constrained
             self.theta = nn.Embedding(n_persons, 1)
             self.a = nn.Embedding(n_items, 1)
             self.d = nn.Embedding(n_items, 1)
@@ -202,13 +221,14 @@ def make_models():
             nn.init.zeros_(self.d.weight)
 
         def forward(self, p, i):
-            return (self.a(i) * self.theta(p) + self.d(i)).squeeze(-1)
+            return (self.a(i) * theta_rows(self, p) + self.d(i)).squeeze(-1)
 
     class Bilinear(nn.Module):
         """MIRT: k-dimensional 2PL, logit = a_item . theta_person + d_item."""
 
-        def __init__(self, n_persons, n_items, k):
+        def __init__(self, n_persons, n_items, k, constrained=False):
             super().__init__()
+            self.constrained = constrained
             self.theta = nn.Embedding(n_persons, k)
             self.a = nn.Embedding(n_items, k)
             self.d = nn.Embedding(n_items, 1)
@@ -217,13 +237,14 @@ def make_models():
             nn.init.zeros_(self.d.weight)
 
         def forward(self, p, i):
-            return (self.theta(p) * self.a(i)).sum(-1) + self.d(i).squeeze(-1)
+            return (theta_rows(self, p) * self.a(i)).sum(-1) + self.d(i).squeeze(-1)
 
     class MLP(nn.Module):
         """Concatenate k-dim person and item embeddings, decode with an MLP of the given hidden widths."""
 
-        def __init__(self, n_persons, n_items, k, hidden=(32, 32)):
+        def __init__(self, n_persons, n_items, k, hidden=(32, 32), constrained=False):
             super().__init__()
+            self.constrained = constrained
             self.theta = nn.Embedding(n_persons, k)
             self.v = nn.Embedding(n_items, k)
             nn.init.normal_(self.theta.weight, std=0.1)
@@ -236,7 +257,7 @@ def make_models():
             self.net = nn.Sequential(*layers)
 
         def forward(self, p, i):
-            return self.net(torch.cat([self.theta(p), self.v(i)], -1)).squeeze(-1)
+            return self.net(torch.cat([theta_rows(self, p), self.v(i)], -1)).squeeze(-1)
 
     return Rasch, TwoPL, Bilinear, MLP
 
@@ -274,10 +295,11 @@ def fit(model, df, epochs=80, lr=0.02, batch=4096, person_decay=1.0, seed=SEED,
             j = perm[s:s + batch]
             opt.zero_grad()
             loss = loss_fn(model(P[j], I[j]), Y[j])
-            # normal prior on persons: (lambda/2) * sum_p theta_p^2, spread over
-            # each person's training responses so the minibatch mean is unbiased
-            pen = (model.theta(P[j]) ** 2).sum(-1) / NP[j]
-            loss = loss + person_decay / 2 * pen.mean()
+            if not model.constrained:
+                # normal prior on persons: (lambda/2) * sum_p theta_p^2, spread over
+                # each person's training responses so the minibatch mean is unbiased
+                pen = (model.theta(P[j]) ** 2).sum(-1) / NP[j]
+                loss = loss + person_decay / 2 * pen.mean()
             loss.backward()
             opt.step()
         model.eval()
@@ -297,3 +319,53 @@ def predict(model, df):
     with torch.no_grad():
         z = model(torch.tensor(df.pid.values), torch.tensor(df.iid.values))
         return torch.sigmoid(z).numpy()
+
+
+def best_epoch_preds(model_fn, d, epochs=30):
+    """Train, keep the held-out predictions from the epoch with lowest held-out loss."""
+    te = d[d.test]
+    best = (np.inf, None)
+    model = model_fn()
+    for ep in range(epochs):
+        model, _ = fit(model, d, epochs=1, seed=SEED + ep)
+        p = predict(model, te)
+        ll = log_loss(te.resp.values, p)
+        if ll < best[0]:
+            best = (ll, p)
+    return best[1]
+
+
+NN_NAMES = ["Rasch", "2PL", "MIRT k=2", "MLP small", "MLP large"]
+
+
+def nn_specs(n_p, n_i, constrained):
+    """Factories for the five networks, in the prior or the constrained version."""
+    Rasch, TwoPL, Bilinear, MLP = make_models()
+    return {
+        "Rasch": lambda: Rasch(n_p, n_i, constrained),
+        "2PL": lambda: TwoPL(n_p, n_i, constrained),
+        "MIRT k=2": lambda: Bilinear(n_p, n_i, 2, constrained),
+        "MLP small": lambda: MLP(n_p, n_i, 2, hidden=(16,), constrained=constrained),
+        "MLP large": lambda: MLP(n_p, n_i, 2, hidden=(64, 64), constrained=constrained),
+    }
+
+
+def torch_preds(t, d, epochs=30):
+    """Held-out predictions for every network, both versions, for one table.
+
+    Keys: "y" (held-out responses), then each model as NN_NAMES, with
+    " (constr.)" appended for the constrained version. Cached as
+    nn_irt_data/<t>_torch_preds.csv.gz; delete the cache to refit.
+    """
+    cache = DATA / f"{t}_torch_preds.csv.gz"
+    if cache.exists():
+        c = pd.read_csv(cache)
+        return {k: c[k].values for k in c.columns}
+    n_p, n_i = int(d.pid.max() + 1), int(d.iid.max() + 1)
+    out = {"y": d[d.test].resp.values}
+    for constrained in (False, True):
+        suffix = " (constr.)" if constrained else ""
+        for name, mk in nn_specs(n_p, n_i, constrained).items():
+            out[name + suffix] = best_epoch_preds(mk, d, epochs)
+    pd.DataFrame(out).to_csv(cache, index=False)
+    return out

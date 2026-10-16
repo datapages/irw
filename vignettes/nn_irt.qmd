@@ -192,7 +192,7 @@ The PyTorch models are fit by minibatch gradient descent (Adam) on the mean
 negative log-likelihood plus a $N(0,1)$ prior on $\theta_p$, which makes each
 fit a maximum a posteriori estimate rather than joint maximum likelihood (the
 section that follows builds this up line by line). Each model is trained for
-up to 80 epochs and the epoch with the lowest held-out loss is reported. That
+up to 30 epochs and the epoch with the lowest held-out loss is reported. That
 is early stopping with the held-out set doing double duty as a validation
 set; a production comparison would carve out a third split, and we return to
 what this choice costs in the results.
@@ -333,8 +333,8 @@ maximum likelihood [@bock1981marginal]; the item parameters are left as
 free fixed effects, exactly as they are here. The network's equivalent is to
 add $\tfrac{1}{2}\sum_p \theta_p^2$ to the loss, scaled by $1/n$ to match
 the mean log-likelihood. That makes the fit a MAP estimate under the same
-normal prior, and it is a single line. (A prior on the item slopes is
-optional, not required; we come back to when it would help.)
+normal prior, and it is a single line. Nothing here puts a prior on the item
+slopes, and the networks do not need one for the comparison.
 
 ```{python}
 #| code-fold: false
@@ -477,10 +477,10 @@ keep going, ending a full 0.01 below the 2PL in training loss. On the
 right, the 2PL is the best held-out model at every epoch after the first
 few. The MIRT model touches the 2PL's held-out loss around its third or
 fourth epoch and then drifts slowly upward; the small multilayer perceptron
-does the same with more noise; the large one turns up within a handful of
-epochs and by epoch thirty is predicting held-out cells worse than the
-Rasch model, having fit the training cells better than anything else on the
-page. The gap between the two panels is overfitting made visible, and it
+does the same with more noise; the large one is at its best around the fourth
+epoch and by epoch thirty has given back about 0.006 of that, ending 0.008
+behind the 2PL and only just ahead of the Rasch model, having fit the training
+cells better than anything else on the page. The gap between the two panels is overfitting made visible, and it
 widens with parameter count, as anticipated.
 
 Two practical consequences follow. First, the wider models have to be
@@ -666,22 +666,25 @@ for sp in ("top", "right"): ax.spines[sp].set_visible(False)
 plt.tight_layout(); plt.show()
 ```
 
-Why does it happen? With a free slope per item, a normal prior on $\theta$
-alone does not bound the product $a_i\theta_p$. Trained to convergence, the
-network's slopes grow and its person estimates shrink (their spread is 0.4
-on the short tests against 0.56 on the residency exam), and held-out loss
-climbs. Early stopping is what keeps the network's 2PL honest, and it is not
-quite enough when each person has only a dozen or twenty responses. Note
-that the caveat runs one way: not every short table shows the gap (the ASQ
-screener, at 17 responses per child, has almost none), so few responses per
-person make the problem possible and the item slopes decide whether it
-bites. Integrating $\theta$ out, as marginal maximum likelihood does, removes
-the problem; a prior on the slopes would blunt it. We checked whether
-plug-in prediction (the item curve at $\hat\theta_p$) rather than
-posterior-predictive prediction explained any of the gap, and it does not
-(0.0002 on the Woodworth). We have left the network as it is so that the
-effect is visible; it is the price of the simplest possible estimator, and
-readers who build their own networks should know it is there.
+Why does it happen? The gap is the estimator, not the optimiser. The companion
+vignette, [Estimating the 2PL in torch](nn_irt_estimation.qmd), fits the same
+2PL in torch by maximum marginal likelihood, integrating the persons out as
+`mirt` does, and its predictions agree with `mirt`'s to 0.0001 IMV on average.
+The torch networks here treat each person's $\theta$ as a parameter to be
+estimated, and the item parameters are then fit around those point estimates.
+With a dozen or twenty responses per person those estimates are poor, and the
+item parameters inherit the error, which is the incidental-parameter problem. A
+prior on $\theta$ alone does not fix it. The companion vignette also shows that
+fixing the scale of $\theta$ does not close the gap either, and that the
+alternating joint maximum likelihood fit, the textbook version of this
+estimator, does worse than the Adam network. The gap is largest on the short
+tests, so few responses per person make the problem possible.
+Plug-in prediction (the item curve at $\hat\theta_p$) rather than
+posterior-predictive prediction does not explain any of it (0.0002 on the
+Woodworth), so the difference lies in fitting the items. We have left the
+network as it is so that the effect is visible; it is the price of the simplest
+possible estimator, and readers who build their own networks should know it is
+there.
 
 ## Limitations
 
@@ -696,9 +699,9 @@ readers who build their own networks should know it is there.
   and the `mirt` 2PL (marginal maximum likelihood) are the same model and do
   not give the same held-out loss. The comparison that is fair is therefore
   networks against the PyTorch 2PL and flexible curves against the `mirt`
-  2PL, and the page is written that way. An amortised or variational
-  estimator for the networks would close the gap and is the natural next
-  step.
+  2PL, and the page is written that way. The companion vignette shows that an
+  estimator which integrates over the persons closes the gap in torch, and that
+  fixing the scale of $\theta$ does not.
 - **Only person and item identities enter the model.** The networks see
   exactly what the classical models see, so this is a comparison of
   functional forms, not of information. Sequential models of learning
@@ -728,6 +731,9 @@ readers who build their own networks should know it is there.
 [`nn_irt_helpers.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_helpers.py),
 [`nn_irt_chart.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_chart.py)
 and [`nn_irt_mirt_compute.R`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_mirt_compute.R).
+The estimator comparison (alternating JML, EM and maximum marginal likelihood
+in torch, and the scale constraint) is on its own page,
+[Estimating the 2PL in torch](nn_irt_estimation.qmd).
 
 <!-- Python-only page on Quarto's jupyter engine: the R includes used by the
      other vignettes would flip it to knitr, so the source links and version
