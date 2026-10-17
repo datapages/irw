@@ -3,11 +3,11 @@ title: "Conjoint Experiments as Paired Comparisons"
 description: |
   A conjoint experiment asks people to choose between pairs of randomly built
   profiles: two immigrants, two candidates, two vaccines. The usual summary is
-  the average effect of each attribute. IRW holds 849 conjoint experiments, and
-  read as item response data each choice is a paired comparison. That lets us
-  ask two measurement questions across all of them: how well do the attributes
-  predict a choice nobody has seen yet, and how much do individual respondents'
-  own preferences add to that? Start by taking one of the experiments yourself.
+  the average effect of each attribute. Read as item response data, each choice
+  is a paired comparison, which lets us ask one measurement question across
+  every conjoint experiment in IRW: how much do a profile's attributes predict
+  the choice of a respondent nobody has seen yet? Start by taking one of the
+  experiments yourself.
 date: today
 bibliography: conjoint_data/references.bib
 format:
@@ -49,23 +49,23 @@ if (cache_ok) {
   widget_tasks     <- .cache$widget_tasks
   support          <- .cache$support
   candidate_tables <- .cache$candidate_tables
-  sides            <- .cache$sides
   date_run         <- .cache$date_run
   is_pilot         <- isTRUE(.cache$pilot)
   r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
   r_n_conj         <- .cache$n_conj_tables
   r_irt_pool       <- .cache$irt_pool_n
+  r_irt_sampled    <- .cache$n_irt_sampled %||% nrow(irt_df)
   r_n_tables_run   <- nrow(summary_df)
 } else {
   summary_df <- tibble(table = character(), n_resp = integer(), n_tasks_used = integer(),
                        n_attr = integer(), n_terms = integer(), restrictions = character(),
-                       country = character(), imv_attr = numeric(), w_base = numeric(),
-                       w_attr = numeric(), imv_indiv = numeric(), w_shared = numeric(),
-                       w_indiv = numeric(), lambda = numeric(), n_resp_q2 = integer(),
-                       mean_tasks = numeric(), reference = character())
+                       country = character(), domain = character(),
+                       choice_object = character(), mean_tasks = numeric(),
+                       imv_attr = numeric(), w_base = numeric(), w_attr = numeric(),
+                       reference = character())
   irt_df <- tibble(table = character(), persons = integer(), items = integer(),
-                   per_person = numeric(), lambda = numeric(), imv_indiv = numeric(),
-                   w_shared = numeric(), w_indiv = numeric())
+                   per_person = numeric(), imv_item = numeric(),
+                   w_base = numeric(), w_item = numeric())
   hhy_amce <- tibble(attribute = character(), level = character(), baseline = logical(),
                      published_amce = numeric(), published_se = numeric(),
                      irw_amce = numeric(), irw_se = numeric(), dim = numeric())
@@ -78,6 +78,7 @@ if (cache_ok) {
   r_all_candidates <- 0L
   r_n_conj         <- 0L
   r_irt_pool       <- 0L
+  r_irt_sampled    <- 0L
   r_n_tables_run   <- 0L
 }
 
@@ -358,23 +359,8 @@ are noisy: the original respondents each made five choices, which is very
 little information about one person, while the published estimates are precise
 because they pool 1,396 people. And the published effects are modest next to
 that noise. None moves the chance of admission by more than
-`r round(max(abs(hhy_amce$published_amce)), 2)`, so learning how one
-respondent's priorities differ from the average would take many more pairs than
-a conjoint usually asks for. That point returns below.
-
-### The published analysis reproduces from the IRW table
-
-The IRW table `hainmueller_2014_immigrant` has one row per respondent, task
-and profile, with the respondent's choice and the profile's attributes in
-`attr_*` columns. The [conjoint standard](../conjoint_standard.qmd) shows how
-to read such a table and fit the linear probability model, with standard
-errors clustered by respondent, that gives the AMCEs. This study needs one
-extra step: two combinations could never appear (the four high-skill
-professions without at least two years of college, and fleeing persecution
-from the six countries other than China, Sudan, Somalia and Iraq), so those two
-pairs of attributes get an interaction and each level's effect is averaged
-over the levels of its partner where both it and the baseline could occur,
-as the `cjoint` package does.
+`r round(max(abs(hhy_amce$published_amce)), 2)`, so no single attribute decides
+many of these choices on its own.
 
 ```{r}
 #| label: hhy-check
@@ -385,33 +371,31 @@ hhy_se_diff <- max(abs(hhy_amce$irw_se - hhy_amce$published_se), na.rm = TRUE)
 hhy_dim_diff <- max(abs(hhy_amce$dim - hhy_amce$irw_amce), na.rm = TRUE)
 ```
 
-All `r sum(!hhy_amce$baseline)` AMCEs and their standard errors match the
-published estimates (computed by `cjoint` from the authors' replication data)
-to `r if (max(hhy_diff, hhy_se_diff) < 1e-10) "at least ten decimal places" else signif(max(hhy_diff, hhy_se_diff), 1)`, that is, exactly. The
-simple difference in choice rates the widget uses, applied to all 1,396
-respondents, is within `r round(hhy_dim_diff, 3)` of every AMCE.
+The published estimates plotted here are not borrowed: all
+`r sum(!hhy_amce$baseline)` of them, and their standard errors, come back out of
+the IRW table `hainmueller_2014_immigrant` to
+`r if (max(hhy_diff, hhy_se_diff) < 1e-10) "at least ten decimal places" else signif(max(hhy_diff, hhy_se_diff), 1)`,
+that is, exactly. The [conjoint standard](../conjoint_standard.qmd) shows how to
+read a conjoint table and fit the model that gives them. The simple difference
+in choice rates the widget uses, applied to all 1,396 respondents, is within
+`r round(hhy_dim_diff, 3)` of every AMCE.
 
-The rest of this page steps back from the average effects. Read as item
-response data, each task is a paired comparison: two objects, one chosen. That
-is the same shape as the [comparisons](intransitivity.qmd) elsewhere in IRW,
-except that the objects are built at random rather than fixed (the [conjoint
-standard](../conjoint_standard.qmd) describes the format). So we can ask two
-predictive questions, scored with the InterModel Vigorish
-[IMV, @domingue2025imv; @domingue2024imvlens], which the [IMV vignette](imv.qmd)
-introduces:
-
-1. **How much do the attributes explain?** How much better than a coin flip
-   does a model of the attributes predict choices it was not fitted to?
-2. **How much do people differ?** Given that model, how much do
-   respondent-specific preferences add? And how does that compare with what a
-   person's ability adds over item difficulties in ordinary item response
-   data?
+The rest of this page steps back from the average effects and asks a
+predictive question instead. Read as item response data, each task is a paired
+comparison: two objects, one chosen. That is the same shape as the
+[comparisons](intransitivity.qmd) elsewhere in IRW, except that the objects are
+built at random rather than fixed. So we can ask: **how much do the attributes
+explain?** How much better than a coin flip does a model of the attributes
+predict the choices of a respondent it was not fitted to? We score that with
+the InterModel Vigorish [IMV, @domingue2025imv; @domingue2024imvlens], which the
+[IMV vignette](imv.qmd) introduces, and we ask it of every eligible conjoint
+experiment in IRW and of the item side of the warehouse for comparison.
 
 ## Data and methods
 
 ### Dataset selection
 
-The IRW conjoint source holds `r r_n_conj` tables in version 4.1, which this page uses. We use
+The IRW conjoint source holds `r r_n_conj` tables across its two shards. We use
 those with a forced choice between exactly two profiles and at least 500
 usable tasks. A task is one choice screen: a respondent sees a pair of
 profiles and picks one, so a study with 1,000 respondents who each saw five
@@ -423,7 +407,7 @@ total over all respondents, not a count per respondent:
 #| label: filter-datasets
 #| eval: false
 
-meta <- read.csv(paste0("https://redivis.com/api/v1/tables/datapages.irw_meta:v41_0.",
+meta <- read.csv(paste0("https://redivis.com/api/v1/tables/datapages.irw_meta:v44_0.",
                         "conj_metadata/rows?format=csv"))
 candidates <- subset(meta, grepl("(^|;)choice(;|$)", outcomes) & n_profiles == 2 &
                            n_respondents * n_tasks >= 500)$table
@@ -441,62 +425,30 @@ the model works with their difference, so a task becomes one binary outcome:
 was the first profile chosen? Attributes that were not shown on a profile get
 a level of their own.
 
-1. **Attributes.** An L2-penalised logistic regression of the choice on the
-   difference in attribute dummies (penalty 1, intercept unpenalised) is fitted
-   on four fifths of the respondents and predicts the other fifth, rotating
-   over five folds. The baseline is a coin weighted to the training share of
-   first-profile choices. The IMV compares the two.
-2. **Respondent preferences.** Among respondents with at least three tasks,
-   one task in five (by position, so each respondent keeps most of their tasks
-   for fitting) is held out at a time. The shared model is the attribute model
-   above, fitted to the training tasks. The individual model keeps it as an
-   offset and gives each respondent their own deviation on every attribute term
-   and on the intercept, shrunk towards zero by an L2 penalty $\lambda$. This
-   is the posterior mode of a random-coefficient logit.
-   $\lambda \in \{1, 3, 10, 30, 100, 300, 1000\}$ is chosen on a random 20% of
-   respondents and the IMV of the individual over the shared model is reported
-   on the other 80%. Tables need at least 200 such respondents.
+The choice is then regressed on the difference in attribute dummies by
+L2-penalised logistic regression (penalty 1, intercept unpenalised), fitted on
+four fifths of the respondents and used to predict the other fifth, rotating
+over five folds. The baseline is a coin weighted to the training share of
+first-profile choices, and the IMV compares the two. Whole respondents are held
+out, so the number says how well a design's attributes predict the choices of
+someone the model has never seen.
 
-   The two steps split the data differently on purpose. Attribute effects are
-   meant to generalise to new people, so step 1 holds out respondents. Step 2
-   asks how much a respondent's own earlier choices predict their later ones,
-   the same question a person parameter in IRT answers when it is estimated on
-   some of a person's items and scored on the rest, so it holds out tasks
-   within respondents. Holding out whole respondents there would leave each new
-   respondent with no training tasks, shrink every deviation to zero and make
-   the individual model identical to the shared one: the IMV would be zero by
-   construction. The held-out choice itself never enters the fit: the
-   deviation is estimated from the respondent's training tasks only, the shared
-   offset from training tasks only, and $\lambda$ on separate respondents.
+### The item side, for comparison
 
-```{r}
-#| label: fit-function
-#| eval: false
+An IMV of some size is hard to read on its own, so we compute the same quantity
+on ordinary item response data, where the counterpart of an attribute is an
+item. We sampled `r r_irt_sampled` tables at random from the `r r_irt_pool`
+dichotomous core IRW tables that are cross-sectional, at least 90% complete,
+and have 300 to 20,000 respondents and 5 to 100 items. The design is the one
+above with items in place of attributes: whole persons are held out, a fifth at
+a time; the model is each item's difficulty, the logit of its mean among the
+training persons; and the baseline is a coin weighted to the training share of
+correct or endorsed responses. `r nrow(irt_df)` of the `r r_irt_sampled` gave
+results (a table whose responses turn out not to be dichotomous is dropped).
 
-# Respondent i's deviation delta_i, given the shared model's linear predictor
-# `off` on their training tasks Z (attribute differences plus a 1 for their own
-# intercept). The penalised optimum lies in the span of Z's rows, so we solve for
-# alpha with delta_i = t(Z) %*% alpha: a system the size of the number of tasks.
-K <- tcrossprod(Z); a <- numeric(nrow(Z))
-for (it in 1:50) {
-  p <- plogis(off + drop(K %*% a)); W <- p * (1 - p)
-  step <- solve(W * K + diag(lambda, nrow(Z)), y - p - lambda * a)
-  a <- a + step
-  if (max(abs(step)) < 1e-8) break
-}
-p_test <- plogis(off_test + drop(Z_test %*% t(Z) %*% a))
-```
-
-For the comparison with ordinary item response data we sampled
-80 tables at random from the `r r_irt_pool` dichotomous core IRW
-tables that are cross-sectional, at least 90% complete, have 300 to 20,000
-respondents and 5 to 100 items, and applied the same design with items in place
-of tasks: one fifth of each person's responses held out at a time, a shared
-model of item difficulties (the logit of each item's training mean), and an
-individual model adding a person ability with the same kind of penalty,
-$\lambda \in \{0.3, 1, 3, 10, 30, 100\}$, chosen the same way. `r nrow(irt_df)`
-of the 80 gave results; the other (`vocabulary_iq`) has six response values
-although its metadata lists two.
+The two sides are not two estimates of one quantity. Each says, for one kind of
+design, how much the features of the thing being judged predict a stranger's
+response to it.
 
 ::: {.callout-note}
 To reproduce with current IRW holdings, re-run `conjoint_compute.R`
@@ -506,28 +458,40 @@ without a login.
 
 ## Results
 
-### How much do the attributes explain?
-
 ```{r}
 #| label: q1-numbers
 #| echo: false
 
 q1 <- summary_df |> filter(!is.na(imv_attr))
 q1_med <- median(q1$imv_attr)
+q1_qu  <- quantile(q1$imv_attr, c(0.1, 0.9))
 q1_w   <- median(q1$w_attr)
+q1_wb  <- median(q1$w_base)
 q1_rho <- cor(q1$imv_attr, q1$n_attr, method = "spearman")
+q1_hi  <- q1 |> slice_max(imv_attr, n = 1)
 ```
 
+### How much do the attributes explain?
+
 Across `r nrow(q1)` experiments the median IMV of the attribute model over a
-coin flip is `r round(q1_med, 2)`. In accuracy terms, the median attribute model
+coin flip is `r sprintf("%.2f", q1_med)`. In accuracy terms, the median attribute model
 predicts a held-out choice like a coin that comes up right
-`r round(100 * q1_w)`% of the time. Designs with more attributes are not more
-predictable (Spearman $\rho$ = `r round(q1_rho, 2)` between the IMV and the
-number of attributes).
+`r round(100 * q1_w)`% of the time, against `r round(100 * q1_wb)`% for the
+baseline. That is a substantial amount for a randomly assembled bundle of five
+or ten features: knowing nothing about a respondent, and only what the two
+profiles look like, gets you most of the way from a coin flip to two choices in
+three.
+
+The spread is wide. Eight in ten experiments fall between
+`r round(q1_qu[1], 2)` and `r round(q1_qu[2], 2)`, and designs with more
+attributes are not more predictable (Spearman $\rho$ = `r round(q1_rho, 2)`
+between the IMV and the number of attributes). More attributes give the model
+more to work with but also more ways for a respondent to trade one against
+another, and the two appear to cancel.
 
 ```{r}
 #| label: fig-q1
-#| fig-cap: "Held-out IMV of the attribute model over a coin flip, one point per experiment, by the number of attributes in the design. Hover for the table."
+#| fig-cap: "Held-out IMV of the attribute model over a coin flip, one point per experiment, by the number of attributes in the design. The dashed line marks the median. Hover for the table."
 
 p1 <- ggplot(q1, aes(n_attr, imv_attr,
                      text = paste0(table, "<br>IMV = ", round(imv_attr, 3),
@@ -538,103 +502,94 @@ p1 <- ggplot(q1, aes(n_attr, imv_attr,
 ggplotly(p1, tooltip = "text")
 ```
 
-### How much do people differ?
+### Against the item side of the warehouse
 
 ```{r}
-#| label: q2-numbers
+#| label: cmp-numbers
 #| echo: false
 
-q2 <- summary_df |> filter(!is.na(imv_indiv))
-q2_med  <- median(q2$imv_indiv)
-irt_med <- median(irt_df$imv_indiv)
-q2_share_small <- mean(q2$imv_indiv < 0.01)
-q2_top <- q2 |> arrange(desc(imv_indiv)) |> slice_head(n = 5)
+irt_med  <- median(irt_df$imv_item)
+irt_wb   <- median(irt_df$w_base)
+irt_w    <- median(irt_df$w_item)
 both <- bind_rows(
-  q2 |> transmute(table, imv = imv_indiv, family = "Conjoint: respondent preferences",
-                  n_per = mean_tasks, detail = paste0("tasks per respondent: ", round(mean_tasks, 1))),
-  irt_df |> transmute(table, imv = imv_indiv, family = "Dichotomous IRT: person ability",
-                      n_per = per_person, detail = paste0("items per person: ", round(per_person, 1))))
+  q1 |> transmute(table, imv = imv_attr, family = "Conjoint: profile attributes",
+                  detail = paste0("attributes: ", n_attr, "; usable tasks: ", n_tasks_used)),
+  irt_df |> transmute(table, imv = imv_item, family = "Item response: item difficulties",
+                      detail = paste0("items: ", items, "; persons: ", persons)))
 ```
 
-Respondent-specific preferences add much less. Over the shared attribute model
-the median IMV is `r round(q2_med, 3)` across `r nrow(q2)` experiments, and in
-`r round(100 * q2_share_small)`% of them it is below 0.01. In the
-`r nrow(irt_df)` dichotomous IRT tables, knowing the person adds a median of
-`r round(irt_med, 3)` over item difficulties alone.
+An IMV of `r sprintf("%.2f", q1_med)` is easier to read next to the same quantity
+computed the same way on ordinary item response data. There, across
+`r nrow(irt_df)` dichotomous tables, knowing which item a person is answering
+raises held-out prediction by a median IMV of `r round(irt_med, 3)`, roughly a
+quarter of what a profile's attributes do for a choice.
 
 ```{r}
-#| label: fig-q2
-#| fig-cap: "Held-out IMV of the individual model over the shared model: respondent-specific preferences in conjoint experiments, person ability in dichotomous IRW tables. One point per table; the diamond marks the median."
+#| label: fig-cmp
+#| fig-cap: "Held-out IMV over a weighted coin: profile attributes in conjoint experiments, item difficulties in dichotomous IRW tables. One point per table; the diamond marks the median."
 
 meds <- both |> group_by(family) |> summarise(m = median(imv))
 p2 <- ggplot(both, aes(imv, family, text = paste0(table, "<br>IMV = ", round(imv, 3), "<br>", detail))) +
   geom_jitter(aes(colour = family), height = 0.2, width = 0, alpha = 0.6, size = 2) +
-  geom_point(data = meds, aes(m, family), inherit.aes = FALSE, shape = 23, size = 4, fill = "black") +
+  geom_point(data = meds, aes(m, family), inherit.aes = FALSE, shape = 23, size = 4,
+             fill = "white", colour = "black", stroke = 1.2) +
   geom_vline(xintercept = 0, colour = irw_grey) +
   scale_colour_manual(values = c(irw_red, irw_blue), guide = "none") +
-  labs(x = "IMV, individual over shared model", y = NULL)
+  labs(x = "IMV over a weighted coin", y = NULL)
 ggplotly(p2, tooltip = "text")
 ```
 
-```{r}
-#| label: side-txt
-#| echo: false
+Two things keep that gap from being a like-for-like contest between designs.
+The first is the baseline. A forced choice between two randomly built profiles
+is a coin flip by construction, so the baseline accuracy is almost exactly
+`r round(100 * q1_wb)`%, and any predictive signal has room to show. Items are
+not balanced that way: the median dichotomous table here is already right
+`r round(100 * irt_wb)`% of the time by always guessing the more common
+response, and relative gains over a baseline that good are necessarily smaller
+(the item model reaches `r round(100 * irt_w)`%). The second is what the
+features are. A conjoint's attributes are the whole stimulus, varied on purpose
+across the range the designer chose; an item's difficulty is one number
+summarising a question somebody wrote for other reasons. A conjoint is, in
+effect, an experiment built to make the stimulus matter, and the comparison
+shows how much that design choice buys.
 
-# Prose for a share of respondents; a missing value (cache built without the
-# check) prints a placeholder rather than failing the render.
-side_txt <- function(x) {
-  if (is.null(x) || is.na(x)) return("[share unavailable]")
-  if (x >= 0.65 && x < 0.75) return("seven in ten")
-  if (x >= 0.3 && x < 0.37) return("a third")
-  if (x >= 0.22 && x < 0.3) return("a quarter")
-  if (x >= 0.18 && x < 0.22) return("a fifth")
-  if (x >= 0.15 && x < 0.18) return("a sixth")
-  if (x >= 0.11 && x < 0.15) return("an eighth")
-  paste0(round(100 * x), "%")
-}
-```
-
-Why do preferences matter so much more in some experiments than in others? Look
-at what the tables near the top have in common. Each has one attribute that
-splits the sample. In `titelman_2024_party_labels` it is the candidate's
-party: among respondents who identify as Conservative or Labour,
-`r side_txt(sides$titelman_own_party$share)` chose their own party's candidate
-in at least nine of every ten tasks where the label was shown. `mummolo_2021_partisan_loyalty`,
-`carey_2020_democracy_public_oct` and `driscoll_2023_court_curbing` also put a
-party label on candidates, and `inouye_2026_sympathies_2023` and `_2025` ask
-which side of a dispute deserves sympathy. The two purchase studies look
-different but work the same way. In `zou_2020_ev_purchase` the attribute is
-whether the car is electric or gasoline: `r side_txt(sides$zou_ev$share)` of
-respondents chose the electric car every time the pair differed on it, and
-`r side_txt(sides$zou_ev$never)` never did. In
-`gan_2026_alternative_meat` it is whether the burger is conventional,
-plant-based or cell-cultured: `r side_txt(sides$gan_normal$share)` always took
-the conventional burger, and `r side_txt(sides$gan_cultured$never)` never took
-the cultured one.
-
-An attribute like this does little for the average effect. When half the
-sample pulls one way and half the other, the AMCE sits near zero, and the
-shared model cannot use the attribute to predict anyone's choice. But each
-respondent is consistent, so a per-respondent term for that one attribute
-predicts their next choice well. That is what the individual model picks up.
-Where no attribute divides people this way, the shared model already captures
-most of what five or ten choices can reveal, and preferences add little.
+### Which experiments are the attributes good for?
 
 ```{r}
-#| label: tbl-q2-top
+#| label: tbl-object
 #| echo: false
 
-q2_top |>
-  transmute(Table = table, `IMV, preferences` = round(imv_indiv, 3),
-            `IMV, attributes` = round(imv_attr, 3), Respondents = n_resp,
-            `Tasks per respondent` = round(mean_tasks, 1)) |>
-  knitr::kable()
+obj_lab <- c(person = "People", policy = "Policies", scenario = "Scenarios",
+             product_service = "Products and services", place = "Places",
+             organisation = "Organisations", message = "Messages")
+by_obj <- q1 |>
+  filter(choice_object %in% names(obj_lab)) |>
+  group_by(choice_object) |>
+  summarise(n = n(), med = median(imv_attr), w = median(w_attr), wb = median(w_base)) |>
+  arrange(desc(med)) |>
+  transmute(`What is being chosen` = unname(obj_lab[choice_object]), Experiments = n,
+            `Median IMV` = round(med, 2),
+            `Median held-out accuracy` = paste0(round(100 * w), "% (from ", round(100 * wb), "%)"))
+knitr::kable(by_obj)
 ```
 
-Put together: in a typical conjoint experiment the attributes do a fair amount
-of work, and the average effect captures most of what can be learned about how
-a given respondent will choose. For person-level prediction, a conjoint's
-handful of tasks per respondent buys less than a test's items do.
+The conjoint literature is dominated by choices between people -- candidates,
+immigrants, job applicants -- and between policies, but those are not where the
+attributes do the most work. Choices between things, places to live and
+products to buy, are the most predictable, and choices between policies and
+between political messages the least. A plausible reading is that a profile's
+attributes come closer to exhausting what there is to know about a product than
+about a policy or a candidate, where what a respondent brings to the choice
+matters more.
+
+Even so, the differences between kinds of choice are small next to the
+variation within them, and that is the more striking fact. At the top,
+`r q1_hi$table` reaches an IMV of `r round(q1_hi$imv_attr, 2)`, predicting
+held-out choices `r round(100 * q1_hi$w_attr)`% of the time from
+`r q1_hi$n_attr` attributes; at the bottom, `r sum(q1$imv_attr <= 0)`
+experiments with designs of much the same size do not beat a weighted coin at
+all. What the attributes explain is a property of the particular experiment,
+not of the method.
 
 ## Limitations
 
@@ -643,41 +598,33 @@ handful of tasks per respondent buys less than a test's items do.
 checked by the IRW team.
 :::
 
-- **Few tasks per respondent.** A typical conjoint gives each respondent about
-  five tasks, against a dozen or more terms for their preferences; a test gives
-  a person a dozen or more items for one ability. The preference IMV measures
-  how much can be learned about a respondent from the tasks they did, not how
-  much respondents truly differ, and it rises with the number of tasks
-  (Spearman $\rho$ = `r round(cor(q2$imv_indiv, q2$mean_tasks, method = "spearman"), 2)`).
-  The comparison with IRT is between what each kind of design lets you learn
-  about a person, not between quantities of the same size.
-- **One model of preferences.** The individual model is additive in the
-  attributes with one isotropic penalty. Preferences that are structured (for
-  example, a respondent's party driving several attributes at once) would be
-  captured better by respondent covariates or a low-rank model, and would
-  likely add more.
-- **Noise in choosing the penalty.** $\lambda$ is chosen on one fifth of
-  respondents and scored on the rest, so in a few tables the chosen value fits
-  the scoring respondents worse than the shared model does:
-  `r sum(q2$imv_indiv < 0)` conjoint and `r sum(irt_df$imv_indiv < 0)` IRT tables
-  have a slightly negative IMV. These are left in, since dropping them would
-  bias both medians upward.
-- **Repeated pairs help.** Some designs show a respondent the same pair twice
-  (the Inouye experiments repeat their first pair, flipped, as the eleventh). A
-  respondent-specific model can use that, so those tables partly measure
-  consistency rather than preference.
-- **Held-out tasks by position.** Conjoint tasks are held out by their position
-  in the sequence and IRT items at random, so order effects (fatigue, learning)
-  enter the conjoint comparison slightly differently.
+- **One model of the attributes.** The model is additive in the attribute
+  dummies with a single ridge penalty, so interactions between attributes, and
+  the restrictions some designs place on which combinations can appear, are
+  only approximated. A model that used them would predict somewhat better, so
+  these numbers are a floor on what the attributes can do.
+- **Comparing two designs, not two estimates.** The conjoint and item-response
+  numbers are the same calculation, but their baselines are not equally easy to
+  beat (a forced choice starts at `r round(100 * q1_wb)`%, the median
+  dichotomous item table at `r round(100 * irt_wb)`%), and item difficulty is a
+  thinner description of an item than a profile's attributes are of a profile.
+  Read the gap as a difference between kinds of design, not as a measurement of
+  one quantity in two places.
+- **A random, unmatched item sample.** The `r nrow(irt_df)` item-response
+  tables are a random draw from dichotomous core tables, not matched to the
+  conjoint experiments by sample, domain or length.
 - **Forced choices only.** Ratings, opt-out tasks and designs with one or three
-  profiles are left out; so are tables with fewer than 500 usable tasks.
-- **A random IRT sample.** The `r nrow(irt_df)` IRT tables are a random draw from
-  dichotomous core tables, not matched to the conjoint experiments by sample,
-  domain or length.
+  profiles are left out, as are tables with fewer than 500 usable tasks. The
+  screen keeps `r nrow(q1)` of the `r r_n_conj` conjoint tables in IRW.
+- **Zero and negative values are kept.** `r sum(q1$imv_attr < 0)` conjoint
+  tables come out slightly below zero, where the attribute model predicts
+  held-out respondents worse than the training base rate does, and
+  `r sum(abs(q1$imv_attr) < 1e-12)` come out at exactly zero, where neither
+  model beats a fair coin and the IMV's accuracy scale floors both at 50%.
+  They are left in, since dropping them would bias the median upward.
 - **One version of the source.** Everything here is `irw_conjoint` v4.2 and
-  `irw_conjoint_2` v1.0 (849 tables in all). Later versions will add
-  experiments; rerunning means changing the version strings at the top of
-  `conjoint_compute.R`.
+  `irw_conjoint_2` v1.4. Later versions will add experiments; rerunning means
+  changing the version strings at the top of `conjoint_compute.R`.
 - **One table left out.** `joo_2026_descriptive_rep` meets the criteria but is
   excluded: in its deposit every respondent's chosen candidate has the same
   position in all six tasks, so its outcomes do not line up with its profiles.
@@ -692,7 +639,7 @@ checked by the IRW team.
 {{< include ../components/_data-version.qmd >}}
 
 Results were computed on `r format(date_run, "%B %d, %Y")` from
-`irw_conjoint` v4.2, `irw_conjoint_2` v1.0 and `irw_meta` v41.0. To regenerate:
+`irw_conjoint` v4.2, `irw_conjoint_2` v1.4 and `irw_meta` v44.0. To regenerate:
 
 ```r
 # 1. Re-run the compute script (from the project root)

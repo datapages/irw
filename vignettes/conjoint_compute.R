@@ -3,21 +3,19 @@
 # A conjoint experiment shows respondents pairs of randomly assembled profiles
 # and asks them to choose. The usual summary is the AMCE, the average effect of
 # each attribute level on the chance a profile is chosen. Read as item response
-# data, every choice is a paired comparison, so two measurement questions apply:
-# how well do the attributes predict a held-out choice, and how much do
-# respondent-specific preferences add on top of the shared (average) model?
-# We answer both across the IRW conjoint source and set the second against the
-# same quantity for person ability in dichotomous IRW tables.
+# data, every choice is a paired comparison, and one measurement question
+# applies: how well do the attributes predict the choice of a respondent the
+# model has not seen? We answer that across the IRW conjoint source and set it
+# against the same quantity on the item side of the warehouse, where item
+# difficulties alone predict the responses of a person the model has not seen.
 #
 # Three parts:
 #   A. Hainmueller, Hopkins & Yamamoto (2014): reproduce the published AMCEs
 #      from the IRW table and draw the task sample the page's widget uses.
 #   B. Every eligible conjoint table: held-out IMV of the attribute model over a
-#      coin flip at the base rate, and of respondent-specific preferences over
-#      the shared attribute model.
-#   C. A random sample of dichotomous core IRW tables: held-out IMV of a person
-#      ability over item difficulties alone (the IRT counterpart of B's second
-#      quantity).
+#      coin flip at the base rate, holding out whole respondents.
+#   C. A random sample of dichotomous core IRW tables: held-out IMV of item
+#      difficulties over the base rate, holding out whole persons.
 #
 # Everything is read from Redivis without a login, through the same row URLs
 # the table landing pages on itemresponsewarehouse.org link to. With an
@@ -41,8 +39,8 @@ set.seed(20261008)
 
 # Conjoint spans shards (Redivis caps a dataset at 1,000 tables). Newest first:
 # a table is read from the first shard that has it, as the packages resolve names.
-CONJ_VERSIONS <- c("irw_conjoint_2:v1_0", "irw_conjoint:v4_2")
-META_VERSION  <- "irw_meta:v41_0"
+CONJ_VERSIONS <- c("irw_conjoint_2:v1_4", "irw_conjoint:v4_2")
+META_VERSION  <- "irw_meta:v44_0"
 
 out_dir   <- "vignettes/conjoint_data"
 # Per-table fits are kept per source version, so a version change refits everything
@@ -53,12 +51,9 @@ dir.create(fits_dir, recursive = TRUE, showWarnings = FALSE)
 bib_file  <- file.path(out_dir, "references.bib")
 
 MIN_TASKS     <- 500    # usable forced-choice tasks per table
-MIN_RESP_HET  <- 200    # respondents with >= 3 tasks, for the preference model
 MAX_N         <- 5000   # downsample respondents/persons before fitting
-N_IRT         <- 80     # dichotomous core tables in the comparison
+N_IRT         <- 200    # dichotomous core tables in the comparison
 N_WIDGET      <- 400    # HHY tasks shipped to the page's widget
-LAMBDA_CONJ   <- c(1, 3, 10, 30, 100, 300, 1000)
-LAMBDA_IRT    <- c(0.3, 1, 3, 10, 30, 100)
 PILOT         <- as.logical(Sys.getenv("CONJ_PILOT", "FALSE"))  # TRUE: a few tables for a draft page
 PILOT_N       <- 12
 
@@ -270,7 +265,8 @@ fit_conj <- function(tab) {
   if (nrow(t) < MIN_TASKS) return(NULL)
   y <- t$y
 
-  # Question 1: attributes vs. a coin flip at the base rate. Folds by respondent.
+  # The attribute model against a coin flip at the base rate. Whole respondents
+  # are held out, so the model predicts someone it has never seen.
   ids <- unique(t$id); fold <- setNames(sample(rep_len(1:5, length(ids))), ids)
   f <- fold[as.character(t$id)]
   p_attr <- p_base <- numeric(nrow(t))
@@ -283,60 +279,11 @@ fit_conj <- function(tab) {
   q1 <- list(imv_attr = imv(mean_ll(y, p_base), mean_ll(y, p_attr)),
              w_base = w_of(mean_ll(y, p_base)), w_attr = w_of(mean_ll(y, p_attr)))
 
-  # Question 2: respondent-specific preferences vs. the shared attribute model.
-  # Hold out tasks within respondent (fold = task position mod min(5, tasks)).
-  # Each respondent gets a deviation delta_i on every attribute term and their
-  # own intercept, shrunk to zero by an L2 penalty lambda (the MAP of a
-  # random-coefficient logit), fitted with the shared model as an offset.
-  # lambda is chosen on 20% of respondents; the IMV is reported on the rest.
-  q2 <- list(imv_indiv = NA_real_, w_shared = NA_real_, w_indiv = NA_real_, lambda = NA_real_,
-             n_resp_q2 = NA_integer_, mean_tasks = NA_real_)
-  t[, ntask := .N, by = id]
-  keep <- t$ntask >= 3
-  if (uniqueN(t$id[keep]) >= MIN_RESP_HET) {
-    t2 <- t[keep]; D2 <- D[keep, , drop = FALSE]; y2 <- t2$y
-    t2[, pos := seq_len(.N) - 1L, by = id]
-    t2[, fold := pos %% pmin(5L, ntask)]
-    Z <- cbind(D2, 1)                            # deviation terms incl. own intercept
-    rid <- split(seq_len(nrow(t2)), t2$id)
-    tune <- setNames(runif(length(rid)) < 0.2, names(rid))
-    p0 <- rep(NA_real_, nrow(t2)); p1 <- matrix(NA_real_, nrow(t2), length(LAMBDA_CONJ))
-    for (k in 0:4) {
-      tr <- t2$fold != k; te <- t2$fold == k
-      if (!any(te)) next
-      bk  <- ridge_logit(D2[tr, , drop = FALSE], y2[tr])
-      off <- drop(cbind(1, D2) %*% bk)
-      p0[te] <- plogis(off[te])
-      for (r in rid) {
-        rtr <- r[tr[r]]; rte <- r[te[r]]
-        if (!length(rte) || !length(rtr)) next
-        # The penalised optimum lies in the span of the training rows, so solve
-        # for alpha (one per training task) instead of delta: delta = Z_tr' alpha.
-        Zt <- Z[rtr, , drop = FALSE]; K <- tcrossprod(Zt); Kte <- Z[rte, , drop = FALSE] %*% t(Zt)
-        for (j in seq_along(LAMBDA_CONJ)) {
-          lam <- LAMBDA_CONJ[j]; a <- numeric(length(rtr))
-          for (it in 1:50) {
-            p <- plogis(off[rtr] + drop(K %*% a)); W <- p * (1 - p)
-            step <- solve(W * K + diag(lam, length(rtr)), y2[rtr] - p - lam * a)
-            a <- a + step
-            if (max(abs(step)) < 1e-8) break
-          }
-          p1[rte, j] <- plogis(off[rte] + drop(Kte %*% a))
-        }
-      }
-    }
-    ok <- !is.na(p0) & !is.na(p1[, 1])
-    is_tune <- tune[as.character(t2$id)]
-    st <- ok & is_tune; se <- ok & !is_tune
-    best <- which.max(apply(p1, 2, function(p) mean_ll(y2[st], p[st])))
-    q2 <- list(imv_indiv = imv(mean_ll(y2[se], p0[se]), mean_ll(y2[se], p1[se, best])),
-               w_shared = w_of(mean_ll(y2[se], p0[se])), w_indiv = w_of(mean_ll(y2[se], p1[se, best])),
-               lambda = LAMBDA_CONJ[best], n_resp_q2 = sum(!tune), mean_tasks = mean(t2[, .N, by = id]$N))
-  }
-
   m <- conj_meta[table == tab]
   c(list(table = tab, n_resp = length(ids), n_tasks_used = nrow(t), n_attr = tf$n_attr,
-         n_terms = ncol(D), restrictions = m$restrictions, country = m$country), q1, q2)
+         n_terms = ncol(D), restrictions = m$restrictions, country = m$country,
+         domain = m$domain, choice_object = m$choice_object,
+         mean_tasks = nrow(t) / length(ids)), q1)
 }
 
 # ==============================================================================
@@ -350,9 +297,9 @@ irt_pool <- core_meta[n_categories == 2 & longitudinal == FALSE & density > 0.9 
 irt_tables <- irt_pool[sample(.N, min(if (PILOT) PILOT_N else N_IRT, .N))]
 message("  pool: ", nrow(irt_pool), "; sampled: ", nrow(irt_tables))
 
-# Same held-out design, items in place of tasks: hold out a fifth of each
-# person's responses; shared model = item difficulties (logit of the training
-# item mean); individual model adds a person ability theta_i shrunk by lambda.
+# The same held-out design as the conjoint side, items in place of attributes:
+# whole persons are held out, item difficulties (the logit of the training item
+# mean) predict their responses, and the baseline is the training base rate.
 fit_irt <- function(tab, dataset) {
   d <- read_rows(dataset, tab, vars = c("id", "item", "resp"))
   d <- unique(d[!is.na(resp)], by = c("id", "item"))
@@ -362,35 +309,25 @@ fit_irt <- function(tab, dataset) {
   ids <- unique(d$id)
   if (length(ids) > MAX_N) { d <- d[id %in% sample(ids, MAX_N)]; ids <- unique(d$id) }
   if (all(d[, mean(y), by = id]$V1 %in% c(0, 1))) return(NULL)
-  d <- d[sample(.N)]
-  d[, fold := (seq_len(.N) - 1L) %% 5L, by = id]
-  r <- match(d$id, ids); y <- d$y; n <- length(ids)
-  tune <- runif(n) < 0.2
-  p0 <- numeric(nrow(d)); p1 <- matrix(0, nrow(d), length(LAMBDA_IRT))
+  fold <- setNames(sample(rep_len(0:4, length(ids))), ids)
+  d[, fold := fold[as.character(id)]]
+  y <- d$y
+  p_item <- p_base <- numeric(nrow(d))
   for (k in 0:4) {
     tr <- d$fold != k; te <- d$fold == k
+    if (!any(te) || !any(tr)) next
     im <- d[tr, .(s = sum(y), n = .N), by = item]
     bdiff <- setNames(log((im$s + .5) / (im$n - im$s + .5)), im$item)
-    off <- unname(bdiff[as.character(d$item)]); off[is.na(off)] <- 0
-    p0[te] <- plogis(off[te])
-    for (j in seq_along(LAMBDA_IRT)) {
-      th <- numeric(n)
-      for (it in 1:30) {
-        p <- plogis(off + th[r])
-        g <- tabulate_sum(r[tr], (y - p)[tr], n) - LAMBDA_IRT[j] * th
-        h <- tabulate_sum(r[tr], (p * (1 - p))[tr], n) + LAMBDA_IRT[j]
-        th <- th + g / h
-      }
-      p1[te, j] <- plogis(off + th[r])[te]
-    }
+    base <- mean(y[tr])
+    # An item no training person answered falls back to the training base rate.
+    off <- unname(bdiff[as.character(d$item)]); off[is.na(off)] <- qlogis(base)
+    p_item[te] <- plogis(off[te])
+    p_base[te] <- base
   }
-  st <- tune[r]; se <- !tune[r]
-  best <- which.max(apply(p1, 2, function(p) mean_ll(y[st], p[st])))
-  list(table = tab, persons = n, items = uniqueN(d$item), per_person = nrow(d) / n, lambda = LAMBDA_IRT[best],
-       imv_indiv = imv(mean_ll(y[se], p0[se]), mean_ll(y[se], p1[se, best])),
-       w_shared = w_of(mean_ll(y[se], p0[se])), w_indiv = w_of(mean_ll(y[se], p1[se, best])))
+  list(table = tab, persons = length(ids), items = uniqueN(d$item), per_person = nrow(d) / length(ids),
+       imv_item = imv(mean_ll(y, p_base), mean_ll(y, p_item)),
+       w_base = w_of(mean_ll(y, p_base)), w_item = w_of(mean_ll(y, p_item)))
 }
-tabulate_sum <- function(i, x, n) { out <- numeric(n); s <- rowsum(x, i); out[as.integer(rownames(s))] <- s[, 1]; out }
 
 # ==============================================================================
 # Run, writing each result to disk as it completes (re-running resumes)
@@ -423,40 +360,8 @@ collect <- function(prefix, keys) {
 }
 conj_summary <- collect("conj__", conj_tables)
 irt_summary  <- collect("irt__", irt_tables$table)
-message("  conjoint tables with results: ", nrow(conj_summary), " of ", length(conj_tables),
-        "; with a preference model: ", sum(!is.na(conj_summary$imv_indiv)))
+message("  conjoint tables with results: ", nrow(conj_summary), " of ", length(conj_tables))
 message("  IRT tables with results: ", nrow(irt_summary), " of ", nrow(irt_tables))
-
-# ==============================================================================
-# 4. One divisive attribute: how consistently respondents pick a side
-# ==============================================================================
-
-# For the tables the page singles out, the share of respondents (with at least
-# three tasks where the two profiles differ on the attribute) who chose a given
-# side in at least `at_least` of those tasks. Study-specific by design; this is
-# evidence for one paragraph, not a general detector.
-side_rate <- function(d, attr, side, at_least = 1) {
-  d <- as.data.table(d)[!is.na(get(attr))]
-  d[, differs := .N == 2 && uniqueN(get(attr)) == 2 && any(get(attr) == side), by = .(id, task)]
-  ch <- d[differs == TRUE & choice == 1]
-  ch[, pick := get(attr) == side]
-  r <- ch[, .(rate = mean(pick), n = .N), by = id][n >= 3]
-  list(n = nrow(r), share = mean(r$rate >= at_least), never = mean(r$rate == 0))
-}
-sides <- tryCatch({
-  ti <- read_conj("titelman_2024_party_labels")
-  ti <- ti[trial_party_label == "Party Label" & cov_party_id_code %in% c(1, 2)]
-  ti[, own := fifelse(cov_party_id_code == 1, "Conservative Party", "Labour Party")]
-  ti[, same := attr_party == own]
-  ti_r <- side_rate(ti[, .(id, task, choice, attr_party = fifelse(same, "own", "other"))], "attr_party", "own", 0.9)
-  zou <- side_rate(read_conj("zou_2020_ev_purchase"), "attr_option", "EV")
-  gan <- read_conj("gan_2026_alternative_meat")
-  list(titelman_own_party = ti_r,
-       zou_ev    = zou,
-       gan_normal   = side_rate(gan, "attr_type", "Normal"),
-       gan_cultured = side_rate(gan, "attr_type", "Cell-cultured"))
-}, error = function(e) { message("  sides: ", conditionMessage(e)); NULL })
-str(sides)
 
 # ==============================================================================
 # Save combined output and references
@@ -469,13 +374,13 @@ saveRDS(list(
   hhy_amce         = as_tibble(hhy_amce),
   widget_tasks     = as_tibble(widget_tasks),
   support          = support,
-  sides            = sides,
   summary          = as_tibble(conj_summary),
   irt_summary      = as_tibble(irt_summary),
   candidate_tables = candidates,
   n_all_candidates = length(candidates),
   n_conj_tables    = nrow(conj_meta),
   irt_pool_n       = nrow(irt_pool),
+  n_irt_sampled    = nrow(irt_tables),
   versions         = c(conj = paste(CONJ_VERSIONS, collapse = " + "), meta = META_VERSION),
   pilot            = PILOT,
   date_run         = Sys.Date(),
