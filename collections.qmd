@@ -22,9 +22,9 @@ exact <- reg$collection[reg$kind == "instrument" & reg$coverage == "curated-only
 KIND_META <- tibble::tribble(
   ~kind,        ~heading,                     ~blurb,
   "design",     "Study &amp; instrument design",
-    "How the study was run, and what structure the data carries. Derived from the columns each table actually has, so these cover every documented table.",
+    "How the study was run, and what structure the data carries. Derived from the columns each table actually has, so these cover every documented table; the exceptions are `continuous_response` and `trials`, which are hand-curated.",
   "instrument", "Instrument family",
-    "Which measure was administered. These group together tables that record the same instrument under different names &mdash; 63 Big Five tables are spread across more than forty spellings of the construct name.",
+    "Which measure was administered. These group together tables that record the same instrument under different names &mdash; the Big Five tables alone are spread across more than forty spellings of the construct name.",
   "construct",  "Construct",
     "What is being measured, across instruments."
 )
@@ -95,10 +95,10 @@ cat(glue(
 library(irw)
 
 irw_collections()                    # what exists: kind, definition, coverage, size
-tabs <- irw_collection("depression") # 70 table names, and a note on coverage
+tabs <- irw_collection("depression") # table names, and a note on coverage
 
 # Narrow to a modellable corpus. Note irw_filter()'s default density = c(0.5, 1),
-# which is why 70 becomes 32 rather than the 41 that pass on sample size alone.
+# which drops more tables than the sample-size cut alone would.
 tabs <- irw_filter(collection = "depression", n_participants = c(500, Inf))
 
 dat <- irw_fetch(tabs)               # named list, one long-format table each
@@ -150,21 +150,9 @@ m[m.basis.str.startswith("wording")]
 #| results: asis
 cat('
 <style>
-.coll-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 2rem; }
-@media (max-width: 768px) { .coll-grid { grid-template-columns: 1fr; } }
-.coll-card { border: 1px solid #dee2e6; border-left: 4px solid #2780e3; border-radius: 6px;
-  padding: 1rem 1.25rem; background: #fff; transition: box-shadow 0.15s;
-  display: flex; flex-direction: column; }
-.coll-card.partial { border-left-color: #c98a30; }
-.coll-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-.coll-name { font-family: var(--bs-font-monospace, monospace); font-size: 0.95rem;
-  font-weight: 600; color: #212529; margin-bottom: 0.15rem; }
-.coll-label { font-size: 0.8rem; color: #6c757d; margin-bottom: 0.5rem; }
-.coll-desc { font-size: 0.85rem; color: #495057; flex: 1; line-height: 1.5; margin-bottom: 0.75rem; }
-.coll-foot { margin-top: auto; padding-top: 0.6rem; display: flex; flex-wrap: wrap;
-  gap: 0.5rem; align-items: baseline; }
-.coll-n { font-size: 0.85rem; font-weight: 600; color: #212529; }
-.coll-cov { font-size: 0.72rem; padding: 0.12rem 0.5rem; border-radius: 100px;
+.coll-code { font-family: var(--bs-font-monospace, monospace); font-size: 0.85rem; font-weight: 400; color: #6c757d; margin-left: 0.5rem; }
+.coll-n { font-weight: 600; color: #212529; }
+.coll-cov { font-size: 0.72rem; padding: 0.12rem 0.5rem; border-radius: 100px; margin-left: 0.4rem;
   background: #e8f1fb; color: #1a5c9e; white-space: nowrap; }
 .coll-cov.partial { background: #f6ead6; color: #8f5410; }
 .coll-cov.curated { background: #eceef0; color: #495057; }
@@ -279,7 +267,7 @@ for (k in KIND_META$kind) {
   if (nrow(rows) == 0) next
 
   cat(glue('\n## {meta$heading}\n\n{meta$blurb}\n\n'))
-  cat('<div class="coll-grid">\n')
+  cat('<div class="entry-list">\n')
 
   for (i in seq_len(nrow(rows))) {
     r <- rows[i, ]
@@ -300,13 +288,11 @@ for (k in KIND_META$kind) {
       TRUE                               ~ ""
     )
     cat(as.character(HTML(glue(
-      '<div class="coll-card{if (partial) " partial" else ""}">',
-      '<div class="coll-name">{r$collection}</div>',
-      '<div class="coll-label">{r$label}</div>',
-      '<div class="coll-desc">{htmlEscape(desc)}</div>',
-      '<div class="coll-foot">',
-      '<span class="coll-n">{r$n_tables} tables</span>',
-      '<span class="coll-cov {cov_cls}">{cov_txt}</span>',
+      '<div class="entry entry-static"><div class="entry-row">',
+      '<span class="entry-title">{r$label}<span class="coll-code">{r$collection}</span></span>',
+      '<span class="entry-teaser">{htmlEscape(desc)}</span>',
+      '<span class="entry-meta"><span class="coll-n">{r$n_tables} tables</span>',
+      '<span class="coll-cov {cov_cls}">{cov_txt}</span></span>',
       '</div></div>\n'
     ))))
   }

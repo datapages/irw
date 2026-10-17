@@ -33,7 +33,8 @@ SHARD_REF <- c(
   item_response_warehouse_3 = "item_response_warehouse_3:5xaj",
   item_response_warehouse_4 = "item_response_warehouse_4:980f",
   item_response_warehouse_5 = "item_response_warehouse_5:3ykx",
-  item_response_warehouse_6 = "item_response_warehouse_6:fpe6"
+  item_response_warehouse_6 = "item_response_warehouse_6:fpe6",
+  item_response_warehouse_7 = "item_response_warehouse_7:ej0d"
 )
 
 # The non-core sources get pages too (ben-domingue/irw#2453, decided 2026-09-26).
@@ -44,13 +45,28 @@ SHARD_REF <- c(
 # Conjoint (irw_conjoint, ben-domingue/irw#2887) has no item/resp either: its
 # metadata counts respondents, tasks and profiles, and carries design fields
 # (country, languages, randomization restrictions) plus a conj_outcomes table.
+# Rankings (irw_rank, ben-domingue/irw#3024) keeps the core column names, but
+# resp is a position and a repeated id x item is a duplicate mark; its
+# rank_metadata carries the design record (method, seats, positions, ballots
+# cast and with marks). `optional` = TRUE: the family's tables were released
+# before rank_metadata reached irw_meta (pipeline stage 18, irw#3029), so the
+# emitter skips the family, with a message, while the table is absent instead
+# of failing the publish. The other families' tables are required.
 NONCORE <- data.frame(
-  dataset = c("irw_simsyn",      "irw_competitions",      "irw_nominal",      "irw_conjoint"),
-  ref     = c("irw_simsyn:0btg", "irw_competitions:cmd7", "irw_nominal:614n", "irw_conjoint:5wjx"),
-  prefix  = c("simsyn",          "comps",                 "nominal",          "conj"),
-  source  = c("sim",             "comp",                  "nom",              "conj"),
+  dataset  = c("irw_simsyn",      "irw_competitions",      "irw_nominal",      "irw_conjoint",      "irw_rank"),
+  ref      = c("irw_simsyn:0btg", "irw_competitions:cmd7", "irw_nominal:614n", "irw_conjoint:5wjx", "irw_rank:93f5"),
+  prefix   = c("simsyn",          "comps",                 "nominal",          "conj",              "rank"),
+  source   = c("sim",             "comp",                  "nom",              "conj",              "rank"),
+  optional = c(FALSE,             FALSE,                   FALSE,              FALSE,               TRUE),
   stringsAsFactors = FALSE)
-PAGE_REF <- c(SHARD_REF, setNames(NONCORE$ref, NONCORE$dataset))
+# Conjoint is split across shards, because Redivis caps a dataset at 1,000
+# tables (ben-domingue/irw#2934; new tables go to the newest shard). irw_meta's
+# conj_metadata has one row per table and no shard column, so the emitter gives
+# each conj table the newest shard that lists it -- the packages resolve a name
+# the same way. NONCORE keeps only the first shard, so conj_metadata is read once.
+CONJ_SHARDS <- c(irw_conjoint = "irw_conjoint:5wjx", irw_conjoint_2 = "irw_conjoint_2:142p")
+PAGE_REF <- c(SHARD_REF, setNames(NONCORE$ref, NONCORE$dataset),
+              CONJ_SHARDS[setdiff(names(CONJ_SHARDS), NONCORE$dataset)])
 
 # The dictionary Sheets are hand-edited, so "missing" arrives in several spellings:
 # a real NA, an empty cell, or the literal text "NA" / "N/A" / "NULL". All of them

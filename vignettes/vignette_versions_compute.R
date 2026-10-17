@@ -129,6 +129,10 @@ VIGNETTE_DIR <- "vignettes"
 # reflects the last run that fed it.
 CACHES <- list(
   "2pl_across_datasets"    = "2pldata/2pl_across_datasets_results.rds",
+  "bits_per_item"          = c("bits_per_item_data/bits_per_item_results.rds",
+                               "bits_per_item_data/sufficiency_results.rds",
+                               "bits_per_item_data/poly_results.rds",
+                               "bits_per_item_data/poly_extra_results.rds"),
   "asymmetric_irt"         = c("asymmetric_irt_data/asymmetric_irt_results.rds",
                                "asymmetric_irt_data/convergence_sim.rds",
                                "asymmetric_irt_data/example_itemfit.rds",
@@ -146,6 +150,7 @@ CACHES <- list(
                                "guessingdata/guessing_m_check.rds",
                                "guessingdata/guessing_imv_benchmark.rds"),
   "hf_reliability_paradox" = "hf_reliability/hf_reliability_results.rds",
+  "home_advantage"         = "home_advantage_data/home_advantage_results.rds",
   "intransitivity"         = "intransitivity_data/results.rds",
   "il_hte"                 = "ilhtedata/il_hte_results.rds",
   "item_text_difficulty"   = "itemtextdata/item_text_difficulty_results.rds",
