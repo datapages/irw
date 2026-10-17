@@ -54,6 +54,7 @@ MIN_TASKS     <- 500    # usable forced-choice tasks per table
 MAX_N         <- 5000   # downsample respondents/persons before fitting
 N_IRT         <- 200    # dichotomous core tables in the comparison
 N_WIDGET      <- 400    # HHY tasks shipped to the page's widget
+EXAMPLE_TABLE <- "hainmueller_2014_immigrant"   # the page's worked example
 PILOT         <- as.logical(Sys.getenv("CONJ_PILOT", "FALSE"))  # TRUE: a few tables for a draft page
 PILOT_N       <- 12
 
@@ -279,6 +280,12 @@ fit_conj <- function(tab) {
   q1 <- list(imv_attr = imv(mean_ll(y, p_base), mean_ll(y, p_attr)),
              w_base = w_of(mean_ll(y, p_base)), w_attr = w_of(mean_ll(y, p_attr)))
 
+  # The page walks through the IMV on one experiment, so keep that fit's
+  # held-out predictions. Same fit as the summary row, so the numbers agree.
+  if (identical(tab, EXAMPLE_TABLE))
+    saveRDS(data.table(id = t$id, task = t$task, y = y, p_base = p_base, p_attr = p_attr),
+            file.path(fits_dir, "example_pred.rds"))
+
   m <- conj_meta[table == tab]
   c(list(table = tab, n_resp = length(ids), n_tasks_used = nrow(t), n_attr = tf$n_attr,
          n_terms = ncol(D), restrictions = m$restrictions, country = m$country,
@@ -370,8 +377,15 @@ message("  IRT tables with results: ", nrow(irt_summary), " of ", nrow(irt_table
 titles <- conj_bib[, .(table, reference = Reference_x)]
 conj_summary <- merge(conj_summary, titles, by = "table", all.x = TRUE)
 
+example_pred <- local({
+  f <- file.path(fits_dir, "example_pred.rds")
+  if (file.exists(f)) as_tibble(readRDS(f))
+})
+
 saveRDS(list(
   hhy_amce         = as_tibble(hhy_amce),
+  example_table    = EXAMPLE_TABLE,
+  example_pred     = example_pred,
   widget_tasks     = as_tibble(widget_tasks),
   support          = support,
   summary          = as_tibble(conj_summary),

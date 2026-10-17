@@ -49,6 +49,8 @@ if (cache_ok) {
   widget_tasks     <- .cache$widget_tasks
   support          <- .cache$support
   candidate_tables <- .cache$candidate_tables
+  example_pred     <- .cache$example_pred
+  example_table    <- .cache$example_table
   date_run         <- .cache$date_run
   is_pilot         <- isTRUE(.cache$pilot)
   r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
@@ -73,6 +75,9 @@ if (cache_ok) {
   support <- tibble(attribute = character(), level = character(), other = character(),
                     other_levels = list())
   candidate_tables <- character()
+  example_pred     <- tibble(id = integer(), task = integer(), y = numeric(),
+                             p_base = numeric(), p_attr = numeric())
+  example_table    <- "hainmueller_2014_immigrant"
   date_run         <- Sys.Date()
   is_pilot         <- FALSE
   r_all_candidates <- 0L
@@ -458,6 +463,82 @@ without a login.
 
 ## Results
 
+### The experiment you just took
+
+Start with the one experiment the widget uses. Fitting the model above to
+`hainmueller_2014_immigrant` -- on four fifths of the 1,396 respondents at a
+time, predicting the fifth left out -- gives a held-out probability for each of
+its `r format(nrow(example_pred), big.mark = ",")` tasks: the chance that this
+respondent, whose choices the model never saw, picked the first of the two
+applicants. The model is often fairly sure. Its predictions run from
+`r round(100 * quantile(example_pred$p_attr, 0.05))`% to
+`r round(100 * quantile(example_pred$p_attr, 0.95))`% at the fifth and
+ninety-fifth percentiles, and across that range they are about right.
+
+```{r}
+#| label: fig-example-cal
+#| fig-cap: "Held-out predictions for `hainmueller_2014_immigrant`, grouped into ten equal bins: the model's average predicted probability that the first applicant was admitted against the share of those tasks in which the respondent did admit them. Points on the diagonal are predictions that come true at the rate claimed. Point size is the number of tasks in the bin."
+
+cal <- example_pred |>
+  mutate(bin = ntile(p_attr, 10)) |>
+  group_by(bin) |>
+  summarise(pred = mean(p_attr), obs = mean(y), n = n())
+
+ggplot(cal, aes(pred, obs)) +
+  geom_abline(linetype = "dashed", colour = irw_grey) +
+  geom_point(aes(size = n), colour = irw_blue, alpha = 0.8) +
+  scale_size_area(max_size = 5, guide = "none") +
+  coord_fixed(xlim = c(0, 1), ylim = c(0, 1)) +
+  labs(x = "Predicted chance the first applicant is admitted",
+       y = "Share actually admitted")
+```
+
+To turn that into one number we compare two predictions of the same held-out
+choices: the attribute model, and a coin weighted to the share of
+first-applicant choices in the training respondents. The IMV converts each
+model's average log-likelihood into the accuracy of a weighted coin that would
+earn it, and reports the relative gain.
+
+```{r}
+#| label: example-imv
+#| echo: true
+
+mean_ll <- function(y, p) mean(y * log(p) + (1 - y) * log(1 - p))
+
+# The accuracy w of a coin whose log-likelihood matches this model's.
+w_of <- function(ll) {
+  if (ll <= log(0.5)) return(0.5)
+  uniroot(function(w) w * log(w) + (1 - w) * log(1 - w) - ll, c(0.5, 1 - 1e-12))$root
+}
+
+ll_base <- mean_ll(example_pred$y, example_pred$p_base)   # weighted coin
+ll_attr <- mean_ll(example_pred$y, example_pred$p_attr)   # attribute model
+w_base  <- w_of(ll_base)
+w_attr  <- w_of(ll_attr)
+imv     <- (w_attr - w_base) / w_base
+c(ll_base = ll_base, ll_attr = ll_attr, w_base = w_base, w_attr = w_attr, imv = imv)
+```
+
+```{r}
+#| label: example-numbers
+#| echo: false
+
+ex_pct <- mean(summary_df$imv_attr < summary_df$imv_attr[summary_df$table == example_table])
+```
+
+The applicants' attributes are randomized, so the coin is right
+`r round(100 * w_base)`% of the time -- which is what makes a conjoint a clean
+test. The attribute model predicts these choices like a coin that comes up
+right `r round(100 * w_attr, 1)`% of the time, and the IMV is the gain over the
+baseline on that scale: `r sprintf("%.2f", imv)`. Nine attributes, none of which
+moves the average chance of admission by more than
+`r round(max(abs(hhy_amce$published_amce)), 2)`, together carry half again as
+much predictive accuracy as knowing nothing at all.
+
+That is a lot, and this experiment is not typical:
+`r round(100 * ex_pct)`% of the conjoint experiments in IRW come out below it.
+
+
 ```{r}
 #| label: q1-numbers
 #| echo: false
@@ -491,13 +572,21 @@ another, and the two appear to cancel.
 
 ```{r}
 #| label: fig-q1
-#| fig-cap: "Held-out IMV of the attribute model over a coin flip, one point per experiment, by the number of attributes in the design. The dashed line marks the median. Hover for the table."
+#| fig-cap: "Held-out IMV of the attribute model over a coin flip, one point per experiment, by the number of attributes in the design. The dashed line marks the median, the red point the Hainmueller, Hopkins & Yamamoto experiment above. Hover for the table."
 
+q1_ex <- q1 |> filter(table == example_table)
 p1 <- ggplot(q1, aes(n_attr, imv_attr,
                      text = paste0(table, "<br>IMV = ", round(imv_attr, 3),
                                    "<br>attributes: ", n_attr, "<br>usable tasks: ", n_tasks_used))) +
   geom_jitter(width = 0.15, height = 0, colour = irw_blue, alpha = 0.7, size = 2) +
   geom_hline(yintercept = q1_med, linetype = "dashed", colour = irw_grey) +
+  geom_point(data = q1_ex, colour = irw_red, size = 3.5) +
+  geom_segment(data = q1_ex, aes(x = n_attr + 0.8, y = imv_attr + 0.02,
+                                 xend = n_attr + 5, yend = imv_attr + 0.12),
+               colour = irw_red, linewidth = 0.4) +
+  geom_text(data = q1_ex, aes(x = n_attr + 10, y = imv_attr + 0.14,
+                              label = "the experiment above"),
+            colour = irw_red, size = 3.5) +
   labs(x = "Number of attributes", y = "IMV, attributes over a coin flip")
 ggplotly(p1, tooltip = "text")
 ```
