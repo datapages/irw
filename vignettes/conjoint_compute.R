@@ -62,8 +62,11 @@ EXAMPLE_TABLE <- "hainmueller_2014_immigrant"   # the page's worked example
 # card (short level labels, a handful of attributes) and to spread across the
 # range of results: the flour experiment is the most predictable in IRW, the
 # candidate experiment among the least.
+# Order is the menu order on the page: the two evocative designs first, the
+# near-null candidate design third, and the price-driven flour last, so the
+# reader ends on the experiment whose attributes explain the most.
 WIDGET_TABLES <- c("hainmueller_2014_immigrant", "tellez_2021_peace_packages",
-                   "chen_2025_bere_barley_scot", "laterzotingley_2024_crime_national")
+                   "laterzotingley_2024_crime_national", "chen_2025_bere_barley_scot")
 
 # Reference level per attribute, against which the others are measured. HHY's
 # come from the published table; the rest are set here so that the comparison

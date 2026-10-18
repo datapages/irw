@@ -175,12 +175,12 @@ widget_info <- tribble(
   "tellez_2021_peace_packages",
     "Terms for the Colombian peace agreement with the FARC",
     "Which peace agreement would you vote for?", "Agreement",
-  "chen_2025_bere_barley_scot",
-    "Packs of barley flour in Scottish shops",
-    "Which pack would you buy?", "Pack",
   "laterzotingley_2024_crime_national",
     "Democratic candidates for state office",
-    "Which candidate would you vote for?", "Candidate")
+    "Which candidate would you vote for?", "Candidate",
+  "chen_2025_bere_barley_scot",
+    "Packs of barley flour in Scottish shops",
+    "Which pack would you buy?", "Pack")
 
 pretty_attr <- function(a) {
   x <- gsub("_", " ", sub("^attr_", "", a))
@@ -256,9 +256,9 @@ The easiest way to see how this works is to take part in one. The card below
 deals real pairs from four IRW experiments, and the menu switches between them:
 immigrants applying for admission to the United States
 [@Hainmueller_2014], packages of terms for Colombia's peace agreement with the
-FARC [@Tellez_2021], packs of barley flour in Scottish shops
-[@https://doi.org/10.5281/zenodo.15420092], and Democratic candidates for state office
-[@Laterzo_Tingley_2024]. Each time, choose the one you would pick. After each
+FARC [@Tellez_2021], Democratic candidates for state office
+[@Laterzo_Tingley_2024], and packs of barley flour in Scottish shops
+[@https://doi.org/10.5281/zenodo.15420092]. Each time, choose the one you would pick. After each
 choice you will see what the person who actually saw that pair chose, and the
 chart below the card turns your choices into AMCEs and sets them against the
 estimates from everybody who took that experiment. Your choices are kept per
@@ -266,10 +266,10 @@ experiment, so you can switch and come back.
 
 The four are readable as a card -- a handful of attributes, short labels -- and
 they differ in how much their attributes turn out to explain, which is what the
-rest of the page is about. Taking two of them back to back is the quickest way
-to feel that difference: in the flour experiment the price alone nearly settles
-the choice, while in the candidate experiment nothing printed on the card moves
-it much.
+rest of the page is about. Taking the last two back to back is the quickest way
+to feel that difference: in the candidate experiment nothing printed on the
+card moves the choice much, while in the flour experiment the price alone
+nearly settles it.
 
 ```{r}
 #| label: widget-data
@@ -466,7 +466,8 @@ w_mine = {
   const note = n < 5
     ? `Make at least five choices to see your estimates (${n} so far).`
     : `Your estimates from ${n} choices (red, ±2 SE) against ${w_info.ref_label} (blue, ±2 SE)` +
-      (cor !== null && isFinite(cor) ? `. Across the ${mine.length} levels you have estimates for, the two correlate at r = ${cor.toFixed(2)}.` : ".");
+      (cor !== null && isFinite(cor) ? `. Across the ${mine.length} levels you have estimates for, the two correlate at r = ${cor.toFixed(2)}` : "") +
+      ". The reference is defined per experiment, so compare bars within one experiment rather than across the menu.";
   const m = Math.min(1, Math.max(0.5, 1.1 * w_info.ref_max));
   // room for the longest row label, which varies a lot between experiments
   const marginLeft = Math.min(340, Math.max(180, 6.4 * d3.max(rows, r => r.length)));
@@ -544,9 +545,9 @@ difference the study was built to find and the kind this page's model is
 deliberately blind to. The question here is a narrow one -- what do the
 printed attributes alone buy you against a stranger's choice -- and for a pair
 of Democratic candidates who differ on five features, the honest answer is
-nothing. Taking a few of these pairs after the flour makes the contrast
-concrete: there you could feel yourself deciding on price, here you are
-guessing.
+nothing. Taking a few of these pairs and then switching to the flour makes
+the contrast concrete: here you are guessing, there you can feel yourself
+deciding on price.
 
 ```{r}
 #| label: hhy-check
@@ -760,8 +761,8 @@ another, and the two appear to cancel.
 q1_widget <- q1 |>
   filter(table %in% widget_tables) |>
   left_join(tibble(table = c("hainmueller_2014_immigrant", "tellez_2021_peace_packages",
-                             "chen_2025_bere_barley_scot", "laterzotingley_2024_crime_national"),
-                   tag = c("immigrants", "peace agreements", "barley flour", "candidates")),
+                             "laterzotingley_2024_crime_national", "chen_2025_bere_barley_scot"),
+                   tag = c("immigrants", "peace agreements", "candidates", "barley flour")),
             by = "table")
 p1 <- ggplot(q1, aes(n_attr, imv_attr,
                      text = paste0(table, "<br>IMV = ", round(imv_attr, 3),
