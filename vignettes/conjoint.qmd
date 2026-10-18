@@ -46,8 +46,13 @@ if (cache_ok) {
   summary_df       <- .cache$summary
   irt_df           <- .cache$irt_summary
   hhy_amce         <- .cache$hhy_amce
+  widget_tables    <- .cache$widget_tables
   widget_tasks     <- .cache$widget_tasks
-  support          <- .cache$support
+  widget_levels    <- .cache$widget_levels
+  widget_ref       <- .cache$widget_ref
+  widget_support   <- .cache$widget_support
+  widget_meta      <- .cache$widget_meta
+  cand_race        <- .cache$cand_race
   candidate_tables <- .cache$candidate_tables
   example_pred     <- .cache$example_pred
   example_table    <- .cache$example_table
@@ -71,9 +76,18 @@ if (cache_ok) {
   hhy_amce <- tibble(attribute = character(), level = character(), baseline = logical(),
                      published_amce = numeric(), published_se = numeric(),
                      irw_amce = numeric(), irw_se = numeric(), dim = numeric())
-  widget_tasks <- tibble(task_key = integer(), profile = integer(), choice = integer())
-  support <- tibble(attribute = character(), level = character(), other = character(),
-                    other_levels = list())
+  widget_tables  <- "hainmueller_2014_immigrant"
+  widget_tasks   <- tibble(table = character(), task_key = integer(), profile = integer(),
+                           choice = integer(), attribute = character(), value = character())
+  widget_levels  <- tibble(table = character(), attribute = character(), ord_attr = integer(),
+                           level = character(), ord_level = integer(), baseline = logical())
+  widget_ref     <- tibble(table = character(), attribute = character(), level = character(),
+                           ref = numeric(), ref_se = numeric())
+  widget_support <- tibble(table = character(), attribute = character(), level = character(),
+                           other = character(), other_levels = list())
+  widget_meta    <- tibble(table = character(), n_resp = integer(), n_tasks_used = integer(),
+                           n_tasks_widget = integer(), n_attr = integer())
+  cand_race      <- tibble(party = character(), n_resp = integer(), d = numeric(), se = numeric())
   candidate_tables <- character()
   example_pred     <- tibble(id = integer(), task = integer(), y = numeric(),
                              p_base = numeric(), p_attr = numeric())
@@ -87,55 +101,97 @@ if (cache_ok) {
   r_n_tables_run   <- 0L
 }
 
-# Display names for the Hainmueller, Hopkins & Yamamoto attributes and levels,
-# in the order the paper lists them (the first level of each is the baseline).
-hhy_labels <- list(
-  attr_education = c("No formal education" = "No formal education",
+# ---- display text for the widget's experiments -------------------------------
+# The compute script ships the data; the words are here. Attribute names are
+# spelled out, and the chart's axis uses a short label wherever a card's text is
+# too long for it. Anything not listed is prettified from the column name or
+# shown exactly as the table holds it.
+
+attr_labels <- list(
+  hainmueller_2014_immigrant = c(attr_education = "Education", attr_gender = "Gender",
+    attr_origin = "Country of origin", attr_application_reason = "Reason for applying",
+    attr_profession = "Profession", attr_job_experience = "Job experience",
+    attr_job_plans = "Job plans", attr_prior_trips = "Prior trips to the U.S.",
+    attr_language = "Language skills"),
+  tellez_2021_peace_packages = c(attr_land = "Land transfer",
+    attr_elections = "FARC in elections", attr_reintegration = "Support for ex-combatants",
+    attr_justice = "Jail time", attr_reparation = "Reparations",
+    attr_drug_policy = "Coca policy"),
+  chen_2025_bere_barley_scot = c(attr_ingredient = "Flour", attr_nutritional_value = "Nutritional value",
+    attr_label = "Nutrition label", attr_access = "Where it is sold",
+    attr_place_of_production = "Where it is grown", attr_cost_per_pack = "Price per pack"),
+  laterzotingley_2024_crime_national = c(attr_gender = "Gender", attr_race = "Race",
+    attr_tax = "Tax policy", attr_public_security = "Public security",
+    attr_education_policy = "Education policy"))
+
+# Short axis labels, where the card's own text is too long for the chart.
+level_labels <- list(
+  hainmueller_2014_immigrant = c(
     "Equivalent to completing fourth grade in the US" = "4th grade",
     "Equivalent to completing eighth grade in the US" = "8th grade",
     "Equivalent to completing high school in the US" = "High school",
     "Equivalent to completing two years of college in the US" = "Two years of college",
     "Equivalent to completing a college degree in the US" = "College degree",
-    "Equivalent to completing a graduate degree in the US" = "Graduate degree"),
-  attr_gender = c("female" = "Female", "male" = "Male"),
-  attr_origin = c("Germany" = "Germany", "France" = "France", "Mexico" = "Mexico",
-    "Philippines" = "Philippines", "Poland" = "Poland", "India" = "India", "China" = "China",
-    "Sudan" = "Sudan", "Somalia" = "Somalia", "Iraq" = "Iraq"),
-  attr_application_reason = c("Reunite with family members already in the U.S." = "Reunite with family",
+    "Equivalent to completing a graduate degree in the US" = "Graduate degree",
+    "female" = "Female", "male" = "Male",
+    "Reunite with family members already in the U.S." = "Reunite with family",
     "Seek better job in U.S." = "Seek a better job",
-    "Escape political/religious persecution" = "Escape persecution"),
-  attr_profession = c("Janitor" = "Janitor", "Waiter" = "Waiter",
-    "Child care provider" = "Child care provider", "Gardener" = "Gardener",
-    "Financial analyst" = "Financial analyst", "Construction worker" = "Construction worker",
-    "Teacher" = "Teacher", "Computer programmer" = "Computer programmer", "Nurse" = "Nurse",
-    "Research scientist" = "Research scientist", "Doctor" = "Doctor"),
-  attr_job_experience = c("No job training or prior experience" = "None",
+    "Escape political/religious persecution" = "Escape persecution",
+    "No job training or prior experience" = "None",
     "One or two years of job training and experience" = "1-2 years",
     "Three to five years of job training and experience" = "3-5 years",
-    "More than five years of job training and experience" = "More than 5 years"),
-  attr_job_plans = c("Has a contract with a U.S. employer" = "Contract with U.S. employer",
+    "More than five years of job training and experience" = "More than 5 years",
+    "Has a contract with a U.S. employer" = "Contract with U.S. employer",
     "Does not have a contract with a U.S. employer but has done job interviews" = "Interviews, no contract",
     "Will look for work after arriving in the U.S." = "Will look for work",
-    "Has no plans to look for work at this time" = "No plans to look for work"),
-  attr_prior_trips = c("Never been to the U.S." = "Never",
+    "Has no plans to look for work at this time" = "No plans to look for work",
+    "Never been to the U.S." = "Never",
     "Entered U.S. once before on a tourist visa" = "Once, tourist visa",
     "Has visited the U.S. many times before on tourist visas" = "Many times, tourist visas",
     "Spent six months with family members in the U.S" = "Six months with family",
-    "Entered the U.S. once before without legal authorization" = "Once, without authorization"),
-  attr_language = c("During the admission interview, this applicant spoke fluent English" = "Fluent English",
+    "Entered the U.S. once before without legal authorization" = "Once, without authorization",
+    "During the admission interview, this applicant spoke fluent English" = "Fluent English",
     "During admission interview, this applicant spoke broken English" = "Broken English",
     "During admission interview, this applicant tried to speak English but was unable" = "Tried English, unable",
-    "During admission interview, this applicant spoke [language] and used an interpreter" = "Used an interpreter"))
-hhy_attr_names <- c(attr_education = "Education", attr_gender = "Gender",
-  attr_origin = "Country of origin", attr_application_reason = "Reason for applying",
-  attr_profession = "Profession", attr_job_experience = "Job experience",
-  attr_job_plans = "Job plans", attr_prior_trips = "Prior trips to the U.S.",
-  attr_language = "Language skills")
+    "During admission interview, this applicant spoke [language] and used an interpreter" = "Used an interpreter"),
+  chen_2025_bere_barley_scot = c("Label" = "Label shown", "No lebel" = "No label",
+    "Locally (neighbouring region)" = "Locally", "Short food supply chain" = "Direct from the grower",
+    "Commercial grocery shop" = "Supermarket", "Speciality food shop" = "Speciality shop"))
 
-level_key <- bind_rows(lapply(names(hhy_labels), function(a)
-  tibble(attribute = a, attr_label = hhy_attr_names[[a]], level = names(hhy_labels[[a]]),
-         short = unname(hhy_labels[[a]]), order_in_attr = seq_along(hhy_labels[[a]]))))
-level_key$row <- seq_len(nrow(level_key))
+# What a card says, where the table's own text needs help: a placeholder in the
+# immigration table, a typo in the flour table.
+card_labels <- list(
+  chen_2025_bere_barley_scot = c("No lebel" = "No label",
+    "Label" = "Nutrition label on the pack"))
+card_fix <- function(x) sub("[language]", "a language other than English", x, fixed = TRUE)
+
+# One row per experiment: the menu entry, the question the card asks, and what
+# one profile is called.
+widget_info <- tribble(
+  ~table, ~label, ~question, ~noun,
+  "hainmueller_2014_immigrant",
+    "Immigrants applying for admission to the United States",
+    "Which applicant would you admit to the United States?", "Applicant",
+  "tellez_2021_peace_packages",
+    "Terms for the Colombian peace agreement with the FARC",
+    "Which peace agreement would you vote for?", "Agreement",
+  "laterzotingley_2024_crime_national",
+    "Democratic candidates for state office",
+    "Which candidate would you vote for?", "Candidate",
+  "chen_2025_bere_barley_scot",
+    "Packs of barley flour in Scottish shops",
+    "Which pack would you buy?", "Pack")
+
+pretty_attr <- function(a) {
+  x <- gsub("_", " ", sub("^attr_", "", a))
+  paste0(toupper(substr(x, 1, 1)), substr(x, 2, nchar(x)))
+}
+# A lookup into one of the lists above, falling back per element.
+lk <- function(lst, tb, key, default) {
+  m <- lst[[tb]]
+  got <- if (is.null(m)) rep(NA_character_, length(key)) else unname(m[key])
+  ifelse(is.na(got), default, got)
+}
 
 knitr::opts_chunk$set(eval = cache_ok)
 ```
@@ -196,98 +252,168 @@ component effect* or AMCE [@Hainmueller_2014]. The design is popular in
 political science because it lets one experiment estimate the effects of many
 attributes at once.
 
-The easiest way to see how this works is to take part in one. The pairs below
-are real tasks from Hainmueller, Hopkins & Yamamoto's (2014) study of
-immigrant admission, in which 1,396 Americans each compared five pairs of
-applicants. Each time, choose the applicant you would admit. After each
-choice you will see what the person who actually saw that pair chose, and
-the chart below the cards turns your choices into AMCEs and sets them against
-the published ones.
+The easiest way to see how this works is to take part in one. The card below
+deals real pairs from four IRW experiments, and the menu switches between them:
+immigrants applying for admission to the United States
+[@Hainmueller_2014], packages of terms for Colombia's peace agreement with the
+FARC [@Tellez_2021], Democratic candidates for state office
+[@Laterzo_Tingley_2024], and packs of barley flour in Scottish shops
+[@https://doi.org/10.5281/zenodo.15420092]. Each time, choose the one you would pick. After each
+choice you will see what the person who actually saw that pair chose, and the
+chart below the card turns your choices into AMCEs and sets them against the
+estimates from everybody who took that experiment. Your choices are kept per
+experiment, so you can switch and come back.
+
+The four are readable as a card -- a handful of attributes, short labels -- and
+they differ in how much their attributes turn out to explain, which is what the
+rest of the page is about. Taking the last two back to back is the quickest way
+to feel that difference: in the candidate experiment nothing printed on the
+card moves the choice much, while in the flour experiment the price alone
+nearly settles it.
 
 ```{r}
 #| label: widget-data
 #| echo: false
 
-w_tasks <- widget_tasks
-for (a in names(hhy_labels)) {
-  w_tasks[[a]] <- sub("[language]", "a language other than English", w_tasks[[a]], fixed = TRUE)
-}
-w_amce <- hhy_amce |>
-  inner_join(level_key, by = c("attribute", "level")) |>
-  arrange(row) |>
-  transmute(attribute, attr_label, level, short, baseline,
-            published = published_amce, published_se, row)
-w_support <- support |>
+w_levels <- bind_rows(lapply(widget_tables, function(tb) {
+  x <- widget_levels |> filter(table == tb)
+  x |> mutate(
+    attr_label = lk(attr_labels, tb, attribute, pretty_attr(attribute)),
+    card       = card_fix(lk(card_labels, tb, level, level)),
+    short      = card_fix(lk(level_labels, tb, level, card)))
+})) |>
+  arrange(table, ord_attr, ord_level) |>
+  group_by(table) |>
+  mutate(row = row_number()) |>
+  ungroup()
+
+w_support <- widget_support |>
   mutate(other = ifelse(is.na(other), "", other)) |>
   unnest_longer(other_levels, keep_empty = TRUE) |>
   mutate(other_levels = ifelse(is.na(other_levels), "", other_levels))
-w_attrs <- tibble(attribute = names(hhy_attr_names), label = unname(hhy_attr_names))
-ojs_define(w_tasks_r = w_tasks, w_amce_r = w_amce, w_support_r = w_support, w_attrs_r = w_attrs)
+
+w_info <- widget_info |>
+  inner_join(widget_meta, by = "table") |>
+  inner_join(widget_ref |> group_by(table) |> summarise(ref_max = max(abs(ref))), by = "table") |>
+  mutate(
+    n_resp_txt = format(n_resp, big.mark = ","),
+    x_label    = paste0("Change in the chance ",
+                        ifelse(grepl("^[AEIOU]", noun), "an ", "a "),
+                        tolower(noun), " is chosen"),
+    # HHY's reference points are the published AMCEs (which the IRW table
+    # reproduces exactly); every other experiment's are the same difference in
+    # choice rates the widget computes, taken over all of its respondents.
+    ref_label  = ifelse(table == example_table,
+                        paste0("the published AMCEs from ", n_resp_txt, " respondents"),
+                        paste0("the same estimates from all ", n_resp_txt, " respondents")),
+    is_example = table == example_table) |>
+  arrange(match(table, widget_tables))
+
+ojs_define(w_tasks_r = widget_tasks, w_ref_r = widget_ref, w_levels_r = w_levels,
+           w_support_r = w_support, w_info_r = w_info)
 ```
 
 ```{ojs}
 //| echo: false
 
-w_tasks   = transpose(w_tasks_r)
-w_amce    = transpose(w_amce_r)
-w_support = transpose(w_support_r)
-w_attrs   = transpose(w_attrs_r)
+w_tasks_all   = transpose(w_tasks_r)
+w_ref_all     = transpose(w_ref_r)
+w_levels_all  = transpose(w_levels_r)
+w_support_all = transpose(w_support_r)
+w_info_all    = transpose(w_info_r)
 
-// one entry per task: [profile 1, profile 2], in a random order for this reader
+viewof w_table = Inputs.select(w_info_all.map(d => d.table), {
+  label: "Experiment",
+  value: w_info_all[0].table,
+  width: 560,
+  format: t => w_info_all.find(d => d.table === t).label
+})
+```
+
+```{ojs}
+//| echo: false
+
+w_info   = w_info_all.find(d => d.table === w_table)
+w_levels = w_levels_all.filter(d => d.table === w_table)
+w_ref    = w_ref_all.filter(d => d.table === w_table)
+
+// the selected experiment's attributes, in the order the card lists them
+w_attrs = Array.from(d3.group(w_levels, d => d.attribute), ([a, v]) => ({
+  attribute: a, label: v[0].attr_label, ord: v[0].ord_attr
+})).sort((x, y) => x.ord - y.ord)
+
+// one entry per task: [profile 1, profile 2], each a map from attribute to
+// level, in a random order for this reader
 w_pairs = {
-  const by = d3.group(w_tasks, d => d.task_key);
-  const pairs = Array.from(by.values()).map(v => v.sort((a, b) => a.profile - b.profile));
+  const rows = w_tasks_all.filter(d => d.table === w_table);
+  const pairs = Array.from(d3.group(rows, d => d.task_key).values()).map(rs =>
+    Array.from(d3.group(rs, d => d.profile), ([pr, v]) => ({
+      profile: pr, choice: v[0].choice, vals: new Map(v.map(r => [r.attribute, r.value]))
+    })).sort((a, b) => a.profile - b.profile));
   return d3.shuffle(pairs.slice());
 }
 
-// for each non-baseline level: which values of the restricted partner attribute
-// it is compared over (empty = all), and the attribute's baseline level
+// the card's text for a level, and the chart's short label
+w_card  = new Map(w_levels.map(d => [d.attribute + "|" + d.level, d.card]))
+w_short = new Map(w_levels.map(d => [d.attribute + "|" + d.level, d.short]))
+w_base  = new Map(w_levels.filter(d => d.baseline).map(d => [d.attribute, d.level]))
+
+// for each non-baseline level: the restricted partner attributes, and which of
+// their values the level is compared over (a level with no restriction has none)
 w_rules = {
   const m = new Map();
-  for (const s of w_support) {
+  for (const s of w_support_all.filter(d => d.table === w_table && d.other !== "")) {
     const k = s.attribute + "|" + s.level;
-    if (!m.has(k)) m.set(k, {other: s.other, allowed: new Set()});
-    if (s.other_levels !== "") m.get(k).allowed.add(s.other_levels);
+    if (!m.has(k)) m.set(k, new Map());
+    const byOther = m.get(k);
+    if (!byOther.has(s.other)) byOther.set(s.other, new Set());
+    if (s.other_levels !== "") byOther.get(s.other).add(s.other_levels);
   }
   return m;
 }
-w_base = new Map(w_amce.filter(d => d.baseline).map(d => [d.attribute, d.level]))
+
+// Answers are kept per experiment, so switching away and back does not lose
+// them. This cell does not depend on the menu, so the store survives a switch.
+cj_store = new Map()
 ```
 
 ```{ojs}
 //| echo: false
 
 viewof w_answers = {
+  const tab = w_table, attrs = w_attrs, pairs = w_pairs, question = w_info.question;
   const el = html`<div class="cj-widget"></div>`;
-  el.value = [];
-  let i = 0, last = null;
+  if (!cj_store.has(tab)) cj_store.set(tab, []);
+  el.value = cj_store.get(tab);
+  let i = el.value.length, last = null;
   const cell = (txt) => html`<td style="padding:4px 10px;border-top:1px solid #ddd;">${txt}</td>`;
   function render() {
-    const pair = w_pairs[i % w_pairs.length];
+    const pair = pairs[i % pairs.length];
     const pick = (p) => {
       last = {mine: p, theirs: pair[0].choice === 1 ? 1 : 2};
       el.value = [...el.value, {pair, chosen: p}];
+      cj_store.set(tab, el.value);
       i += 1;
       el.dispatchEvent(new Event("input", {bubbles: true}));
       render();
     };
     const btn = (p) => {
-      const b = html`<button class="btn btn-outline-primary btn-sm">Admit applicant ${p}</button>`;
+      const b = html`<button class="btn btn-outline-primary btn-sm">Choose ${w_info.noun.toLowerCase()} ${p}</button>`;
       b.onclick = () => pick(p);
       return b;
     };
     const fb = last === null ? "" :
-      `On the last pair you chose applicant ${last.mine}; the respondent who saw it chose applicant ${last.theirs}` +
-      (last.mine === last.theirs ? " too." : ".");
+      `On the last pair you chose ${w_info.noun.toLowerCase()} ${last.mine}; the respondent who saw it chose ${last.theirs === last.mine ? "the same one." : `${w_info.noun.toLowerCase()} ${last.theirs}.`}`;
     const agree = el.value.filter(a => (a.pair[0].choice === 1 ? 1 : 2) === a.chosen).length;
     el.replaceChildren(html`<div>
-      <p style="margin-bottom:6px;"><strong>Pair ${i + 1}.</strong> Which applicant would you admit to the United States?</p>
+      <p style="margin-bottom:6px;"><strong>Pair ${i + 1}.</strong> ${question}</p>
       <table style="border-collapse:collapse;max-width:760px;width:100%;font-size:0.92em;">
-        <thead><tr><th></th><th style="padding:4px 10px;">Applicant 1</th><th style="padding:4px 10px;">Applicant 2</th></tr></thead>
-        <tbody>${w_attrs.map(a => html`<tr>${cell(html`<strong>${a.label}</strong>`)}${cell(pair[0][a.attribute])}${cell(pair[1][a.attribute])}</tr>`)}</tbody>
+        <thead><tr><th></th><th style="padding:4px 10px;">${w_info.noun} 1</th><th style="padding:4px 10px;">${w_info.noun} 2</th></tr></thead>
+        <tbody>${attrs.map(a => html`<tr>${cell(html`<strong>${a.label}</strong>`)}${
+          pair.map(pf => cell(w_card.get(a.attribute + "|" + pf.vals.get(a.attribute))))}</tr>`)}</tbody>
         <tfoot><tr><td></td><td style="padding:8px 10px;">${btn(1)}</td><td style="padding:8px 10px;">${btn(2)}</td></tr></tfoot>
       </table>
-      <p style="margin-top:6px;color:#555;font-size:0.9em;">${fb}${el.value.length ? ` You have made ${el.value.length} choice${el.value.length > 1 ? "s" : ""} and agreed with the original respondent on ${agree}.` : ""}</p>
+      <p style="margin-top:6px;color:#555;font-size:0.9em;">${fb}${el.value.length ? ` You have made ${el.value.length} choice${el.value.length > 1 ? "s" : ""} in this experiment and agreed with the original respondent on ${agree}.` : ""}</p>
     </div>`);
   }
   render();
@@ -298,22 +424,27 @@ viewof w_answers = {
 ```{ojs}
 //| echo: false
 
-// The reader's AMCEs: for each level, the share of profiles with that level the
-// reader chose, minus the share for the baseline level. For the two restricted
-// attributes the comparison is made only among profiles where both levels could
-// appear, which is what makes the simple difference an AMCE in this design.
+// The reader's estimates: for each level, the share of profiles with that level
+// the reader chose, minus the share for the baseline level. Where the design
+// restricted which profiles could appear, the comparison is made only among
+// profiles where both levels were possible, which is what makes the simple
+// difference an AMCE.
 w_mine = {
-  const profs = w_answers.flatMap(a => a.pair.map(p => ({...p, chosen: p.profile === a.chosen ? 1 : 0})));
-  return w_amce.filter(d => !d.baseline).map(d => {
-    const rule = w_rules.get(d.attribute + "|" + d.level);
-    const ok = p => !rule || rule.other === "" || rule.allowed.has(p[rule.other]);
-    const g1 = profs.filter(p => ok(p) && p[d.attribute] === d.level);
-    const g0 = profs.filter(p => ok(p) && p[d.attribute] === w_base.get(d.attribute));
-    if (!g1.length || !g0.length) return {...d, mine: null};
-    const r = g => (d3.sum(g, p => p.chosen) + 0.5) / (g.length + 1);
+  const profs = w_answers.flatMap(a => a.pair.map(p => ({vals: p.vals, chosen: p.profile === a.chosen ? 1 : 0})));
+  const ref = new Map(w_ref.map(d => [d.attribute + "|" + d.level, d]));
+  return w_levels.filter(d => !d.baseline).map(d => {
+    const key = d.attribute + "|" + d.level;
+    const rule = w_rules.get(key);
+    const ok = p => !rule || Array.from(rule).every(([z, allowed]) => allowed.has(p.vals.get(z)));
+    const g1 = profs.filter(p => ok(p) && p.vals.get(d.attribute) === d.level);
+    const g0 = profs.filter(p => ok(p) && p.vals.get(d.attribute) === w_base.get(d.attribute));
+    const r = ref.get(key);
+    const out = {...d, ref: r ? r.ref : null, ref_se: r ? r.ref_se : null};
+    if (!g1.length || !g0.length) return {...out, mine: null};
+    const sh = g => (d3.sum(g, p => p.chosen) + 0.5) / (g.length + 1);
     const est = d3.mean(g1, p => p.chosen) - d3.mean(g0, p => p.chosen);
-    const se = Math.sqrt(r(g1) * (1 - r(g1)) / g1.length + r(g0) * (1 - r(g0)) / g0.length);
-    return {...d, mine: est, lo: est - 2 * se, hi: est + 2 * se};
+    const se = Math.sqrt(sh(g1) * (1 - sh(g1)) / g1.length + sh(g0) * (1 - sh(g0)) / g0.length);
+    return {...out, mine: est, lo: est - 2 * se, hi: est + 2 * se};
   });
 }
 ```
@@ -323,35 +454,40 @@ w_mine = {
 
 {
   const n = w_answers.length;
-  const rows = w_amce.map(d => d.attr_label + ": " + d.short);
-  const pub = w_amce.filter(d => !d.baseline);
-  const base = w_amce.filter(d => d.baseline);
+  const lab = d => d.attr_label + ": " + d.short;
+  const rows = w_levels.map(lab);
+  const pub = w_mine.filter(d => d.ref !== null);
+  const base = w_levels.filter(d => d.baseline);
   const mine = w_mine.filter(d => d.mine !== null);
-  const xs = mine.map(d => d.mine), ys = mine.map(d => d.published);
+  const xs = mine.map(d => d.mine), ys = mine.map(d => d.ref);
   const mx = d3.mean(xs), my = d3.mean(ys);
   const cor = xs.length > 5 ? d3.sum(xs.map((x, i) => (x - mx) * (ys[i] - my))) /
     Math.sqrt(d3.sum(xs.map(x => (x - mx) ** 2)) * d3.sum(ys.map(y => (y - my) ** 2))) : null;
   const note = n < 5
     ? `Make at least five choices to see your estimates (${n} so far).`
-    : `Your estimates from ${n} choices (red, ±2 SE) against the published AMCEs from 1,396 respondents (blue, ±2 SE)` +
-      (cor !== null && isFinite(cor) ? `. Across the ${mine.length} levels you have estimates for, the two correlate at r = ${cor.toFixed(2)}.` : ".");
+    : `Your estimates from ${n} choices (red, ±2 SE) against ${w_info.ref_label} (blue, ±2 SE)` +
+      (cor !== null && isFinite(cor) ? `. Across the ${mine.length} levels you have estimates for, the two correlate at r = ${cor.toFixed(2)}` : "") +
+      ". The reference is defined per experiment, so compare bars within one experiment rather than across the menu.";
+  const m = Math.min(1, Math.max(0.5, 1.1 * w_info.ref_max));
+  // room for the longest row label, which varies a lot between experiments
+  const marginLeft = Math.min(340, Math.max(180, 6.4 * d3.max(rows, r => r.length)));
   const plot = Plot.plot({
-    width: 760,
+    width: Math.max(760, marginLeft + 440),
     height: 22 * rows.length + 40,
-    marginLeft: 260,
-    x: {label: "Change in the chance an applicant is chosen", domain: [-0.8, 0.8], grid: true},
+    marginLeft,
+    x: {label: w_info.x_label, domain: [-m, m], grid: true},
     clip: true,
     y: {domain: rows, label: null},
     marks: [
       Plot.ruleX([0], {stroke: "#999"}),
-      Plot.dot(base, {x: 0, y: d => d.attr_label + ": " + d.short, symbol: "diamond", fill: "white", stroke: "#333", strokeWidth: 1.5, r: 5, title: () => "Baseline level"}),
-      n >= 5 ? Plot.ruleY(mine, {y: d => d.attr_label + ": " + d.short, x1: "lo", x2: "hi", stroke: "#d73027", strokeOpacity: 0.5}) : null,
-      n >= 5 ? Plot.dot(mine, {x: "mine", y: d => d.attr_label + ": " + d.short, fill: "#d73027", r: 3.5,
-        title: d => `You: ${d.mine.toFixed(2)}\nPublished: ${d.published.toFixed(2)}`}) : null,
-      Plot.ruleY(pub, {y: d => d.attr_label + ": " + d.short, x1: d => d.published - 2 * d.published_se,
-        x2: d => d.published + 2 * d.published_se, stroke: "#2166ac", strokeWidth: 2}),
-      Plot.dot(pub, {x: "published", y: d => d.attr_label + ": " + d.short, fill: "#2166ac", r: 3.5,
-        title: d => `Published: ${d.published.toFixed(3)}`})
+      Plot.dot(base, {x: 0, y: lab, symbol: "diamond", fill: "white", stroke: "#333", strokeWidth: 1.5, r: 5, title: () => "Baseline level"}),
+      n >= 5 ? Plot.ruleY(mine, {y: lab, x1: "lo", x2: "hi", stroke: "#d73027", strokeOpacity: 0.5}) : null,
+      n >= 5 ? Plot.dot(mine, {x: "mine", y: lab, fill: "#d73027", r: 3.5,
+        title: d => `You: ${d.mine.toFixed(2)}\nAll respondents: ${d.ref.toFixed(2)}`}) : null,
+      Plot.ruleY(pub, {y: lab, x1: d => d.ref - 2 * d.ref_se, x2: d => d.ref + 2 * d.ref_se,
+        stroke: "#2166ac", strokeWidth: 2}),
+      Plot.dot(pub, {x: "ref", y: lab, fill: "#2166ac", r: 3.5,
+        title: d => `All respondents: ${d.ref.toFixed(3)}`})
     ]
   });
   return html`<div><p style="font-size:0.92em;color:#333;">${note}</p>${plot}</div>`;
@@ -360,12 +496,58 @@ w_mine = {
 
 Diamonds mark each attribute's baseline level, against which the others are
 measured. Two things stand out after ten or twenty choices. Your own estimates
-are noisy: the original respondents each made five choices, which is very
-little information about one person, while the published estimates are precise
-because they pool 1,396 people. And the published effects are modest next to
-that noise. None moves the chance of admission by more than
-`r round(max(abs(hhy_amce$published_amce)), 2)`, so no single attribute decides
-many of these choices on its own.
+are noisy: the original respondents each made about five choices, which is very
+little information about one person, while the reference estimates pool hundreds
+or thousands of people. And in three of the four experiments the pooled effects
+are modest next to that noise. In the immigration experiment none of them moves
+the chance of admission by more than
+`r round(max(abs(hhy_amce$published_amce)), 2)`. The flour is the exception:
+moving from the cheapest to the dearest pack costs it
+`r sprintf("%.2f", max(abs(widget_ref$ref[widget_ref$table == "chen_2025_bere_barley_scot"])))`
+of its chance of being bought, which you can see in your own estimates after a
+handful of choices.
+
+```{r}
+#| label: candidate-numbers
+#| echo: false
+
+cand_tab  <- "laterzotingley_2024_crime_national"
+cand_ref  <- widget_ref |> filter(table == cand_tab) |> mutate(z = abs(ref / ref_se))
+cand_best <- cand_ref |> slice_max(z, n = 1)
+cand_n    <- widget_meta |> filter(table == cand_tab)
+cand_p    <- function(p, f) cand_race |> filter(party == p) |> pull({{ f }})
+cand_sister <- summary_df |> filter(table == "laterzotingley_2024_crime_students")
+```
+
+The candidate experiment is the one where taking it tells you least, and that
+is worth a paragraph of its own. Five features of a Democratic candidate for
+state office -- gender, race, a tax position, a crime position, a schools
+position -- and across
+`r format(cand_n$n_tasks_used, big.mark = ",")` tasks only one of them is
+distinguishable from zero: a candidate who runs on prevention rather than on
+being tough on crime gains about
+`r sprintf("%.2f", cand_best$ref)` (SE `r sprintf("%.3f", cand_best$ref_se)`).
+That is why the red dot for this experiment sits at the bottom of the next
+figure. A model that knows the five features and nothing about the respondent
+predicts a held-out voter's choice no better than a coin, and the IMV scale
+floors there; the companion table from the same study, with student
+respondents,
+`r if (nrow(cand_sister) && cand_sister$imv_attr <= 0) "comes out at zero too" else sprintf("comes out at %.2f", cand_sister$imv_attr)`.
+
+The reading to avoid is that race or crime policy does not matter to these
+choices. The averages are small partly because respondents pull against each
+other: Democrats in this sample lean toward the Black candidate
+(`r sprintf("%+.2f", cand_p("Democrat", d))`, SE
+`r sprintf("%.2f", cand_p("Democrat", se))`) and independents away from them
+(`r sprintf("%+.2f", cand_p("Independent", d))`, SE
+`r sprintf("%.2f", cand_p("Independent", se))`), which is the kind of
+difference the study was built to find and the kind this page's model is
+deliberately blind to. The question here is a narrow one -- what do the
+printed attributes alone buy you against a stranger's choice -- and for a pair
+of Democratic candidates who differ on five features, the honest answer is
+nothing. Taking a few of these pairs and then switching to the flour makes
+the contrast concrete: here you are guessing, there you can feel yourself
+deciding on price.
 
 ```{r}
 #| label: hhy-check
@@ -463,9 +645,10 @@ without a login.
 
 ## Results
 
-### The experiment you just took
+### One experiment, worked through
 
-Start with the one experiment the widget uses. Fitting the model above to
+Start with one experiment, the immigration study the card opens on (the
+arithmetic below is for that one whichever you took). Fitting the model above to
 `hainmueller_2014_immigrant` -- on four fifths of the 1,396 respondents at a
 time, predicting the fifth left out -- gives a held-out probability for each of
 its `r format(nrow(example_pred), big.mark = ",")` tasks: the chance that this
@@ -572,23 +755,32 @@ another, and the two appear to cancel.
 
 ```{r}
 #| label: fig-q1
-#| fig-cap: "Held-out IMV of the attribute model over a coin flip, one point per experiment, by the number of attributes in the design. The dashed line marks the median, the red point the Hainmueller, Hopkins & Yamamoto experiment above. Hover for the table."
+#| fig-cap: "Held-out IMV of the attribute model over a coin flip, one point per experiment, by the number of attributes in the design. The dashed line marks the median. The red points are the four experiments the card above offers, which were picked to span this range. Hover for the table."
 
-q1_ex <- q1 |> filter(table == example_table)
+# The four experiments a reader can take, labelled in the words the menu uses.
+q1_widget <- q1 |>
+  filter(table %in% widget_tables) |>
+  left_join(tibble(table = c("hainmueller_2014_immigrant", "tellez_2021_peace_packages",
+                             "laterzotingley_2024_crime_national", "chen_2025_bere_barley_scot"),
+                   tag = c("immigrants", "peace agreements", "candidates", "barley flour")),
+            by = "table")
 p1 <- ggplot(q1, aes(n_attr, imv_attr,
                      text = paste0(table, "<br>IMV = ", round(imv_attr, 3),
                                    "<br>attributes: ", n_attr, "<br>usable tasks: ", n_tasks_used))) +
   geom_jitter(width = 0.15, height = 0, colour = irw_blue, alpha = 0.7, size = 2) +
   geom_hline(yintercept = q1_med, linetype = "dashed", colour = irw_grey) +
-  geom_point(data = q1_ex, colour = irw_red, size = 3.5) +
-  geom_segment(data = q1_ex, aes(x = n_attr + 0.8, y = imv_attr + 0.02,
-                                 xend = n_attr + 5, yend = imv_attr + 0.12),
-               colour = irw_red, linewidth = 0.4) +
-  geom_text(data = q1_ex, aes(x = n_attr + 10, y = imv_attr + 0.14,
-                              label = "the experiment above"),
-            colour = irw_red, size = 3.5) +
+  geom_point(data = q1_widget, colour = irw_red, size = 3.5) +
+  scale_x_continuous(expand = expansion(mult = c(0.03, 0.12))) +
   labs(x = "Number of attributes", y = "IMV, attributes over a coin flip")
-ggplotly(p1, tooltip = "text")
+
+# ggplotly centres geom_text, so the four tags are plotly annotations instead,
+# anchored to the right of their point.
+ggplotly(p1, tooltip = "text") |>
+  layout(annotations = lapply(seq_len(nrow(q1_widget)), function(i) list(
+    x = q1_widget$n_attr[i], y = q1_widget$imv_attr[i], text = q1_widget$tag[i],
+    xref = "x", yref = "y", xanchor = "left", yanchor = "middle", xshift = 8,
+    showarrow = FALSE, font = list(color = irw_red, size = 11),
+    bgcolor = "rgba(255,255,255,0.78)", borderpad = 1)))
 ```
 
 ### Against the item side of the warehouse
@@ -712,9 +904,13 @@ not of the method.
 - **One table left out.** `joo_2026_descriptive_rep` meets the criteria but is
   excluded: in its deposit every respondent's chosen candidate has the same
   position in all six tasks, so its outcomes do not line up with its profiles.
-- **The widget.** Its pairs are a random 400 of the 6,980 tasks, its estimator
-  is a simple difference in choice rates, and the published respondents are a
-  2012 sample of U.S. adults.
+- **The widget.** Each experiment ships a random 250 of its tasks, and the
+  estimator is a simple difference in choice rates rather than a model. Its
+  reference points are the published AMCEs for the immigration experiment and
+  the same simple difference over all respondents for the other three, whose
+  standard errors, unlike the published ones, ignore the clustering of tasks
+  within a respondent. The four experiments were chosen to be readable and to
+  spread across the range of results, so they are not a random sample of IRW.
 
 ## Reproducibility
 

@@ -11,7 +11,9 @@
 #
 # Three parts:
 #   A. Hainmueller, Hopkins & Yamamoto (2014): reproduce the published AMCEs
-#      from the IRW table and draw the task sample the page's widget uses.
+#      from the IRW table. Then pack the handful of experiments the page's
+#      widget offers: a task sample, the full-sample estimates to compare a
+#      reader's own choices against, and the design's restrictions.
 #   B. Every eligible conjoint table: held-out IMV of the attribute model over a
 #      coin flip at the base rate, holding out whole respondents.
 #   C. A random sample of dichotomous core IRW tables: held-out IMV of item
@@ -53,8 +55,85 @@ bib_file  <- file.path(out_dir, "references.bib")
 MIN_TASKS     <- 500    # usable forced-choice tasks per table
 MAX_N         <- 5000   # downsample respondents/persons before fitting
 N_IRT         <- 200    # dichotomous core tables in the comparison
-N_WIDGET      <- 400    # HHY tasks shipped to the page's widget
+N_WIDGET      <- 250    # tasks per experiment shipped to the page's widget
 EXAMPLE_TABLE <- "hainmueller_2014_immigrant"   # the page's worked example
+
+# The experiments a reader can take on the page. Chosen to be readable as a
+# card (short level labels, a handful of attributes) and to spread across the
+# range of results: the flour experiment is the most predictable in IRW, the
+# candidate experiment among the least.
+# Order is the menu order on the page: the two evocative designs first, the
+# near-null candidate design third, and the price-driven flour last, so the
+# reader ends on the experiment whose attributes explain the most.
+WIDGET_TABLES <- c("hainmueller_2014_immigrant", "tellez_2021_peace_packages",
+                   "laterzotingley_2024_crime_national", "chen_2025_bere_barley_scot")
+
+# Reference level per attribute, against which the others are measured. HHY's
+# come from the published table; the rest are set here so that the comparison
+# reads naturally (a policy's absence, the cheaper product, and so on).
+BASELINES <- list(
+  tellez_2021_peace_packages = c(
+    attr_land = "No transfer", attr_elections = "No electoral participation",
+    attr_reintegration = "No assistance", attr_justice = "Jail for all FARC",
+    attr_reparation = "No reparations", attr_drug_policy = "Aerial fumigation"),
+  chen_2025_bere_barley_scot = c(
+    attr_ingredient = "No bere flour", attr_nutritional_value = "Low",
+    attr_label = "No lebel", attr_access = "Commercial grocery shop",
+    attr_place_of_production = "Outside Scotland", attr_cost_per_pack = "£1.00"),
+  laterzotingley_2024_crime_national = c(
+    attr_gender = "Male", attr_race = "White", attr_tax = "Increase Sales Tax",
+    attr_public_security = "Tough on Crime", attr_education_policy = "School Choice"))
+
+# Attributes whose levels have an order that is neither numeric nor
+# alphabetical. HHY's come from the published table instead.
+LEVEL_ORDER <- list(
+  # the immigration experiment's levels in the order the paper lists them (the
+  # published table itself is alphabetical)
+  hainmueller_2014_immigrant = list(
+    attr_education = c("No formal education",
+      "Equivalent to completing fourth grade in the US",
+      "Equivalent to completing eighth grade in the US",
+      "Equivalent to completing high school in the US",
+      "Equivalent to completing two years of college in the US",
+      "Equivalent to completing a college degree in the US",
+      "Equivalent to completing a graduate degree in the US"),
+    attr_gender = c("female", "male"),
+    attr_origin = c("Germany", "France", "Mexico", "Philippines", "Poland", "India",
+                    "China", "Sudan", "Somalia", "Iraq"),
+    attr_application_reason = c("Reunite with family members already in the U.S.",
+      "Seek better job in U.S.", "Escape political/religious persecution"),
+    attr_profession = c("Janitor", "Waiter", "Child care provider", "Gardener",
+      "Financial analyst", "Construction worker", "Teacher", "Computer programmer",
+      "Nurse", "Research scientist", "Doctor"),
+    attr_job_experience = c("No job training or prior experience",
+      "One or two years of job training and experience",
+      "Three to five years of job training and experience",
+      "More than five years of job training and experience"),
+    attr_job_plans = c("Has a contract with a U.S. employer",
+      "Does not have a contract with a U.S. employer but has done job interviews",
+      "Will look for work after arriving in the U.S.",
+      "Has no plans to look for work at this time"),
+    attr_prior_trips = c("Never been to the U.S.",
+      "Entered U.S. once before on a tourist visa",
+      "Has visited the U.S. many times before on tourist visas",
+      "Spent six months with family members in the U.S",
+      "Entered the U.S. once before without legal authorization"),
+    attr_language = c("During the admission interview, this applicant spoke fluent English",
+      "During admission interview, this applicant spoke broken English",
+      "During admission interview, this applicant tried to speak English but was unable",
+      "During admission interview, this applicant spoke [language] and used an interpreter")),
+  tellez_2021_peace_packages = list(
+    attr_land = c("No transfer", "Small transfer", "Large transfer"),
+    attr_elections = c("No electoral participation", "FARC competes", "FARC competes + seats"),
+    attr_reintegration = c("No assistance", "90% min. wage for demobilized",
+                           "200% min. wage for demobilized"),
+    attr_justice = c("Jail for all FARC", "Jail for HR violators", "No jail"),
+    attr_reparation = c("No reparations", "FARC ask forgiveness", "FARC pay victims")),
+  chen_2025_bere_barley_scot = list(
+    attr_nutritional_value = c("Low", "Medium", "High"),
+    attr_access = c("Commercial grocery shop", "Speciality food shop", "Short food supply chain"),
+    attr_place_of_production = c("Outside Scotland", "Elsewhere in Scotland",
+                                 "Locally (neighbouring region)")))
 PILOT         <- as.logical(Sys.getenv("CONJ_PILOT", "FALSE"))  # TRUE: a few tables for a draft page
 PILOT_N       <- 12
 
@@ -129,19 +208,31 @@ ridge_logit <- function(X, y, lambda = 1, iters = 50) {
 
 # Forced-choice tasks with two profiles and exactly one chosen. Returns one row
 # per task (id, task, y = 1 if the first profile was chosen) and D, the
-# difference between the two profiles' attribute dummies. Attributes missing on
-# a profile are a level of their own ("(not shown)").
-tasks_frame <- function(d) {
+# difference between the two profiles' attribute dummies.
+# The profiles of the usable forced-choice tasks: two profiles, exactly one
+# chosen, ordered within task. Attributes missing on a profile become a level of
+# their own ("(not shown)").
+usable_profiles <- function(d) {
   d <- as.data.table(d)[!is.na(choice)]
   d[, `:=`(n_ = .N, s_ = sum(choice), np_ = uniqueN(profile)), by = .(id, task)]
   d <- d[n_ == 2 & s_ == 1 & np_ == 2]
   setorder(d, id, task, profile)
-  attrs <- grep("^attr_", names(d), value = TRUE)
-  for (a in attrs) {
+  for (a in grep("^attr_", names(d), value = TRUE)) {
     x <- as.character(d[[a]]); x[is.na(x) | x == ""] <- "(not shown)"
     set(d, j = a, value = x)
   }
-  attrs <- attrs[vapply(attrs, function(a) uniqueN(d[[a]]) > 1, logical(1))]
+  d[]
+}
+
+# Attributes that actually vary.
+attr_cols <- function(d) {
+  attrs <- grep("^attr_", names(d), value = TRUE)
+  attrs[vapply(attrs, function(a) uniqueN(d[[a]]) > 1, logical(1))]
+}
+
+tasks_frame <- function(d) {
+  d <- usable_profiles(d)
+  attrs <- attr_cols(d)
   X <- model.matrix(~ ., data = as.data.frame(lapply(d[, ..attrs], factor)))[, -1, drop = FALSE]
   first <- seq(1, nrow(d), by = 2)
   D <- X[first, , drop = FALSE] - X[first + 1, , drop = FALSE]
@@ -227,15 +318,158 @@ dim_full <- rbindlist(lapply(seq_len(nrow(support)), function(i) {
 }))
 hhy_amce <- merge(hhy_amce, dim_full, by = c("attribute", "level"), all.x = TRUE, sort = FALSE)
 
-# Tasks for the widget: N_WIDGET random complete tasks, with the real
-# respondent's choice so the reader can see whether they agreed.
-tk <- hhy[, .(n = .N, s = sum(choice)), by = .(id, task)][n == 2 & s == 1]
-tk <- tk[sample(.N, N_WIDGET)]
-widget_tasks <- merge(hhy, tk[, .(id, task)], by = c("id", "task"))
-setorder(widget_tasks, id, task, profile)
-widget_tasks[, task_key := .GRP, by = .(id, task)]
-widget_tasks <- widget_tasks[, c("task_key", "profile", "choice", hhy_attrs), with = FALSE]
-for (a in hhy_attrs) set(widget_tasks, j = a, value = as.character(widget_tasks[[a]]))
+# ==============================================================================
+# A2. The experiments the page's widget offers
+# ==============================================================================
+
+message("A2. Widget experiments")
+
+# Level display order: numeric where every level carries a number (prices,
+# weights), alphabetical otherwise, with the baseline moved to the front.
+lev_order <- function(x, base = NULL) {
+  lv <- sort(unique(as.character(x)))
+  num <- suppressWarnings(as.numeric(gsub(",", "", gsub("^[^0-9.-]*([0-9.,-]+).*$", "\\1", lv))))
+  if (!anyNA(num) && uniqueN(num) == length(lv)) lv <- lv[order(num)]
+  if (!is.null(base) && base %in% lv) lv <- c(base, setdiff(lv, base))
+  lv
+}
+
+# An attribute's levels in the order the page shows them: the published order
+# for HHY, a hand-set order where one is needed, else lev_order().
+pack_levels <- function(tab, a, x, base) {
+  lv <- if (!is.null(LEVEL_ORDER[[tab]][[a]])) LEVEL_ORDER[[tab]][[a]]
+        else if (tab == EXAMPLE_TABLE) published[attribute == a]$level
+        else lev_order(x, base)
+  stopifnot(setequal(lv, unique(as.character(x))))
+  c(base, setdiff(lv, base))
+}
+
+# Attribute pairs the design restricted: their cross-tab has empty cells in a
+# design big enough that an empty cell cannot be chance. HHY's two known
+# restrictions -- the high-skill professions need two years of college, and
+# fleeing persecution only from four of the ten countries -- come out of this
+# scan, so no table needs its own code.
+restricted_pairs <- function(d, attrs, min_exp = 20) {
+  out <- list()
+  for (i in seq_along(attrs)) for (j in seq_along(attrs)) if (i < j) {
+    tb <- table(d[[attrs[i]]], d[[attrs[j]]])
+    if (any(tb == 0) && nrow(d) / length(tb) >= min_exp)
+      out[[length(out) + 1L]] <- c(attrs[i], attrs[j])
+  }
+  out
+}
+
+# A reader answers a handful of tasks, so the widget estimates a level's effect
+# as a difference in choice rates rather than from a model. Inside a restricted
+# pair that difference is an AMCE only if it is taken over profiles where both
+# the level and the baseline could appear. One row per level and restricted
+# partner, carrying the partner values allowed for both.
+support_rules <- function(tab, d, attrs, bases, pairs) {
+  rbindlist(lapply(attrs, function(a) {
+    partners <- unlist(lapply(pairs, function(p) if (a %in% p) setdiff(p, a)))
+    lvs <- setdiff(pack_levels(tab, a, d[[a]], bases[[a]]), bases[[a]])
+    rbindlist(lapply(lvs, function(lv) {
+      if (!length(partners))
+        return(data.table(attribute = a, level = lv, other = NA_character_, other_levels = list(NULL)))
+      rbindlist(lapply(partners, function(z) {
+        A <- table(d[[a]], d[[z]]) > 0
+        data.table(attribute = a, level = lv, other = z,
+                   other_levels = list(colnames(A)[A[lv, ] & A[bases[[a]], ]]))
+      }))
+    }))
+  }))
+}
+
+# The same estimator on every respondent in the table: where a reader's own
+# estimates would land with enough tasks.
+full_sample_diff <- function(d, rules, bases) {
+  keys <- unique(rules[, .(attribute, level)])
+  rbindlist(lapply(seq_len(nrow(keys)), function(i) {
+    a <- keys$attribute[i]; lv <- keys$level[i]; base <- bases[[a]]
+    r <- rules[attribute == a & level == lv]
+    ok <- rep(TRUE, nrow(d))
+    for (k in seq_len(nrow(r)))
+      if (!is.na(r$other[k])) ok <- ok & d[[r$other[k]]] %in% r$other_levels[[k]]
+    g1 <- d$choice[ok & d[[a]] == lv]; g0 <- d$choice[ok & d[[a]] == base]
+    p1 <- mean(g1); p0 <- mean(g0)
+    data.table(attribute = a, level = lv, ref = p1 - p0,
+               ref_se = sqrt(p1 * (1 - p1) / length(g1) + p0 * (1 - p0) / length(g0)))
+  }))
+}
+
+# One experiment's worth of everything the page needs: a task sample with the
+# original respondent's choice, the levels in display order, the full-sample
+# estimates, and the design's restrictions.
+widget_pack <- function(tab) {
+  d <- usable_profiles(read_conj(tab))
+  attrs <- attr_cols(d)
+  bases <- if (tab == EXAMPLE_TABLE) as.list(setNames(published[baseline == TRUE]$level,
+                                                      published[baseline == TRUE]$attribute))
+           else if (!is.null(BASELINES[[tab]])) as.list(BASELINES[[tab]])
+           else as.list(setNames(lapply(attrs, function(a) lev_order(d[[a]])[1]), attrs))
+  stopifnot(all(attrs %in% names(bases)),
+            vapply(attrs, function(a) bases[[a]] %in% d[[a]], logical(1)))
+
+  pairs <- restricted_pairs(d, attrs)
+  rules <- support_rules(tab, d, attrs, bases, pairs)
+  ref   <- full_sample_diff(d, rules, bases)
+  # HHY's reference points are the published AMCEs, which come back out of the
+  # IRW table exactly (see above); every other experiment's are the difference
+  # in choice rates over all of its respondents.
+  if (tab == EXAMPLE_TABLE)
+    ref <- merge(ref[, .(attribute, level)],
+                 published[baseline == FALSE, .(attribute, level, ref = published_amce, ref_se = published_se)],
+                 by = c("attribute", "level"), sort = FALSE)
+
+  tk <- unique(d[, .(id, task)])
+  tk <- tk[sample(.N, min(N_WIDGET, .N))]
+  w  <- merge(d, tk, by = c("id", "task"))
+  setorder(w, id, task, profile)
+  w[, task_key := .GRP, by = .(id, task)]
+  tasks <- melt(w[, c("task_key", "profile", "choice", attrs), with = FALSE],
+                id.vars = c("task_key", "profile", "choice"),
+                variable.name = "attribute", value.name = "value")
+  tasks[, attribute := as.character(attribute)]
+
+  lvl <- rbindlist(lapply(attrs, function(a) {
+    lv <- pack_levels(tab, a, d[[a]], bases[[a]])
+    data.table(attribute = a, ord_attr = match(a, attrs), level = lv,
+               ord_level = seq_along(lv), baseline = lv == bases[[a]])
+  }))
+
+  message("  ", tab, ": ", nrow(d) / 2, " usable tasks, ", length(attrs), " attributes, ",
+          length(pairs), " restricted pair(s)")
+  lapply(list(tasks = tasks, levels = lvl, ref = ref,
+              support = rules[, .(attribute, level, other, other_levels)],
+              meta = data.table(n_resp = uniqueN(d$id), n_tasks_used = nrow(d) / 2,
+                                n_tasks_widget = nrow(tk), n_attr = length(attrs))),
+         function(x) cbind(data.table(table = tab), x))
+}
+
+# One of the four needs a number the summary cannot give. The candidate
+# experiment's attributes predict nothing out of sample, and the page says why:
+# respondents of different parties lean opposite ways on the candidate's race,
+# which an additive, respondent-blind model averages away. Computed here so the
+# page's figures come from the build.
+CAND_TABLE <- "laterzotingley_2024_crime_national"
+cand_race <- local({
+  d <- usable_profiles(read_conj(CAND_TABLE))
+  rbindlist(lapply(c("Democrat", "Independent", "Republican"), function(p) {
+    sub <- d[cov_party_id == p]
+    x <- sub$choice[sub$attr_race == "Black"]; y <- sub$choice[sub$attr_race == "White"]
+    data.table(party = p, n_resp = uniqueN(sub$id), d = mean(x) - mean(y),
+               se = sqrt(var(x) / length(x) + var(y) / length(y)))
+  }))
+})
+message("  ", CAND_TABLE, " race effect by party: ",
+        paste(sprintf("%s %+.3f (%.3f)", cand_race$party, cand_race$d, cand_race$se), collapse = "; "))
+
+w_packs <- lapply(WIDGET_TABLES, widget_pack)
+widget_tasks   <- rbindlist(lapply(w_packs, `[[`, "tasks"))
+widget_levels  <- rbindlist(lapply(w_packs, `[[`, "levels"))
+widget_ref     <- rbindlist(lapply(w_packs, `[[`, "ref"))
+widget_support <- rbindlist(lapply(w_packs, `[[`, "support"))
+widget_meta    <- rbindlist(lapply(w_packs, `[[`, "meta"))
 
 # ==============================================================================
 # B. Every eligible conjoint table
@@ -386,7 +620,13 @@ saveRDS(list(
   hhy_amce         = as_tibble(hhy_amce),
   example_table    = EXAMPLE_TABLE,
   example_pred     = example_pred,
+  widget_tables    = WIDGET_TABLES,
   widget_tasks     = as_tibble(widget_tasks),
+  widget_levels    = as_tibble(widget_levels),
+  widget_ref       = as_tibble(widget_ref),
+  widget_support   = widget_support,
+  widget_meta      = as_tibble(widget_meta),
+  cand_race        = as_tibble(cand_race),
   support          = support,
   summary          = as_tibble(conj_summary),
   irt_summary      = as_tibble(irt_summary),
@@ -401,7 +641,7 @@ saveRDS(list(
   session          = sessionInfo()
 ), file.path(out_dir, "conjoint_results.rds"))
 
-bib <- unique(trimws(conj_bib[table %in% c("hainmueller_2014_immigrant", conj_summary$table)]$BibTex))
+bib <- unique(trimws(conj_bib[table %in% c(WIDGET_TABLES, conj_summary$table)]$BibTex))
 bib <- bib[nzchar(bib) & !is.na(bib)]
 writeLines(c(bib, readLines(file.path(out_dir, "methods.bib"))), bib_file)   # + the two IMV papers
 message("Done: ", file.path(out_dir, "conjoint_results.rds"))
