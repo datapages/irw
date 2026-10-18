@@ -222,7 +222,7 @@ Le package `irw`, disponible pour **R** et **Python**, fournit des fonctions sim
 
 ```r
 # R
-devtools::install_github("itemresponsewarehouse/Rpkg")
+install.packages("irw")
 library(irw)
 
 irw_info()                     # overview of the IRW

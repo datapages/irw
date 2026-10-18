@@ -222,7 +222,7 @@ Het `irw`-pakket, beschikbaar voor zowel **R** als **Python**, biedt eenvoudige 
 
 ```r
 # R
-devtools::install_github("itemresponsewarehouse/Rpkg")
+install.packages("irw")
 library(irw)
 
 irw_info()                     # overview of the IRW

@@ -222,7 +222,7 @@ Pakej `irw`, yang tersedia untuk kedua-dua **R** dan **Python**, menyediakan fun
 
 ```r
 # R
-devtools::install_github("itemresponsewarehouse/Rpkg")
+install.packages("irw")
 library(irw)
 
 irw_info()                     # overview of the IRW

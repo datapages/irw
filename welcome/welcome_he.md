@@ -223,7 +223,7 @@ IRW מכיל **מאות מערכי נתונים** ("טבלאות"), וכל אח�
 
 ```r
 # R
-devtools::install_github("itemresponsewarehouse/Rpkg")
+install.packages("irw")
 library(irw)
 
 irw_info()                     # overview of the IRW
