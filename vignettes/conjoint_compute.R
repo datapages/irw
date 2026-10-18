@@ -443,6 +443,24 @@ widget_pack <- function(tab) {
          function(x) cbind(data.table(table = tab), x))
 }
 
+# One of the four needs a number the summary cannot give. The candidate
+# experiment's attributes predict nothing out of sample, and the page says why:
+# respondents of different parties lean opposite ways on the candidate's race,
+# which an additive, respondent-blind model averages away. Computed here so the
+# page's figures come from the build.
+CAND_TABLE <- "laterzotingley_2024_crime_national"
+cand_race <- local({
+  d <- usable_profiles(read_conj(CAND_TABLE))
+  rbindlist(lapply(c("Democrat", "Independent", "Republican"), function(p) {
+    sub <- d[cov_party_id == p]
+    x <- sub$choice[sub$attr_race == "Black"]; y <- sub$choice[sub$attr_race == "White"]
+    data.table(party = p, n_resp = uniqueN(sub$id), d = mean(x) - mean(y),
+               se = sqrt(var(x) / length(x) + var(y) / length(y)))
+  }))
+})
+message("  ", CAND_TABLE, " race effect by party: ",
+        paste(sprintf("%s %+.3f (%.3f)", cand_race$party, cand_race$d, cand_race$se), collapse = "; "))
+
 w_packs <- lapply(WIDGET_TABLES, widget_pack)
 widget_tasks   <- rbindlist(lapply(w_packs, `[[`, "tasks"))
 widget_levels  <- rbindlist(lapply(w_packs, `[[`, "levels"))
@@ -605,6 +623,7 @@ saveRDS(list(
   widget_ref       = as_tibble(widget_ref),
   widget_support   = widget_support,
   widget_meta      = as_tibble(widget_meta),
+  cand_race        = as_tibble(cand_race),
   support          = support,
   summary          = as_tibble(conj_summary),
   irt_summary      = as_tibble(irt_summary),

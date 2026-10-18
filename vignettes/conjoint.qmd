@@ -52,6 +52,7 @@ if (cache_ok) {
   widget_ref       <- .cache$widget_ref
   widget_support   <- .cache$widget_support
   widget_meta      <- .cache$widget_meta
+  cand_race        <- .cache$cand_race
   candidate_tables <- .cache$candidate_tables
   example_pred     <- .cache$example_pred
   example_table    <- .cache$example_table
@@ -86,6 +87,7 @@ if (cache_ok) {
                            other = character(), other_levels = list())
   widget_meta    <- tibble(table = character(), n_resp = integer(), n_tasks_used = integer(),
                            n_tasks_widget = integer(), n_attr = integer())
+  cand_race      <- tibble(party = character(), n_resp = integer(), d = numeric(), se = numeric())
   candidate_tables <- character()
   example_pred     <- tibble(id = integer(), task = integer(), y = numeric(),
                              p_base = numeric(), p_attr = numeric())
@@ -498,13 +500,53 @@ little information about one person, while the reference estimates pool hundreds
 or thousands of people. And in three of the four experiments the pooled effects
 are modest next to that noise. In the immigration experiment none of them moves
 the chance of admission by more than
-`r round(max(abs(hhy_amce$published_amce)), 2)`, and in the candidate experiment
-no attribute moves the chance of a vote by more than
-`r sprintf("%.2f", max(abs(widget_ref$ref[widget_ref$table == "laterzotingley_2024_crime_national"])))`;
-the flour is the exception, where moving from the cheapest to the dearest pack
-costs it
+`r round(max(abs(hhy_amce$published_amce)), 2)`. The flour is the exception:
+moving from the cheapest to the dearest pack costs it
 `r sprintf("%.2f", max(abs(widget_ref$ref[widget_ref$table == "chen_2025_bere_barley_scot"])))`
-of its chance of being bought.
+of its chance of being bought, which you can see in your own estimates after a
+handful of choices.
+
+```{r}
+#| label: candidate-numbers
+#| echo: false
+
+cand_tab  <- "laterzotingley_2024_crime_national"
+cand_ref  <- widget_ref |> filter(table == cand_tab) |> mutate(z = abs(ref / ref_se))
+cand_best <- cand_ref |> slice_max(z, n = 1)
+cand_n    <- widget_meta |> filter(table == cand_tab)
+cand_p    <- function(p, f) cand_race |> filter(party == p) |> pull({{ f }})
+cand_sister <- summary_df |> filter(table == "laterzotingley_2024_crime_students")
+```
+
+The candidate experiment is the one where taking it tells you least, and that
+is worth a paragraph of its own. Five features of a Democratic candidate for
+state office -- gender, race, a tax position, a crime position, a schools
+position -- and across
+`r format(cand_n$n_tasks_used, big.mark = ",")` tasks only one of them is
+distinguishable from zero: a candidate who runs on prevention rather than on
+being tough on crime gains about
+`r sprintf("%.2f", cand_best$ref)` (SE `r sprintf("%.3f", cand_best$ref_se)`).
+That is why the red dot for this experiment sits at the bottom of the next
+figure. A model that knows the five features and nothing about the respondent
+predicts a held-out voter's choice no better than a coin, and the IMV scale
+floors there; the companion table from the same study, with student
+respondents,
+`r if (nrow(cand_sister) && cand_sister$imv_attr <= 0) "comes out at zero too" else sprintf("comes out at %.2f", cand_sister$imv_attr)`.
+
+The reading to avoid is that race or crime policy does not matter to these
+choices. The averages are small partly because respondents pull against each
+other: Democrats in this sample lean toward the Black candidate
+(`r sprintf("%+.2f", cand_p("Democrat", d))`, SE
+`r sprintf("%.2f", cand_p("Democrat", se))`) and independents away from them
+(`r sprintf("%+.2f", cand_p("Independent", d))`, SE
+`r sprintf("%.2f", cand_p("Independent", se))`), which is the kind of
+difference the study was built to find and the kind this page's model is
+deliberately blind to. The question here is a narrow one -- what do the
+printed attributes alone buy you against a stranger's choice -- and for a pair
+of Democratic candidates who differ on five features, the honest answer is
+nothing. Taking a few of these pairs after the flour makes the contrast
+concrete: there you could feel yourself deciding on price, here you are
+guessing.
 
 ```{r}
 #| label: hhy-check
