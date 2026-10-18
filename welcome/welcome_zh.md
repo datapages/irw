@@ -222,7 +222,7 @@ IRW 中的每一个数据集都力求做到：
 
 ```r
 # R
-devtools::install_github("itemresponsewarehouse/Rpkg")
+install.packages("irw")
 library(irw)
 
 irw_info()                     # overview of the IRW

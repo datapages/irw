@@ -222,7 +222,7 @@ Hem **R** hem de **Python** için mevcut olan `irw` paketi, veri bulma, filtrele
 
 ```r
 # R
-devtools::install_github("itemresponsewarehouse/Rpkg")
+install.packages("irw")
 library(irw)
 
 irw_info()                     # overview of the IRW

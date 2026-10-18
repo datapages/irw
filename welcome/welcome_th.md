@@ -222,7 +222,7 @@ IRW ประกอบด้วย **ชุดข้อมูลหลายร�
 
 ```r
 # R
-devtools::install_github("itemresponsewarehouse/Rpkg")
+install.packages("irw")
 library(irw)
 
 irw_info()                     # overview of the IRW

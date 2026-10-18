@@ -223,7 +223,7 @@ IRW میں شامل ہر ڈیٹاسیٹ کو اس طرح ڈیزائن کیا گ�
 
 ```r
 # R
-devtools::install_github("itemresponsewarehouse/Rpkg")
+install.packages("irw")
 library(irw)
 
 irw_info()                     # overview of the IRW

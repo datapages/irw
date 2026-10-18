@@ -222,7 +222,7 @@ IRW-এর প্রতিটি ডেটাসেট এমনভাবে ড
 
 ```r
 # R
-devtools::install_github("itemresponsewarehouse/Rpkg")
+install.packages("irw")
 library(irw)
 
 irw_info()                     # overview of the IRW

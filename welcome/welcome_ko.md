@@ -222,7 +222,7 @@ IRW의 모든 데이터셋은 다음과 같이 설계되어 있습니다:
 
 ```r
 # R
-devtools::install_github("itemresponsewarehouse/Rpkg")
+install.packages("irw")
 library(irw)
 
 irw_info()                     # overview of the IRW

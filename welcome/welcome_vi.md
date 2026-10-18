@@ -222,7 +222,7 @@ Gói `irw`, có sẵn cho cả **R** và **Python**, cung cấp các hàm đơn 
 
 ```r
 # R
-devtools::install_github("itemresponsewarehouse/Rpkg")
+install.packages("irw")
 library(irw)
 
 irw_info()                     # overview of the IRW
