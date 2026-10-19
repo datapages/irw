@@ -14,6 +14,46 @@ This log begins in September 2026, when the page was created. The IRW is older
 than the log, and changes before then are recorded only in the repositories'
 commit history and in the versioned data itself.
 
+## 2026-10-18 — The R package is on CRAN
+
+`irw` 1.3.1 was accepted on CRAN on 2026-10-18, so `install.packages("irw")`
+is now all it takes; the GitHub install is for the features that the CRAN
+release does not yet carry, among them the rankings source. The `redivis`
+client, which does the downloading, is still not on CRAN and still comes from
+r-universe. Three things in this version will be felt by anyone upgrading from
+1.3.0, all asked for in CRAN's review: `irw_download()` and
+`irw_save_bibtex()` no longer have a default output path, so name the file;
+the table cache moved to `tools::R_user_dir("irw", "cache")`, so tables cached
+by 1.3.0 are fetched once more; and reading the warehouse needs a cached
+Redivis login, which the new `irw_has_credentials()` reports, rather than
+starting a browser login that never finishes in a script. The installation
+snippets across the site, [Get Started](getstarted.qmd) included, now say
+CRAN.
+
+Python 0.7.7 went out the same day and is the first release to carry several
+things that had only ever been on main: the rankings source, the conjoint shard
+list, the conjoint topic-tag filters, and the item-text licence function below.
+It therefore closes the gap noted on 2026-10-11 — a released Python package can
+now see both conjoint datasets, so installing from GitHub is no longer needed
+to reach the whole family.
+
+## 2026-10-17 — Two new analysis pages
+
+[Conjoint Experiments as Paired Comparisons](./vignettes/conjoint.qmd) reads
+each choice in a conjoint experiment as a paired comparison between two
+profiles and asks one measurement question of every conjoint table in the IRW:
+how much of a choice is explained by the profile's attributes, and how much by
+which respondent is doing the choosing. The page lets you take one of four of
+the experiments yourself — immigrant admission, terms for the Colombian peace
+agreement, packs of barley flour, candidates for state office — and sets your
+own attribute effects against the reference estimates for that experiment.
+
+[Bits per Item](./vignettes/bits_per_item.qmd) asks how much a test tells you
+about a person, counted in Shannon's bits: what one answer narrows down, how
+much the whole test delivers, where in the trait range it lands, and whether
+the sum score is enough to carry it. It opens with a sandbox for cut points on
+the trait and works up to a reliability comparison stated in bits.
+
 ## 2026-10-15 — A rankings family
 
 The IRW has a sixth data family, **rankings** (`source = "rank"`): tables in
@@ -32,6 +72,22 @@ and the standard is on [its own page](rankings_standard.qmd). The intake
 floor is 50 rankers rather than the core 100, since each ranker contributes
 several positions.
 
+## 2026-10-15 — The licence on item wording travels with the data
+
+For the minority of IRW tables whose item wording was released by its source
+under an open licence (CC BY-SA, CC BY-NC), that licence no longer lives only
+on the table's Redivis page. `irw_itemtext_licence()` in the R package's
+development version and `itemtext_licence()` in Python 0.7.7 return the
+licence, the attribution it requires and the changes IRW made to the wording,
+and fetching the item text for such a table prints them. The record behind
+both is `itemtext/itemtext_licences.csv` in the processing repository.
+
+The disclaimer carried on every item-text page now also says plainly what such
+a licence does and does not cover: it applies to the wording as published here,
+and implies no licence to reuse the original instrument, whose copyright and
+related rights stay with the rights holders. Permissions for an intended use
+remain the user's to obtain. See [the item text standard](itemtext.qmd).
+
 ## 2026-10-14 — Conjoint tables tagged by topic
 
 Every conjoint table now carries two topic tags: `domain`, what the study is
@@ -46,6 +102,36 @@ table's page. The vocabulary and the tagging rules are on
 [the conjoint standard](conjoint_standard.qmd#what-the-studies-are-about).
 Tags are judgement calls from the study descriptions and are corrected by pull
 request when shown wrong.
+
+## 2026-10-14 — Every family's tables are listed, and citable, from the site
+
+The standards page for each family — [competitions](comps_standard.qmd),
+[nominal](nominal_standard.qmd), [conjoint](conjoint_standard.qmd) and
+[simulated and synthetic](simsyn.qmd) — now carries a filterable list of the
+tables that family holds, each row giving the family's own size columns, the
+licence, a link to the source and, where one exists, a link to the table's own
+page. The [documentation listing](docs.qmd) covers the same rows, naming each
+non-core table's family and the `source` argument the packages need for it.
+
+The [Data page](data.qmd)'s single-table lookup read only the core
+bibliography, so a competition, nominal, conjoint or simulated table could not
+be found or cited there at all. It now reads every family's bibliography,
+labels a non-core table with its family, and gives the citation call that
+actually exists — `irw_save_bibtex()` in R, `irw.save_bibtex()` in Python —
+with the `source` argument the table needs.
+
+## 2026-10-13 — Stimulus-norming studies have one shape
+
+The data standard now states how a stimulus-norming study is laid out — the
+kind where people rate words, sentences, images or sounds on judgement
+dimensions. The stimulus is `id`, the judgement dimension is `item` (a single
+value when the study rated one dimension), the rating participant is `rater`,
+and one table holds the study; the rater never goes on `item`. This was already
+the shape such tables were meant to have, but it was not written down, and
+reading one wrongly inverts what the rows mean. [The data standard's column
+list](standard.qmd) is the site's summary of the same format. Two older tables
+that did not follow the rule have been rebuilt in the processing repository;
+those rebuilds are staged on Redivis drafts and are not yet released.
 
 ## 2026-10-11 — Conjoint data outgrew one dataset
 
