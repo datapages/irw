@@ -34,7 +34,8 @@ SHARD_REF <- c(
   item_response_warehouse_4 = "item_response_warehouse_4:980f",
   item_response_warehouse_5 = "item_response_warehouse_5:3ykx",
   item_response_warehouse_6 = "item_response_warehouse_6:fpe6",
-  item_response_warehouse_7 = "item_response_warehouse_7:ej0d"
+  item_response_warehouse_7 = "item_response_warehouse_7:ej0d",
+  item_response_warehouse_8 = "item_response_warehouse_8:8b1m"
 )
 
 # The non-core sources get pages too (ben-domingue/irw#2453, decided 2026-09-26).
