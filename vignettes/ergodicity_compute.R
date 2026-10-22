@@ -73,11 +73,14 @@ suppressPackageStartupMessages({
 
 set.seed(20261022)
 
-PILOT          <- TRUE   # TRUE: the 6 anchor tables below, both response formats
+PILOT          <- FALSE  # TRUE: the 6 anchor tables below, both response formats
 MIN_OCC        <- 10L    # occasions a person needs before their own SD / correlation is used
 MIN_PERSONS    <- 15L    # persons a pair needs before it is reported
 MAX_PAIRS      <- 200L   # per comparable item group; seeded sample beyond this
-WORKERS        <- min(4, max(1, parallel::detectCores() %/% 2))
+# Stage A is correlations and SDs, no model fitting: the full pool is minutes,
+# not hours, so this runs on ONE core by default and stays out of the way of
+# whatever else the machine is doing. Raise it only if that changes.
+WORKERS        <- 1L
 
 DATA_DIR <- "vignettes/ergodicity_data"
 FIT_DIR  <- file.path(DATA_DIR, "fits")
@@ -391,18 +394,38 @@ profile_table <- function(tab) {
         sd_within_median = median(s, na.rm = TRUE),
         sd_within_q25 = quantile(s, .25, na.rm = TRUE),
         sd_within_q75 = quantile(s, .75, na.rm = TRUE),
+        sd_within_q90 = quantile(s, .90, na.rm = TRUE),
         sd_within_max = max(s, na.rm = TRUE),
         n_flat = sum(s == 0, na.rm = TRUE),
         occ_median = median(t_occ),
         .groups = "drop") %>%
       mutate(
         ratio_median = sd_within_median / sd_between,
+        # The 90th-percentile person, not the maximum. A person's own SD rests on
+        # as few as MIN_OCC occasions, so the MAXIMUM over a few hundred persons
+        # is an order statistic that inflates wherever series are short -- the
+        # pool's largest value (20x) comes from its shortest table. The q90 is
+        # the defensible version of "a highly variable individual"; the max is
+        # kept beside it as context, not as the claim.
+        ratio_q90    = sd_within_q90 / sd_between,
         ratio_max    = sd_within_max / sd_between,
         var_ratio_median = (sd_within_median / sd_between)^2,
+        var_ratio_q90    = (sd_within_q90 / sd_between)^2,
         var_ratio_max    = (sd_within_max / sd_between)^2,
         table = tab, spec = spec)
   }) %>% left_join(per_item %>% select(arm, item, instrument, format, scale,
                                        n_cat, floor_pct), by = c("arm", "item"))
+
+  # Why a table can yield no pairs at all, recorded instead of crashing: a pool
+  # member is not guaranteed to clear MIN_OCC / MIN_PERSONS, and six of the 26 do
+  # not. An empty `out` has no columns, so n_pairs cannot be filtered out of it.
+  n_elig <- occ_person %>% filter(n_occ >= MIN_OCC) %>% nrow()
+  n_groups <- nrow(groups)
+  n_pairs_raw <- if ("spec" %in% names(out)) sum(out$spec == "raw") else 0L
+  note <- if (n_pairs_raw > 0) NA_character_
+    else if (n_groups == 0) sprintf("no comparable item group with 2+ items on one scale (%d items)", n_distinct(per_item$item))
+    else if (n_elig < MIN_PERSONS) sprintf("only %d persons reach %d occasions (need %d)", n_elig, MIN_OCC, MIN_PERSONS)
+    else sprintf("%d comparable groups, %d persons at %d+ occasions, but no pair cleared both gates", n_groups, n_elig, MIN_OCC)
 
   list(
     summary = tibble(
@@ -416,8 +439,11 @@ profile_table <- function(tab) {
       occ_q25 = quantile(occ_person$n_occ, .25),
       occ_q75 = quantile(occ_person$n_occ, .75),
       occ_min = min(occ_person$n_occ), occ_max = max(occ_person$n_occ),
-      n_pairs = nrow(out %>% filter(spec == "raw")),
-      n_arms = n_distinct(per_item$arm)
+      n_pairs = n_pairs_raw,
+      n_groups = n_groups,
+      n_persons_eligible = n_elig,
+      n_arms = n_distinct(per_item$arm),
+      note = note
     ),
     items = item_disp,
     pairs = out,
@@ -442,9 +468,13 @@ run_one <- function(tab) {
   invisible(NULL)
 }
 
-plan(multisession, workers = WORKERS)
-future_walk(tables, run_one, .options = furrr_options(seed = TRUE))
-plan(sequential)
+if (WORKERS > 1L) {
+  plan(multisession, workers = WORKERS)
+  future_walk(tables, run_one, .options = furrr_options(seed = TRUE))
+  plan(sequential)
+} else {
+  walk(tables, run_one)
+}
 
 res <- map(tables, function(tab) {
   f <- file.path(FIT_DIR, paste0(tab, ".rds"))

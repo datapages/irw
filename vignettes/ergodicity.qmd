@@ -1,0 +1,833 @@
+---
+title: "Does the Group Result Describe the Person?"
+description: |
+  Almost every published psychological finding is a between-person result: this
+  measure goes with that one, averaged over people. Fisher, Medaglia and
+  Jeronimus argued in 2018 that such a result transfers to an individual only
+  under ergodicity, and showed in six intensive-longitudinal datasets that
+  individual variability can run several times the group estimate. IRW holds 26
+  such datasets. This page measures the gap between the within-person and
+  between-person descriptions of the same items across all of them — against the
+  spread that each person's own occasion count would produce from noise alone,
+  which is the comparison that decides whether any of it is real.
+date: today
+bibliography: ergodicity_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(plotly)
+library(knitr)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue  <- "#2166ac"
+irw_red   <- "#d73027"
+irw_amber <- "#b8791f"
+irw_grey  <- "grey50"
+fmt_cols  <- c(`Ordinal` = irw_blue, `Slider / continuous` = irw_amber)
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+cache_path <- "ergodicity_data/ergodicity_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache        <- readRDS(cache_path)
+  table_summary <- .cache$table_summary
+  item_summary  <- .cache$item_summary
+  pair_summary  <- .cache$pair_summary
+  occ_person    <- .cache$occ_person
+  esm_slider    <- .cache$esm_slider
+  esm_ordinal   <- .cache$esm_ordinal
+  candidate_tables <- .cache$candidate_tables
+  min_occ       <- .cache$min_occ %||% 10L
+  min_persons   <- .cache$min_persons %||% 15L
+  date_run      <- .cache$date_run
+  is_pilot      <- isTRUE(.cache$pilot)
+  r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
+  r_n_tables_run   <- nrow(table_summary)
+} else {
+  table_summary <- tibble(
+    table = character(), pool_format = character(), n_items = integer(),
+    n_persons = integer(), n_responses = integer(), occasion_col = character(),
+    occ_median = numeric(), occ_q25 = numeric(), occ_q75 = numeric(),
+    occ_min = numeric(), occ_max = numeric(), n_pairs = integer(),
+    n_arms = integer())
+  item_summary <- tibble(
+    table = character(), arm = character(), item = character(),
+    n_persons = integer(), sd_between = numeric(), sd_within_median = numeric(),
+    sd_within_q25 = numeric(), sd_within_q75 = numeric(),
+    sd_within_q90 = numeric(), sd_within_max = numeric(),
+    n_flat = integer(), occ_median = numeric(),
+    ratio_median = numeric(), ratio_q90 = numeric(), ratio_max = numeric(),
+    var_ratio_median = numeric(), var_ratio_q90 = numeric(),
+    var_ratio_max = numeric(),
+    spec = character(), instrument = character(), format = character(),
+    scale = character(), n_cat = integer(), floor_pct = numeric())
+  pair_summary <- tibble(
+    table = character(), arm = character(), instrument = character(),
+    scale = character(), format = character(), spec = character(),
+    item_i = character(), item_j = character(), n_persons = integer(),
+    occ_median = numeric(), occ_min = integer(), occ_max = integer(),
+    r_within_median = numeric(), r_within_q25 = numeric(),
+    r_within_q75 = numeric(), r_within_min = numeric(), r_within_max = numeric(),
+    z_mean = numeric(), z_sd_obs = numeric(), z_sd_exp = numeric(),
+    z_mean_wt = numeric(), r_between = numeric(), n_between = integer(),
+    flipped = logical(), frac_opposite = numeric(),
+    frac_opposite_wt = numeric(), frac_opposite_exp = numeric(),
+    n_novar = integer(), frac_novar = numeric(), z_sd_excess = numeric(),
+    het_ratio = numeric(), frac_opposite_excess = numeric(),
+    floor_i = numeric(), floor_j = numeric(), floor_max = numeric())
+  occ_person <- tibble(table = character(), .arm = character(),
+                       id = character(), n_occ = integer())
+  esm_slider <- character(); esm_ordinal <- character()
+  candidate_tables <- character()
+  min_occ <- 10L; min_persons <- 15L
+  date_run <- Sys.Date(); is_pilot <- FALSE
+  r_all_candidates <- 0L; r_n_tables_run <- 0L
+}
+
+# Everything below reports the RAW specification; the detrended one is a
+# sensitivity check with its own section, not a parallel set of headline numbers.
+pairs_raw <- pair_summary %>% filter(spec == "raw")
+items_raw <- item_summary %>% filter(spec == "raw")
+
+knitr::opts_chunk$set(eval = cache_ok)
+```
+
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (!cache_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Cache not found** — figures and tables will not appear. Generate results ",
+  "by running the compute script, then re-render:\n\n",
+  "```r\nRscript vignettes/ergodicity_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+```{r}
+#| label: pilot-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (cache_ok && is_pilot) cat(
+  "::: {.callout-warning}\n",
+  "**Draft preview, partial run.** This render uses ", r_n_tables_run,
+  " of the ", r_all_candidates, " curated ESM tables, to validate the pipeline ",
+  "and the page before the full batch. Every number is a real computed result, ",
+  "not a placeholder, but treat the *distributions* as a small preview rather ",
+  "than a representative picture. Re-run `ergodicity_compute.R` with ",
+  "`PILOT <- FALSE` to scale up.\n",
+  ":::\n", sep = ""
+)
+```
+
+::: {.callout-note}
+This vignette — including the analysis design, the compute script, and the
+writing below — was produced largely by Claude (Anthropic), working from a task
+specification and with human review. Treat the methodological choices and
+interpretations accordingly, and check `ergodicity_compute.R` directly if you
+are relying on the numbers.
+:::
+
+## Motivation
+
+Nearly every quantitative claim in psychology is a between-person claim. We
+measure many people once, find that two things covary, and write a sentence
+about people. The sentence a reader hears, and often the sentence a clinician
+acts on, is about a person: if your rumination goes up, your mood goes down.
+
+Those are different claims, and @fisher2018lack showed how different. A
+group-level result generalises to the individuals in the group when the process
+is *ergodic* — roughly, when people are homogeneous in the structure being
+estimated and each person's process is stationary over time. Using six
+intensive-longitudinal datasets, they compared within-person to between-person
+variance structures and found individual variation running up to about four
+times the group estimate. The group result was not a description of a typical
+person; it was a description of nobody in particular.
+
+@adolf2019ergodicity replied, and the reply matters for how this page is
+written. Group-to-individual generalisability does not actually *require*
+ergodicity: ergodicity is sufficient but not necessary, and inferring
+non-ergodicity from a within/between discrepancy proves more than the data
+support. So nothing here claims that any IRW table is non-ergodic. What follows
+is the quantity — how far apart the within-person and between-person
+descriptions of the same items are — and the reader can decide what it licenses.
+
+IRW's contribution is the denominator. @fisher2018lack had six datasets, which
+is as many as anyone had assembled. The warehouse holds **`r r_all_candidates`**
+intensive-longitudinal tables in one format, so the same comparison can be run
+across a pool rather than demonstrated on a handful, and the result becomes a
+distribution with a spread, a floor and an exception instead of an existence
+proof.
+
+Two sibling pages share the data and the problem.
+[What Is a Floor, Actually?](esm_floor.qmd) profiles the same pool and
+establishes how much of it piles at the bottom of the scale, which is the
+confound that could manufacture everything below; its per-item floor
+percentages are reused here rather than recomputed.
+[Individual Treatment Effects](il_hte.qmd) asks the adjacent question about
+treatment effects rather than associations.
+
+## Data and methods
+
+### Which tables, and why they had to be curated
+
+No rule in IRW finds its own experience-sampling data. `metadata$longitudinal`
+is a pattern match over column names that matches `cov_birthdate`; the
+`intensive_longitudinal` collection is 72 of 81 one COVID panel averaging 2.6
+waves; and there is no temporal tag in the vocabulary. The pool used here came
+from an occasions-per-person screen — responses per participant divided by item
+count — followed by reading the processing script of every survivor, and it is
+the same pool as [What Is a Floor, Actually?](esm_floor.qmd), reused rather than
+re-derived.
+
+That curation is not a formality. Four tables pass the column screen and fail
+the script: `narcissism_schneider_2025_study2_*` (an identifier defect),
+`moralvignettes_rakhmankulova_2025` (`id` is a video and `rater` is the person),
+`political_psychology` (the processing script drops `wave`), and
+`musifeast17_vanderwalle_2025` (`date` indexes a clip within a single session).
+Around 21 cognitive trial-level tables score well because their "occasions" are
+trials. And two tables that reached the first draft of the pool,
+`emoji_scheffler_2024` and `tears`, turned out to be stimulus-rating designs
+where the person is the `rater` and `id` is the stimulus — the same defect,
+caught only by reading the script.
+
+The screen also *understates* branched instruments, because dividing by all
+items dilutes any item that sits behind a branch:
+`vollbracht_et_al_2026_ambulatory_assessment` reads as roughly 37 occasions per
+person on that ratio against a measured median of 64. So occasions per person
+are counted directly here, per person, from the table's own occasion column.
+
+```{r}
+#| label: tbl-pool
+#| echo: false
+
+if (cache_ok) {
+  table_summary %>%
+    transmute(
+      Table = table, Format = pool_format, Items = n_items,
+      Persons = n_persons,
+      `Occasions (median)` = round(occ_median),
+      `Occasions (IQR)` = paste0(round(occ_q25), "–", round(occ_q75)),
+      `Occasion column` = occasion_col,
+      Pairs = n_pairs) %>%
+    arrange(Format, desc(`Occasions (median)`)) %>%
+    kable(caption = paste0(
+      "The curated pool: ", r_n_tables_run, " of ", r_all_candidates,
+      " tables computed. Occasions are counted per person, not inferred from",
+      " responses per item."))
+}
+```
+
+```{r}
+#| label: tbl-excluded
+#| echo: false
+
+if (cache_ok && any(table_summary$n_pairs == 0)) {
+  table_summary %>% filter(n_pairs == 0) %>%
+    transmute(Table = table, Items = n_items, Persons = n_persons,
+              `Occasions (median)` = round(occ_median),
+              `Why no pairs` = note) %>%
+    kable(caption = paste0(
+      "Pool members that cannot support a person-level estimate. They stay in",
+      " the pool and in the item-level counts where they qualify; they contribute",
+      " no pairs."))
+}
+```
+
+```{r}
+#| label: excluded-text
+#| echo: false
+#| output: asis
+
+if (cache_ok && nrow(table_summary) > 0) {
+  n0 <- sum(table_summary$n_pairs == 0)
+  cat("This is worth stating as a result and not only as bookkeeping: **", n0,
+      " of the ", r_n_tables_run, " tables cannot support the pair-level",
+      " analysis at all**, because too few people contribute ", min_occ,
+      " occasions, or because no two items share a response scale. The",
+      " occasions-per-person screen that finds experience-sampling data in IRW",
+      " is a weaker filter than person-level estimation needs. The remaining **",
+      r_n_tables_run - n0, "** tables are still more than three times what",
+      " @fisher2018lack had available.\n", sep = "")
+}
+```
+
+### The two quantities
+
+Everything on this page is correlations and standard deviations. No model is
+fitted; a multilevel or DSEM decomposition would put the within/between split on
+a common footing and is deliberately out of scope here.
+
+**Item level, the direct analogue of @fisher2018lack.** For each item: each
+person's own standard deviation across their occasions, against the
+between-person standard deviation of person means. The ratio of the two is the
+quantity they report. A person needs `r min_occ` occasions on an item to
+contribute, and an item needs `r min_persons` such persons.
+
+**Pair level, which is the one that reads.** For each pair of items inside a
+comparable group: the group correlation, computed on person means, against the
+distribution of within-person correlations, each computed over one person's own
+occasions. Three numbers come out — the spread of those person-level
+correlations, the median, and how often a person's correlation has the
+**opposite sign** to the group's. The last is the one that can be stated in a
+sentence: the group says these two things go together, and for this fraction of
+people they move apart.
+
+A "comparable group" is one arm × one instrument × one response scale. A
+correlation is scale-free, but the *estimator* is not: a within-person
+correlation on a 5-point item with a floor is not the same object as one on a
+0–100 slider, so pairs are never formed across response formats.
+
+```{r}
+#| label: method-snippet
+#| eval: false
+
+# From ergodicity_compute.R — per-person correlations for one comparable group.
+# A person whose response never varies yields NA and is counted separately,
+# because that exclusion is itself a floor effect.
+for (k in seq_along(idx)) {
+  mi <- M[idx[[k]], , drop = FALSE]          # one person's occasions x items
+  if (nrow(mi) < min_occ) next
+  ok <- !is.na(mi)
+  tp <- crossprod(ok)                        # occasions with BOTH items answered
+  cm <- suppressWarnings(stats::cor(mi, use = "pairwise.complete.obs"))
+  ...
+}
+```
+
+### The baseline that decides whether any of this is real
+
+A within-person correlation estimated on 12 occasions is mostly noise, and noise
+alone produces spread and sign flips. Reporting raw spread as heterogeneity
+would therefore be a measurement of nothing.
+
+So every pair carries the spread it would show **if every person shared the
+group's correlation exactly**, computed from each person's own occasion count:
+in Fisher-$z$ space a person's estimate has standard error
+$1/\sqrt{T_i - 3}$, so the expected spread under homogeneity is
+$\sqrt{\overline{1/(T_i-3)}}$, and the expected rate of landing on the far side
+of zero is $\overline{\Phi(-|z_{\text{between}}|\sqrt{T_i-3})}$. Heterogeneity is
+reported as the **excess** over that baseline, never as the raw spread.
+
+Three further confounds are handled in the script rather than hoped about:
+
+- **Unequal occasions within a table** mean the person-level distribution mixes
+  precisions. Every summary is computed unweighted and weighted by $T_i - 3$.
+- **Stationarity**, which @fisher2018lack require, is tested rather than
+  assumed: every quantity is computed again after removing each person's own
+  linear trend on their occasion index. The person *mean* always comes from the
+  raw responses — a per-person detrend removes the mean exactly, so a
+  between-person correlation on residual means would be zero by construction.
+- **Response direction is not harmonised in IRW.** Reverse keying flips a
+  correlation's sign, but it flips the group's and the person's together, so the
+  sign-flip rate is invariant to it; each pair is nonetheless oriented so the
+  group correlation is non-negative before anything is pooled.
+
+## Results
+
+### The item-level ratio: individual variation against the group's
+
+```{r}
+#| label: fig-item-ratio
+#| echo: false
+#| fig-height: 6
+
+if (cache_ok && nrow(items_raw) > 0) {
+  ord <- items_raw %>% group_by(table) %>%
+    summarise(m = median(var_ratio_median), .groups = "drop") %>% arrange(m)
+  d <- items_raw %>%
+    mutate(table = factor(table, levels = ord$table),
+           text = paste0(table, " · ", item,
+                         "\nvariance ratio (median person): ", round(var_ratio_median, 2),
+                         "\n90th-percentile person: ", round(var_ratio_q90, 2),
+                         "\nmost variable person: ", round(var_ratio_max, 2),
+                         "\npersons: ", n_persons, ", occasions (median): ", round(occ_median),
+                         "\nfloor mass: ", round(floor_pct, 1), "%"))
+  p <- ggplot(d, aes(x = var_ratio_median, y = table, colour = format, text = text)) +
+    geom_vline(xintercept = 1, colour = irw_grey, linetype = "dashed") +
+    geom_vline(xintercept = 4, colour = irw_red, linetype = "dotted") +
+    geom_point(alpha = 0.75, size = 1.9) +
+    scale_colour_manual(values = fmt_cols, name = NULL) +
+    scale_x_log10() +
+    labs(x = "Within-person variance / between-person variance (median person)",
+         y = NULL)
+  ggplotly(p, tooltip = "text") %>% layout(legend = list(orientation = "h", y = -0.12))
+}
+```
+
+```{r}
+#| label: item-ratio-text
+#| echo: false
+#| output: asis
+
+if (cache_ok && nrow(items_raw) > 0) {
+  med <- median(items_raw$var_ratio_median)
+  above1 <- mean(items_raw$var_ratio_median > 1)
+  q90 <- median(items_raw$var_ratio_q90)
+  mx  <- items_raw %>% slice_max(var_ratio_q90, n = 1)
+  mxx <- items_raw %>% slice_max(var_ratio_max, n = 1)
+  byfmt <- items_raw %>% group_by(format) %>%
+    summarise(m = median(var_ratio_median), .groups = "drop")
+  cat("Each point is one item: the ratio of the median person's own variance to",
+      " the variance of person means. The dashed line is parity; the dotted line",
+      " is the factor of four @fisher2018lack report as their upper end.\n\n",
+      "Across ", nrow(items_raw), " items in ", n_distinct(items_raw$table),
+      " tables the median ratio is **", sprintf("%.2f", med), "** — the typical",
+      " person moves about as much on their own as people differ from each other",
+      " — and **", sprintf("%.0f%%", 100 * above1), "** of items exceed parity.",
+      " For the typical item the person at the 90th percentile of variability",
+      " sits at **", sprintf("%.1f×", q90), "** the group variance, and on the",
+      " most extreme item that figure reaches **",
+      sprintf("%.1f×", mx$var_ratio_q90[1]), "** (`", mx$table[1], "` · `",
+      mx$item[1], "`). So Fisher et al.'s four-fold figure is not an outer",
+      " bound; it is the kind of value a larger pool returns routinely.\n\n",
+      "Single maxima are not used for that claim. A person's own standard",
+      " deviation can rest on as few as ", min_occ, " occasions, so the maximum",
+      " over a few hundred people is an order statistic that inflates wherever",
+      " series are short — the pool's largest single value, ",
+      sprintf("%.0f×", mxx$var_ratio_max[1]), " on `", mxx$table[1], "` · `",
+      mxx$item[1], "`, comes from one of its shortest tables.\n\n", sep = "")
+  cat("By response format the medians are ",
+      paste(sprintf("%.2f (%s)", byfmt$m, byfmt$format), collapse = " and "),
+      ".\n", sep = "")
+}
+```
+
+### The pair-level result: how often a person moves against the group
+
+```{r}
+#| label: fig-sign-flips
+#| echo: false
+#| fig-height: 5.5
+
+if (cache_ok && nrow(pairs_raw) > 0) {
+  d <- pairs_raw %>%
+    mutate(text = paste0(table, ifelse(is.na(arm), "", paste0(" · ", arm)),
+                         "\n", item_i, " ~ ", item_j,
+                         "\ngroup r: ", round(r_between, 2),
+                         "\nmedian person r: ", round(r_within_median, 2),
+                         "\nopposite sign: ", sprintf("%.0f%%", 100 * frac_opposite),
+                         " (expected from noise: ",
+                         sprintf("%.0f%%", 100 * frac_opposite_exp), ")",
+                         "\npersons: ", n_persons,
+                         ", occasions (median): ", round(occ_median)))
+  p <- ggplot(d, aes(x = frac_opposite_exp, y = frac_opposite,
+                     colour = format, text = text)) +
+    geom_abline(slope = 1, intercept = 0, colour = irw_grey, linetype = "dashed") +
+    geom_point(alpha = 0.6, size = 1.8) +
+    scale_colour_manual(values = fmt_cols, name = NULL) +
+    labs(x = "Expected if every person shared the group correlation",
+         y = "Observed share of persons with the opposite sign")
+  ggplotly(p, tooltip = "text") %>% layout(legend = list(orientation = "h", y = -0.15))
+}
+```
+
+```{r}
+#| label: sign-flip-text
+#| echo: false
+#| output: asis
+
+if (cache_ok && nrow(pairs_raw) > 0) {
+  ex <- median(pairs_raw$frac_opposite_excess)
+  above <- mean(pairs_raw$frac_opposite_excess > 0)
+  obs <- median(pairs_raw$frac_opposite)
+  expd <- median(pairs_raw$frac_opposite_exp)
+  wt <- median(pairs_raw$frac_opposite_wt)
+  het <- median(pairs_raw$het_ratio)
+  cat("Each point is one item pair. A point on the dashed line is a pair whose",
+      " person-to-person differences are entirely explained by how few occasions",
+      " each person contributed; a point above it has heterogeneity the noise",
+      " baseline cannot account for.\n\n",
+      "Across ", nrow(pairs_raw), " pairs the median pair has **",
+      sprintf("%.0f%%", 100 * obs), "** of its persons correlating in the",
+      " opposite direction to the group, against **",
+      sprintf("%.0f%%", 100 * expd), "** expected from noise alone — an excess of",
+      " **", sprintf("%.0f", 100 * ex), " percentage points**, and **",
+      sprintf("%.0f%%", 100 * above), "** of pairs lie above the line. Weighting",
+      " each person by their own precision moves the median rate to ",
+      sprintf("%.0f%%", 100 * wt), ". The spread of person-level correlations is",
+      " **", sprintf("%.1f×", het), "** the spread homogeneity would produce.\n",
+      sep = "")
+}
+```
+
+### Is it just short series?
+
+The raw sign-flip rate *is* higher where people contributed fewer occasions,
+which is exactly what noise does, and is why the baseline above is not optional.
+The excess over that baseline is close to flat.
+
+```{r}
+#| label: fig-occasions
+#| echo: false
+#| fig-height: 5
+
+if (cache_ok && nrow(pairs_raw) > 0) {
+  d <- pairs_raw %>%
+    mutate(text = paste0(table, ifelse(is.na(arm), "", paste0(" · ", arm)),
+                         "\n", item_i, " ~ ", item_j,
+                         "\noccasions (median): ", round(occ_median),
+                         "\nexcess sign flips: ",
+                         sprintf("%.0f pp", 100 * frac_opposite_excess),
+                         "\nspread vs homogeneity: ", round(het_ratio, 2), "×"))
+  p <- ggplot(d, aes(x = occ_median, y = frac_opposite_excess,
+                     colour = format, text = text)) +
+    geom_hline(yintercept = 0, colour = irw_grey, linetype = "dashed") +
+    geom_point(alpha = 0.6, size = 1.8) +
+    scale_colour_manual(values = fmt_cols, name = NULL) +
+    scale_x_log10() +
+    labs(x = "Occasions per person contributing to the pair (median)",
+         y = "Observed − expected share with the opposite sign")
+  ggplotly(p, tooltip = "text") %>% layout(legend = list(orientation = "h", y = -0.15))
+}
+```
+
+```{r}
+#| label: occ-text
+#| echo: false
+#| output: asis
+
+if (cache_ok && nrow(pairs_raw) > 0) {
+  c_raw <- cor(pairs_raw$frac_opposite, pairs_raw$occ_median, use = "complete.obs")
+  c_exc <- cor(pairs_raw$frac_opposite_excess, pairs_raw$occ_median, use = "complete.obs")
+  c_het <- cor(pairs_raw$het_ratio, pairs_raw$occ_median, use = "complete.obs")
+  long  <- pairs_raw %>% filter(occ_median >= 50)
+  short <- pairs_raw %>% filter(occ_median < 20)
+  cat("The raw sign-flip rate correlates ", sprintf("%.2f", c_raw),
+      " with occasions per person: pairs resting on fewer than 20 occasions show",
+      " a median raw rate of ",
+      sprintf("%.0f%%", 100 * median(short$frac_opposite)),
+      " against ", sprintf("%.0f%%", 100 * median(long$frac_opposite)),
+      " for those with 50 or more. The **excess** over the noise baseline",
+      " correlates ", sprintf("%.2f", c_exc), " with occasion count and the",
+      " spread ratio ", sprintf("%.2f", c_het), " — both near zero.\n\n",
+      "The cleanest version of the test is to throw away the short series",
+      " entirely. Among the ", nrow(long), " pairs where the median person",
+      " contributed 50 or more occasions, the median excess is ",
+      sprintf("%.0f percentage points", 100 * median(long$frac_opposite_excess)),
+      ", ", sprintf("%.0f%%", 100 * mean(long$frac_opposite_excess > 0)),
+      " of pairs exceed the baseline, and the spread is ",
+      sprintf("%.1f×", median(long$het_ratio)), " what homogeneity would give —",
+      " indistinguishable from the pool as a whole. Whatever this is, it is not",
+      " an artefact of people with too few measurements.\n", sep = "")
+}
+```
+
+### The floor, which splits the two quantities
+
+A floor attenuates within-person correlations harder than between-person ones,
+so it could manufacture this entire page. The per-item floor percentages
+measured by [What Is a Floor, Actually?](esm_floor.qmd) are joined onto every
+item and pair here as a covariate.
+
+```{r}
+#| label: fig-floor
+#| echo: false
+#| fig-height: 5
+
+if (cache_ok && nrow(pairs_raw) > 0 && any(!is.na(pairs_raw$floor_max))) {
+  d <- pairs_raw %>% filter(!is.na(floor_max)) %>%
+    mutate(text = paste0(table, ifelse(is.na(arm), "", paste0(" · ", arm)),
+                         "\n", item_i, " ~ ", item_j,
+                         "\nfloor mass (worse item): ", round(floor_max, 1), "%",
+                         "\nexcess sign flips: ",
+                         sprintf("%.0f pp", 100 * frac_opposite_excess),
+                         "\npersons excluded for never varying: ",
+                         sprintf("%.0f%%", 100 * frac_novar)))
+  p <- ggplot(d, aes(x = floor_max, y = frac_opposite_excess,
+                     colour = format, text = text)) +
+    geom_hline(yintercept = 0, colour = irw_grey, linetype = "dashed") +
+    geom_point(alpha = 0.6, size = 1.8) +
+    scale_colour_manual(values = fmt_cols, name = NULL) +
+    labs(x = "Floor mass of the more floored item in the pair (%)",
+         y = "Observed − expected share with the opposite sign")
+  ggplotly(p, tooltip = "text") %>% layout(legend = list(orientation = "h", y = -0.15))
+}
+```
+
+```{r}
+#| label: floor-text
+#| echo: false
+#| output: asis
+
+if (cache_ok && nrow(pairs_raw) > 0) {
+  c_pair <- suppressWarnings(cor(pairs_raw$frac_opposite_excess, pairs_raw$floor_max,
+                                 use = "complete.obs"))
+  c_item <- suppressWarnings(cor(items_raw$ratio_median, items_raw$floor_pct,
+                                 use = "complete.obs"))
+  nov <- median(pairs_raw$frac_novar, na.rm = TRUE)
+  nov_hi <- max(pairs_raw$frac_novar, na.rm = TRUE)
+  cat("Neither quantity is driven by the floor, and the item-level one leans the",
+      " other way. The within/between variance ratio correlates **",
+      sprintf("%.2f", c_item), "** with an item's floor mass: a floored item",
+      " shows *less* individual variability relative to the group, not more,",
+      " which is the expected attenuation and works against the headline rather",
+      " than producing it. The pair-level excess correlates **",
+      sprintf("%.2f", c_pair), "** — weakly positive, and small enough that the",
+      " floor cannot carry the result.\n\n",
+      "This also revises a reading taken from a six-table pilot of this page,",
+      " where the same correlation was 0.59. With the full pool, floor mass and",
+      " study identity separate, and the apparent floor effect mostly belonged to",
+      " the studies.\n\n",
+      "There is a second, quieter floor effect that no correlation shows: a person",
+      " whose response never moves has no correlation to contribute at all. That",
+      " excludes a median of ", sprintf("%.0f%%", 100 * nov),
+      " of otherwise-eligible persons per pair, and ",
+      sprintf("%.0f%%", 100 * nov_hi), " in the worst case. Those exclusions are",
+      " counted rather than dropped silently, because the people a floor removes",
+      " are unlikely to be the people a floor leaves — and that selection, not",
+      " the attenuation, is the floor's real threat to this analysis.\n", sep = "")
+}
+```
+
+### Response format: a randomised contrast, not just a comparison
+
+The pool splits into continuous sliders and ordinal 5–8 point items, and the
+estimator is not the same on both. Across tables that split is confounded with
+everything else about the studies. Inside one of them it is not:
+`vollbracht_et_al_2026_ambulatory_assessment` randomised 406 participants to a
+Likert or a slider version of the same ambulatory protocol. **The assignment is
+between persons** — every one of the 406 identifiers carries exactly one
+`cov_group` — so this is a randomised format contrast, not the same people
+answering both formats.
+
+```{r}
+#| label: tbl-format
+#| echo: false
+
+if (cache_ok && nrow(pairs_raw) > 0) {
+  vb <- pairs_raw %>% filter(grepl("^vollbracht", table))
+  if (nrow(vb) > 0) {
+    vb %>% group_by(Arm = arm, Format = format) %>%
+      summarise(Pairs = n(),
+                `Occasions (median)` = round(median(occ_median)),
+                `Group r (median)` = round(median(r_between), 2),
+                `Person r (median)` = round(median(r_within_median), 2),
+                `Spread vs homogeneity` = round(median(het_ratio), 2),
+                `Opposite sign` = sprintf("%.1f%%", 100 * median(frac_opposite)),
+                .groups = "drop") %>%
+      kable(caption = paste0(
+        "vollbracht_et_al_2026_ambulatory_assessment, by randomised arm. The",
+        " Likert arm's items are ordinal; the slider arm's are continuous",
+        " except `stress`, which was never sliderised and so appears as an",
+        " ordinal row inside the slider arm — an internal control for the arm's",
+        " participants."))
+  }
+}
+```
+
+```{r}
+#| label: format-text
+#| echo: false
+#| output: asis
+
+if (cache_ok && nrow(items_raw) > 0) {
+  vbi <- items_raw %>% filter(grepl("^vollbracht", table))
+  byfmt <- items_raw %>% group_by(format) %>%
+    summarise(m = median(var_ratio_median), n = n(), .groups = "drop")
+  cat("Within the randomisation the two arms come out close together, which is a",
+      " clean null on response format: whatever drives the within/between gap, it",
+      " is not the choice between a slider and a Likert scale. That null is worth",
+      " having, because the unrandomised comparison across the pool does *not*",
+      " come out flat — ordinal pairs show the higher sign-flip rate while slider",
+      " pairs show the wider spread relative to their noise baseline, and both",
+      " differences are confounded with every other way those studies differ.\n\n")
+  bypair <- pairs_raw %>% group_by(format) %>%
+    summarise(n = n(), het = median(het_ratio), opp = median(frac_opposite),
+              .groups = "drop")
+  cat("Pool-wide, by format: ",
+      paste(sprintf("%s pairs, spread %.2f×, opposite sign %.0f%% (%d pairs)",
+                    bypair$format, bypair$het, 100 * bypair$opp, bypair$n),
+            collapse = "; "), ".\n\n", sep = "")
+  cat("The item-level medians are (",
+      paste(sprintf("%.2f on %d %s items", byfmt$m, byfmt$n, tolower(byfmt$format)),
+            collapse = " against "),
+      "), which is a between-study comparison and carries everything else that",
+      " differs between those studies.\n", sep = "")
+  if (nrow(vbi) > 0) {
+    st <- vbi %>% filter(item == "stress")
+    if (nrow(st) > 0) cat("\n`stress`, the item that kept its 5-point format in",
+        " the slider arm, sits at ",
+        paste(sprintf("%.2f (%s arm)", st$var_ratio_median, st$arm), collapse = " and "),
+        " — the same internal control that mattered on the floor page.\n", sep = "")
+  }
+}
+```
+
+### Stationarity: does removing each person's trend change the answer?
+
+```{r}
+#| label: tbl-detrend
+#| echo: false
+
+if (cache_ok && n_distinct(pair_summary$spec) > 1) {
+  pair_summary %>%
+    group_by(Specification = recode(spec, raw = "As observed",
+                                    detrended = "Person-level linear trend removed")) %>%
+    summarise(Pairs = n(),
+              `Group r (median)` = round(median(r_between), 2),
+              `Person r (median)` = round(median(r_within_median), 2),
+              `Spread vs homogeneity` = round(median(het_ratio), 2),
+              `Opposite sign` = sprintf("%.1f%%", 100 * median(frac_opposite)),
+              `Excess over baseline` = sprintf("%.0f pp",
+                                               100 * median(frac_opposite_excess)),
+              .groups = "drop") %>%
+    kable(caption = paste0(
+      "Removing each person's own linear trend on their occasion index. Person",
+      " means always come from the raw responses, since a per-person detrend",
+      " removes the mean exactly."))
+}
+```
+
+```{r}
+#| label: detrend-text
+#| echo: false
+#| output: asis
+
+if (cache_ok && n_distinct(pair_summary$spec) > 1) {
+  cmp <- pair_summary %>% group_by(spec) %>%
+    summarise(h = median(het_ratio), o = median(frac_opposite), .groups = "drop")
+  cat("The two specifications agree closely, so a within-person trend is not what",
+      " produces the gap. That is worth stating plainly because stationarity is",
+      " one of the two conditions @fisher2018lack invoke, and it is the one that",
+      " an experience-sampling series is most likely to violate: a linear trend is",
+      " the cheapest version of that test, and the result does not move.\n",
+      sep = "")
+}
+```
+
+### Per table
+
+```{r}
+#| label: tbl-bytable
+#| echo: false
+
+if (cache_ok && nrow(pairs_raw) > 0) {
+  pairs_raw %>%
+    group_by(Table = table, Arm = arm) %>%
+    summarise(Pairs = n(),
+              `Occasions (median)` = round(median(occ_median)),
+              `Persons per pair (median)` = round(median(n_persons)),
+              `Group r` = round(median(r_between), 2),
+              `Person r` = round(median(r_within_median), 2),
+              `Spread vs homogeneity` = round(median(het_ratio), 2),
+              `Opposite sign` = sprintf("%.1f%%", 100 * median(frac_opposite)),
+              `Expected from noise` = sprintf("%.1f%%", 100 * median(frac_opposite_exp)),
+              .groups = "drop") %>%
+    arrange(desc(`Spread vs homogeneity`)) %>%
+    kable(caption = paste0(
+      "Pair-level results per table, as observed. `Arm` is populated only where",
+      " a table randomised response format."))
+}
+```
+
+## Limitations
+
+**This is a description, not a verdict on ergodicity.** Following
+@adolf2019ergodicity, a within/between discrepancy does not establish
+non-ergodicity, and generalisability needs less than ergodicity to hold. The
+numbers here say how far apart the two descriptions are in these datasets. They
+do not say that a group result in this literature is invalid, and they do not
+identify which of homogeneity or stationarity fails where.
+
+**No model is fitted.** Correlations and standard deviations are transparent and
+cheap, but a multilevel or DSEM decomposition would put the within- and
+between-person parts on one estimated footing, propagate uncertainty properly,
+and allow the person-level correlation to be a random effect rather than a
+point estimate computed from one person's handful of occasions. Everything here
+treats each person's estimate as data; it has sampling error that the baseline
+accounts for on average and not pair by pair.
+
+**The baseline assumes normality and independence within a person.** The
+expected spread under homogeneity uses the Fisher-$z$ standard error
+$1/\sqrt{T_i-3}$, which assumes bivariate normal, independent occasions. ESM
+responses are neither: they are bounded, often floored, and autocorrelated.
+Positive autocorrelation makes the effective number of occasions smaller than
+$T_i$, which means the true noise baseline is *higher* than the one used here
+and the reported excess is correspondingly optimistic. The carryover estimates
+on [the floor page](esm_floor.qmd) are modest, which limits but does not remove
+this.
+
+**The floor is handled by covariate, not by design.** Floor mass measured on
+items is weakly related to the pair-level excess and negatively related to the
+item-level ratio, so it is not generating these results — but floor mass also
+varies systematically with the table, and nothing here experimentally separates
+the two. The sharper residual worry is selection rather than attenuation: people
+who never move on an item are dropped from the pair-level estimate, and they are
+plausibly the people for whom the group result holds least.
+
+**Instrument boundaries are approximate.** Pairs are kept within one response
+scale and, where a table carries several instruments, within an item-name stem.
+Elsewhere the table is treated as one instrument. A pair of items from genuinely
+different constructs that happen to share a scale would be counted as a pair
+here, and a low group correlation makes a sign flip cheap — which is one reason
+the group correlation is reported beside every rate.
+
+**Occasion indices are not comparable across tables.** One table's `wave` is a
+prompt within a day, another's is a day, another's is a study visit. "Occasions
+per person" is therefore a count of measurements, not a duration, and the
+pool's range of occasion spacing is not represented anywhere in these numbers.
+
+**Response direction is not harmonised in IRW**, so an item's observed minimum
+may be its substantive maximum. The sign-flip rate is invariant to this and the
+dispersion ratios are sign-free, but the reported *group* correlations are
+oriented to be non-negative by convention rather than by substance.
+
+## Reproducibility
+
+```{r}
+#| label: repro
+#| echo: false
+#| output: asis
+if (cache_ok) {
+  cat("Computed on **", format(date_run), "**, across ", r_n_tables_run, " of ",
+      r_all_candidates, " curated intensive-longitudinal tables, ",
+      nrow(pairs_raw), " item pairs and ", nrow(items_raw), " items.\n\n", sep = "")
+}
+```
+
+Run `Rscript vignettes/ergodicity_compute.R` from the repository root with
+`REDIVIS_API_TOKEN` set to a read-scoped token. The script caches each table's
+profile separately under `ergodicity_data/fits/`, so an interrupted run resumes
+rather than restarting; delete that directory to force a recompute. Stage A is
+correlations only and runs on one core in minutes.
+
+{{< include ../components/_data-version.qmd >}}
+
+{{< include ../components/_source-links.qmd >}}
+
+::: {.callout-tip}
+To cite the datasets used:
+
+```r
+irw_save_bibtex(unique(table_summary$table),
+                output_file = "ergodicity_data/references.bib")
+```
+:::
+
+---
+
+## References

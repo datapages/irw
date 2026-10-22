@@ -141,6 +141,7 @@ CACHES <- list(
   "dimensionality"         = c("dimensionality_data/dimensionality_results.rds",
                                "dimensionality_data/dimensionality_merge_results.rds"),
   "dutch_identity"         = "dutchdata/dutch_identity_results.rds",
+  "ergodicity"             = "ergodicity_data/ergodicity_results.rds",
   "esm_floor"              = "esm_floor_data/esm_floor_results.rds",
   # Only the caches fit to IRW data; the sim and floor-calibration caches are
   # pure simulation and say nothing about which corpus version was read.
