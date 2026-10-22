@@ -629,7 +629,7 @@ tryCatch(
 manual_entries <- c(
   "@article{kwon2026copula,
   title   = {A Copula-Based Joint Model for Speed and Accuracy},
-  author  = {Kwon, Sooyong and Zhang, Susu},
+  author  = {Kwon, Sunbeom and Zhang, Susu},
   journal = {Psychometrika},
   year    = {2026},
   doi     = {10.1017/psy.2026.10143}
