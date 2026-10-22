@@ -6,7 +6,8 @@ description: |
   deepens them and asks, on 24 IRW tables, whether a neural network predicts
   held-out item responses any better than the 2PL. Scored with the InterModel
   Vigorish, the answer is: only where there is a second dimension to find, and
-  a two-dimensional MIRT finds it as well as a multilayer perceptron does.
+  a two-dimensional MIRT finds it as well as a multilayer perceptron does, at
+  the table sizes we fit here.
   Part I also leaves a small gap between the torch 2PL and the `mirt` 2PL, and
   Part II takes that gap apart by fitting the same 2PL six ways. The estimator
   explains it; fixing the scale of the person parameters does not.
@@ -88,10 +89,13 @@ the item curve while keeping a single dimension.
 The short version of the answer is that on a test built to measure one
 thing, nothing beats the 2PL; where a network wins, the win is a second
 dimension, and a two-dimensional MIRT finds it as well as a deeper network
-does. That is Part I. One of the comparisons also turned up an estimator
-effect, a small but consistent gap between the same 2PL fit in torch and in
-`mirt`, and Part II takes it apart: the estimator explains the gap, and fixing
-the scale of the person parameters does not.
+does. All of that holds at the sizes we fit here: tables are capped at 5,000
+respondents and 116 items, and scale is the one advantage a wider network is
+supposed to have, so the null is a null at this scale. That is Part I. One of
+the comparisons also turned up an estimator effect, a small but consistent
+gap between the same 2PL fit in torch and in `mirt`, and Part II takes it
+apart: the estimator explains the gap, and fixing the scale of the person
+parameters does not.
 
 ## Data and methods
 
@@ -121,9 +125,11 @@ tables fall into five groups, fixed in `nn_irt_helpers.py`:
 All are dense and dichotomous. The response values are checked at fetch time
 rather than trusted from metadata; one candidate, `vocabulary_iq`, turned out
 to be polytomous despite its metadata and was dropped (and the metadata
-corrected upstream). Tables with more than 5,000 respondents or 116 items are
-subsampled to those caps with a fixed seed, so that every fit on the page
-stays small enough to run on a laptop.
+corrected upstream); two further candidates, `encceja_2025_em_cn` and
+`mgkt_options`, were dropped because their full exports fail to load, so the
+final 24 is a design choice filtered by what we could read. Tables with more
+than 5,000 respondents or 116 items are subsampled to those caps with a fixed
+seed, so that every fit on the page stays small enough to run on a laptop.
 
 ```{python}
 #| label: data
@@ -621,7 +627,11 @@ the test is not unidimensional in practice whatever it was built to measure.
 The gains cluster in the personality and clinical inventories: about 0.03 on
 the ADQ anhedonia scale, 0.02 on the Eysenck EPI (three scales in one
 table), 0.008 on the Woodworth, with smaller gains on the Author Recognition
-Test and the GMI. In every one of these the MLPs match or trail the
+Test and the GMI. Seven of the 24 tables show a gain above 0.005 and the
+other seventeen sit within noise of the 2PL, so the positive result rests on a
+minority of the corpus; that is what one would expect if a second dimension is
+something an instrument has or lacks rather than a general property of item
+response data. In every one of these the MLPs match or trail the
 two-dimensional MIRT, and the large MLP is never reliably better than the
 small one. Once the embeddings are two-dimensional, a nonlinear decoder adds
 nothing on these data. Put differently: the signal a network can find in a
@@ -959,7 +969,10 @@ keeps them honest.
   epochs at which to get lucky. A third split would fix this; we judged that
   at 24 tables and five models the bias is small relative to the effects
   reported, and the direction is known: it works against the 2PL, not for
-  it.
+  it. Note that the same practice tilts Part II the other way. There the
+  networks and the alternating JML fits stop on the held-out cells while
+  `mirt` never sees them, so the estimator gap reported there is if anything
+  an underestimate. In both parts the thumb is on the networks' side.
 - **Two estimators, one model.** The PyTorch 2PL (MAP by gradient descent)
   and the `mirt` 2PL (marginal maximum likelihood) are the same model and do
   not give the same held-out loss. The comparison that is fair is therefore
