@@ -162,6 +162,7 @@ CACHES <- list(
                                "network_psych_data/network_psych_prior_sensitivity_results.rds",
                                "network_psych_data/network_psych_sbm_results.rds"),
   "rt_imv"                 = "rtimvdata/rt_imv_results.rds",
+  "speed_accuracy_copula"  = "speed_accuracy_copula_data/speed_accuracy_copula_results.rds",
   "sports_trials"          = "sports_trials_data/results.rds"
 )
 

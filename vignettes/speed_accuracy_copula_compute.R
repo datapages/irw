@@ -79,7 +79,7 @@ SYMTEST_REPS <- 1000  # bootstrap replicates for the symmetry tests
 FAMILY_SET <- c(0, 1, 2, 4, 6, 14, 16, 24, 26, 34, 36)
 JOE_90     <- 26
 
-PILOT          <- TRUE
+PILOT          <- FALSE
 PILOT_TABLES   <- c(
   # Deliberately spans the structural range, and two are known-goods.
   "nomt_hooper_2024_study2",     # one of Kwon & Zhang's own six datasets: direct bridge
@@ -218,11 +218,23 @@ resolve_trials <- function(df, table_name) {
     return(list(df = df, note = "one response per person-item", collapsed = FALSE))
   }
   if ("wave" %in% names(df)) {
-    w1 <- df[!is.na(df$wave) & df$wave == min(df$wave, na.rm = TRUE), ]
-    if (nrow(w1) > 0 && sum(duplicated(w1[, c("id", "item")])) == 0) {
-      return(list(df = w1,
-                  note = paste0("collapsed to first of ",
-                                length(unique(df$wave)), " waves"),
+    # The first wave, but not blindly. trivia_fastrich_2017's wave 1 is 80,006
+    # responses that are ALL zero -- an initial guess phase before feedback --
+    # so "keep the first wave" lands on a degenerate wave and throws the table
+    # away for having no response variance. Take the first wave that actually
+    # varies, which leaves a genuine baseline wave untouched wherever one
+    # exists.
+    waves <- sort(unique(df$wave[!is.na(df$wave)]))
+    for (w in waves) {
+      wi <- df[!is.na(df$wave) & df$wave == w, ]
+      if (nrow(wi) == 0) next
+      if (sum(duplicated(wi[, c("id", "item")])) != 0) next
+      rv <- suppressWarnings(as.numeric(as.character(wi$resp)))
+      if (length(unique(rv[is.finite(rv)])) < 2) next
+      return(list(df = wi,
+                  note = paste0("collapsed to wave ", w, " of ",
+                                length(waves),
+                                if (!identical(w, waves[1])) " (wave 1 has no response variance)" else ""),
                   collapsed = TRUE))
     }
   }

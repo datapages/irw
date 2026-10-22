@@ -1,0 +1,750 @@
+---
+title: "Asymmetric Speed–Accuracy Dependence Beyond PISA"
+description: |
+  The standard hierarchical model for speed and accuracy assumes a person's
+  latent ability and latent speed are jointly normal. A recent Psychometrika
+  paper replaces that assumption with a copula and reports, from 30 splits of
+  PISA 2018, that the dependence is asymmetric and concentrated in one tail.
+  Thirty splits of one assessment cannot tell you whether that is a fact about
+  item response data or a fact about PISA. This page runs the same comparison
+  across heterogeneous IRW tables — cognitive tests, matrix reasoning, a
+  credentialing exam, crowdsourced labelling — and asks which tail, if any,
+  is the sharp one.
+date: today
+bibliography: speed_accuracy_copula_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(plotly)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+irw_grey <- "grey50"
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
+cache_path <- "speed_accuracy_copula_data/speed_accuracy_copula_results.rds"
+cache_ok   <- file.exists(cache_path)
+
+if (cache_ok) {
+  .cache           <- readRDS(cache_path)
+  all_floors       <- .cache$summary
+  person_floor     <- .cache$person_floor
+  floor_sweep      <- .cache$person_floor_sweep
+  summary_df       <- all_floors |> filter(person_floor == !!person_floor)
+  excluded_df      <- .cache$excluded
+  pobs_samples     <- .cache$pobs_samples
+  candidate_tables <- .cache$candidate_tables
+  date_run         <- .cache$date_run
+  is_pilot         <- isTRUE(.cache$pilot)
+  r_all_candidates <- .cache$n_all_candidates %||% length(candidate_tables)
+  r_n_tables_run   <- length(candidate_tables)
+  min_rpi          <- .cache$min_resp_per_item
+  max_items        <- .cache$max_items
+  max_n            <- .cache$max_n
+  xg               <- .cache$xg
+} else {
+  summary_df <- tibble(
+    table = character(), person_floor = numeric(), n_persons_copula = integer(),
+    tau_emp = numeric(), theta_distinct_frac = numeric(),
+    speed_distinct_frac = numeric(), n_theta_distinct = integer(),
+    lattice_share = numeric(), asym_jitter = numeric(),
+    best_family = integer(), best_family_name = character(),
+    best_par = numeric(), best_par2 = numeric(), is_joe90 = logical(),
+    lambda_LL_fit = numeric(), lambda_UU_fit = numeric(),
+    lambda_LU_fit = numeric(), lambda_UL_fit = numeric(), asym_fit = numeric(),
+    lambda_LL_emp = numeric(), lambda_UU_emp = numeric(),
+    lambda_LU_emp = numeric(), lambda_UL_emp = numeric(), asym_emp = numeric(),
+    taildep_k = numeric(), aic_best = numeric(), aic_gaussian = numeric(),
+    aic_independence = numeric(), daic_vs_gaussian = numeric(),
+    p_exch = numeric(), p_radsym = numeric(), symtest_n = integer(),
+    symtest_reps = integer(), n_persons_fit = integer(), n_items_fit = integer(),
+    pct_na = numeric(), n_rows_raw = integer(), trial_note = character(),
+    wave_collapsed = logical(), item_selection = character(),
+    tau_mvn = numeric(), rho_mvn = numeric(),
+    construct_type = character(), item_format = character()
+  )
+  all_floors       <- summary_df
+  excluded_df      <- tibble(table = character(), reason = character())
+  pobs_samples     <- list()
+  candidate_tables <- character()
+  date_run         <- Sys.Date()
+  is_pilot         <- FALSE
+  r_all_candidates <- 0L
+  r_n_tables_run   <- 0L
+  person_floor     <- 10
+  floor_sweep      <- c(10, 20, 40)
+  min_rpi          <- 50
+  max_items        <- 500
+  max_n            <- 5000
+  xg               <- 1000
+}
+
+knitr::opts_chunk$set(eval = cache_ok)
+
+fam_label <- function(x) sub(" degrees$", "°", x)
+```
+
+```{r}
+#| label: cache-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (!cache_ok) cat(
+  "::: {.callout-warning}\n",
+  "**Cache not found** — figures and tables will not appear. Generate results ",
+  "by running the compute script, then re-render:\n\n",
+  "```r\nRscript vignettes/speed_accuracy_copula_compute.R\n```\n",
+  ":::\n", sep = ""
+)
+```
+
+```{r}
+#| label: pilot-warning
+#| echo: false
+#| eval: true
+#| output: asis
+
+if (cache_ok && is_pilot) cat(
+  "::: {.callout-warning}\n",
+  "**Draft preview, partial run.** This render uses a partial sample of ",
+  r_n_tables_run, " tables out of ", r_all_candidates, " eligible tables, ",
+  "to validate the pipeline and page layout before the full batch finishes. ",
+  "All numbers here are real computed results -- not placeholders -- but ",
+  "treat the *distributions* as a small, noisy preview rather than a ",
+  "representative picture. Re-run `speed_accuracy_copula_compute.R` (with ",
+  "`PILOT <- FALSE` and the full batch complete) to scale up.\n",
+  ":::\n", sep = ""
+)
+```
+
+::: {.callout-note}
+This vignette — including the dataset search, the compute script, the
+analysis design, and the writing below — was produced largely by Claude
+(Anthropic), working from a task specification and with human review.
+Treat the methodological choices and interpretations accordingly, and
+check the compute script (`speed_accuracy_copula_compute.R`) directly if
+you're relying on the numbers here.
+:::
+
+## Motivation
+
+The hierarchical framework of @vanderlinden2007hierarchical is the standard
+way to model response accuracy and response time together. Level 1 is
+familiar: a 2PL for whether each answer is right, a lognormal for how long it
+took. Level 2 is the part that does the joining — it says a person's latent
+ability $\theta$ and latent speed $\tau$ are drawn together from a **bivariate
+normal**.
+
+That second level is an assumption, and a strong one. A bivariate normal is
+*radially symmetric*: whatever dependence exists between ability and speed, it
+has to be the same shape in opposite corners of the joint distribution. If
+unusually fast-and-wrong respondents cluster much more tightly than unusually
+slow-and-right ones, a bivariate normal cannot say so. It has one correlation
+and no way to put more structure in one tail than the other.
+
+@kwon2026copula replace that bivariate normal with a **copula**, which
+separates the dependence structure from the marginals and so can be asymmetric
+and tail-concentrated. Fitting their model to 30 splits of PISA 2018, they find
+a 90°-rotated Joe copula selected over the normal on 28 of them, and read this
+as "strong evidence for the presence of asymmetric tail dependence in
+large-scale educational assessments."
+
+Thirty splits of one assessment, plus six small cognitive-training datasets, is
+a narrow base for a claim about item response data in general. The IRW holds
+much more heterogeneous material, so the question this page asks is simply:
+**does the direction and magnitude of that tail asymmetry show up outside
+large-scale educational assessment, or is it a PISA fact?** Two of the paper's
+own data sources are IRW tables, so part of the answer is already a
+re-examination of their evidence rather than a new sample.
+
+### What biases this screen, stated up front
+
+This page is **not** the paper's estimator. It is a deliberately simple
+two-stage screen: fit the plain bivariate-normal hierarchical model, take the
+resulting person estimates $(\hat\theta, \hat\tau)$, and characterise *their*
+empirical copula.
+
+The direction of the resulting bias is knowable in advance and belongs here
+rather than in the Limitations. $\hat\theta$ and $\hat\tau$ are shrunken
+posterior means from a model whose person prior **is** the bivariate normal.
+Shrinkage pulls the joint distribution toward its centre, and pulling toward
+the centre is exactly what destroys tail dependence. So this screen is
+**conservative**: it is biased toward finding *no* asymmetry.
+
+That asymmetry of evidence is what makes the screen worth running at all.
+Asymmetry it *does* find is credible, because it had to survive a procedure
+designed to wash it out. Absence of asymmetry, on any given table, is weak
+evidence of absence.
+
+### Related pages
+
+[Response time and accuracy: an IMV analysis](rt_imv.qmd) asks the
+*response-level* version of this question — whether within-item-centred
+$\log(\mathrm{RT})$ improves prediction of individual responses over a Rasch
+baseline, keyed to @domingue2022notsofast. That is a different object: this
+page is about the *person-level* joint distribution, not about predicting
+individual responses. [Guessing](guessing.qmd) matters here too, for a reason
+that only becomes clear once the winning family is identified below.
+[Asymmetric item response functions](asymmetric_irt.qmd) and
+[bits per item](bits_per_item.qmd) ask the analogous question about the
+item side: whether a more flexible shape buys anything.
+
+## Data and methods
+
+### Dataset selection
+
+The starting pool is every IRW table that carries an `rt` column, is
+dichotomous, and is big enough for a claim about tails to mean anything.
+
+```{r}
+#| label: filter-datasets
+#| eval: false
+
+# From irw_metadata() rather than irw_filter() alone: the gates that matter
+# here are density and responses-per-unit facts that irw_filter() does not
+# express.
+pool <- meta[has_rt &
+             meta$n_categories  == 2 &
+             meta$n_participants >= 300 &
+             meta$n_items        >= 10, ]
+```
+
+`r r_all_candidates` tables met that criterion as of
+`r format(date_run, "%B %Y")`. That number is a *starting* pool, not a run
+list, and the gap between the two is itself a corpus fact worth reporting.
+
+### Two gates, and why a density number is not enough
+
+**Repeated trials are not an item response matrix.** A hierarchical
+speed–accuracy model wants one response and one response time per
+person–item. When a table's density runs far above 1, the `id`–`item` key
+repeats — but for two quite different reasons, and density alone cannot tell
+them apart. Checking the actual keys separates them cleanly:
+
+- For `rapm_poulton_2022_timed` / `_untimed` (two waves) and
+  `quopl2_forster_2021_quop` (eight waves), the `wave` column resolves the
+  duplicates **exactly** — zero repeated `id`–`item` pairs within a wave.
+  Keeping the first wave is then a real collapsing rule, and those tables stay.
+- For the five `enkavi_2019_*` tables, duplicates survive both `wave` *and*
+  `position`. There, `item` names a **stimulus type presented many times**, not
+  a distinct item. No person-by-item matrix exists to put the model on, so
+  those tables are excluded rather than reshaped. The same holds for
+  `imps2025_hf`, which is four items over sixty-nine trials.
+
+**Sparsity has two different victims.** Reporting a table as simply "sparse"
+hides which part of the model it breaks. The floors are therefore set per unit:
+at least **`r min_rpi` responses per item** and at least **`r person_floor` per
+person**. The Duolingo tables show why the distinction matters — they carry
+150–450 responses per *person*, which is ample, but as few as 3.6 per *item*.
+There the item parameters are the noise source, and because $\hat\theta$ is
+computed from item parameters, poisoning them poisons the person estimates too.
+
+Tables wider than `r max_items` items are fitted on their
+`r max_items` most-administered items and flagged as item-selected subtables;
+they are reported separately below and never pooled with the rest. Tables with
+more than `r format(max_n, big.mark = ",")` respondents are downsampled, which
+is a compute decision and not a statistical one.
+
+```{r}
+#| label: tbl-attrition
+#| tbl-cap: "Why candidate tables did not produce a result. Exclusions are recorded with their reason rather than silently dropped."
+
+if (nrow(excluded_df) > 0) {
+  excluded_df |>
+    count(reason, name = "n_tables") |>
+    arrange(desc(n_tables)) |>
+    knitr::kable(col.names = c("Reason excluded", "N tables"))
+} else {
+  knitr::kable(tibble(Note = "No candidate table was excluded in this pass."))
+}
+```
+
+Of the `r r_n_tables_run` candidate tables in this pass,
+**`r nrow(summary_df)`** produced usable results.
+
+### Per-table computation
+
+For each surviving table, `fit_one_table()`:
+
+1. Fetches the table and resolves repeated `id`–`item` keys as described above,
+   coercing `rt` explicitly — it does not always arrive numeric — and dropping
+   non-positive times, which $\log$ would send to $-\infty$.
+2. Applies the item and person response floors, iterated twice, since dropping
+   thin items can push a person below the person floor and vice versa.
+3. Fits the **bivariate-normal hierarchical model** with `LNIRT`
+   [@fox2021lnirt], `r format(xg, big.mark = ",")` MCMC iterations, and takes
+   the posterior means $\hat\theta$ (ability) and $\hat\tau$ (speed, where
+   higher means faster).
+4. Converts the pair to pseudo-observations (ranks) and selects among the
+   families @kwon2026copula select over — independence, Gaussian, Student $t$,
+   and Gumbel and Joe in all four rotations — by AIC, recording the full AIC
+   table rather than only the winner.
+5. Computes tail dependence both nonparametrically [@schmidt2006nonparametric]
+   and as implied by the selected family, and tests exchangeability and radial
+   symmetry [@genest2012tests].
+
+### Which corner is which
+
+This is the part that decides what the result *means*, so it is worth being
+explicit. A bivariate copula on (ability, speed) has four corners, and which
+two of them can hold anything depends on the **sign** of the dependence:
+
+| corner | ability | speed | reading |
+|---|---|---|---|
+| $\lambda_{LU}$ | low | fast | **fast and wrong** |
+| $\lambda_{UL}$ | high | slow | **slow and able** |
+| $\lambda_{LL}$ | low | slow | **slow and wrong** |
+| $\lambda_{UU}$ | high | fast | **fast and able** |
+
+Under **negative** dependence the diagonal corners ($\lambda_{LL}$,
+$\lambda_{UU}$) are empty by construction and the action is off-diagonal;
+under **positive** dependence it is the reverse. Reporting one pair only would
+mean measuring, on half the corpus, the two corners guaranteed to hold nothing
+— which is a mistake this page made in draft before the full run exposed it.
+So all four are computed, and each table is read against the pair its own
+dependence sign makes informative.
+
+The asymmetry at issue is then whether the two *informative* corners differ. A
+Gaussian or Student $t$ copula forces them equal; that is exactly the symmetry
+a rotated Joe or Gumbel breaks. Checked against simulation from each family, a
+**90°** rotation puts its mass in the fast-and-wrong corner, **270°** in
+slow-and-able, the **unrotated** families in fast-and-able, and the **survival**
+(180°) families in slow-and-wrong. So the question is not only whether an
+asymmetric family wins, but *which corner it names* — and the four readings are
+substantively quite different.
+
+One distinction that matters for reading the results below: a Student $t$
+copula beating the Gaussian is **not** a vote for the bivariate normal. The $t$
+has tail dependence the Gaussian lacks; it is simply *symmetric* about it. So a
+$t$ win with a large AIC margin says the normal is wrong about the tails while
+leaving the asymmetry question answered in the negative.
+
+## Results
+
+### Which family wins
+
+```{r}
+#| label: corner-frame
+#| echo: false
+
+corner_label <- c(LL = "slow and wrong", UU = "fast and able",
+                  LU = "fast and wrong", UL = "slow and able")
+
+summary_df <- summary_df |>
+  mutate(
+    regime = if_else(tau_emp < 0, "negative", "positive"),
+    # The pair of corners this table's dependence sign makes informative.
+    pair_a = if_else(tau_emp < 0, lambda_LU_emp, lambda_LL_emp),
+    pair_b = if_else(tau_emp < 0, lambda_UL_emp, lambda_UU_emp),
+    pair_a_name = if_else(tau_emp < 0, "LU", "LL"),
+    pair_b_name = if_else(tau_emp < 0, "UL", "UU"),
+    lam_dom  = pmax(pair_a, pair_b),
+    lam_opp  = pmin(pair_a, pair_b),
+    dom_name = if_else(pair_a >= pair_b, pair_a_name, pair_b_name),
+    dom_corner = unname(corner_label[dom_name]),
+    asym_regime = lam_dom - lam_opp,
+    asymmetric_family = grepl("Rotated|Survival|^Joe$|^Gumbel$", best_family_name),
+    verdict = case_when(
+      daic_vs_gaussian < 2            ~ "normal adequate",
+      asymmetric_family               ~ "asymmetric departure",
+      TRUE                            ~ "symmetric, tail-dependent"
+    )
+  )
+```
+
+```{r}
+#| label: fig-families
+#| fig-cap: "Copula family selected by AIC per table, split by the sign of the ability-speed dependence. Independence, Gaussian and Student t are symmetric families; the Joe and Gumbel families, rotated or not, are not. The negative-dependence tables cluster on the 90-degree rotations, which name the fast-and-wrong corner."
+
+fam_counts <- summary_df |>
+  mutate(family_name = fam_label(best_family_name)) |>
+  count(regime, family_name, name = "n_tables")
+
+p <- ggplot(fam_counts,
+            aes(x = n_tables, y = reorder(family_name, n_tables), fill = regime,
+                text = paste0(family_name, " (", regime, " dependence): ",
+                              n_tables, " tables"))) +
+  geom_col(alpha = 0.9) +
+  scale_fill_manual(values = c(negative = irw_red, positive = irw_blue),
+                    name = "dependence") +
+  labs(x = "Number of tables", y = NULL)
+
+ggplotly(p, tooltip = "text")
+```
+
+```{r}
+#| label: headline-numbers
+#| echo: false
+
+n_tab      <- nrow(summary_df)
+n_neg      <- sum(summary_df$regime == "negative")
+n_pos      <- sum(summary_df$regime == "positive")
+n_asym     <- sum(summary_df$asymmetric_family)
+n_sym      <- n_tab - n_asym
+n_joe90    <- sum(summary_df$is_joe90, na.rm = TRUE)
+n_90       <- sum(grepl("90 degrees", summary_df$best_family_name))
+n_90_of_neg <- sum(grepl("90 degrees", summary_df$best_family_name) &
+                   summary_df$regime == "negative")
+n_norm_ok  <- sum(summary_df$verdict == "normal adequate")
+n_symtail  <- sum(summary_df$verdict == "symmetric, tail-dependent")
+n_asymdep  <- sum(summary_df$verdict == "asymmetric departure")
+med_daic   <- median(summary_df$daic_vs_gaussian, na.rm = TRUE)
+n_rad_rej  <- sum(summary_df$p_radsym < 0.05, na.rm = TRUE)
+n_fastwrong <- sum(summary_df$dom_corner == "fast and wrong")
+med_asym_neg <- median(summary_df$asym_regime[summary_df$regime == "negative"], na.rm = TRUE)
+n_itemsel  <- sum(summary_df$item_selection != "all items")
+n_wave     <- sum(summary_df$wave_collapsed)
+```
+
+The sign of the ability–speed dependence splits this corpus almost in half, and
+it is the single most useful thing to condition on. Ability and speed are
+negatively dependent on **`r n_neg`** of `r n_tab` tables and positively
+dependent on **`r n_pos`**.
+
+**Within the negative half, the paper's direction replicates.** A 90° rotation
+— the family that names the fast-and-wrong corner — wins on
+`r n_90_of_neg` of those `r n_neg` tables, and the specific family
+@kwon2026copula report, the 90°-rotated Joe, on `r n_joe90` across the corpus.
+The median asymmetry among the negative-dependence tables is
+**`r round(med_asym_neg, 3)`**: the fast-and-wrong corner is typically several
+times sharper than slow-and-able.
+
+**Within the positive half, asymmetry is still common but points in no single
+direction.** There the informative corners are diagonal, and which of them is
+sharper varies by table — a vocabulary assessment and a mental-rotation battery
+disagree about it.
+
+The three-way verdict matters more than the family names. Reading a Student $t$
+win as "the normal is fine" would be wrong, because the $t$'s advantage *is*
+tail dependence:
+
+- **`r n_asymdep`** tables show an **asymmetric** departure from the bivariate normal.
+- **`r n_symtail`** show a departure that is real but **symmetric** — tail-dependent, not lopsided.
+- **`r n_norm_ok`** are tables where the bivariate normal is adequate (AIC margin under 2).
+
+So the bivariate normal survives on `r n_norm_ok` of `r n_tab` tables; on the
+other `r n_tab - n_norm_ok` something with tail structure fits better, and on
+`r n_asymdep` that structure is lopsided. The median AIC improvement over the
+Gaussian copula is
+**`r round(med_daic, 1)`**, and radial symmetry is rejected at the 5% level on
+`r n_rad_rej` of `r n_tab`.
+
+### How asymmetric, and in which direction
+
+Each table contributes one point: how sharp its *dominant* informative corner
+is, against its *opposite* corner. The diagonal is what a Gaussian or $t$
+copula is obliged to produce, so distance above it is the asymmetry.
+
+```{r}
+#| label: fig-corners
+#| fig-cap: "Nonparametric tail dependence in each table's dominant informative corner against its opposite corner. Colour marks the sign of the dependence, which determines which pair of corners is informative. A symmetric copula family can only sit on the dashed diagonal; distance above it is the asymmetry this page is measuring."
+
+plot_df <- summary_df |>
+  mutate(text = paste0(table,
+                       "<br>J = ", n_items_fit, ", N = ", n_persons_copula,
+                       "<br>Kendall tau = ", round(tau_emp, 3),
+                       " (", regime, ")",
+                       "<br>selected: ", fam_label(best_family_name),
+                       "<br>dominant corner: ", dom_corner,
+                       " = ", round(lam_dom, 3),
+                       "<br>opposite corner = ", round(lam_opp, 3)))
+
+p <- ggplot(plot_df, aes(x = lam_opp, y = lam_dom, text = text)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_point(aes(colour = regime, shape = asymmetric_family),
+             size = 3, alpha = 0.85) +
+  scale_colour_manual(values = c(negative = irw_red, positive = irw_blue),
+                      name = "dependence") +
+  scale_shape_manual(values = c(`TRUE` = 16, `FALSE` = 1),
+                     labels = c(`TRUE` = "asymmetric family",
+                                `FALSE` = "symmetric family"),
+                     name = NULL) +
+  coord_equal() +
+  labs(x = "opposite corner", y = "dominant corner")
+
+ggplotly(p, tooltip = "text")
+```
+
+```{r}
+#| label: fig-asym-ordered
+#| fig-cap: "Asymmetry per table: the dominant informative corner minus its opposite. Open points show the same quantity after jittering theta-hat by 10% of its standard deviation, a check against the estimate being an artifact of how few distinct values theta-hat takes on a short test. The jitter check is computed on the fast-and-wrong contrast, so it tracks the plotted value only for the negative-dependence tables."
+
+p <- summary_df |>
+  mutate(label = paste0(table, "  (", dom_corner, ")"),
+         text = paste0(table,
+                       "<br>dominant: ", dom_corner,
+                       "<br>asymmetry = ", round(asym_regime, 3),
+                       "<br>J = ", n_items_fit,
+                       "<br>selected: ", fam_label(best_family_name))) |>
+  ggplot(aes(y = reorder(label, asym_regime), text = text)) +
+  geom_vline(xintercept = 0, colour = irw_grey) +
+  geom_segment(aes(x = 0, xend = asym_regime,
+                   yend = reorder(label, asym_regime)), colour = irw_grey) +
+  geom_point(aes(x = asym_regime, colour = regime), size = 2.6) +
+  scale_colour_manual(values = c(negative = irw_red, positive = irw_blue),
+                      name = "dependence") +
+  labs(x = "dominant corner minus opposite corner", y = NULL)
+
+ggplotly(p, tooltip = "text")
+```
+
+Because the two-stage design is biased toward zero, every number here is a
+lower bound on whatever asymmetry is present in the data-generating process
+rather than an estimate of it.
+
+### The copula, drawn
+
+```{r}
+#| label: fig-pobs
+#| fig-cap: "Pseudo-observations of (ability, speed) for one table from each dependence regime, chosen as the most asymmetric in each. Each point is one respondent, placed by rank rather than by value, so both axes are uniform by construction and only the dependence structure is visible. A bivariate normal person prior would produce an elliptical cloud symmetric under 180-degree rotation."
+#| fig-height: 4.5
+
+if (length(pobs_samples) > 0 && nrow(summary_df) > 0) {
+  picks <- summary_df |>
+    filter(!is.na(asym_regime), table %in% names(pobs_samples)) |>
+    group_by(regime) |>
+    slice_max(asym_regime, n = 1, with_ties = FALSE) |>
+    ungroup()
+
+  if (nrow(picks) > 0) {
+    pdf_df <- bind_rows(lapply(seq_len(nrow(picks)), function(i) {
+      row <- picks[i, ]
+      U <- pobs_samples[[row$table]]
+      if (is.null(U) || !nrow(U)) return(NULL)
+      tibble(panel = paste0(row$table, "\n",
+                            fam_label(row$best_family_name),
+                            " — ", row$regime, " dependence\n",
+                            "sharp corner: ", row$dom_corner),
+             ability = U[, 1], speed = U[, 2])
+    }))
+
+    ggplot(pdf_df, aes(x = ability, y = speed)) +
+      geom_point(alpha = 0.3, size = 0.9, colour = irw_blue) +
+      facet_wrap(~ panel) +
+      coord_equal() +
+      labs(x = "ability (rank)", y = "speed (rank), higher = faster")
+  }
+}
+```
+
+On the negative-dependence panel it is the upper-**left** — low ability, high
+speed — that fills in. That is the rapid-guessing corner, which is why
+[guessing](guessing.qmd) is a sibling page here: a respondent answering quickly
+and incorrectly is the behaviour both pages describe, arriving once as a
+departure from an item response function and once as a departure from a
+person-level normal prior. `r n_fastwrong` of `r n_tab` tables in this pass have
+fast-and-wrong as their sharpest corner.
+
+### Per-table detail
+
+```{r}
+#| label: tbl-per-table
+#| tbl-cap: "Per-table results at the headline person floor, ordered by asymmetry. tau is Kendall's tau between the two person estimates; tau (MVN) is what the fitted bivariate-normal person prior implies, for comparison on the same scale. The dominant corner is named from the pair that this table's dependence sign makes informative. dAIC is the improvement of the selected family over the Gaussian copula."
+
+summary_df |>
+  arrange(desc(asym_regime)) |>
+  transmute(table,
+            N = n_persons_copula,
+            J = n_items_fit,
+            tau = round(tau_emp, 3),
+            `tau (MVN)` = round(tau_mvn, 3),
+            selected = fam_label(best_family_name),
+            dAIC = round(daic_vs_gaussian, 1),
+            `dominant corner` = dom_corner,
+            `lambda dom.` = round(lam_dom, 3),
+            `lambda opp.` = round(lam_opp, 3),
+            asymmetry = round(asym_regime, 3),
+            verdict,
+            `p (rad. sym.)` = signif(p_radsym, 2)) |>
+  knitr::kable()
+```
+
+```{r}
+#| label: tbl-treatments
+#| tbl-cap: "Tables whose structure required an explicit decision, with the decision recorded. Item-selected subtables are not the table and are listed so they can be read separately."
+
+treat_df <- summary_df |>
+  filter(wave_collapsed | item_selection != "all items") |>
+  transmute(table, J = n_items_fit, `trial structure` = trial_note,
+            `item selection` = item_selection,
+            selected = fam_label(best_family_name),
+            `dominant corner` = dom_corner,
+            asymmetry = round(asym_regime, 3))
+
+if (nrow(treat_df) > 0) {
+  knitr::kable(treat_df)
+} else {
+  knitr::kable(tibble(Note = "No table in this pass needed a wave collapse or item selection."))
+}
+```
+
+`r n_wave` table(s) in this pass were collapsed to a first wave and
+`r n_itemsel` were restricted to their `r max_items` most-administered items.
+
+### Is this an artifact?
+
+Two checks, both for the same worry. On a short complete test, $\hat\theta$ is
+very nearly a monotone function of the number correct, so it takes roughly
+$J+1$ distinct values while $\hat\tau$ stays continuous. An empirical copula
+built on that is a lattice of vertical stripes, and a rotated family could win
+on the lattice rather than on any real tail behaviour.
+
+Counting distinct values does not detect this — MCMC noise makes every
+posterior mean numerically unique. So the lattice is measured directly, as the
+share of $\hat\theta$'s variance falling *within* $J+1$ clusters; a value near
+zero means a lattice, near one means genuinely continuous. Then the asymmetry
+is recomputed with $\hat\theta$ jittered, which smears any lattice away.
+
+```{r}
+#| label: tbl-lattice
+#| tbl-cap: "Lattice diagnostic and the jitter check, for the shorter tables where the concern bites. A small within-cluster share means theta-hat really is close to a lattice; asymmetry surviving the jitter means the lattice is not what produces it. Both columns here are the fast-and-wrong contrast, so they are directly comparable to each other but equal the headline asymmetry only for negative-dependence tables."
+
+lat_df <- summary_df |>
+  filter(!is.na(lattice_share)) |>
+  arrange(n_items_fit) |>
+  transmute(table, J = n_items_fit,
+            `within-cluster share` = round(lattice_share, 4),
+            `fast-wrong asym.` = round(asym_emp, 3),
+            `after jitter` = round(asym_jitter, 3),
+            `change` = round(asym_jitter - asym_emp, 3))
+
+if (nrow(lat_df) > 0) {
+  knitr::kable(lat_df)
+} else {
+  knitr::kable(tibble(Note = "No table in this pass was short enough for the lattice diagnostic."))
+}
+```
+
+### Does the person floor matter?
+
+The person floor was swept over `r paste(floor_sweep, collapse = ", ")`
+responses. It is worth being clear about what this check can and cannot show:
+on a *complete* matrix every respondent has the same number of responses, so
+raising the floor either changes nothing or removes the table entirely. The
+sweep is informative only for the genuinely sparse tables.
+
+```{r}
+#| label: tbl-floor-sweep
+#| tbl-cap: "Selected family and asymmetry at each person floor, for tables where more than one floor yielded a result. A table appearing once only did so because the stricter floors left too few respondents."
+
+sweep_df <- all_floors |>
+  group_by(table) |>
+  filter(n() > 1) |>
+  ungroup() |>
+  arrange(table, person_floor) |>
+  transmute(table, `person floor` = person_floor, N = n_persons_copula,
+            selected = fam_label(best_family_name),
+            `fast-wrong asym.` = round(asym_emp, 3),
+            dAIC = round(daic_vs_gaussian, 1))
+
+if (nrow(sweep_df) > 0) {
+  knitr::kable(sweep_df)
+} else {
+  knitr::kable(tibble(
+    Note = "Every table in this pass yielded a result at one floor only — see the note above."))
+}
+```
+
+## Limitations
+
+**This is not the paper's estimator, and the gap is the point.**
+@kwon2026copula estimate the copula *jointly* with the measurement model by EM
+with stochastic approximation. This page fits the bivariate-normal model first
+and characterises the copula of its output second. The two-stage version is
+biased toward finding no asymmetry, as set out in the Motivation, which is why
+positive findings here are informative and null findings on any single table
+are not. It is not a substitute for their estimator and does not reproduce
+their parameter values.
+
+**This page measures fit, not prediction, and not bias.** What is reported is
+how well competing dependence structures describe the joint distribution of
+two person estimates, by AIC. That is a third thing, distinct from both of the
+quantities usually at issue. @kwon2026copula report an IMV of 0.00027 for their
+copula over the normal — a gain they themselves call comparable to a 3PL over
+a 2PL, which is to say nearly nothing — but their *substantive* claim is about
+**bias in $\hat\theta$ in the lower tail**, not about prediction. A small IMV
+would not refute that claim, and a large AIC improvement here does not
+establish it. Nothing on this page measures either out-of-sample prediction or
+bias in $\hat\theta$; testing the bias claim needs the joint estimator and is
+the obvious next step rather than something to read off these numbers.
+
+**Shrinkage is not the only distortion.** $\hat\theta$ on a short test is close
+to a lattice, which the diagnostics above address directly but do not remove.
+On tables with few items the person estimates are also simply noisy, and noise
+attenuates rather than creates directional asymmetry — but it does widen the
+uncertainty around every number here, and that uncertainty is not quantified
+per table.
+
+**The symmetry test p-values carry Monte Carlo error.** They are bootstrap
+statistics with roughly ±0.005 of simulation error at the number of replicates
+used here. Read which side of a conventional threshold they fall on; the third
+digit is not meaningful.
+
+**Item-selected subtables are not the tables.** Restricting a 13,000-item
+Duolingo table to its 500 most-administered items produces a different
+instrument — the most-practised items, from the most-engaged learners. Those
+rows are flagged throughout and should not be read as statements about the
+full table.
+
+**The PISA cells are not reproduced.** The PISA 2018 tables are in the IRW, but
+with mixed response formats, so matching the paper's 30 splits would require
+per-country and per-cluster subsetting that this pass does not attempt. This
+page therefore tests whether the phenomenon generalises, not whether the
+paper's specific numbers replicate.
+
+**The dependence is population-level.** @domingue2022notsofast found a
+*within-person* effect — lower-ability respondents vary their speed more. The
+tail dependence measured here is a property of the population joint
+distribution. Whether these are two views of one fact or two distinct misfits
+is answerable by correlating the two quantities across tables, and is not
+answered here.
+
+## Reproducibility
+
+{{< include ../components/_data-version.qmd >}}
+
+Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
+
+```r
+# 1. Re-run the compute script (from the project root)
+source("vignettes/speed_accuracy_copula_compute.R")
+
+# 2. Re-render this page
+quarto::quarto_render("vignettes/speed_accuracy_copula.qmd")
+```
+
+The compute script needs `copula` and `VineCopula` in addition to the site's
+usual packages; this page itself only reads the cached results and does not
+need either.
+
+::: {.callout-tip}
+To cite the datasets used, run:
+
+```r
+irw_save_bibtex(summary_df$table,
+                output_file = "speed_accuracy_copula_data/references.bib")
+```
+:::
+
+---
+
+## References
