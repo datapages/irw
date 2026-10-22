@@ -204,12 +204,12 @@ Asymmetry it *does* find should therefore be credible, because it had to
 survive a procedure that works against it, while absence of asymmetry on any
 given table is weak evidence of absence.
 
-That is the argument, and one result below strains it. Shrinkage toward the
-centre is not the only way a two-stage procedure can distort a joint
-distribution, and on the single dataset this page shares with the paper the
-two methods disagree in the direction the argument says they should not. The
-case is set out where the result appears, and again in the Limitations; it is
-the main reason to treat what follows as a screen rather than a finding.
+That is the argument, and one result below strains it: on the single dataset
+this page shares with the paper, the two methods disagree in the direction the
+argument says they should not. Because that is a threat to the whole design
+rather than to one row, it is tested directly — by generating data from an
+exactly bivariate normal prior and asking how often the screen reports
+asymmetry anyway. It does not. The result and its limits are set out below.
 
 ### Related pages
 
@@ -570,19 +570,9 @@ if (!has_nomt) {
       "Both things cannot be the best reading of this dataset, and the ",
       "disagreement is not about the selection criterion: the families at ",
       "issue carry one parameter each, so AIC and log-likelihood rank them ",
-      "identically. It is a disagreement about *what is being modelled*. ",
-      "Their estimator fits the copula jointly with the measurement model, ",
-      "where it has to earn its keep against the response and timing data ",
-      "directly. This page fits the normal first and then characterises the ",
-      "copula of the resulting person estimates -- estimates whose shrinkage ",
-      "is induced by that very normal prior, and whose reliability is not ",
-      "constant across the ability range. Uneven shrinkage of that kind can ",
-      "distort the shape of a joint distribution as well as shrink it, which ",
-      "is a different and less comfortable failure mode than the ",
-      "toward-zero bias set out in the Motivation. Which of the two readings ",
-      "of `nomt` is right is not settled here, and it is the sharpest ",
-      "available test of whether a two-stage screen of this kind can be ",
-      "trusted at all.\n"
+      "identically. The obvious suspect is this page's own two-stage design, ",
+      "so it is worth ruling in or out directly rather than reasoning about ",
+      "it, which is what the next section does.\n"
     ),
     nomt$n_persons_fit[1], nomt$n_items_fit[1], 389L, 144L,
     "\u00b0",
@@ -592,6 +582,78 @@ if (!has_nomt) {
   ))
 }
 ```
+
+### Can this screen invent an asymmetry?
+
+A two-stage screen characterises the copula of *estimates*, not of latent
+traits, and the estimates are shrunken toward a centre by a prior that is
+itself the bivariate normal. The Motivation argues that this biases the
+screen toward finding nothing. But shrinkage is not uniform — measurement
+precision varies across the ability range — and uneven pulling could in
+principle bend the shape of a joint distribution rather than merely contract
+it, which would mean manufacturing asymmetry rather than hiding it. `nomt` is
+exactly the case that would expose this, so it is tested rather than argued.
+
+The test is a parametric bootstrap under the null the paper's model replaces.
+Take the bivariate-normal model fitted to `nomt` — its item parameters, its
+time intensities, its estimated person covariance — generate complete datasets
+of the same size from it with an **exactly bivariate normal** person
+distribution, refit the same model, and run the identical copula
+characterisation on the result. Any asymmetry that appears is manufactured by
+the procedure, because none was put in.
+
+```{r}
+#| label: null-calibration
+#| echo: false
+#| output: asis
+
+cal_path <- "speed_accuracy_copula_data/null_calibration.rds"
+if (!file.exists(cal_path)) {
+  cat("The null-calibration results are not present in this build.\n")
+} else {
+  cal <- readRDS(cal_path)$results
+  fam <- sort(table(cal$best_family_name), decreasing = TRUE)
+  cat(sprintf(
+    paste0(
+      "Across %d replicates the screen selects the **Gaussian copula %d** ",
+      "times, the Student $t$ %d, a 90%s-rotated Gumbel %d, and the ",
+      "90%s-rotated Joe **%d** times. The improvement over the Gaussian ",
+      "reaches a median of %.1f AIC and a maximum of %.1f; radial symmetry ",
+      "is rejected at the 5%% level in %d of %d replicates, which is the ",
+      "nominal rate. The asymmetry statistic has a median of %.3f and a 95th ",
+      "percentile of %.3f.\n\n",
+      "The observed values on the real `nomt` are %.1f AIC and an asymmetry ",
+      "of %.3f, with radial symmetry rejected at $p = %.4f$. Neither is ",
+      "approached by any replicate. **On this design the screen is ",
+      "calibrated**: it does not invent a rotated Joe, and the margin it ",
+      "reports on `nomt` is not something uneven shrinkage produces. The ",
+      "conservative reading set out in the Motivation survives, and the ",
+      "disagreement with @kwon2026copula on this dataset is not explained by ",
+      "the two-stage design.\n"
+    ),
+    nrow(cal),
+    sum(cal$best_family_name == "Gaussian"),
+    sum(cal$best_family_name == "t"),
+    "\u00b0", sum(grepl("Gumbel 90", cal$best_family_name)),
+    "\u00b0", sum(cal$is_joe90),
+    median(cal$daic_vs_gaussian), max(cal$daic_vs_gaussian),
+    sum(cal$p_radsym < .05), nrow(cal),
+    median(cal$asym_emp), quantile(cal$asym_emp, .95),
+    34.42, 0.368, 0.0015
+  ))
+}
+```
+
+Two caveats bound that conclusion. It is one design — `nomt`'s N, its item
+count and its particular measurement precision — and says nothing about the
+short, sparse tables elsewhere in this corpus, where shrinkage is far heavier.
+And it generates from the fitted model, so it tests whether a *correctly
+specified* two-stage screen stays calibrated, not what happens when level 1 is
+wrong. That second gap is the live alternative: if some respondents are rapid
+guessing, their response times are not lognormal, and a copula fitted at
+level 2 may be absorbing a level-1 misfit. That reading is available for every
+asymmetric result on this page, including the paper's own, and nothing here
+separates the two.
 
 ### The copula, drawn
 
@@ -769,21 +831,22 @@ establish it. Nothing on this page measures either out-of-sample prediction or
 bias in $\hat\theta$; testing the bias claim needs the joint estimator and is
 the obvious next step rather than something to read off these numbers.
 
-**Shrinkage is not the only distortion, and `nomt` is the warning.** On the one
-dataset this page and the paper share, the two procedures reach opposite
-conclusions: their joint estimator selects the bivariate normal, this screen
-selects a 90°-rotated Joe with a comfortable margin. A screen that is biased
-toward zero should not do that. The likely culprit is that shrinkage is not
-uniform — measurement precision varies across the ability range, so the
-posterior means are pulled in unevenly, and uneven pulling can bend the shape
-of a joint distribution rather than merely contract it. That is a mechanism
-capable of *manufacturing* apparent asymmetry, not only of hiding it, and it
-is not controlled for anywhere on this page. The corpus-level patterns here
-should be read with that possibility live. Separately, $\hat\theta$ on a short
-test is close to a lattice, which the diagnostics above address directly but do
-not remove, and on tables with few items the person estimates are simply noisy,
-which widens the uncertainty around every number here in a way that is not
-quantified per table.
+**The screen is calibrated on one design, not on all of them.** The parametric
+bootstrap above shows that on `nomt` this procedure does not manufacture a
+rotated Joe from bivariate-normal data. That is the only design it has been
+checked on, and it is a favourable one: 144 items per respondent, so shrinkage
+is light. The short tables in this corpus shrink much harder, and the same
+check has not been run for them. Read the corpus-level counts with that gap in
+mind. Separately, $\hat\theta$ on a short test is close to a lattice, which
+the diagnostics above address directly but do not remove, and on tables with
+few items the person estimates are simply noisy, which widens the uncertainty
+around every number here in a way that is not quantified per table.
+
+**Level-2 asymmetry and level-1 misfit are not separated anywhere here.** A
+copula at the person level can absorb a failure of the lognormal response-time
+model at the item level — rapid guessing being the obvious case, and the one
+@kwon2026copula themselves invoke when interpreting the fast-and-wrong corner.
+Every asymmetric result on this page admits that alternative reading.
 
 **The symmetry test p-values carry Monte Carlo error.** They are bootstrap
 statistics with roughly ±0.005 of simulation error at the number of replicates
