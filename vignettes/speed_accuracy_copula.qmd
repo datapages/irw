@@ -168,13 +168,22 @@ a 90°-rotated Joe copula selected over the normal on 28 of them, and read this
 as "strong evidence for the presence of asymmetric tail dependence in
 large-scale educational assessments."
 
-Thirty splits of one assessment, plus six small cognitive-training datasets, is
-a narrow base for a claim about item response data in general. The IRW holds
-much more heterogeneous material, so the question this page asks is simply:
-**does the direction and magnitude of that tail asymmetry show up outside
-large-scale educational assessment, or is it a PISA fact?** Two of the paper's
-own data sources are IRW tables, so part of the answer is already a
-re-examination of their evidence rather than a new sample.
+Thirty splits of one assessment is a narrow base for a claim about item
+response data in general, and the paper's own non-PISA evidence does not widen
+it much. Alongside PISA it fits the same nine models to six smaller datasets —
+five cognitive-training tasks and a novel object memory test — and there the
+bivariate normal is selected on four, a 270°-rotated Gumbel on two, and the
+90°-rotated Joe on none. Within PISA itself the picture is also uneven: across
+the thirty country-by-cluster cells they fit individually, the 90°-rotated Joe
+is selected on fourteen of the fifteen science cells but only five of the
+fifteen in mathematics, where the bivariate normal takes eight. Their headline
+direction is, on their own showing, strongest in one subject of one
+assessment. That makes the generalisation question a real one rather than
+a rhetorical one: **does the direction and magnitude of that tail asymmetry
+show up outside large-scale educational assessment, or is it a PISA fact?**
+The IRW holds much more heterogeneous material to ask it of — and one of the
+paper's own six is an IRW table that this pass also analyses, so part of the
+answer is a re-examination of their evidence rather than a new sample.
 
 ### What biases this screen, stated up front
 
@@ -191,9 +200,16 @@ the centre is exactly what destroys tail dependence. So this screen is
 **conservative**: it is biased toward finding *no* asymmetry.
 
 That asymmetry of evidence is what makes the screen worth running at all.
-Asymmetry it *does* find is credible, because it had to survive a procedure
-designed to wash it out. Absence of asymmetry, on any given table, is weak
-evidence of absence.
+Asymmetry it *does* find should therefore be credible, because it had to
+survive a procedure that works against it, while absence of asymmetry on any
+given table is weak evidence of absence.
+
+That is the argument, and one result below strains it. Shrinkage toward the
+centre is not the only way a two-stage procedure can distort a joint
+distribution, and on the single dataset this page shares with the paper the
+two methods disagree in the direction the argument says they should not. The
+case is set out where the result appears, and again in the Limitations; it is
+the main reason to treat what follows as a screen rather than a finding.
 
 ### Related pages
 
@@ -294,12 +310,14 @@ For each surviving table, `fit_one_table()`:
    [@fox2021lnirt], `r format(xg, big.mark = ",")` MCMC iterations, and takes
    the posterior means $\hat\theta$ (ability) and $\hat\tau$ (speed, where
    higher means faster).
-4. Converts the pair to pseudo-observations (ranks) and selects among the
-   families @kwon2026copula select over — independence, Gaussian, Student $t$,
-   and Gumbel and Joe in all four rotations — by AIC, recording the full AIC
-   table rather than only the winner. (The paper selects among the same nine by
-   log-likelihood; AIC is used here because the families differ in parameter
-   count, the Student $t$ carrying one more than the rest.)
+4. Converts the pair to pseudo-observations (ranks) and selects a copula
+   family by AIC, recording the full AIC table rather than only the winner.
+   The candidate set here extends the paper's rather than matching it.
+   @kwon2026copula compare the bivariate normal against Gumbel and Joe in all
+   four rotations — nine models — and select by log-likelihood, which is
+   reasonable there because all nine carry one dependence parameter. This page
+   adds **independence** and the **Student $t$** as reference points, and so
+   selects by AIC instead, the $t$ carrying one parameter more than the rest.
 5. Computes tail dependence both nonparametrically [@schmidt2006nonparametric]
    and as implied by the selected family, and tests exchangeability and radial
    symmetry [@genest2012tests].
@@ -513,6 +531,68 @@ Because the two-stage design is biased toward zero, every number here is a
 lower bound on whatever asymmetry is present in the data-generating process
 rather than an estimate of it.
 
+### The one dataset in common
+
+```{r}
+#| label: nomt-overlap
+#| echo: false
+
+nomt <- summary_df |> filter(table == "nomt_hooper_2024_study2")
+has_nomt <- nrow(nomt) == 1
+```
+
+```{r}
+#| label: nomt-text
+#| echo: false
+#| output: asis
+
+if (!has_nomt) {
+  cat("The `nomt` table did not yield a result in this pass, so the direct",
+      "comparison with the paper is not available here.\n")
+} else {
+  cat(sprintf(
+    paste0(
+      "The novel object memory test of @nomt_hooper_2024_study2 is the one dataset ",
+      "this page and @kwon2026copula both analyse: they take it from the IRW, ",
+      "and it clears every gate here. The two analyses therefore see very ",
+      "nearly the same data -- %d respondents and %d items here against the ",
+      "%d and %d they report, the difference being their removal of ",
+      "respondents with any missing value -- and they disagree.\n\n",
+      "They select the **bivariate normal** on this dataset. Its ",
+      "log-likelihood beats all eight of their copulas, and the 90%s-rotated ",
+      "Joe is close to their worst fit on it. This screen selects the ",
+      "**%s** over the Gaussian by %.0f AIC, finds the fast-and-wrong corner ",
+      "at $\\lambda_{LU} = %.2f$ against $\\lambda_{UL} = %.2f$ in the ",
+      "opposite corner, and rejects radial symmetry at $p = %.3f$. The ",
+      "dependence is negative and substantial ($\\hat\\rho = %.2f$ under ",
+      "the fitted normal prior), so those are the two corners that can hold ",
+      "anything.\n\n",
+      "Both things cannot be the best reading of this dataset, and the ",
+      "disagreement is not about the selection criterion: the families at ",
+      "issue carry one parameter each, so AIC and log-likelihood rank them ",
+      "identically. It is a disagreement about *what is being modelled*. ",
+      "Their estimator fits the copula jointly with the measurement model, ",
+      "where it has to earn its keep against the response and timing data ",
+      "directly. This page fits the normal first and then characterises the ",
+      "copula of the resulting person estimates -- estimates whose shrinkage ",
+      "is induced by that very normal prior, and whose reliability is not ",
+      "constant across the ability range. Uneven shrinkage of that kind can ",
+      "distort the shape of a joint distribution as well as shrink it, which ",
+      "is a different and less comfortable failure mode than the ",
+      "toward-zero bias set out in the Motivation. Which of the two readings ",
+      "of `nomt` is right is not settled here, and it is the sharpest ",
+      "available test of whether a two-stage screen of this kind can be ",
+      "trusted at all.\n"
+    ),
+    nomt$n_persons_fit[1], nomt$n_items_fit[1], 389L, 144L,
+    "\u00b0",
+    fam_label(nomt$best_family_name[1]), nomt$daic_vs_gaussian[1],
+    nomt$lambda_LU_emp[1], nomt$lambda_UL_emp[1],
+    nomt$p_radsym[1], nomt$rho_mvn[1]
+  ))
+}
+```
+
 ### The copula, drawn
 
 ```{r}
@@ -689,12 +769,21 @@ establish it. Nothing on this page measures either out-of-sample prediction or
 bias in $\hat\theta$; testing the bias claim needs the joint estimator and is
 the obvious next step rather than something to read off these numbers.
 
-**Shrinkage is not the only distortion.** $\hat\theta$ on a short test is close
-to a lattice, which the diagnostics above address directly but do not remove.
-On tables with few items the person estimates are also simply noisy, and noise
-attenuates rather than creates directional asymmetry — but it does widen the
-uncertainty around every number here, and that uncertainty is not quantified
-per table.
+**Shrinkage is not the only distortion, and `nomt` is the warning.** On the one
+dataset this page and the paper share, the two procedures reach opposite
+conclusions: their joint estimator selects the bivariate normal, this screen
+selects a 90°-rotated Joe with a comfortable margin. A screen that is biased
+toward zero should not do that. The likely culprit is that shrinkage is not
+uniform — measurement precision varies across the ability range, so the
+posterior means are pulled in unevenly, and uneven pulling can bend the shape
+of a joint distribution rather than merely contract it. That is a mechanism
+capable of *manufacturing* apparent asymmetry, not only of hiding it, and it
+is not controlled for anywhere on this page. The corpus-level patterns here
+should be read with that possibility live. Separately, $\hat\theta$ on a short
+test is close to a lattice, which the diagnostics above address directly but do
+not remove, and on tables with few items the person estimates are simply noisy,
+which widens the uncertainty around every number here in a way that is not
+quantified per table.
 
 **The symmetry test p-values carry Monte Carlo error.** They are bootstrap
 statistics with roughly ±0.005 of simulation error at the number of replicates
