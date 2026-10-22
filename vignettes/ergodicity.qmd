@@ -161,11 +161,15 @@ acts on, is about a person: if your rumination goes up, your mood goes down.
 Those are different claims, and @fisher2018lack showed how different. A
 group-level result generalises to the individuals in the group when the process
 is *ergodic* — roughly, when people are homogeneous in the structure being
-estimated and each person's process is stationary over time. Using six
-intensive-longitudinal datasets, they compared within-person to between-person
-variance structures and found individual variation running up to about four
-times the group estimate. The group result was not a description of a typical
-person; it was a description of nobody in particular.
+estimated and each person's process is stationary over time. Across six
+intensive-longitudinal datasets they compared the within-person and
+between-person versions of the same statistics and found that the means agreed
+(14 of 15 variables, 3% median discrepancy) while the *dispersions* did not: a
+person's own standard deviation ran 3.79 to 13.20 times the between-person
+standard deviation, and the spread of person-level correlations ran 2.09 to 4
+times the group's. Only 68% of individual correlations fell inside a range the
+group data predicted would hold 99.7% of them. The group result was not a
+description of a typical person; it was a description of nobody in particular.
 
 @adolf2019ergodicity replied, and the reply matters for how this page is
 written. Group-to-individual generalisability does not actually *require*
@@ -744,6 +748,107 @@ if (cache_ok && nrow(pairs_raw) > 0) {
 }
 ```
 
+### What replicates, and what does not
+
+```{r}
+#| label: tbl-fisher
+#| echo: false
+
+if (cache_ok && nrow(pairs_raw) > 0) {
+  pr <- pairs_raw; pd <- pair_summary %>% filter(spec == "detrended")
+  tibble(
+    Quantity = c(
+      "Datasets",
+      "Person means vs group means",
+      "A person's own SD ÷ the between-person SD",
+      "Spread of person-level correlations ÷ its reference",
+      "After removing temporal dependence",
+      "The typical person's correlation vs the group's",
+      "Persons correlating opposite to the group"),
+    `Fisher et al. (2018)` = c(
+      "6 (63–535 persons; 30–925 occasions)",
+      "equivalent: 14 of 15 variables, 3% median discrepancy",
+      "3.79 to 13.20 (mean 7.85)",
+      "2.09 to 4.00 (mean 2.84)",
+      "1.63 to 3.43 (mean 2.56) after AR residualisation",
+      "0.40 vs 0.71, and 0.23 vs 0.46: roughly half",
+      "one negative individual (r = −0.11) on one pair"),
+    `This page` = c(
+      sprintf("%d (%d with item pairs; %d–%d occasions per person, table medians)",
+              r_n_tables_run, n_distinct(pr$table),
+              round(min(table_summary$occ_median)), round(max(table_summary$occ_median))),
+      "not computed",
+      sprintf("%.2f (median item); %.2f to %.2f across table medians",
+              median(items_raw$ratio_median),
+              min((items_raw %>% group_by(table) %>%
+                     summarise(m = median(ratio_median), .groups = "drop"))$m),
+              max((items_raw %>% group_by(table) %>%
+                     summarise(m = median(ratio_median), .groups = "drop"))$m)),
+      sprintf("%.2f (median pair, ÷ the homogeneity baseline)", median(pr$het_ratio)),
+      sprintf("%.2f after a per-person linear detrend", median(pd$het_ratio)),
+      sprintf("%.2f vs %.2f: %.0f%% of the group value",
+              median(pr$r_within_median), median(pr$r_between),
+              100 * median(pr$r_within_median) / median(pr$r_between)),
+      sprintf("%.0f%% of persons on the median pair, vs %.1f%% expected from noise",
+              100 * median(pr$frac_opposite), 100 * median(pr$frac_opposite_exp)))) %>%
+    kable(caption = paste0(
+      "The same quantities, their six datasets and this pool. The two sets of",
+      " dispersion figures are not computed against the same reference — see",
+      " below."))
+}
+```
+
+**The correlational result replicates closely.** Their person-level
+correlations averaged about half the group's, and so do these (0.25 against
+0.55). Their spread of person-level correlations ran 2.09–4.00 times its
+reference against 1.92 here, and in both cases removing temporal dependence
+shrinks it slightly without touching the conclusion (2.84 → 2.56 for them,
+1.92 → 1.87 here). Two groups of datasets with almost nothing else in common —
+theirs clinical and physiological, this pool mostly non-clinical self-report —
+give the same answer to the same question.
+
+**The univariate dispersion result does not.** A person's own standard deviation
+ran at least 3.79 times the between-person standard deviation in every one of
+their fifteen variables; here the median item is at 1.12, and no table's median
+reaches 2. That is a real disagreement and not a rounding difference, and two
+things separate it from a failed replication.
+
+First, **the reference is not the same quantity**. Their between-person figure
+comes from a cross-section — one occasion per person, as a cross-sectional study
+would actually collect — which carries that occasion's within-person noise inside
+it. The figure here is the standard deviation of person *means*, which averages
+that noise away and so is smaller. The direction of that difference makes this
+page's ratios *larger* than theirs would be on the same data, so it cannot
+explain a gap this size; it only means the two numbers are not interchangeable.
+
+Second, **their datasets are built to vary within persons**. Heart rate and
+respiratory sinus arrhythmia sampled through a night, or symptom ratings from
+patients in a GAD/MDD sample and an antidepressant trial, move far more from
+moment to moment, relative to how much people differ from each other, than
+"how much did you enjoy that lecture" does. Their samples are also clinically
+selected, which compresses between-person differences and inflates the ratio
+from the other side. The honest statement is that the *size* of the
+within/between gap is a property of the measurement setting, and the six
+datasets that founded this literature sit at one extreme of it.
+
+**The sign reversals are new, and they are the part this pool is for.** Fisher
+et al. report exactly one negative individual correlation in their empirical
+results — the depressed-mood/worry pair, range −0.11 to 0.89 — and are explicit
+that the famous reversal example, where a relationship runs one way between
+people and the other way within them, comes from an illustration rather than
+their data. Across 611 pairs here the median pair has 15% of its people
+correlating against the group's direction, against 0.1% expected from noise, and
+95% of pairs exceed that baseline. Their claim was about dispersion; this adds
+that the dispersion routinely crosses zero, which is the version of the problem
+a reader can act on.
+
+**And the pool contributes a boundary condition they could not see.** Six of the
+26 tables cannot support the analysis at all, and the quantity varies by a factor
+of roughly three across the tables that can (table medians 0.61 to 1.71 on the
+univariate ratio). With six datasets a within/between gap is an existence proof;
+with this many it has a distribution, a floor, and — in the randomised format
+contrast above — at least one thing it demonstrably does not depend on.
+
 ## Limitations
 
 **This is a description, not a verdict on ergodicity.** Following
@@ -785,6 +890,13 @@ Elsewhere the table is treated as one instrument. A pair of items from genuinely
 different constructs that happen to share a scale would be counted as a pair
 here, and a low group correlation makes a sign flip cheap — which is one reason
 the group correlation is reported beside every rate.
+
+**The between-person reference differs from @fisher2018lack's.** Person means
+are used here, where they used a single-occasion cross-section. Person means are
+the right reference for asking whether a *person* differs from the group, and a
+cross-section is the right one for asking what a cross-sectional study would
+have measured. The two are not interchangeable, and the univariate ratios on
+this page should not be read directly against their 3.79–13.20.
 
 **Occasion indices are not comparable across tables.** One table's `wave` is a
 prompt within a day, another's is a day, another's is a study visit. "Occasions
