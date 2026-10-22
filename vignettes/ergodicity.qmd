@@ -336,6 +336,17 @@ $\sqrt{\overline{1/(T_i-3)}}$, and the expected rate of landing on the far side
 of zero is $\overline{\Phi(-|z_{\text{between}}|\sqrt{T_i-3})}$. Heterogeneity is
 reported as the **excess** over that baseline, never as the raw spread.
 
+That standard error assumes a person's occasions are independent draws, which
+ESM occasions are not. So the baseline is computed twice: once on each person's
+raw occasion count $T_i$, and once on an **effective** count that deflates for
+serial dependence in the two series,
+$T_i^{\text{eff}} = T_i(1-\rho_i\rho_j)/(1+\rho_i\rho_j)$, with $\rho$ the
+lag-1 autocorrelation of that person's own series on that item. Serial
+dependence makes the honest baseline *higher* and the excess *smaller*, so the
+deflated version is the conservative one and is reported alongside every
+quantity below; [its own section](#serial-dependence-a-baseline-that-does-not-assume-independent-occasions)
+gives the comparison.
+
 Three further confounds are handled in the script rather than hoped about:
 
 - **Unequal occasions within a table** mean the person-level distribution mixes
@@ -723,6 +734,85 @@ if (cache_ok && n_distinct(pair_summary$spec) > 1) {
 }
 ```
 
+### Serial dependence: a baseline that does not assume independent occasions
+
+```{r}
+#| label: tbl-ar1
+#| echo: false
+
+if (cache_ok && nrow(pairs_raw) > 0) {
+  pr <- pairs_raw
+  tibble(
+    Quantity = c("Occasions per person (median pair)",
+                 "Lag-1 autocorrelation (median pair)",
+                 "Spread of person correlations \u00f7 baseline",
+                 "Pairs above the baseline",
+                 "Persons opposite the group, excess over baseline",
+                 "Pairs above the baseline (sign flips)",
+                 "Persons inside the group interval, baseline"),
+    `Independent occasions` = c(
+      sprintf("%.0f", median(pr$occ_median)),
+      "assumed 0",
+      sprintf("%.2f", median(pr$het_ratio)),
+      sprintf("%.0f%%", 100 * mean(pr$het_ratio > 1)),
+      sprintf("%.1f points", 100 * median(pr$frac_opposite_excess)),
+      sprintf("%.0f%%", 100 * mean(pr$frac_opposite > pr$frac_opposite_exp)),
+      sprintf("%.1f%%", 100 * median(pr$frac_in_ci_exp))),
+    `Deflated for serial dependence` = c(
+      sprintf("%.0f effective", median(pr$occ_eff_median)),
+      sprintf("%.2f", median(pr$rho_median)),
+      sprintf("%.2f", median(pr$het_ratio_eff)),
+      sprintf("%.0f%%", 100 * mean(pr$het_ratio_eff > 1)),
+      sprintf("%.1f points", 100 * median(pr$frac_opposite_excess_eff)),
+      sprintf("%.0f%%", 100 * mean(pr$frac_opposite > pr$frac_opposite_exp_eff)),
+      sprintf("%.1f%%", 100 * median(pr$frac_in_ci_exp_eff)))) %>%
+    kable(caption = paste0(
+      "Every quantity on this page is an excess over a noise baseline. The left",
+      " column builds that baseline from each person's occasion count; the right",
+      " deflates the count for serial dependence in their own series, which is",
+      " the conservative version."))
+}
+```
+
+```{r}
+#| label: ar1-text
+#| echo: false
+#| output: asis
+
+if (cache_ok && nrow(pairs_raw) > 0) {
+  pr <- pairs_raw
+  cat("The baseline every number here is measured against assumes a person's",
+      " occasions are independent draws. They are not: the median pair's items",
+      sprintf(" carry a lag-1 autocorrelation of %.2f", median(pr$rho_median)),
+      sprintf(" (10th to 90th percentile %.2f to %.2f),",
+              quantile(pr$rho_median, .10), quantile(pr$rho_median, .90)),
+      " which means each person's series holds less information than its length",
+      " suggests and the true noise baseline is **higher** than an independence",
+      " calculation gives. Deflating each person's occasion count accordingly",
+      sprintf(" takes the median pair from %.0f occasions to %.0f effective ones",
+              median(pr$occ_median), median(pr$occ_eff_median)),
+      sprintf(" — a %.0f%% reduction — and moves the spread ratio from %.2f to **%.2f**,",
+              100 * (1 - median(pr$occ_eff_median / pr$occ_median)),
+              median(pr$het_ratio), median(pr$het_ratio_eff)),
+      sprintf(" the sign-flip excess from %.1f to **%.1f points**, and the share of pairs",
+              100 * median(pr$frac_opposite_excess),
+              100 * median(pr$frac_opposite_excess_eff)),
+      sprintf(" exceeding their own baseline unmoved at %.0f%%.",
+              100 * mean(pr$frac_opposite > pr$frac_opposite_exp_eff)),
+      " The result is smaller and it is intact.\n\n",
+      "This is the assumption most likely to be doing hidden work, because",
+      " every quantity on the page is an excess over the baseline rather than a",
+      " raw number, so the baseline being too low would inflate all of them at",
+      " once. It is worth being precise about the direction: the deflation only",
+      " ever *reduces* what is reported here. Negative autocorrelation estimates",
+      " are clamped to zero rather than allowed to raise the effective count,",
+      " and the lag-1 coefficient is capped at 0.9, so the baseline is never",
+      " made more permissive than the independence version. What the deflated",
+      " column shows is a lower bound on the excess, not a correction to it.\n",
+      sep = "")
+}
+```
+
 ### Per table
 
 ```{r}
@@ -731,6 +821,7 @@ if (cache_ok && n_distinct(pair_summary$spec) > 1) {
 
 if (cache_ok && nrow(pairs_raw) > 0) {
   pairs_raw %>%
+    mutate(arm = ifelse(is.na(arm), "\u2014", arm)) %>%
     group_by(Table = table, Arm = arm) %>%
     summarise(Pairs = n(),
               `Occasions (median)` = round(median(occ_median)),
@@ -789,7 +880,8 @@ if (cache_ok && nrow(pairs_raw) > 0) {
                      summarise(m = median(ratio_median), .groups = "drop"))$m),
               max((items_raw %>% group_by(table) %>%
                      summarise(m = median(ratio_median), .groups = "drop"))$m)),
-      sprintf("%.2f (median pair, ÷ the homogeneity baseline)", median(pr$het_ratio)),
+      sprintf("%.2f (median pair, ÷ the homogeneity baseline; %.2f deflating that baseline for serial dependence)",
+              median(pr$het_ratio), median(pr$het_ratio_eff)),
       sprintf("%.2f after a per-person linear detrend", median(pd$het_ratio)),
       sprintf("%.2f vs %.2f: %.0f%% of the group value",
               median(pr$r_within_median), median(pr$r_between),
@@ -907,15 +999,39 @@ point estimate computed from one person's handful of occasions. Everything here
 treats each person's estimate as data; it has sampling error that the baseline
 accounts for on average and not pair by pair.
 
-**The baseline assumes normality and independence within a person.** The
-expected spread under homogeneity uses the Fisher-$z$ standard error
-$1/\sqrt{T_i-3}$, which assumes bivariate normal, independent occasions. ESM
-responses are neither: they are bounded, often floored, and autocorrelated.
-Positive autocorrelation makes the effective number of occasions smaller than
-$T_i$, which means the true noise baseline is *higher* than the one used here
-and the reported excess is correspondingly optimistic. The carryover estimates
-on [the floor page](esm_floor.qmd) are modest, which limits but does not remove
-this.
+**The baseline assumes normality within a person; serial dependence is
+measured rather than assumed away.** The expected spread under homogeneity uses
+the Fisher-$z$ standard error $1/\sqrt{T-3}$, which assumes bivariate normal,
+independent occasions. ESM responses are bounded, often floored, and
+autocorrelated, and the autocorrelation is the part that would matter most:
+it makes the honest baseline higher and every reported excess smaller.
+[The deflated baseline](#serial-dependence-a-baseline-that-does-not-assume-independent-occasions)
+quantifies that and the result survives it. What is *not* addressed is
+non-normality: a bounded, floored, discrete response does not give a
+Fisher-$z$-distributed correlation, and no analytic baseline fixes that. A
+permutation null within persons would, and is the obvious next step for anyone
+who wants this tighter than it is.
+
+**The item-level quantity has no baseline, unlike the pair-level one.** The
+within/between SD ratios are reported raw, where every pair-level number is an
+excess over a noise reference. The asymmetry is deliberate but it is an
+asymmetry: a person's own SD on as few as ten occasions is noisy, which is why
+the 90th-percentile person rather than the maximum is quoted. The direction is
+conservative — the between-person SD of person *means* is inflated by each
+mean's own sampling error, which makes the ratio smaller than it should be — but
+"conservative in expectation" is weaker than the explicit reference the pair
+quantities carry, and the row where this page fails to replicate
+@fisher2018lack is an item-level row.
+
+**The 611 pairs are not independent, and the pooled percentages treat them as
+though they were.** Pairs within a table share items, items within a source
+share persons and protocol, and 153 of the 611 pairs come from a single table.
+So "95% of pairs exceed the baseline" is a description of the pairs in this
+pool, not a test with 611 degrees of freedom, and nothing here clusters the
+standard errors or weights tables equally. The per-table table above is the
+honest unit of replication: the quantity is positive in all 20 tables that
+support it, which is the claim that does not depend on how the pairs are
+counted.
 
 **The floor is handled by covariate, not by design.** Floor mass measured on
 items is weakly related to the pair-level excess and negatively related to the

@@ -175,14 +175,38 @@ format_of <- function(n_cat) ifelse(n_cat > 10, "Slider / continuous", "Ordinal"
 
 z_of <- function(r) atanh(pmax(pmin(r, 0.9999), -0.9999))
 
+# Lag-1 autocorrelation of one person's series on one item, used to deflate that
+# person's occasion count to an EFFECTIVE one. Clamped to [0, 0.9]: a negative
+# estimate would legitimately raise the effective sample size, but allowing that
+# would let noise inflate the baseline's precision and so inflate the reported
+# excess, so this only ever deflates. 0.9 keeps a near-unit-root estimate from
+# collapsing t_eff to nothing.
+ar1_of <- function(x) {
+  x <- x[!is.na(x)]
+  n <- length(x)
+  if (n < 4L) return(0)
+  d <- x - mean(x)
+  den <- sum(d^2)
+  if (den <= 0) return(0)
+  min(max(sum(d[-1] * d[-n]) / den, 0), 0.9)
+}
+
 # ---------------------------------------------------------------------------
 # Per-person correlations for one comparable group of items
 # ---------------------------------------------------------------------------
 # w: one row per (id, occasion), one column per item.
-# Returns one row per (person, pair) with the person's correlation and the number
-# of occasions it rests on. A person whose response never varies (a floored item)
-# yields NA and is counted separately rather than dropped silently -- that
+# Returns one row per (person, pair) with the person's correlation, the number of
+# occasions it rests on, and an EFFECTIVE occasion count that accounts for serial
+# dependence in the two series. A person whose response never varies (a floored
+# item) yields NA and is counted separately rather than dropped silently -- that
 # exclusion is itself a floor effect.
+#
+# t_eff uses the standard Bartlett-type adjustment for the correlation between
+# two autocorrelated series, t_eff = T (1 - rho_i rho_j) / (1 + rho_i rho_j).
+# This matters because every reported quantity on the page is an excess over a
+# baseline built from T: ESM occasions are not independent draws, so the true
+# baseline is HIGHER than an independence calculation gives and the excess
+# correspondingly smaller. Both versions are computed and carried through.
 person_pair_cors <- function(w, items, min_occ) {
   M <- as.matrix(w[, items, drop = FALSE])
   storage.mode(M) <- "double"
@@ -197,10 +221,16 @@ person_pair_cors <- function(w, items, min_occ) {
     cm <- suppressWarnings(stats::cor(mi, use = "pairwise.complete.obs"))
     keep <- tp[cmb] >= min_occ
     if (!any(keep)) next
+    rho <- apply(mi, 2L, ar1_of)
+    ri <- rho[cmb[keep, 1]]; rj <- rho[cmb[keep, 2]]
+    t_raw <- as.integer(tp[cmb][keep])
+    rp <- ri * rj
     rows[[k]] <- tibble(
       id    = names(idx)[k],
       item_i = items[cmb[keep, 1]], item_j = items[cmb[keep, 2]],
-      t_occ = as.integer(tp[cmb][keep]),
+      t_occ = t_raw,
+      rho_i = ri, rho_j = rj,
+      t_eff = t_raw * (1 - rp) / (1 + rp),
       r     = cm[cmb][keep]
     )
   }
@@ -320,6 +350,11 @@ profile_table <- function(tab) {
           # Spread EXPECTED if every person shared the group correlation, from
           # each person's own occasion count. se_i = 1/sqrt(T_i - 3) in z space.
           z_sd_exp    = sqrt(mean(1 / pmax(t_occ - 3, 1))),
+          # The same baseline on effective occasions: the defensible version,
+          # since ESM occasions are serially dependent.
+          z_sd_exp_eff = sqrt(mean(1 / pmax(t_eff - 3, 1))),
+          rho_median  = median(pmax(rho_i, rho_j)),
+          occ_eff_median = median(t_eff),
           z_mean_wt   = sum(z_of(r) * pmax(t_occ - 3, 1)) / sum(pmax(t_occ - 3, 1)),
           .groups = "drop"
         ) %>%
@@ -353,6 +388,8 @@ profile_table <- function(tab) {
           # their own precision), averaged over persons.
           frac_opposite_exp = mean(stats::pnorm(-abs(z_of(first(r_between))) *
                                                  sqrt(pmax(t_occ - 3, 1)))),
+          frac_opposite_exp_eff = mean(stats::pnorm(-abs(z_of(first(r_between))) *
+                                                 sqrt(pmax(t_eff - 3, 1)))),
           # Fisher et al.'s coverage statistic: they report that only 68% of
           # individual correlations fall inside a 99.7% (+-3 SE) interval built
           # around the GROUP estimate. Reproduced here pair by pair -- and with
@@ -370,6 +407,12 @@ profile_table <- function(tab) {
           frac_in_ci_exp = {
             se_g <- 1 / sqrt(pmax(first(n_between) - 3, 1))
             mean(2 * stats::pnorm(3 * se_g * sqrt(pmax(t_occ - 3, 1))) - 1)
+          },
+          # The group's own interval needs no deflation: it is built over
+          # PERSONS, who are independent of each other, not over occasions.
+          frac_in_ci_exp_eff = {
+            se_g <- 1 / sqrt(pmax(first(n_between) - 3, 1))
+            mean(2 * stats::pnorm(3 * se_g * sqrt(pmax(t_eff - 3, 1))) - 1)
           },
           .groups = "drop")
 
@@ -389,8 +432,11 @@ profile_table <- function(tab) {
           # produce under homogeneity, never the raw spread.
           z_sd_excess = sqrt(pmax(z_sd_obs^2 - z_sd_exp^2, 0)),
           het_ratio   = z_sd_obs / z_sd_exp,
+          z_sd_excess_eff = sqrt(pmax(z_sd_obs^2 - z_sd_exp_eff^2, 0)),
+          het_ratio_eff   = z_sd_obs / z_sd_exp_eff,
           # The reportable excess over the noise baseline, for both quantities.
           frac_opposite_excess = frac_opposite - frac_opposite_exp,
+          frac_opposite_excess_eff = frac_opposite - frac_opposite_exp_eff,
           table = tab, arm = arm, instrument = instrument,
           scale = scale, format = format, spec = spec, .before = 1)
     })
