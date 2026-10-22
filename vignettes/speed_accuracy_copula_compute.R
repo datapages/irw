@@ -69,6 +69,9 @@ PERSON_FLOOR        <- PERSON_FLOOR_SWEEP[1]  # sensitivity check the brief asks
 XG     <- 1000  # MCMC iterations for LNIRT
 BURNIN <- 10    # percent discarded
 
+SYMTEST_MAX  <- 2000  # symmetry tests use the full sample up to this size
+SYMTEST_REPS <- 1000  # bootstrap replicates for the symmetry tests
+
 # Kwon & Zhang select over nine families. These VineCopula codes cover all of
 # them -- independence, Gaussian, Student t, and Gumbel and Joe in all four
 # rotations, including the 90-degree-rotated Joe (26) that wins on their PISA
@@ -151,17 +154,58 @@ tags_meta <- tryCatch(irw_tags(tables = tables), error = function(e) {
 # 2. Per-table computation
 # ==============================================================================
 
-# Nonparametric tail-dependence coefficients. Schmidt & Stadtmueller (2006):
-# lambda_L = C(k/n, k/n) / (k/n), lambda_U = (1 - 2k/n + C(1-k/n, 1-k/n)) / (k/n),
-# evaluated at k = floor(sqrt(n)). Model-free, so it does not inherit the
-# winning family's shape assumption.
+# Nonparametric tail-dependence coefficients, all four corners, at
+# k = floor(sqrt(n)) (Schmidt & Stadtmueller 2006). Model-free, so they do not
+# inherit the winning family's shape assumption.
+#
+# All four corners, not just the diagonal, because ability and speed are
+# NEGATIVELY dependent on most of these tables. The classical lambda_L and
+# lambda_U measure the low-low and high-high corners, which under negative
+# dependence are empty by construction -- reporting them alone measures the
+# two corners guaranteed to hold nothing. The substantive quantity is the
+# OFF-diagonal pair:
+#
+#   lambda_LU = P(speed high | ability low)  -- fast and wrong
+#   lambda_UL = P(speed low  | ability high) -- slow and able
+#
+# and the asymmetry that Kwon & Zhang's rotated Joe encodes is precisely
+# lambda_LU != lambda_UL. A Gaussian or t copula forces them equal.
 emp_taildep <- function(u, v) {
   n <- length(u)
   k <- max(2L, floor(sqrt(n)))
   p <- k / n
   Cn <- function(a, b) mean(u <= a & v <= b)
-  c(lambda_L_emp = Cn(p, p) / p,
-    lambda_U_emp = (1 - 2 * (1 - p) + Cn(1 - p, 1 - p)) / p)
+  c(lambda_LL_emp = Cn(p, p) / p,
+    lambda_UU_emp = (2 * p - 1 + Cn(1 - p, 1 - p)) / p,
+    lambda_LU_emp = (p - Cn(p, 1 - p)) / p,
+    lambda_UL_emp = (p - Cn(1 - p, p)) / p,
+    taildep_k     = k)
+}
+
+# Tail dependence implied by the SELECTED family, placed in the right corner.
+# BiCopPar2TailDep reports the rotated copula's diagonal corners, which are
+# zero for the 90- and 270-degree rotations by construction, so it cannot
+# express what those families actually claim. A 90-degree rotation moves the
+# base family's upper tail into the (low u, high v) corner; 270 degrees moves
+# it into (high u, low v). Verified against BiCopSim for Joe and Gumbel.
+fit_taildep <- function(fam, par, par2) {
+  base <- fam %% 10L
+  zero <- c(lambda_LU_fit = 0, lambda_UL_fit = 0)
+  if (fam %in% c(24L, 26L, 34L, 36L)) {
+    bu <- tryCatch(VineCopula::BiCopPar2TailDep(base, abs(par), par2)$upper,
+                   error = function(e) NA_real_)
+    if (fam %in% c(24L, 26L)) return(c(lambda_LU_fit = bu, lambda_UL_fit = 0))
+    return(c(lambda_LU_fit = 0, lambda_UL_fit = bu))
+  }
+  # Student t with negative rho carries tail dependence in BOTH off-diagonal
+  # corners, equally -- it is a symmetric alternative, which is the whole
+  # point of the comparison.
+  if (fam == 2L && is.finite(par) && par < 0) {
+    td <- tryCatch(VineCopula::BiCopPar2TailDep(2, abs(par), par2)$upper,
+                   error = function(e) NA_real_)
+    return(c(lambda_LU_fit = td, lambda_UL_fit = td))
+  }
+  zero
 }
 
 # One response and one RT per person-item, or an explicit reason why not.
@@ -187,7 +231,7 @@ resolve_trials <- function(df, table_name) {
        collapsed = FALSE)
 }
 
-characterise_copula <- function(theta, speed, floor_used) {
+characterise_copula <- function(theta, speed, floor_used, n_items_fit, table_label) {
   ok <- is.finite(theta) & is.finite(speed)
   theta <- theta[ok]; speed <- speed[ok]
   n <- length(theta)
@@ -197,6 +241,42 @@ characterise_copula <- function(theta, speed, floor_used) {
   u <- U[, 1]; v <- U[, 2]
 
   tau_emp <- suppressWarnings(cor(theta, speed, method = "kendall"))
+
+  # Tie diagnostic, and it is not cosmetic. On a short complete test, theta-hat
+  # is very nearly a monotone function of the sum score, so it takes only about
+  # J+1 distinct values while speed-hat stays continuous. The empirical copula
+  # is then a lattice of vertical stripes, and a rotated family can win on that
+  # structure rather than on any real tail behaviour. Any table whose
+  # theta_distinct_frac is small should be read as suggestive at best.
+  theta_distinct_frac <- length(unique(theta)) / n
+  speed_distinct_frac <- length(unique(speed)) / n
+
+  # Counting distinct values is too weak a test: MCMC noise makes every
+  # posterior mean numerically unique while the values still sit in a tight
+  # lattice around the J+1 possible sum scores. On rapm_poulton (12 items)
+  # 98.9% of theta-hat's variance is BETWEEN 13 clusters. So measure the
+  # lattice directly, and then check the asymmetry against it by jittering.
+  lattice_share <- NA_real_
+  if (n_items_fit <= 50 && n > (n_items_fit + 1)) {
+    lattice_share <- tryCatch({
+      km <- kmeans(theta, centers = n_items_fit + 1, nstart = 5)
+      km$tot.withinss / km$totss   # near 0 = a lattice, near 1 = continuous
+    }, error = function(e) NA_real_)
+  }
+
+  # Does the asymmetry survive smearing theta-hat across the lattice? If it is
+  # an artifact of discreteness, jitter destroys it; if it is real, it does not.
+  asym_raw <- function(th, sp) {
+    nn <- length(th); kk <- max(2L, floor(sqrt(nn))); pp <- kk / nn
+    uu <- rank(th, ties.method = "random") / (nn + 1)
+    vv <- rank(sp, ties.method = "random") / (nn + 1)
+    Cnn <- function(a, b) mean(uu <= a & vv <= b)
+    ((pp - Cnn(pp, 1 - pp)) / pp) - ((pp - Cnn(1 - pp, pp)) / pp)
+  }
+  sd_theta  <- stats::sd(theta)
+  asym_jitter <- tryCatch(
+    mean(replicate(20, asym_raw(theta + stats::rnorm(n, 0, 0.10 * sd_theta), speed))),
+    error = function(e) NA_real_)
 
   sel <- tryCatch(
     VineCopula::BiCopSelect(u, v, familyset = FAMILY_SET,
@@ -220,31 +300,63 @@ characterise_copula <- function(theta, speed, floor_used) {
   aic_indep <- aic_tbl$AIC[aic_tbl$family == 0]
 
   td  <- tryCatch(VineCopula::BiCopPar2TailDep(sel), error = function(e) list(lower = NA, upper = NA))
+  ftd <- fit_taildep(sel$family, sel$par, sel$par2)
   emp <- emp_taildep(u, v)
 
-  # The symmetry tests are bootstrap-based and scale badly; subsample for them
-  # and record that we did. Radial symmetry is the one that bears on the
-  # paper's claim -- an MVN person prior is radially symmetric by construction.
-  sub <- if (n > 1000) U[sample.int(n, 1000), ] else U
-  p_exch <- tryCatch(copula::exchTest(sub, N = 200)$p.value,
+  # The symmetry tests are bootstrap-based and scale badly. Radial symmetry is
+  # the one that bears on the paper's claim -- an MVN person prior is radially
+  # symmetric by construction, so rejecting it rejects the MVN's shape.
+  #
+  # Use the whole sample up to SYMTEST_MAX. Beyond it, subsample from a seed
+  # derived from the table name rather than from the ambient RNG stream: an
+  # earlier version drew 1000 of 1636 off the shared stream, and
+  # credentialform_lnirt's p moved from 0.26 to 0.04 between two runs that
+  # differed only in how much unrelated code had drawn before it.
+  sub <- if (n > SYMTEST_MAX) {
+    local({
+      old_seed <- if (exists(".Random.seed", .GlobalEnv)) get(".Random.seed", .GlobalEnv) else NULL
+      set.seed(sum(utf8ToInt(table_label)) + floor_used)
+      idx <- sample.int(n, SYMTEST_MAX)
+      if (!is.null(old_seed)) assign(".Random.seed", old_seed, .GlobalEnv)
+      U[idx, ]
+    })
+  } else U
+  # 1000 bootstrap replicates, not 200. These p-values carry Monte Carlo error
+  # of their own -- at N = 200 credentialform_lnirt's radial-symmetry p ranged
+  # over 0.012-0.027 across identical reruns, and at N = 1000 it settles to
+  # about 0.02 +/- 0.005. Read which side of a threshold they fall on, never
+  # the third digit.
+  p_exch <- tryCatch(copula::exchTest(sub, N = SYMTEST_REPS)$p.value,
                      error = function(e) NA_real_)
-  p_rad  <- tryCatch(copula::radSymTest(sub, N = 200)$p.value,
+  p_rad  <- tryCatch(copula::radSymTest(sub, N = SYMTEST_REPS)$p.value,
                      error = function(e) NA_real_)
 
   tibble(
-    person_floor     = floor_used,
-    n_persons_copula = n,
-    tau_emp          = tau_emp,
+    person_floor        = floor_used,
+    n_persons_copula    = n,
+    tau_emp             = tau_emp,
+    theta_distinct_frac = theta_distinct_frac,
+    speed_distinct_frac = speed_distinct_frac,
+    n_theta_distinct    = length(unique(theta)),
+    lattice_share       = lattice_share,
+    asym_jitter         = asym_jitter,
     best_family      = sel$family,
     best_family_name = VineCopula::BiCopName(sel$family, short = FALSE),
     best_par         = sel$par,
     best_par2        = sel$par2,
     is_joe90         = sel$family == JOE_90,
-    lambda_L_fit     = td$lower %||% NA_real_,
-    lambda_U_fit     = td$upper %||% NA_real_,
-    lambda_L_emp     = unname(emp["lambda_L_emp"]),
-    lambda_U_emp     = unname(emp["lambda_U_emp"]),
-    asym_emp         = unname(emp["lambda_U_emp"] - emp["lambda_L_emp"]),
+    lambda_LL_fit    = td$lower %||% NA_real_,
+    lambda_UU_fit    = td$upper %||% NA_real_,
+    lambda_LU_fit    = unname(ftd["lambda_LU_fit"]),
+    lambda_UL_fit    = unname(ftd["lambda_UL_fit"]),
+    asym_fit         = unname(ftd["lambda_LU_fit"] - ftd["lambda_UL_fit"]),
+    lambda_LL_emp    = unname(emp["lambda_LL_emp"]),
+    lambda_UU_emp    = unname(emp["lambda_UU_emp"]),
+    lambda_LU_emp    = unname(emp["lambda_LU_emp"]),
+    lambda_UL_emp    = unname(emp["lambda_UL_emp"]),
+    # Positive means the fast-and-wrong corner is the sharper one.
+    asym_emp         = unname(emp["lambda_LU_emp"] - emp["lambda_UL_emp"]),
+    taildep_k        = unname(emp["taildep_k"]),
     aic_best         = sel$AIC,
     aic_gaussian     = if (length(aic_gauss)) aic_gauss else NA_real_,
     aic_independence = if (length(aic_indep)) aic_indep else NA_real_,
@@ -252,6 +364,7 @@ characterise_copula <- function(theta, speed, floor_used) {
     p_exch           = p_exch,
     p_radsym         = p_rad,
     symtest_n        = nrow(sub),
+    symtest_reps     = SYMTEST_REPS,
     aic_table        = list(aic_tbl)
   )
 }
@@ -364,7 +477,7 @@ fit_one_table <- function(table_name) {
   cop <- map_dfr(PERSON_FLOOR_SWEEP, function(fl) {
     sel <- n_resp_person >= fl
     if (sum(sel) < 50) return(NULL)
-    characterise_copula(theta[sel], speed[sel], fl)
+    characterise_copula(theta[sel], speed[sel], fl, ncol(Y), table_name)
   })
   if (nrow(cop) == 0) {
     return(list(excluded = tibble(table = table_name, reason = "copula characterisation failed")))
@@ -391,6 +504,10 @@ fit_one_table <- function(table_name) {
 
   list(
     summary = summary_tbl,
+    # Full person estimates stay in the per-table fit (which is gitignored and
+    # resume-only), so a later diagnostic never costs another LNIRT run.
+    person_estimates = tibble(theta = theta, speed = speed,
+                              n_resp = as.integer(n_resp_person)),
     # A thinned pseudo-observation sample, for the copula scatter on the page.
     pobs_sample = {
       ok <- is.finite(theta) & is.finite(speed)
@@ -423,7 +540,7 @@ fit_to_disk <- function(table_name) {
 # you OOM the machine rather than how you finish sooner.
 plan(multisession, workers = 2)
 message("\nAnalyzing ", length(tables), " candidate tables...")
-future_map(tables, fit_to_disk, .options = furrr_options(seed = TRUE))
+invisible(future_map(tables, fit_to_disk, .options = furrr_options(seed = TRUE)))
 plan(sequential)
 
 # ==============================================================================
