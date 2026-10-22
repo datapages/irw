@@ -239,6 +239,7 @@ profile_table <- function(tab) {
   per_item <- d %>%
     group_by(arm = .arm, item) %>%
     summarise(n = n(), lo = min(resp), hi = max(resp), n_cat = n_distinct(resp),
+              mean_pooled = mean(resp),
               floor_pct = 100 * mean(resp == min(resp)), .groups = "drop") %>%
     mutate(instrument = instrument_of(tab, item),
            format = format_of(n_cat),
@@ -335,7 +336,7 @@ profile_table <- function(tab) {
       # and item names do not recover keying; a flip moves the group and every
       # person together, so no reported quantity changes except its readability.
       res <- res %>% mutate(flipped = r_between < 0)
-      pc2 <- pc %>% left_join(res %>% select(item_i, item_j, r_between, flipped),
+      pc2 <- pc %>% left_join(res %>% select(item_i, item_j, r_between, n_between, flipped),
                               by = c("item_i", "item_j")) %>%
         filter(!is.na(r_between)) %>%
         mutate(r = ifelse(flipped, -r, r), r_between = ifelse(flipped, -r_between, r_between))
@@ -352,6 +353,24 @@ profile_table <- function(tab) {
           # their own precision), averaged over persons.
           frac_opposite_exp = mean(stats::pnorm(-abs(z_of(first(r_between))) *
                                                  sqrt(pmax(t_occ - 3, 1)))),
+          # Fisher et al.'s coverage statistic: they report that only 68% of
+          # individual correlations fall inside a 99.7% (+-3 SE) interval built
+          # around the GROUP estimate. Reproduced here pair by pair -- and with
+          # the share that would fall inside it under perfect homogeneity, which
+          # is NOT 99.7%: the interval is scaled by the group's precision
+          # (se = 1/sqrt(n_between - 3), hundreds of persons) while each person's
+          # own estimate carries its own much wider se, so a homogeneous
+          # population already misses the interval often. The excess is the
+          # reportable quantity, exactly as for the sign flips.
+          frac_in_ci = {
+            se_g <- 1 / sqrt(pmax(first(n_between) - 3, 1))
+            zg <- z_of(first(r_between))
+            mean(abs(z_of(r) - zg) <= 3 * se_g)
+          },
+          frac_in_ci_exp = {
+            se_g <- 1 / sqrt(pmax(first(n_between) - 3, 1))
+            mean(2 * stats::pnorm(3 * se_g * sqrt(pmax(t_occ - 3, 1))) - 1)
+          },
           .groups = "drop")
 
       res %>%
@@ -390,6 +409,17 @@ profile_table <- function(tab) {
       filter(n() >= MIN_PERSONS) %>%
       summarise(
         n_persons = n(),
+        # Fisher et al. also report that group and individual MEANS agree (14 of
+        # 15 variables, 3% median discrepancy) -- location generalises even where
+        # dispersion does not, and leaving it out would show only the half of
+        # their argument that cuts against generalisability. Two quantities,
+        # because they say different things: the group mean against the average
+        # person's mean (near-identical by construction, the literal analogue of
+        # their test), and the distance from the group mean to a typical
+        # INDIVIDUAL's own mean, which is the substantive version.
+        mean_of_person_means = mean(m),
+        mean_dev_median = median(abs(m - mean(m))),
+        mean_dev_q90 = quantile(abs(m - mean(m)), .90),
         sd_between = stats::sd(m),
         sd_within_median = median(s, na.rm = TRUE),
         sd_within_q25 = quantile(s, .25, na.rm = TRUE),
@@ -414,7 +444,16 @@ profile_table <- function(tab) {
         var_ratio_max    = (sd_within_max / sd_between)^2,
         table = tab, spec = spec)
   }) %>% left_join(per_item %>% select(arm, item, instrument, format, scale,
-                                       n_cat, floor_pct), by = c("arm", "item"))
+                                       n_cat, lo, hi, mean_pooled, floor_pct),
+                   by = c("arm", "item")) %>%
+    mutate(
+      range = hi - lo,
+      # Percentages of the item's observed range, so items on different scales
+      # pool. `disc_group_pct` is Fisher's comparison; `dev_person_*_pct` is how
+      # far the group mean sits from a person's own level.
+      disc_group_pct      = 100 * abs(mean_pooled - mean_of_person_means) / range,
+      dev_person_med_pct  = 100 * mean_dev_median / range,
+      dev_person_q90_pct  = 100 * mean_dev_q90 / range)
 
   # Why a table can yield no pairs at all, recorded instead of crashing: a pool
   # member is not guaranteed to clear MIN_OCC / MIN_PERSONS, and six of the 26 do

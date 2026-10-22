@@ -764,6 +764,7 @@ if (cache_ok && nrow(pairs_raw) > 0) {
       "Spread of person-level correlations ÷ its reference",
       "After removing temporal dependence",
       "The typical person's correlation vs the group's",
+      "Persons inside a 99.7% interval around the group estimate",
       "Persons correlating opposite to the group"),
     `Fisher et al. (2018)` = c(
       "6 (63–535 persons; 30–925 occasions)",
@@ -772,12 +773,16 @@ if (cache_ok && nrow(pairs_raw) > 0) {
       "2.09 to 4.00 (mean 2.84)",
       "1.63 to 3.43 (mean 2.56) after AR residualisation",
       "0.40 vs 0.71, and 0.23 vs 0.46: roughly half",
+      "68% of individual correlations",
       "one negative individual (r = −0.11) on one pair"),
     `This page` = c(
       sprintf("%d (%d with item pairs; %d–%d occasions per person, table medians)",
               r_n_tables_run, n_distinct(pr$table),
               round(min(table_summary$occ_median)), round(max(table_summary$occ_median))),
-      "not computed",
+      sprintf("group mean within %.1f%% of the average person's mean (median item), %.0f%% of items within 3%%; but the typical person's own mean sits %.0f%% of the range away",
+              median(items_raw$disc_group_pct),
+              100 * mean(items_raw$disc_group_pct < 3, na.rm = TRUE),
+              median(items_raw$dev_person_med_pct)),
       sprintf("%.2f (median item); %.2f to %.2f across table medians",
               median(items_raw$ratio_median),
               min((items_raw %>% group_by(table) %>%
@@ -789,6 +794,8 @@ if (cache_ok && nrow(pairs_raw) > 0) {
       sprintf("%.2f vs %.2f: %.0f%% of the group value",
               median(pr$r_within_median), median(pr$r_between),
               100 * median(pr$r_within_median) / median(pr$r_between)),
+      sprintf("%.0f%% on the median pair, vs %.0f%% expected from noise",
+              100 * median(pr$frac_in_ci), 100 * median(pr$frac_in_ci_exp)),
       sprintf("%.0f%% of persons on the median pair, vs %.1f%% expected from noise",
               100 * median(pr$frac_opposite), 100 * median(pr$frac_opposite_exp)))) %>%
     kable(caption = paste0(
@@ -797,6 +804,22 @@ if (cache_ok && nrow(pairs_raw) > 0) {
       " below."))
 }
 ```
+
+**Where people sit replicates; how much they move does not.** The first thing
+Fisher et al. checked was the half of their argument that *supports*
+generalisability: group means and individual means agreed on 14 of their 15
+variables, with a median discrepancy of 3%. That holds here almost exactly. The
+group mean and the average person's own mean differ by 0.2% of an item's
+observed range for the median item, and 98% of the 163 items agree to within
+their 3% — though this particular comparison is close to an identity by
+construction, since the two quantities differ only in how unequal occasion counts
+are weighted, so it is confirmation that nothing is broken rather than a finding.
+The version with content is the distance from the group mean to an *individual's*
+mean: 11% of the range for the typical person, 25% for the 90th percentile. So
+the group's location is the right summary of where people sit on average, and
+still a poor description of where any particular person sits — which is the
+distinction their paper draws and the reason reporting only the dispersion
+result would be one-sided.
 
 **The correlational result replicates closely.** Their person-level
 correlations averaged about half the group's, and so do these (0.25 against
@@ -830,6 +853,24 @@ selected, which compresses between-person differences and inflates the ratio
 from the other side. The honest statement is that the *size* of the
 within/between gap is a property of the measurement setting, and the six
 datasets that founded this literature sit at one extreme of it.
+
+**Their coverage statistic comes out worse here, and is the one number on this
+page that should be read with care.** Fisher et al. report that only 68% of
+individual correlations fell inside a 99.7% interval built around the group
+estimate, where 99.7% is what the interval is nominally for. On the median pair
+here it is 42%, and 67% of the 611 pairs are at or below their 68%. But the
+shortfall is overstated by the construction, and in a way the rest of this page
+is built to avoid: the interval is scaled by the *group's* precision — hundreds
+of persons — while each person's own correlation rests on a few dozen occasions
+and so has a far wider standard error of its own. Run the same calculation on a
+population where everyone genuinely shares the group correlation and 97% fall
+inside, not 99.7%. The excess is therefore 97% minus 42%, and 97.5% of pairs
+land below their own baseline; restricting to pairs with 50 or more occasions
+per person moves the observed figure to 52% against a baseline unchanged at 97%,
+so this is not a power artefact either. The quantity is real and large. The
+headline form of it — "only 68% inside a 99.7% interval" — nonetheless invites
+the reader to compare against 99.7%, and that comparison is not available in
+either dataset.
 
 **The sign reversals are new, and they are the part this pool is for.** Fisher
 et al. report exactly one negative individual correlation in their empirical
