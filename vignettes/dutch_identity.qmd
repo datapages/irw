@@ -48,13 +48,20 @@ if (cache_ok) {
 } else {
   # Placeholder objects so inline R expressions in prose don't crash
   na_dataset <- list(table_name = "—", J = NA_integer_, N = NA_integer_,
-                     ll_diff = NA_real_, r2_quad = NA_real_,
+                     ll_diff = NA_real_, ll_diff_per_resp = NA_real_,
+                     r2_quad = NA_real_,
                      gamma_k_data = NULL, cor_eigval = numeric(),
                      soe_eigval = NULL)
   s1_3 <- c(na_dataset, list(patterns = NULL, gamma_matrix = NULL,
-                              eigenvalues = NULL, bic_table = NULL))
+                              eigenvalues = NA_real_, bic_table = NULL,
+                              bic_n = NA_integer_,
+                              ll_multinomial = NA_real_,
+                              rq_gap_share = NA_real_,
+                              rq_convergence = list(n_starts = NA_integer_,
+                                                    n_at_best = NA_integer_)))
   s4   <- list(good_rasch = na_dataset, poor_rasch = na_dataset,
-               rasch_meta = tibble(table_name = character()))
+               rasch_meta = tibble(table_name = "—", r2_quad = NA_real_,
+                                   ll_diff_per_resp = NA_real_))
   s5   <- list(unidim = na_dataset, multidim = na_dataset)
   s6   <- tibble(table_name = character(), J = integer(),
                  imv_1v2 = numeric(), imv_2v3 = numeric())
@@ -295,7 +302,7 @@ models and compare.
 
 ```{r}
 #| label: tbl-bic
-#| tbl-cap: "Log-likelihood and BIC for three nested loglinear models. The restricted log-quadratic uses 2J + 1 parameters; the full SOE uses 1 + J + J(J-1)/2."
+#| tbl-cap: "Log-likelihood and BIC for three nested loglinear models, all fitted by Poisson maximum likelihood to the same table of 2^J pattern counts with zero cells included. The restricted log-quadratic uses 2J + 1 parameters; the full SOE uses 1 + J + J(J-1)/2. BIC uses n = N respondents for every row."
 
 s1_3$bic_table |>
   mutate(
@@ -306,11 +313,37 @@ s1_3$bic_table |>
   knitr::kable(align = "lrrr")
 ```
 
+All three models are fitted to the same $2^J$ pattern counts — zero cells
+included — by Poisson maximum likelihood, so the log-likelihoods are on one
+scale, and BIC uses $n = N = `r format(s1_3$bic_n, big.mark=",")`$ respondents
+for every row. Each model has a free intercept, so its fitted counts sum to $N$;
+the multinomial log-likelihoods therefore differ from the Poisson ones by a
+constant that is the same for all three
+(`r paste(sprintf("%.1f", s1_3$ll_multinomial), collapse = ", ")` for
+independence, log-quadratic and SOE respectively).
+
+The three models are nested: independence is the log-quadratic with $\gamma = 0$,
+and the log-quadratic is the full SOE with $\Gamma_{jk}$ forced to
+$\gamma_j \gamma_k$. The log-likelihoods must therefore increase down the table,
+and they do. The rank-1 fit is by direct Poisson maximum likelihood rather than
+by a GLM, since $\gamma$ enters only through $(\mathbf{x}'\gamma)^2$ and so is
+identified only up to sign; of
+`r s1_3$rq_convergence$n_starts` starting values,
+`r s1_3$rq_convergence$n_at_best` reached the reported optimum.
+
 The key question is whether the restricted log-quadratic — which enforces rank-1
 structure on $\boldsymbol{\Gamma}$ — captures most of the association signal
-while using only $1 + 2J$ parameters instead of $1 + J + \binom{J}{2}$. If the
-Dutch Identity holds, its ΔBIC relative to the full SOE should be small compared
-to the gap between the independence model and the SOE.
+while using only $1 + 2J$ parameters instead of $1 + J + \binom{J}{2}$. It
+captures nearly all of it: the rank-1 model recovers
+**`r sprintf("%.1f%%", 100 * s1_3$rq_gap_share)`** of the
+independence-to-SOE log-likelihood gap,
+$(\ell_{\text{rq}} - \ell_{\text{ind}})/(\ell_{\text{soe}} - \ell_{\text{ind}})$,
+with `r s1_3$bic_table$Parameters[3] - s1_3$bic_table$Parameters[2]` fewer
+parameters. BIC still prefers the full SOE, but only by
+`r sprintf("%.1f", round(s1_3$bic_table$BIC[2], 1) - round(s1_3$bic_table$BIC[3], 1))`
+— small beside the
+`r sprintf("%.1f", round(s1_3$bic_table$BIC[1], 1) - round(s1_3$bic_table$BIC[3], 1))`
+that separates independence from the SOE.
 
 ```{r}
 #| label: fig-model-fit
@@ -404,12 +437,23 @@ ggplot(eig_df, aes(x = component, y = eigenvalue)) +
   )
 ```
 
-**What to notice.** If the Dutch Identity holds, the restricted log-quadratic
-model ($1 + 2J$ parameters) should close most of the gap between the independence
-model and the full SOE ($1 + J + \binom{J}{2}$ parameters), despite using far
-fewer parameters. The eigenvalue plot shows how nearly rank-1 $\boldsymbol{\Gamma}$
-is: one dominant positive eigenvalue with the rest near zero is the hallmark of
-a unidimensional instrument.
+**What to notice.** The restricted log-quadratic model ($1 + 2J$ parameters)
+closes `r sprintf("%.1f%%", 100 * s1_3$rq_gap_share)` of the gap between the
+independence model and the full SOE ($1 + J + \binom{J}{2}$ parameters) — the
+Dutch Identity's economy claim, holding up here.
+
+The eigenvalue plot is the more equivocal of the two views. A strictly rank-1
+$\boldsymbol{\Gamma}$ would show one dominant eigenvalue and the rest at zero.
+What we get instead is one clearly dominant positive eigenvalue
+(`r sprintf("%.2f", s1_3$eigenvalues[1])`) alongside a non-trivial negative one
+(`r sprintf("%.2f", min(s1_3$eigenvalues))`), so the leading eigenvalue accounts
+for only about
+`r round(100 * abs(s1_3$eigenvalues[1]) / sum(abs(s1_3$eigenvalues)))`% of the
+absolute eigenvalue mass. The two diagnostics are not in conflict: the rank-1
+model re-estimates its own main effects, and the extra interaction freedom the
+SOE spends on those smaller eigenvalues buys it very little likelihood. Rank-1
+is a good enough description of the association structure for prediction without
+$\boldsymbol{\Gamma}$ being literally rank-1.
 
 ---
 
@@ -426,14 +470,22 @@ ability. In other words, $\log \pi_k$ is a *quadratic* function of $k$, centred
 on $\bar{y}_+$. Systematic deviations indicate either non-normality of the
 ability distribution or Rasch misfit.
 
-We compare two IRW datasets: one where the Rasch model fits well
-(**`r s4$good_rasch$table_name`**, $J = `r s4$good_rasch$J`$,
+We compare two IRW datasets, chosen on the quantity these figures actually
+show — the $R^2$ of the quadratic fit to $\log \pi_k$. One where that quadratic
+holds closely (**`r s4$good_rasch$table_name`**, $J = `r s4$good_rasch$J`$,
 $N = `r format(s4$good_rasch$N, big.mark=",")`$,
-$\Delta\ell = `r round(s4$good_rasch$ll_diff, 1)`$ 2PL vs. Rasch),
-and one where it does not
+$R^2 = `r round(s4$good_rasch$r2_quad, 3)`$) and one where it does not
 (**`r s4$poor_rasch$table_name`**, $J = `r s4$poor_rasch$J`$,
 $N = `r format(s4$poor_rasch$N, big.mark=",")`$,
-$\Delta\ell = `r round(s4$poor_rasch$ll_diff, 1)`$).
+$R^2 = `r round(s4$poor_rasch$r2_quad, 3)`$).
+
+Rasch misfit itself is quoted per response, $\Delta\ell / (NJ)$ for the 2PL
+against the Rasch model: `r signif(s4$good_rasch$ll_diff_per_resp, 2)` and
+`r signif(s4$poor_rasch$ll_diff_per_resp, 2)` respectively. Raw $\Delta\ell$ is
+not comparable across datasets — it grows with the number of responses, so a
+larger dataset looks like worse Rasch fit for free, and the raw values here
+(`r round(s4$good_rasch$ll_diff, 1)` and `r round(s4$poor_rasch$ll_diff, 1)`)
+would overstate the contrast by a wide margin.
 
 ```{r}
 #| label: plot-gk-fn
@@ -454,7 +506,7 @@ plot_gk <- function(gk_data) {
 
 ```{r}
 #| label: fig-gamma-k-good
-#| fig-cap: "Total-score log-frequencies for the dataset where Rasch fits well. Points follow a smooth quadratic, consistent with Holland's Corollary 2."
+#| fig-cap: "Total-score log-frequencies for the dataset with the closest quadratic fit. Points follow a smooth quadratic, consistent with Holland's Corollary 2."
 #| fig-height: 4
 
 plot_gk(s4$good_rasch$gamma_k_data)
@@ -464,7 +516,7 @@ The quadratic $R^2$ is `r round(s4$good_rasch$r2_quad, 3)` for this dataset.
 
 ```{r}
 #| label: fig-gamma-k-poor
-#| fig-cap: "Total-score log-frequencies for the dataset where Rasch fits poorly. Deviations from the quadratic suggest non-constant discrimination or a non-normal ability distribution."
+#| fig-cap: "Total-score log-frequencies for the dataset with the worst quadratic fit. Deviations from the quadratic suggest a non-normal ability distribution or non-constant discrimination."
 #| fig-height: 4
 
 plot_gk(s4$poor_rasch$gamma_k_data)
@@ -476,8 +528,26 @@ The quadratic $R^2$ is `r round(s4$poor_rasch$r2_quad, 3)` for this dataset.
 parabola. Deviations can take two forms: (1) a sharp peak at the mode with thin
 tails, suggesting a more leptokurtic ability distribution; or (2) asymmetry or a
 kink, consistent with varying item discriminations. The $R^2$ from the quadratic
-regression is a quick, model-free diagnostic: values above 0.99 are consistent
-with Rasch; lower values flag something worth investigating.
+regression is a quick, model-free diagnostic, but it is a comparative one rather
+than a test against a fixed cutoff. Across the
+`r nrow(s4$rasch_meta)` datasets screened here it ranges from
+`r sprintf("%.2f", min(s4$rasch_meta$r2_quad))` to
+`r sprintf("%.2f", max(s4$rasch_meta$r2_quad))`; the top of that range is about
+as quadratic as real total-score distributions get, and values below roughly
+0.95 are worth investigating.
+
+The two diagnostics need not agree, and here they do not. Corollary 2 is a joint
+prediction about Rasch fit *and* normality of the ability distribution, so either
+can break it. **`r s4$good_rasch$table_name`** happens to be best on both counts
+— highest quadratic $R^2$ and the smallest per-response 2PL gain in the set. But
+**`r s4$poor_rasch$table_name`**, with much the worst quadratic fit, is only
+middling on Rasch misfit per response
+(`r signif(s4$poor_rasch$ll_diff_per_resp, 2)`, against a worst-in-set
+`r signif(max(s4$rasch_meta$ll_diff_per_resp), 2)` for
+**`r s4$rasch_meta$table_name[which.max(s4$rasch_meta$ll_diff_per_resp)]`**).
+What its $\log \pi_k$ curve is flagging is the shape of the score distribution,
+not non-constant discrimination — which is the caveat in the box at the foot of
+this page, met in the data.
 
 ---
 
