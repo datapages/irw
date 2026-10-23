@@ -24,6 +24,7 @@ import torch
 import torch.nn.functional as F
 
 DT = torch.float64
+A_BOUND = 6.0   # |a| bound, alternating JML only; see _item_newton
 
 
 def _cells(d):
@@ -39,12 +40,33 @@ def _cells(d):
     return Y, M
 
 
-def _item_newton(a, dd, x, n, s, steps=8, cap=1.0):
-    """Newton ascent on each item's (a, d) for sum_k s_k log P_k + (n_k - s_k) log(1 - P_k).
+def _item_loglik(a, dd, xx, n, s):
+    """Per-item log-likelihood, sum_k s_k eta_k - n_k log(1 + exp(eta_k))."""
+    eta = xx * a + dd
+    return (s * eta - n * F.softplus(eta)).sum(0)
+
+
+def _item_newton(a, dd, x, n, s, steps=8, cap=1.0, ridge=1e-6, halvings=12,
+                 bound=float("inf")):
+    """Damped Newton ascent on each item's (a, d).
 
     x:   (K,) covariate values (persons' theta, or the quadrature grid)
     n,s: (K, I) trial and success counts for each covariate value and item
-    P_k = sigmoid(a_i x_k + d_i). Steps are capped to keep separable items finite.
+    P_k = sigmoid(a_i x_k + d_i).
+
+    The raw Newton step diverges on an item the persons separate: the likelihood
+    rises without bound as the slope grows, so capping the step only slows the
+    march. Three safeguards, all per item and all vectorised:
+    a small ridge on the Hessian, backtracking (halve the step until the item's
+    own log-likelihood does not fall), and a bound on |a| when the caller asks
+    for one.
+
+    The bound is off by default. EM's M-step maximises a marginal likelihood
+    whose optimum is finite but can legitimately be large on an item the
+    quadrature barely constrains, and bounding it there would change the EM and
+    MML fits. `alt_jml_2pl` passes A_BOUND, matching the bound the person step
+    already puts on theta, because unpenalised JML has no finite optimum on an
+    item the persons separate; it reports how many items reach it.
     """
     xx = x[:, None]
     for _ in range(steps):
@@ -53,14 +75,23 @@ def _item_newton(a, dd, x, n, s, steps=8, cap=1.0):
         w = n * P * (1 - P)
         gA = (r * xx).sum(0)
         gD = r.sum(0)
-        hAA = (w * xx * xx).sum(0)
+        hAA = (w * xx * xx).sum(0) + ridge
         hAD = (w * xx).sum(0)
-        hDD = w.sum(0)
+        hDD = w.sum(0) + ridge
         det = (hAA * hDD - hAD * hAD).clamp_min(1e-12)
         step_a = ((hDD * gA - hAD * gD) / det).clamp(-cap, cap)
         step_d = ((hAA * gD - hAD * gA) / det).clamp(-cap, cap)
-        a = a + step_a
-        dd = dd + step_d
+        ll0 = _item_loglik(a, dd, xx, n, s)
+        t = torch.ones_like(a)
+        for _ in range(halvings):
+            a_t = (a + t * step_a).clamp(-bound, bound)
+            dd_t = dd + t * step_d
+            worse = _item_loglik(a_t, dd_t, xx, n, s) < ll0 - 1e-10
+            if not bool(worse.any()):
+                break
+            t = torch.where(worse, t * 0.5, t)
+        a = (a + t * step_a).clamp(-bound, bound)
+        dd = dd + t * step_d
     return a, dd
 
 
@@ -105,7 +136,7 @@ def alt_jml_2pl(d, prior=True, max_sweeps=5000, tol=1e-5, patience=100):
             theta = (theta - m) / s
             # theta_old = m + s * theta_new, so a*theta_old + d = (a*s)*theta_new + (d + a*m)
             a, dd = a * s, dd + a * m
-        a, dd = _item_newton(a, dd, theta, M, Y * M)
+        a, dd = _item_newton(a, dd, theta, M, Y * M, bound=A_BOUND)
         # convergence on the fitted logits, not the parameters: the prior version
         # can drift along the scale ridge (theta shrinking, a growing) while a*theta is fixed
         eta = theta[:, None] * a + dd
@@ -124,7 +155,8 @@ def alt_jml_2pl(d, prior=True, max_sweeps=5000, tol=1e-5, patience=100):
     info = {"sweeps": sweep, "best_sweep": best_sweep, "stopped": stopped,
             "heldout_logloss": best[0], "last_change": delta,
             "theta_sd": theta.std(unbiased=False).item(), "median_a": a.median().item(),
-            "max_a": a.abs().max().item()}
+            "max_a": a.abs().max().item(),
+            "items_at_bound": int((a.abs() >= A_BOUND - 1e-9).sum())}
     return theta, a, dd, info
 
 
