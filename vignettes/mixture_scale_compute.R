@@ -65,7 +65,11 @@ pilot_tables <- function(q, n_per = PILOT_PER_STRATUM) {
 prepare <- function(tab) {
   d <- as.data.table(irw_fetch(tab)[, c("id", "item", "resp")])
   d <- d[!is.na(resp)]
-  if (!all(d$resp %in% c(0, 1))) return(list(err = "resp not 0/1"))
+  # metadata says two categories, but the corpus does not promise they are coded
+  # 0/1 -- 1/2 is common. Map the lower value to 0 and the higher to 1.
+  vals <- sort(unique(d$resp))
+  if (length(vals) != 2) return(list(err = sprintf("not dichotomous (%d values)", length(vals))))
+  d[, resp := as.integer(resp == vals[2])]
   d <- unique(d, by = c("id", "item"))          # duplicate id-item rows can be real data
   w <- dcast(d, id ~ item, value.var = "resp")
   m <- as.matrix(w[, -1]); rownames(m) <- as.character(w$id)
@@ -86,25 +90,40 @@ prepare <- function(tab) {
   flip <- !is.na(rr) & rr < 0
   m[, flip] <- 1 - m[, flip]
 
-  const <- apply(m, 2, function(x) length(unique(x)) < 2)
-  m <- m[, !const, drop = FALSE]
-  if (ncol(m) < 10) return(list(err = "too few non-constant items"))
-
-  # CML conditions on the raw score, so all-0 and all-J people carry no
-  # information about item parameters and are dropped by the estimator anyway.
-  # They are also exactly the people a "flat" class would recruit, so the count
-  # is reported, not buried.
-  s <- rowSums(m); keep <- s > 0 & s < ncol(m)
-  n_extreme <- sum(!keep)
-  m <- m[keep, , drop = FALSE]
-  if (nrow(m) < 300) return(list(err = "too few non-extreme persons"))
-
   set.seed(SEED)
   if (nrow(m) > MAX_PERSON) m <- m[sample(nrow(m), MAX_PERSON), , drop = FALSE]
   if (ncol(m) > MAX_ITEMS)  m <- m[, sort(sample(ncol(m), MAX_ITEMS)), drop = FALSE]
 
+  # Dropping constant items and dropping extreme scorers each create more of the
+  # other, so iterate to a fixed point rather than doing one pass. CML conditions
+  # on the raw score, so all-0 and all-J people carry no information about the
+  # item parameters and the estimator discards them anyway; they are also exactly
+  # who a "flat" class would recruit, so the count is reported, not buried.
+  n_extreme <- 0L
+  repeat {
+    const <- apply(m, 2, function(x) length(unique(x)) < 2)
+    if (any(const)) m <- m[, !const, drop = FALSE]
+    if (ncol(m) < 10) return(list(err = "too few non-constant items"))
+    s <- rowSums(m); keep <- s > 0 & s < ncol(m)
+    n_extreme <- n_extreme + sum(!keep)
+    if (all(keep) && !any(const)) break
+    m <- m[keep, , drop = FALSE]
+    if (nrow(m) < 300) return(list(err = "too few non-extreme persons"))
+  }
+
   list(m = m, n_raw = n_raw, j_raw = j_raw, n_complete = n_complete,
        n_flipped = sum(flip), n_extreme = n_extreme)
+}
+
+# Item difficulties as a J x K matrix, from parameters() rather than itempar().
+# itempar() centres each component on the mean over items, so a single item that
+# is constant *within* a class -- which CML sends to +/-Inf, and which happens
+# routinely on easy tests -- turns that whole column NA. Centring is irrelevant
+# here because the diagnostic regresses one class on the other with an intercept,
+# so take the raw parameters and drop the non-estimable items individually.
+rasch_b <- function(fit) {
+  pr <- parameters(fit)
+  pr[grepl("^item", rownames(pr)), , drop = FALSE]
 }
 
 # ---------------------------------------------------------------- diagnostic ----
@@ -112,13 +131,22 @@ prepare <- function(tab) {
 # the "scale" direction is always the same way round and the slope is comparable
 # across tables.
 compare_pair <- function(ba, bb) {
-  if (sd(ba) == 0 || sd(bb) == 0) return(list(scale_ratio = NA, shared_r2 = NA, resid_sd = NA))
+  # Both vectors must be matched BY ITEM NAME, never by position. raschmix drops
+  # items that are constant within whatever sample it was given, so two fits on
+  # two halves of one table come back with different item sets -- and comparing
+  # them positionally silently correlates one item's difficulty against another's.
+  nm <- intersect(names(ba)[is.finite(ba)], names(bb)[is.finite(bb)])
+  if (length(nm) < 5) return(list(scale_ratio = NA, shared_r2 = NA, resid_sd = NA, j_used = length(nm)))
+  ba <- ba[nm]; bb <- bb[nm]
+  if (!isTRUE(sd(ba) > 0) || !isTRUE(sd(bb) > 0))
+    return(list(scale_ratio = NA, shared_r2 = NA, resid_sd = NA, j_used = length(nm)))
   big <- if (sd(ba) >= sd(bb)) ba else bb
   sml <- if (sd(ba) >= sd(bb)) bb else ba
   fit <- lm(sml ~ big)
   list(scale_ratio = sd(sml) / sd(big),
        shared_r2   = suppressWarnings(cor(big, sml))^2,
-       resid_sd    = sd(residuals(fit)))
+       resid_sd    = sd(residuals(fit)),
+       j_used      = length(nm))
 }
 
 # The baseline. Persons split at random into groups of the same sizes as the
@@ -133,16 +161,19 @@ split_baseline <- function(m, sizes, reps = 3) {
       s <- rowSums(mk); mk <- mk[s > 0 & s < ncol(mk), , drop = FALSE]
       if (nrow(mk) < 50) return(NULL)
       f <- try(raschmix(mk, k = 1, verbose = FALSE), silent = TRUE)
-      if (inherits(f, "try-error")) NULL else as.numeric(itempar(f))
+      if (inherits(f, "try-error")) NULL else setNames(rasch_b(f)[, 1], sub("^item\\.", "", rownames(rasch_b(f))))
     })
     if (any(vapply(bs, is.null, logical(1)))) return(NULL)
     compare_pair(bs[[1]], bs[[2]])
   })
   res <- Filter(Negate(is.null), res)
-  if (!length(res)) return(list(scale_ratio = NA, shared_r2 = NA, resid_sd = NA))
+  if (!length(res))
+    return(list(scale_ratio = NA_real_, shared_r2 = NA_real_,
+                resid_sd = NA_real_, j_used = NA_real_))
   list(scale_ratio = mean(vapply(res, `[[`, numeric(1), "scale_ratio")),
        shared_r2   = mean(vapply(res, `[[`, numeric(1), "shared_r2")),
-       resid_sd    = mean(vapply(res, `[[`, numeric(1), "resid_sd")))
+       resid_sd    = mean(vapply(res, `[[`, numeric(1), "resid_sd")),
+       j_used      = mean(vapply(res, `[[`, numeric(1), "j_used")))
 }
 
 # --------------------------------------------------------------------- table ----
@@ -156,12 +187,14 @@ run_table <- function(tab) {
   bics <- BIC(f)
   k_bic <- as.integer(names(bics)[which.min(bics)])
   m2 <- getModel(f, which = "2")
-  ip <- itempar(m2)                       # items x classes
+  ip <- rasch_b(m2)                       # items x classes
   stopifnot(nrow(ip) == ncol(m), ncol(ip) == 2)
+  rownames(ip) <- sub("^item\\.", "", rownames(ip))
+  j_estimable <- sum(is.finite(ip[, 1]) & is.finite(ip[, 2]))
   cl <- clusters(m2)
   sizes <- as.integer(table(factor(cl, levels = 1:2)))
 
-  cmp  <- compare_pair(ip[, 1], ip[, 2])
+  cmp  <- compare_pair(setNames(ip[, 1], rownames(ip)), setNames(ip[, 2], rownames(ip)))
   base <- split_baseline(m, sizes)
 
   write.csv(data.frame(item = rownames(ip), b1 = ip[, 1], b2 = ip[, 2]),
@@ -171,15 +204,16 @@ run_table <- function(tab) {
     table = tab, status = "ok",
     n_raw = p$n_raw, j_raw = p$j_raw, n_complete = p$n_complete,
     n_fitted = nrow(m), j_fitted = ncol(m),
-    n_flipped = p$n_flipped, n_extreme = p$n_extreme,
+    n_flipped = p$n_flipped, n_extreme = p$n_extreme, j_estimable = j_estimable,
     mean_resp = round(mean(m), 4),
     bic_k1 = bics[["1"]], bic_k2 = bics[["2"]],
     bic_k3 = if ("3" %in% names(bics)) bics[["3"]] else NA_real_,
     k_bic = k_bic,
     smaller_class = min(sizes) / sum(sizes),
     scale_ratio = cmp$scale_ratio, shared_r2 = cmp$shared_r2, resid_sd = cmp$resid_sd,
+    j_used = cmp$j_used,
     base_scale_ratio = base$scale_ratio, base_shared_r2 = base$shared_r2,
-    base_resid_sd = base$resid_sd,
+    base_resid_sd = base$resid_sd, base_j_used = base$j_used,
     secs = round(as.numeric(difftime(Sys.time(), t0, units = "secs")))
   )
 }
