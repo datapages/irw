@@ -27,7 +27,7 @@ import torch
 import irw
 from nn_irt_helpers import (TABLES, GROUPS, GROUP_OF, SHORT, DATA, FITS, prepare, fit,
                             predict, imv, log_loss, make_models, SEED)
-from nn_irt_chart import imv_stripchart_html
+from nn_irt_chart import imv_stripchart_html, facet_scatter_html
 from imvpy import vanilla_imv
 from IPython.display import HTML, display
 
@@ -630,7 +630,7 @@ note that it fixes which comparisons are fair: networks against the PyTorch
 estimator).
 
 ```{python}
-#| label: tbl-imv-rule
+#| label: imv-rule
 #| echo: false
 # A rule between the two column blocks of the table below. The boundary is computed
 # rather than hardcoded so it follows the table if the model list changes: one cell
@@ -920,88 +920,74 @@ alternating fits.
 
 ```{python}
 #| label: fig-estimators
-#| code-summary: "IMV of the mirt 2PL over each estimator, all 24 tables"
-import matplotlib.ticker as mticker
-from matplotlib.lines import Line2D
-BLUE, ORANGE = "#2a78d6", "#eb6834"
-rows, nresp = [], {}
+#| code-summary: "Each estimator against the PyTorch 2PL, all 24 tables"
+est_rows, nresp = [], {}
 for t in TABLES:
     d = prepare(t)
     te = d[d.test]
     m = te[["id", "item"]].merge(pd.read_csv(FITS / f"{t}_mirt_preds.csv.gz", dtype={"id": str, "item": str}),
                                  on=["id", "item"], how="left")
-    mirt = m["mirt_2pl"].values
     e = pd.read_csv(FITS / f"{t}_estimation_preds.csv.gz")
     tp = pd.read_csv(FITS / f"{t}_torch_preds.csv.gz")
     y = e.y.values
-    est = {"Adam, prior": tp["2PL"].values, "Adam, constrained": tp["2PL (constr.)"].values,
-           "alt. JML, prior": e["alt JML (prior)"].values,
-           "alt. JML, constrained": e["alt JML (constr.)"].values,
-           "EM (MML)": e["EM MML"].values, "L-BFGS (MML)": e["MML L-BFGS"].values}
-    r = {"table": SHORT[t]}
-    for k, pr in est.items():
-        r[k] = vanilla_imv(pr, mirt, y)
-    r["max_abs"] = np.abs(est["L-BFGS (MML)"] - mirt).max()
-    rows.append(r)
+    base = tp["2PL"].values            # the page's zero line throughout: Adam, prior
+    cand = {"mirt 2PL": m["mirt_2pl"].values,
+            "L-BFGS (MML)": e["MML L-BFGS"].values,
+            "EM (MML)": e["EM MML"].values,
+            "Adam, constrained": tp["2PL (constr.)"].values,
+            "alt. JML, prior": e["alt JML (prior)"].values,
+            "alt. JML, constrained": e["alt JML (constr.)"].values}
+    for k, pr in cand.items():
+        est_rows.append({"table": t, "short": SHORT[t], "group": GROUP_OF[t],
+                         "model": k, "imv": round(float(vanilla_imv(base, pr, y)), 4)})
     nresp[SHORT[t]] = float(d[~d.test].groupby("pid").size().median())
-est_res = pd.DataFrame(rows).set_index("table")
 nresp = pd.Series(nresp)
+est = pd.DataFrame(est_rows)
+est_order = ["mirt 2PL", "L-BFGS (MML)", "EM (MML)",
+             "Adam, constrained", "alt. JML, prior", "alt. JML, constrained"]
+display(HTML(imv_stripchart_html(est.to_dict("records"), est_order, {}, group_colour,
+                                 div_id="est-strip", xlim=0.03,
+                                 xlabel="IMV relative to the PyTorch 2PL (Adam, prior)")))
 
-order = ["alt. JML, constrained", "alt. JML, prior", "Adam, constrained", "Adam, prior",
-         "EM (MML)", "L-BFGS (MML)"]
-rng = np.random.default_rng(0)
-fig, ax = plt.subplots(figsize=(7.2, 3.8))
-ax.axvline(0, color="0.3", lw=0.8)
-for i, k in enumerate(order):
-    v = est_res[k].values
-    integ = "MML" in k
-    ax.scatter(v, np.full(len(v), i) + rng.normal(0, 0.055, len(v)), s=26,
-               color=BLUE if integ else "0.58", alpha=0.85, edgecolor="white", lw=0.5, zorder=3,
-               label=("persons integrated out" if integ else "persons as parameters") if i in (0, 5) else None)
-    ax.scatter([v.mean()], [i], marker="|", s=430, color=ORANGE, lw=2.0, zorder=4)
-h, l = ax.get_legend_handles_labels()
-h.append(Line2D([], [], color=ORANGE, lw=2.0, marker="|", ls="none", markersize=9))
-l.append("mean over the 24 tables")
-ax.legend(h, l, frameon=False, fontsize=8, loc="upper left", handletextpad=0.7)
-ax.set_yticks(range(len(order)), order)
-ax.set_xscale("symlog", linthresh=0.001)
-ax.set(xlabel="IMV of the mirt 2PL over each estimator   (0 = matches mirt)",
-       ylim=(-0.6, len(order) + 0.35))
-ax.grid(axis="x", color="0.9", lw=0.6); ax.set_axisbelow(True)
-for sp in ("top", "right", "left"): ax.spines[sp].set_visible(False)
-ax.tick_params(axis="y", length=0)
-plt.tight_layout(); plt.show()
-
-print(est_res[order].mean().round(4).rename("mean IMV of mirt over the estimator").to_string())
-print(f"\nlargest single held-out probability difference, L-BFGS against mirt: "
-      f"{est_res.max_abs.max():.2f} on {est_res.max_abs.idxmax()}")
+wide = est.pivot(index="table", columns="model", values="imv")[est_order]
+print(wide.mean().round(4).rename("mean over tables").to_string())
+print(f"\nlargest gap to mirt over the 24 tables: L-BFGS {(wide['L-BFGS (MML)'] - wide['mirt 2PL']).abs().max():.4f}, "
+      f"EM {(wide['EM (MML)'] - wide['mirt 2PL']).abs().max():.4f}")
 ```
 
-Each dot is one table and the orange tick is the mean, so a point to the right
-of zero means `mirt` predicts the held-out cells better than that estimator
-does. The scale is logarithmic on either side of 0.001, without which the two
-marginal-likelihood rows would be a single smear on the zero line. Three things
-stand out.
+The zero line is the PyTorch 2PL fit by Adam with the prior --- the model used
+everywhere else on this page --- so it has no row of its own, and a dot to the
+right means that estimator predicts the held-out cells better than it does.
+This is the same baseline, the same colours and the same gesture as
+@fig-imv: hover or tap a dot to pick out that table in every row. Three
+things stand out.
 
-**The torch MML matches mirt.** The two blue rows sit on the zero line: the
-L-BFGS fit is within 0.0001 of `mirt` on average and the EM fit within 0.0012.
-Their few visible strays are the ASQ and Denver screeners and EDSC, where
-several items are nearly perfectly separated by the persons, their parameters
-sit at magnitudes in the hundreds and the likelihood is flat along them --- on
-the two screeners the torch fit has the higher marginal likelihood of the pair.
-Same model, same objective, same predictions.
+**The torch MML matches mirt.** The top three rows are one model fit by three
+marginal-likelihood routines --- `mirt`'s own, our EM, and our L-BFGS --- and
+they lie on top of each other at about +0.005. The L-BFGS row never differs
+from the `mirt` row by more than 0.003 on any table and the EM row by more than
+0.03, and the handful of tables carrying those differences are the ASQ and
+Denver screeners and EDSC, where several items are nearly perfectly separated
+by the persons, their parameters sit at magnitudes in the hundreds and the
+likelihood is flat along them. On the two screeners the torch fit has the
+higher marginal likelihood of the pair. Same model, same objective, same
+predictions --- which is what makes the rows below the comparison worth
+reading.
 
-**The gap is the estimator.** The four grey rows sit clear of zero and the two
-blue ones do not. The torch networks trail `mirt` by 0.005 on average when fit
-by Adam and by 0.008 when fit by alternating JML, and the MML fit closes the gap
-to about zero on the same tables. Optimiser quality is not the
-explanation: EM and L-BFGS both converge and agree with each other. What differs
-is whether the person parameters are integrated out or treated as known.
+**The gap is the estimator.** The figure splits cleanly in half. Every
+estimator that integrates the persons out sits above zero, by about +0.005;
+every estimator that plugs in a point estimate of $\theta$ sits at zero or
+below. Nothing else lines up with that split --- not the optimiser, since EM
+and L-BFGS converge and agree with each other, and not the treatment of the
+scale, since the prior and constrained versions fall on the same side. What
+differs is whether the person parameters are integrated out or treated as
+known. The +0.005 is also the `mirt 2PL` row of @fig-imv, which is where this
+question came from; it is the same number, and this is its explanation.
 
 **Alternation does not help.** Alternating joint maximum likelihood is the
-textbook way to fit a joint model and it is worse than Adam on average, 0.008
-against 0.005 for the prior version and 0.018 against 0.007 for the constrained
-one. The incidental-parameter problem predicts exactly this. The best held-out
+textbook way to fit a joint model, and it is worse than Adam, by 0.003 for the
+prior version and by 0.012 for the constrained one. The incidental-parameter
+problem predicts exactly this. The best held-out
 sweep falls within the first ten on 22 of 24 tables for the prior version and on
 all 24 for the constrained one (medians three and two), and the constrained fit
 stopped on patience rather than convergence on 18 tables. On short tests the loss
@@ -1021,40 +1007,24 @@ above. What it does not do is close the prediction gap.
 ```{python}
 #| label: fig-constrained
 #| code-summary: "What fixing the scale costs, by test length"
-rows = []
+models = ["Rasch", "2PL", "MIRT k=2", "MLP small", "MLP large"]
+con_rows = []
 for t in TABLES:
     d = prepare(t)
     y = d[d.test].resp.values
     tp = pd.read_csv(FITS / f"{t}_torch_preds.csv.gz")
     base = tp["2PL"].values
-    r = {"table": SHORT[t]}
-    for name in ["Rasch", "2PL", "MIRT k=2", "MLP small", "MLP large"]:
-        r[name] = (vanilla_imv(base, tp[f"{name} (constr.)"].values, y)
-                   - vanilla_imv(base, tp[name].values, y))
-    rows.append(r)
-con = pd.DataFrame(rows).set_index("table")
-
-models = ["Rasch", "2PL", "MIRT k=2", "MLP small", "MLP large"]
-fig, axes = plt.subplots(1, 5, figsize=(10, 2.9), sharey=True, sharex=True)
-for ax, name in zip(axes, models):
-    ax.axhline(0, color="0.3", lw=0.8)
-    ax.scatter(nresp[con.index], con[name], s=22, color=BLUE, alpha=0.85,
-               edgecolor="white", lw=0.5, zorder=3)
-    ax.axhline(con[name].mean(), color=ORANGE, lw=1.4, ls="--", zorder=4)
-    ax.set_title(f"{name}\nmean {con[name].mean():+.4f}", fontsize=8.5)
-    ax.set_xscale("log")
-    ax.set_xticks([20, 40, 80], ["20", "40", "80"])
-    ax.xaxis.set_minor_locator(mticker.NullLocator())
-    ax.grid(color="0.92", lw=0.6); ax.set_axisbelow(True)
-    for sp in ("top", "right"): ax.spines[sp].set_visible(False)
-axes[0].set_ylabel("IMV cost of fixing the scale\n(constrained \u2212 prior)", fontsize=8.5)
-axes[0].set_ylim(con.min().min() - 0.003, con.max().max() + 0.003)
-fig.supxlabel("median training responses per person", fontsize=8.5, y=0.02)
-plt.tight_layout(rect=(0, 0.04, 1, 1)); plt.show()
-
-worst = con.min(axis=1).nsmallest(2)
-print("worst single losses: " + ", ".join(f"{t} {v:+.4f} ({nresp[t]:.0f} responses per person)"
-                                          for t, v in worst.items()))
+    for name in models:
+        cost = (vanilla_imv(base, tp[f"{name} (constr.)"].values, y)
+                - vanilla_imv(base, tp[name].values, y))
+        con_rows.append({"table": t, "short": SHORT[t], "group": GROUP_OF[t], "panel": name,
+                         "x": int(nresp[SHORT[t]]), "y": round(float(cost), 4)})
+con = pd.DataFrame(con_rows)
+notes = {m: f"mean {con[con.panel == m].y.mean():+.4f}" for m in models}
+display(HTML(facet_scatter_html(con.to_dict("records"), models, group_colour,
+                                div_id="con-facets", notes=notes,
+                                xlabel="median training responses per person",
+                                ylabel="IMV cost of fixing the scale")))
 ```
 
 The Rasch panel is worth pausing on, because it first told us something false. With
@@ -1072,12 +1042,16 @@ lesson is about identification, not about the constraint: a model that cannot
 represent the scale should not be asked to fix it.
 
 With that repaired, the cost of the constraint is small and consistent across
-the five networks --- the panel means run from zero for the Rasch model to
-$-0.003$ for the large MLP --- and it is concentrated where theory says it
-should be. Every panel has the same shape: the points fan out below zero at the
-left, where people answer few items, and close on the zero line at the right.
-On tests where people answer many items the constraint is free or slightly
-positive; on short tests every model pays. Standardising $\theta$ divides out the spread of estimates
+the five networks: the panel means run from zero for the Rasch model to
+$-0.003$ for the large MLP. In four of the five panels it is also concentrated
+where theory says it should be. The Rasch model, the 2PL, the MIRT and the small
+MLP all fan out below zero at the left, where people answer few items, and close
+toward the zero line at the right; the correlation between the cost and the log
+of median responses per person runs from +0.31 to +0.45 for those four, and the
+spread of the costs halves or better between the short tables and the long ones.
+The large MLP is the exception and worth noting as one: it pays about $-0.003$
+whatever the test length, with a correlation of +0.05. Whatever it is losing to
+the constraint is not the thing short tests cause. Standardising $\theta$ divides out the spread of estimates
 that are mostly noise on a short test, stretching poorly determined person
 parameters back to a spread of one instead of shrinking them toward zero. That is
 the incidental-parameter story again, seen from the other side. The constraint

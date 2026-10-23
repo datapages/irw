@@ -9,14 +9,19 @@ D3_URL = "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"
 
 
 def imv_stripchart_html(records, models, labels, group_colour, div_id="imv-strip",
-                        xlabel="IMV relative to PyTorch 2PL"):
-    """records: list of {table, short, group, model, imv}; models: row order."""
+                        xlabel="IMV relative to PyTorch 2PL", xlim=0.05):
+    """records: list of {table, short, group, model, imv}; models: row order.
+
+    xlim sets the half-width of the window; values outside it are drawn as
+    triangles at the edge with the real number in the tooltip.
+    """
     payload = json.dumps({
         "records": records,
         "models": models,
         "labels": labels,
         "colours": group_colour,
         "xlabel": xlabel,
+        "xlim": xlim,
     })
     return f"""
 <div id="{div_id}" class="imv-strip"></div>
@@ -104,6 +109,114 @@ def imv_stripchart_html(records, models, labels, group_colour, div_id="imv-strip
     Object.entries(D.colours).forEach(([g, c]) => leg.append("span").html(`<i style="background:${{c}}"></i>${{g}}`));
     const q = new URLSearchParams(location.search).get("focus");
     if (q && byTable.has(q)) focus(q, {{clientX: 0, clientY: 0}});
+  }};
+  draw(); window.addEventListener("resize", draw);
+}})();
+</script>
+"""
+
+
+def facet_scatter_html(records, panels, group_colour, div_id="facet-scatter",
+                       xlabel="", ylabel="", notes=None, xlog=True):
+    """Small multiples of a scatter, one panel per model, sharing both axes.
+
+    records: list of {table, short, group, panel, x, y}. Hovering a point picks
+    out that table in every panel and lists its value in each, the same gesture
+    as the strip chart above. A dashed line per panel marks the panel mean.
+    notes: optional {panel: subtitle} drawn under each panel title.
+    """
+    payload = json.dumps({
+        "records": records, "panels": panels, "colours": group_colour,
+        "xlabel": xlabel, "ylabel": ylabel, "notes": notes or {}, "xlog": bool(xlog),
+    })
+    return f"""
+<div id="{div_id}" class="imv-strip"></div>
+<script>window.__amdDefine = window.define; window.define = undefined;</script>
+<script src="{D3_URL}"></script>
+<script>window.define = window.__amdDefine;</script>
+<script>
+(function() {{
+  const D = {payload};
+  const root = d3.select("#{div_id}");
+  const draw = () => {{
+    root.selectAll("*").remove();
+    const width = Math.max(560, root.node().getBoundingClientRect().width || 900);
+    const m = {{top: 34, right: 8, bottom: 44, left: 56}}, gap = 12;
+    const height = 250;
+    const n = D.panels.length;
+    const pw = (width - m.left - m.right - gap * (n - 1)) / n;
+    const svg = root.append("svg").attr("width", width).attr("height", height)
+      .attr("viewBox", `0 0 ${{width}} ${{height}}`).style("max-width", "100%");
+    const xs = D.records.map(d => d.x), ys = D.records.map(d => d.y);
+    const xdom = [d3.min(xs), d3.max(xs)];
+    const pad = (d3.max(ys) - d3.min(ys)) * 0.08;
+    const y = d3.scaleLinear().domain([d3.min(ys) - pad, d3.max(ys) + pad])
+      .range([height - m.bottom, m.top]);
+    const byPanel = d3.group(D.records, d => d.panel);
+    const fmt = d3.format("+.4f");
+    const tip = root.append("div").attr("class", "tip");
+    const all = [];
+    D.panels.forEach((pn, i) => {{
+      const x0 = m.left + i * (pw + gap);
+      const x = (D.xlog ? d3.scaleLog() : d3.scaleLinear()).domain(xdom).range([x0, x0 + pw]).nice();
+      const g = svg.append("g");
+      g.append("rect").attr("x", x0).attr("y", m.top).attr("width", pw).attr("height", height - m.top - m.bottom)
+        .attr("fill", "none").attr("stroke", "#e6e6e6");
+      g.append("line").attr("x1", x0).attr("x2", x0 + pw).attr("y1", y(0)).attr("y2", y(0))
+        .attr("stroke", "#555").attr("stroke-width", 1);
+      const rows = byPanel.get(pn) || [];
+      const mu = d3.mean(rows, d => d.y);
+      g.append("line").attr("x1", x0).attr("x2", x0 + pw).attr("y1", y(mu)).attr("y2", y(mu))
+        .attr("stroke", "#eb6834").attr("stroke-width", 1.4).attr("stroke-dasharray", "4,3");
+      g.append("text").attr("x", x0 + pw / 2).attr("y", 14).attr("text-anchor", "middle")
+        .style("font-size", "12px").text(pn);
+      if (D.notes[pn]) g.append("text").attr("x", x0 + pw / 2).attr("y", 27).attr("text-anchor", "middle")
+        .style("font-size", "10.5px").style("fill", "#666").text(D.notes[pn]);
+      g.append("g").attr("transform", `translate(0,${{height - m.bottom}})`)
+        .call(d3.axisBottom(x).tickValues([20, 40, 80]).tickFormat(d3.format("d")).tickSize(3))
+        .call(gg => gg.select(".domain").remove()).selectAll("text").style("font-size", "10px");
+      if (i === 0) g.append("g").attr("transform", `translate(${{x0}},0)`)
+        .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format("+.2f")).tickSize(3))
+        .call(gg => gg.select(".domain").remove()).selectAll("text").style("font-size", "10px");
+      all.push(g.append("g").selectAll("circle").data(rows).join("circle")
+        .attr("cx", d => x(d.x)).attr("cy", d => y(d.y)).attr("r", 4.2)
+        .attr("fill", d => D.colours[d.group]).attr("fill-opacity", 0.75)
+        .attr("stroke", "#fff").attr("stroke-width", 1).style("cursor", "pointer"));
+    }});
+    svg.append("text").attr("x", m.left).attr("y", height - 4)
+      .style("font-size", "11px").style("fill", "#555").text(D.xlabel);
+    svg.append("text").attr("transform", `rotate(-90)`).attr("x", -(m.top + height - m.bottom) / 2)
+      .attr("y", 12).attr("text-anchor", "middle").style("font-size", "11px").style("fill", "#555")
+      .text(D.ylabel);
+    const byTable = d3.group(D.records, d => d.table);
+    function focus(t, ev) {{
+      all.forEach(sel => sel.attr("fill-opacity", d => d.table === t ? 1 : 0.12)
+        .attr("stroke", d => d.table === t ? "#222" : "#fff")
+        .attr("stroke-width", d => d.table === t ? 1.5 : 1)
+        .attr("r", d => d.table === t ? 5.2 : 4.2));
+      const pts = byTable.get(t);
+      const r = pts[0];
+      tip.style("display", "block").html(
+        `<b>${{r.short}}</b><span style="color:#666">${{r.group}} &middot; ${{r.x}} responses/person</span><br>` +
+        D.panels.map(pn => {{
+          const d = pts.find(q => q.panel === pn);
+          return d ? `<span class="val">${{fmt(d.y)}}</span>&nbsp; ${{pn}}` : "";
+        }}).filter(Boolean).join("<br>"));
+      const [px, py] = d3.pointer(ev, root.node());
+      const tw = tip.node().offsetWidth;
+      tip.style("left", `${{Math.min(px + 14, width - tw - 4)}}px`).style("top", `${{Math.max(0, py - 10)}}px`);
+    }}
+    function blur() {{
+      all.forEach(sel => sel.attr("fill-opacity", 0.75).attr("stroke", "#fff")
+        .attr("stroke-width", 1).attr("r", 4.2));
+      tip.style("display", "none");
+    }}
+    all.forEach(sel => sel.on("mouseenter", (ev, d) => focus(d.table, ev))
+      .on("mousemove", (ev, d) => focus(d.table, ev)).on("mouseleave", blur)
+      .on("click", (ev, d) => {{ ev.stopPropagation(); focus(d.table, ev); }}));
+    svg.on("click", blur);
+    const leg = root.append("div").attr("class", "legend").style("margin", "2px 0 0 " + m.left + "px");
+    Object.entries(D.colours).forEach(([g, c]) => leg.append("span").html(`<i style="background:${{c}}"></i>${{g}}`));
   }};
   draw(); window.addEventListener("resize", draw);
 }})();
