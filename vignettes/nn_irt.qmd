@@ -919,9 +919,12 @@ version fixes the scale exactly, and that is the only difference between the two
 alternating fits.
 
 ```{python}
-#| label: tbl-estimators
-#| code-summary: "IMV of mirt 2PL over each estimator, all tables"
-rows = []
+#| label: fig-estimators
+#| code-summary: "IMV of the mirt 2PL over each estimator, all 24 tables"
+import matplotlib.ticker as mticker
+from matplotlib.lines import Line2D
+BLUE, ORANGE = "#2a78d6", "#eb6834"
+rows, nresp = [], {}
 for t in TABLES:
     d = prepare(t)
     te = d[d.test]
@@ -931,33 +934,67 @@ for t in TABLES:
     e = pd.read_csv(FITS / f"{t}_estimation_preds.csv.gz")
     tp = pd.read_csv(FITS / f"{t}_torch_preds.csv.gz")
     y = e.y.values
-    est = {"Adam prior": tp["2PL"].values, "Adam constr.": tp["2PL (constr.)"].values,
-           "JML prior": e["alt JML (prior)"].values, "JML constr.": e["alt JML (constr.)"].values,
-           "EM": e["EM MML"].values, "MML L-BFGS": e["MML L-BFGS"].values}
+    est = {"Adam, prior": tp["2PL"].values, "Adam, constrained": tp["2PL (constr.)"].values,
+           "alt. JML, prior": e["alt JML (prior)"].values,
+           "alt. JML, constrained": e["alt JML (constr.)"].values,
+           "EM (MML)": e["EM MML"].values, "L-BFGS (MML)": e["MML L-BFGS"].values}
     r = {"table": SHORT[t]}
-    for k, p in est.items():
-        r[k] = vanilla_imv(p, mirt, y)
-    r["max |diff| MML"] = np.abs(est["MML L-BFGS"] - mirt).max()
+    for k, pr in est.items():
+        r[k] = vanilla_imv(pr, mirt, y)
+    r["max_abs"] = np.abs(est["L-BFGS (MML)"] - mirt).max()
     rows.append(r)
-res = pd.DataFrame(rows).set_index("table")
-out = pd.concat([res.round(4), res.mean().rename("mean over tables").round(4).to_frame().T])
-out
+    nresp[SHORT[t]] = float(d[~d.test].groupby("pid").size().median())
+est_res = pd.DataFrame(rows).set_index("table")
+nresp = pd.Series(nresp)
+
+order = ["alt. JML, constrained", "alt. JML, prior", "Adam, constrained", "Adam, prior",
+         "EM (MML)", "L-BFGS (MML)"]
+rng = np.random.default_rng(0)
+fig, ax = plt.subplots(figsize=(7.2, 3.8))
+ax.axvline(0, color="0.3", lw=0.8)
+for i, k in enumerate(order):
+    v = est_res[k].values
+    integ = "MML" in k
+    ax.scatter(v, np.full(len(v), i) + rng.normal(0, 0.055, len(v)), s=26,
+               color=BLUE if integ else "0.58", alpha=0.85, edgecolor="white", lw=0.5, zorder=3,
+               label=("persons integrated out" if integ else "persons as parameters") if i in (0, 5) else None)
+    ax.scatter([v.mean()], [i], marker="|", s=430, color=ORANGE, lw=2.0, zorder=4)
+h, l = ax.get_legend_handles_labels()
+h.append(Line2D([], [], color=ORANGE, lw=2.0, marker="|", ls="none", markersize=9))
+l.append("mean over the 24 tables")
+ax.legend(h, l, frameon=False, fontsize=8, loc="upper left", handletextpad=0.7)
+ax.set_yticks(range(len(order)), order)
+ax.set_xscale("symlog", linthresh=0.001)
+ax.set(xlabel="IMV of the mirt 2PL over each estimator   (0 = matches mirt)",
+       ylim=(-0.6, len(order) + 0.35))
+ax.grid(axis="x", color="0.9", lw=0.6); ax.set_axisbelow(True)
+for sp in ("top", "right", "left"): ax.spines[sp].set_visible(False)
+ax.tick_params(axis="y", length=0)
+plt.tight_layout(); plt.show()
+
+print(est_res[order].mean().round(4).rename("mean IMV of mirt over the estimator").to_string())
+print(f"\nlargest single held-out probability difference, L-BFGS against mirt: "
+      f"{est_res.max_abs.max():.2f} on {est_res.max_abs.idxmax()}")
 ```
 
-A positive number means `mirt` predicts the held-out cells better than that
-estimator does. Three things stand out.
+Each dot is one table and the orange tick is the mean, so a point to the right
+of zero means `mirt` predicts the held-out cells better than that estimator
+does. The scale is logarithmic on either side of 0.001, without which the two
+marginal-likelihood rows would be a single smear on the zero line. Three things
+stand out.
 
-**The torch MML matches mirt.** The L-BFGS fit is within 0.0001 of `mirt` on
-average and the EM fit within 0.0012. The two largest disagreements are on the
-ASQ and Denver screeners and on EDSC, where several items are nearly perfectly
-separated by the persons, their parameters sit at magnitudes in the hundreds and
-the likelihood is flat along them; on the two screeners the torch fit has the
-higher marginal likelihood of the pair. Same model, same objective, same
-predictions.
+**The torch MML matches mirt.** The two blue rows sit on the zero line: the
+L-BFGS fit is within 0.0001 of `mirt` on average and the EM fit within 0.0012.
+Their few visible strays are the ASQ and Denver screeners and EDSC, where
+several items are nearly perfectly separated by the persons, their parameters
+sit at magnitudes in the hundreds and the likelihood is flat along them --- on
+the two screeners the torch fit has the higher marginal likelihood of the pair.
+Same model, same objective, same predictions.
 
-**The gap is the estimator.** The torch networks trail `mirt` by 0.005 on average
-when fit by Adam and by 0.008 when fit by alternating JML, and the MML fit closes
-the gap to about zero on the same tables. Optimiser quality is not the
+**The gap is the estimator.** The four grey rows sit clear of zero and the two
+blue ones do not. The torch networks trail `mirt` by 0.005 on average when fit
+by Adam and by 0.008 when fit by alternating JML, and the MML fit closes the gap
+to about zero on the same tables. Optimiser quality is not the
 explanation: EM and L-BFGS both converge and agree with each other. What differs
 is whether the person parameters are integrated out or treated as known.
 
@@ -982,8 +1019,8 @@ constrained ones about 9% above `mirt`'s and the rescaled prior ones about 3%
 above. What it does not do is close the prediction gap.
 
 ```{python}
-#| label: tbl-constrained
-#| code-summary: "Constrained versus prior, every network, IMV against the prior 2PL"
+#| label: fig-constrained
+#| code-summary: "What fixing the scale costs, by test length"
 rows = []
 for t in TABLES:
     d = prepare(t)
@@ -992,15 +1029,35 @@ for t in TABLES:
     base = tp["2PL"].values
     r = {"table": SHORT[t]}
     for name in ["Rasch", "2PL", "MIRT k=2", "MLP small", "MLP large"]:
-        r[f"{name}"] = vanilla_imv(base, tp[name].values, y)
-        r[f"{name} (constr.)"] = vanilla_imv(base, tp[f"{name} (constr.)"].values, y)
+        r[name] = (vanilla_imv(base, tp[f"{name} (constr.)"].values, y)
+                   - vanilla_imv(base, tp[name].values, y))
     rows.append(r)
-res = pd.DataFrame(rows).set_index("table")
-out = pd.concat([res.round(4), res.mean().rename("mean over tables").round(4).to_frame().T])
-out
+con = pd.DataFrame(rows).set_index("table")
+
+models = ["Rasch", "2PL", "MIRT k=2", "MLP small", "MLP large"]
+fig, axes = plt.subplots(1, 5, figsize=(10, 2.9), sharey=True, sharex=True)
+for ax, name in zip(axes, models):
+    ax.axhline(0, color="0.3", lw=0.8)
+    ax.scatter(nresp[con.index], con[name], s=22, color=BLUE, alpha=0.85,
+               edgecolor="white", lw=0.5, zorder=3)
+    ax.axhline(con[name].mean(), color=ORANGE, lw=1.4, ls="--", zorder=4)
+    ax.set_title(f"{name}\nmean {con[name].mean():+.4f}", fontsize=8.5)
+    ax.set_xscale("log")
+    ax.set_xticks([20, 40, 80], ["20", "40", "80"])
+    ax.xaxis.set_minor_locator(mticker.NullLocator())
+    ax.grid(color="0.92", lw=0.6); ax.set_axisbelow(True)
+    for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+axes[0].set_ylabel("IMV cost of fixing the scale\n(constrained \u2212 prior)", fontsize=8.5)
+axes[0].set_ylim(con.min().min() - 0.003, con.max().max() + 0.003)
+fig.supxlabel("median training responses per person", fontsize=8.5, y=0.02)
+plt.tight_layout(rect=(0, 0.04, 1, 1)); plt.show()
+
+worst = con.min(axis=1).nsmallest(2)
+print("worst single losses: " + ", ".join(f"{t} {v:+.4f} ({nresp[t]:.0f} responses per person)"
+                                          for t, v in worst.items()))
 ```
 
-The Rasch row is worth pausing on, because it first told us something false. With
+The Rasch panel is worth pausing on, because it first told us something false. With
 the Rasch model written the usual way --- $\theta_p + d_i$, no slope --- the
 constraint was catastrophic: worse on every one of the 24 tables, by 0.03 on
 average and by 0.19 on the Onah test. That is not what it costs to fix the scale.
@@ -1014,13 +1071,13 @@ difficulty --- removes the problem entirely: the constrained Rasch is then withi
 lesson is about identification, not about the constraint: a model that cannot
 represent the scale should not be asked to fix it.
 
-With that repaired, the cost of the constraint is small and consistent across the
-five networks: $-0.0017$ for the 2PL, $-0.0021$ for the MIRT, $-0.0030$ and
-$-0.0028$ for the two MLPs, and $+0.0001$ for the Rasch. It is concentrated where
-theory says it should be. On tests where people answer many items the constraint
-is free or slightly positive; on short tests every model pays, with the worst
-single losses on the ASQ (17 training responses per person) and the Ding
-knowledge test (19). Standardising $\theta$ divides out the spread of estimates
+With that repaired, the cost of the constraint is small and consistent across
+the five networks --- the panel means run from zero for the Rasch model to
+$-0.003$ for the large MLP --- and it is concentrated where theory says it
+should be. Every panel has the same shape: the points fan out below zero at the
+left, where people answer few items, and close on the zero line at the right.
+On tests where people answer many items the constraint is free or slightly
+positive; on short tests every model pays. Standardising $\theta$ divides out the spread of estimates
 that are mostly noise on a short test, stretching poorly determined person
 parameters back to a spread of one instead of shrinking them toward zero. That is
 the incidental-parameter story again, seen from the other side. The constraint
