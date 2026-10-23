@@ -642,6 +642,8 @@ ll_tab = res.pivot(index="table", columns="model", values="log-loss").reindex(ro
 ll_tab.insert(0, "2PL", ll2.reindex(rows_order))
 out = pd.concat({"IMV vs 2PL": imv_tab.round(4), "held-out log-loss": ll_tab.round(4)}, axis=1)
 out.index = [SHORT[t] for t in out.index]
+# display names only: fig-gap still indexes imv_tab by the raw column names
+out = out.rename(columns=labels, level=1)
 
 out
 ```
@@ -666,7 +668,7 @@ to measure. The sweep below says otherwise: 42% of its items take a negative
 dimension lines up with that split almost perfectly. The gain is scoring, not
 spatial ability.
 
-### Where the networks win, a dot product already finds it
+### Where the networks win, a two-dimensional 2PL wins too
 
 The gains cluster in the personality and clinical inventories: about 0.03 on
 the ADQ anhedonia scale, 0.02 on the Eysenck EPI (three scales in one
@@ -679,8 +681,8 @@ response data. In every one of these the MLPs match or trail the
 two-dimensional MIRT, and the large MLP is never reliably better than the
 small one. Once the embeddings are two-dimensional, a nonlinear decoder adds
 nothing on these data. Put differently: the signal a network can find in a
-person-by-item table of this kind is a second dimension, and a dot product
-already finds it. Depth is not where the signal is. What that second dimension
+person-by-item table of this kind is a second dimension, and an ordinary
+two-dimensional 2PL finds it. Depth is not where the signal is. What that second dimension
 *is* turns out to vary, and the sweep below separates two cases: the ADQ, the
 EPI and the mental-rotation test all carry reverse-keyed items, while the GMI
 and the Author Recognition Test gain with every slope positive. Keying explains
@@ -692,14 +694,27 @@ where slopes differ sharply across items, including reverse-keyed items a
 Rasch model cannot fit at all. The step from one item parameter to two is
 worth more than every step after it.
 
-### Flexible item curves add nothing
+### Flexible item curves do not add much
 
-The asymmetric LPE curve tracks the `mirt` 2PL to within 0.001 on every
-table. The monotonic polynomial is the same on the tests and worse on
-several inventories (0.04 below on the NPI, 0.015 on the ADQ), and it failed
-to converge on three of the longer tables. Changing the shape of the item
-curve while keeping one dimension is not where the predictable signal is
-either. Taken with the previous section, the picture is fairly simple: on
+The asymmetric LPE curve tracks the `mirt` 2PL to within 0.003 on every
+table, very slightly above it on average. The monotonic polynomial is the
+same on the tests and worse on several inventories (0.04 below on the NPI,
+0.015 on the ADQ), and it failed to converge on three of the longer tables.
+Changing the shape of the item curve while keeping one dimension buys a
+little on some tables and loses more on others, which is not where the
+predictable signal is either.
+
+This is the second time the warehouse has returned that answer. The
+[asymmetric IRT vignette](asymmetric_irt.qmd) takes the three asymmetric
+models of @shimbonifay2026 --- the LPE among them --- across dozens of
+binary IRW tables and scores them on held-out responses with the same IMV.
+The plain 2PL wins outright on the largest share of tables, and the single
+best case in that batch is worth about what a typical 1PL-to-2PL upgrade is
+worth. That page and this one share a measure and a warehouse but not an
+implementation, a model set or a table list, which makes the agreement worth
+something. It also reports a thing we cannot see from here: the asymmetric
+model that looks dominant in-sample by BIC is the weakest of the three once
+it is scored out of sample. Taken with the previous section, the picture is fairly simple: on
 dichotomous tables, the 2PL's logistic curve is good enough, and the only
 thing worth adding is a dimension, when the instrument has one to add.
 
@@ -798,22 +813,44 @@ fitted 2PL slope is negative and the picture is immediate.
 #| label: tbl-keying
 #| code-summary: "IMV by the fraction of negatively-sloped items"
 bands = pd.cut(ex.frac_neg, [-0.001, 0.0001, 0.10, 0.25, 0.45, 1.0],
-               labels=["none", "up to 10%", "10-25%", "25-45%", "over 45%"])
+               labels=["none", "up to 10%", "10\u201325%", "25\u201345%", "over 45%"])
 summary = (ex.groupby(bands, observed=True)
              .agg(tables=("imv", "size"), mean=("imv", "mean"), median=("imv", "median"),
-                  **{"share above 0.005": ("imv", lambda x: (x > 0.005).mean())})
-             .round({"mean": 4, "median": 4, "share above 0.005": 2}))
+                  gainers=("imv", lambda x: (x > 0.005).mean()))
+             .round({"mean": 4, "median": 4}))
+# the last column is a share, not an IMV; show it as a percentage so it cannot be
+# misread against the four-decimal columns beside it
+summary["gainers"] = (summary["gainers"] * 100).round(0).astype(int).astype(str) + "%"
+summary = summary.rename(columns={"gainers": "% above 0.005"})
 summary.index.name = "items with a negative 2PL slope"
 print(f"corr(IMV, fraction of negatively-sloped items) = {ex.imv.corr(ex.frac_neg):+.3f}")
 summary
 ```
 
-The relationship is monotone and strong: +0.47, against +0.17 for the oriented
-alignment. The 155 tables with no negatively-sloped item at all gain **nothing
-on average** (−0.0004); the 87 tables with at least one average +0.0078; the
-six tables where more than 45% of slopes are negative average +0.039, and five
-of those six clear 0.005. Essentially the entire corpus mean lives in the
-third of tables with mixed-sign slopes.
+What the table shows is a step, not a gradient. The 155 tables with no
+negatively-sloped item gain **nothing on average** (−0.0004, median −0.0002,
+7% above 0.005), and the 42 tables where more than a tenth of the slopes are
+negative average +0.0158, with 45% above 0.005. Essentially the entire corpus
+mean lives in the third of tables with mixed-sign slopes, and the split itself
+is not in doubt: Mann--Whitney gives $p = 1.4\times10^{-5}$ for mixed against
+single sign.
+
+The shape of the increase above that step is another matter, and we would not
+lean on it. The ordering is not even monotone --- the 10–25% band outranks the
+25–45% band on both the mean and the share of gainers --- and with six to
+twenty-two tables per cell each band's mean rests on two of them: drop the top
+two from the 10–25% band and it falls from +0.0127 to +0.0047. The correlation
+carries the same warning. It is +0.47 by Pearson but +0.32 by Spearman, so it
+is carried by the tail rather than by the middle of the distribution, against
++0.17 for the oriented alignment on the same tables.
+
+The tail is also not a clean keying story. The second and third largest gains
+in the sweep are two tables from a single deposit, with 18% and 12% negative
+slopes, and the seventh is a table with one negatively-sloped item in 114.
+Dropping that same-study pair in fact *raises* the Pearson correlation, to
++0.53, because they are counterexamples rather than drivers. Reverse keying is
+the best single predictor we have of where a second dimension pays; it is not
+the whole of it.
 
 This reads as a method factor rather than a dimension of the construct. When a
 third of an inventory is worded in the opposite direction, a one-dimensional
@@ -825,8 +862,8 @@ table whose reverse-keyed items had been recoded at ingest would show less of
 it. Readers tempted to read a high IMV here as evidence of a second trait
 should check the sign of the slopes first.
 
-It also qualifies, rather than overturns, Part I. The claim that a dot product
-finds whatever a deeper network finds is a claim about depth, and nothing in
+It also qualifies, rather than overturns, Part I. The claim that a
+two-dimensional 2PL finds whatever a deeper network finds is a claim about depth, and nothing in
 the sweep touches it. The claim that the gains cluster in personality and
 clinical inventories survives too — those are exactly the instruments that mix
 keying directions. What changes is the interpretation: the second dimension
@@ -1206,6 +1243,13 @@ keeps them honest.
   responses, which excludes the largest mass administrations (the
   million-respondent ENEM forms among them), and its density threshold of 0.9
   excludes adaptive instruments, including two of Part I's own tables.
+- **The sweep treats tables as independent, and the warehouse does not.** IRW
+  holds several tables from some deposits, and two of them sit among the
+  largest gains in the sweep (`vogel_2024_citizen_attributes_s2` and `_s3`, at
+  +0.094 and +0.091). Nothing in the selection rule or the summaries accounts
+  for that, so the tail is less varied than a count of 242 suggests, and any
+  standard error computed as though those tables were independent would be too
+  small. We report no such standard error for that reason.
 - **Keying is measured, not established.** The fraction of items with a
   negative fitted 2PL slope is a symptom of reverse-keyed items that were not
   recoded, but it is not a direct observation of the item wording. A negative
