@@ -9,14 +9,18 @@ dimensions -- is an artifact: dimension 1 recovers the 2PL direction by
 construction. So orient the solution first (rotate so column 1 points along the
 2PL slope vector), then look at what is left in the orthogonal column.
 
-Writes fits/expand_keying.csv.
+Writes nn_irt_data/expand_summary.csv -- one row per table, the committed
+deliverable of the sweep. The per-table fits it is built from stay in fits/,
+which is not in the repository, so this file is what the vignette reads.
 """
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-FITS = Path(__file__).parent / "nn_irt_data" / "fits"
+DATA = Path(__file__).parent / "nn_irt_data"
+FITS = DATA / "fits"
+OUT = DATA / "expand_summary.csv"
 
 
 def oriented(a_2pl, loadings):
@@ -66,13 +70,13 @@ def main():
 
     out = (
         pd.DataFrame(rows)
-        .merge(results[["table", "imv", "items", "persons"]], on="table", how="left")
+        .merge(results[["table", "imv", "items", "persons", "mean_resp"]], on="table", how="left")
         .dropna(subset=["imv"])
     )
     out["mixed_sign"] = out["frac_neg"] > 0
-    out.to_csv(FITS / "expand_keying.csv", index=False)
+    out.to_csv(OUT, index=False)
 
-    print(f"{len(out)} tables")
+    print(f"{len(out)} tables -> {OUT}")
     for col in ("align", "orth_share", "frac_neg"):
         print(f"  corr(imv, {col:11s}) = {out['imv'].corr(out[col]):+.3f}")
     print(

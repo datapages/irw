@@ -7,15 +7,20 @@ at least 500 respondents, and -- our additions -- at least 10 items and density
 >= 0.9, since the cell-level split assumes dense tables.
 
 For each table it records the IMV of MIRT k=2 over the 2PL on held-out cells and
-two covariates for the keying question: the fraction of items whose rest
-correlation is negative, and how far the second MIRT dimension aligns with that
-keying direction. If the second dimension is a method factor, its loadings should
-separate the reverse-keyed items; if it is a substantive dimension, it need not.
+one covariate for the keying question: the fraction of items whose rest
+correlation is negative. The `mirt_key_alignment` column is retained for the
+record but should not be used -- see nn_irt_expand_keying.py, which recomputes
+the alignment properly from the saved loading matrix.
 
 Resumable: one row per table appended to fits/expand_results.csv, tables already
 in the file are skipped. Run from vignettes/.
 """
-import sys, time, traceback
+import os
+import sys
+import time
+import traceback
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -23,7 +28,11 @@ sys.path.insert(0, ".")
 import nn_irt_helpers as H
 from imvpy import vanilla_imv
 
-METADATA = "/home/ben/Dropbox/projects/irw/src/metadata/metadata.csv"
+# The corpus metadata lives in the main checkout, not in a vignette worktree; point
+# IRW_METADATA at it if this script is run from somewhere else.
+METADATA = Path(
+    os.environ.get("IRW_METADATA", "~/Dropbox/projects/irw/src/metadata/metadata.csv")
+).expanduser()
 OUT = H.FITS / "expand_results.csv"
 MIN_PERSONS, MIN_ITEMS, MIN_DENSITY = 500, 10, 0.9
 # Every table is subsampled to 5,000 respondents and 116 items before fitting, so

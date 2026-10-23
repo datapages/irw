@@ -7,7 +7,10 @@ description: |
   held-out item responses any better than the 2PL. Scored with the InterModel
   Vigorish, the answer is: only where there is a second dimension to find, and
   a two-dimensional MIRT finds it as well as a multilayer perceptron does, at
-  the table sizes we fit here.
+  the table sizes we fit here. A rule-based sweep over 242 further tables then
+  asks how often that happens. The median table gains nothing, the mean gain
+  matches the published benchmark, and the tables that do gain are mostly
+  tables with reverse-keyed items that were never recoded.
   Part I also leaves a small gap between the torch 2PL and the `mirt` 2PL, and
   Part II takes that gap apart by fitting the same 2PL six ways. The estimator
   explains it; fixing the scale of the person parameters does not.
@@ -89,7 +92,13 @@ the item curve while keeping a single dimension.
 The short version of the answer is that on a test built to measure one
 thing, nothing beats the 2PL; where a network wins, the win is a second
 dimension, and a two-dimensional MIRT finds it as well as a deeper network
-does. All of that holds at the sizes we fit here: tables are capped at 5,000
+does. We then put that result to a harder test, applying a selection rule to
+the whole warehouse rather than a judgment to 24 tables, and fitting the 2PL
+against a two-dimensional MIRT on all 242 tables that qualify. The median
+table gains nothing; the mean gain, +0.0025, matches the published benchmark
+and is carried almost entirely by a seventh of the corpus. Those tables turn
+out to have something specific in common, and it is not a second trait --- it
+is reverse-keyed items that were never recoded. All of that holds at the sizes we fit here: tables are capped at 5,000
 respondents and 116 items, and scale is the one advantage a wider network is
 supposed to have, so the null is a null at this scale. That is Part I. One of
 the comparisons also turned up an estimator effect, a small but consistent
@@ -129,7 +138,12 @@ corrected upstream); two further candidates, `encceja_2025_em_cn` and
 `mgkt_options`, were dropped because their full exports fail to load, so the
 final 24 is a design choice filtered by what we could read. Tables with more
 than 5,000 respondents or 116 items are subsampled to those caps with a fixed
-seed, so that every fit on the page stays small enough to run on a laptop.
+seed, so that every fit on the page stays small enough to run on a laptop. This
+selection is deliberate and it is *not* a sample: these 24 tables were picked
+to span kinds of structure, which makes them good for showing where gains come
+from and bad for estimating how often gains occur. A rule-based sweep over the
+whole warehouse, reported [below](#away-from-the-hand-picked-tables-the-median-table-gains-nothing),
+supplies the second thing.
 
 ```{python}
 #| label: data
@@ -541,13 +555,15 @@ for t, d in data.items():
     preds[t] = {"y": te.resp.values}
     for name, mk in nn_specs.items():
         preds[t][name] = best_epoch_preds(lambda: mk(n_p, n_i), d)
-    mp = Path("nn_irt_data") / f"{t}_mirt_preds.csv.gz"
-    if mp.exists():
-        m = pd.read_csv(mp, dtype={"id": str, "item": str})
-        m = te[["id", "item"]].merge(m, on=["id", "item"], how="left")
-        for c in m.columns:
-            if c.startswith("mirt_"):
-                preds[t][c] = m[c].values
+    mp = FITS / f"{t}_mirt_preds.csv.gz"
+    if not mp.exists():
+        raise FileNotFoundError(
+            f"no mirt predictions for {t} at {mp}; run nn_irt_mirt_compute.R first")
+    m = pd.read_csv(mp, dtype={"id": str, "item": str})
+    m = te[["id", "item"]].merge(m, on=["id", "item"], how="left")
+    for c in m.columns:
+        if c.startswith("mirt_"):
+            preds[t][c] = m[c].values
 ```
 
 ```{python}
@@ -622,7 +638,7 @@ invisible in prediction. The one clear exception in this group is the FSIQ
 mental-rotation test, where every wider network gains about 0.03, which says
 the test is not unidimensional in practice whatever it was built to measure.
 
-### Where the networks win, the win is multidimensionality, and MIRT captures it
+### Where the networks win, a dot product already finds it
 
 The gains cluster in the personality and clinical inventories: about 0.03 on
 the ADQ anhedonia scale, 0.02 on the Eysenck EPI (three scales in one
@@ -654,6 +670,136 @@ curve while keeping one dimension is not where the predictable signal is
 either. Taken with the previous section, the picture is fairly simple: on
 dichotomous tables, the 2PL's logistic curve is good enough, and the only
 thing worth adding is a dimension, when the instrument has one to add.
+
+### Away from the hand-picked tables, the median table gains nothing
+
+Twenty-four tables chosen to span kinds of structure cannot tell us how often
+a second dimension pays. For that we need a rule rather than a judgment, so we
+applied one to the whole warehouse: dichotomous, at least 500 respondents, at
+least 10 items, and density at least 0.9, which is what the cell-level split
+needs. That gives 262 tables, of which 242 fit without incident. The sweep is
+narrower than Part I's comparison — it is the 2PL against a two-dimensional
+MIRT and nothing else, because the point is to count how often the one move
+that worked above actually works, not to re-run five models 242 times.
+
+```{python}
+#| label: fig-expand
+#| code-summary: "The sweep: 242 tables under a selection rule"
+ex = pd.read_csv(DATA / "expand_summary.csv")
+picked = ex.table.isin(TABLES)
+
+fig, ax = plt.subplots(figsize=(6.4, 3.4))
+bins = np.linspace(-0.025, 0.105, 53)
+ax.hist(ex.imv, bins=bins, color="0.78", edgecolor="white", lw=0.5, label=f"all {len(ex)} tables")
+ax.hist(ex.imv[picked], bins=bins, color="#2a78d6", edgecolor="white", lw=0.5,
+        label=f"{int(picked.sum())} of Part I's 24")
+ax.axvline(0, color="0.3", lw=0.8)
+ax.axvline(ex.imv.mean(), color="#eb6834", lw=1.2, ls="--",
+           label=f"mean {ex.imv.mean():+.4f}")
+ax.set(xlabel="IMV of MIRT k=2 over the 2PL, held-out cells", ylabel="tables", yscale="log")
+ax.legend(frameon=False, fontsize=8)
+ax.grid(color="0.9", lw=0.6); ax.set_axisbelow(True)
+for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+plt.tight_layout(); plt.show()
+
+q = ex.imv.quantile([0.25, 0.5, 0.75])
+print(f"mean {ex.imv.mean():+.4f}   median {q[0.5]:+.4f}   sd {ex.imv.std():.4f}")
+print(f"quartiles {q[0.25]:+.4f} / {q[0.75]:+.4f}   max {ex.imv.max():+.4f}   min {ex.imv.min():+.4f}")
+print(f"at or below zero: {(ex.imv <= 0).mean():.0%}    above 0.005: {(ex.imv > 0.005).mean():.0%}")
+print(f"Part I's tables, scored the same way: n={int(picked.sum())}, "
+      f"mean {ex.imv[picked].mean():+.4f}, above 0.005: {(ex.imv[picked] > 0.005).mean():.0%}")
+```
+
+Note the log scale on the count axis: without it the spike at zero flattens
+everything else. The median table gains **nothing at all** (−0.0001), 54% of
+tables are at or below zero, and the quartiles are −0.0012 and +0.0016. The
+mean is +0.0025, and it is positive only because of a thin right tail: 14% of
+tables gain more than 0.005 and a single table gains 0.10. So the honest
+summary of the one move that worked in Part I is that it works on about a
+seventh of the warehouse and does nothing on the rest.
+
+Two checks are worth pausing on. The first is that this mean is almost exactly
+the published one. @domingue2024imv fit an exploratory two-factor model to 60
+IRW datasets under a similar rule and report a mean IMV of +0.0031 against the
+2PL, with a maximum of 0.029; we get +0.0025 from a different implementation,
+a different split design and four times as many tables. Two independent routes
+to the same number is about as much reassurance as this kind of comparison
+affords.
+
+The second is less comfortable. Scored under the same rule and the same split, Part I's
+tables give a mean of +0.0048 with 27% above 0.005 — roughly double the corpus
+rate on both counts. **Part I's table set is
+enriched for the effect it reports.** That is what picking tables to span kinds
+of structure does, and it was the right choice for showing *where* the gains
+come from, but it makes the 24 useless for saying *how common* they are. Of the
+24, 22 clear the rule; the two that do not are the developmental screeners,
+which are age-adaptive and so fail the density threshold.
+
+### The gain is item keying, not a second dimension
+
+If a two-dimensional model wins on a seventh of the warehouse, what do those
+tables have in common? The obvious thing to test is whether they carry real
+structure beyond the first dimension — and the obvious way to test it is a
+trap we fell into. Correlating the MIRT loadings with the 2PL slopes and taking
+the better-aligned of the two dimensions produces a correlation with IMV of
++0.59, which looks like a finding and is an artifact: MIRT's first dimension
+recovers the 2PL direction *by construction*, so the statistic is largely
+measuring how well the fit converged.
+
+The repair is to orient the solution before measuring it. Rotate the loading
+matrix so that its first column lies along the 2PL slope vector, which is
+permitted because the two-dimensional solution is identified only up to
+rotation, and then look at what is left in the orthogonal column. That column
+is the structure a second dimension adds that the 2PL could not already
+express. Oriented this way, the alignment correlates +0.17 with IMV, and the
+share of loading variance in the orthogonal column correlates +0.09 — with no
+monotone pattern across its quartiles. There is no evidence here that extra
+dimensional structure is what pays.
+
+What does pay is cruder. Some IRW tables contain reverse-keyed items that were
+never recoded; the warehouse does not harmonise the direction of responses,
+and the 2PL handles such an item by giving it a negative slope, which is a
+legitimate fit but leaves a mixed-sign slope vector. Count the items whose
+fitted 2PL slope is negative and the picture is immediate.
+
+```{python}
+#| label: tbl-keying
+#| code-summary: "IMV by the fraction of negatively-sloped items"
+bands = pd.cut(ex.frac_neg, [-0.001, 0.0001, 0.10, 0.25, 0.45, 1.0],
+               labels=["none", "up to 10%", "10-25%", "25-45%", "over 45%"])
+summary = (ex.groupby(bands, observed=True)
+             .agg(tables=("imv", "size"), mean=("imv", "mean"), median=("imv", "median"),
+                  **{"share above 0.005": ("imv", lambda x: (x > 0.005).mean())})
+             .round({"mean": 4, "median": 4, "share above 0.005": 2}))
+summary.index.name = "items with a negative 2PL slope"
+print(f"corr(IMV, fraction of negatively-sloped items) = {ex.imv.corr(ex.frac_neg):+.3f}")
+summary
+```
+
+The relationship is monotone and strong: +0.47, against +0.17 for the oriented
+alignment. The 155 tables with no negatively-sloped item at all gain **nothing
+on average** (−0.0004); the 87 tables with at least one average +0.0078; the
+six tables where more than 45% of slopes are negative average +0.039, and five
+of those six clear 0.005. Essentially the entire corpus mean lives in the
+third of tables with mixed-sign slopes.
+
+This reads as a method factor rather than a dimension of the construct. When a
+third of an inventory is worded in the opposite direction, a one-dimensional
+model must choose a single ordering of persons and eat the misfit on the
+reversed items; a second dimension gives it somewhere to put them. Whether to
+call that a second substantive dimension or an artifact of wording is a real
+question, and it is partly a question about the data rather than the model: a
+table whose reverse-keyed items had been recoded at ingest would show less of
+it. Readers tempted to read a high IMV here as evidence of a second trait
+should check the sign of the slopes first.
+
+It also qualifies, rather than overturns, Part I. The claim that a dot product
+finds whatever a deeper network finds is a claim about depth, and nothing in
+the sweep touches it. The claim that the gains cluster in personality and
+clinical inventories survives too — those are exactly the instruments that mix
+keying directions. What changes is the interpretation: the second dimension
+those tables need is doing less interesting work than the phrase
+"multidimensionality" suggests.
 
 ### The mirt 2PL gap is an estimator effect, and it is largest on short tests
 
@@ -1000,7 +1146,23 @@ keeps them honest.
   kinds of structure, not sampled from the warehouse, and the counts per
   group are small. The qualitative pattern (dimension helps where there is
   one, depth does not) is consistent across the groups; the sizes of the
-  gains are specific to these tables.
+  gains are specific to these tables, and the sweep confirms that the set is
+  enriched — roughly double the corpus rate of gains above 0.005.
+- **The sweep is narrower than the comparison it generalises.** The 242-table
+  sweep fits the 2PL against a two-dimensional MIRT and nothing else. It can
+  say how often the one move that worked in Part I pays, and it can say what
+  the paying tables have in common, but it says nothing about depth, about
+  flexible item curves, or about the estimator gap — all of which rest on the
+  24 tables alone. Its selection rule also caps fetched tables at two million
+  responses, which excludes the largest mass administrations (the
+  million-respondent ENEM forms among them), and its density threshold of 0.9
+  excludes adaptive instruments, including two of Part I's own tables.
+- **Keying is measured, not established.** The fraction of items with a
+  negative fitted 2PL slope is a symptom of reverse-keyed items that were not
+  recoded, but it is not a direct observation of the item wording. A negative
+  slope can also mean a mis-scored key, a badly behaved item, or a genuinely
+  oppositional trait. We did not read the items; a table-by-table check of
+  wording against slope sign would settle it and is not on this page.
 
 ## Of the estimator comparison
 
@@ -1046,7 +1208,9 @@ those outputs — the fetched tables, the splits, and the held-out predictions
 from every model — are regenerable, so they are kept out of the repository in
 `vignettes/nn_irt_data/fits/`, which `.gitignore` excludes. What is committed
 beside the page is the small, slow-to-rebuild material: the `mirt` item
-parameters, the estimator diagnostics, the drift trace and the bibliography.
+parameters, the estimator diagnostics, the drift trace, the bibliography, and
+`expand_summary.csv`, the one-row-per-table result of the 242-table sweep,
+which takes hours to rebuild and 26 KB to store.
 Re-rendering the page from source therefore means regenerating the caches,
 which needs Redivis access and an R installation; building the site from the
 committed freeze needs neither. To regenerate:
@@ -1065,10 +1229,17 @@ python vignettes/nn_irt_estimation_compute.py
 python vignettes/nn_irt_estimation_drift.py
 
 # 4. The offline mirt fits (2PL, monotonic polynomial, LPE) on the same split;
-#    delete vignettes/nn_irt_data/*_mirt_preds.csv.gz first if the split changes
+#    delete vignettes/nn_irt_data/fits/*_mirt_preds.csv.gz first if the split changes
 Rscript vignettes/nn_irt_mirt_compute.R
 
-# 5. Re-render this page
+# 5. The 242-table sweep behind the corpus check (slow: hours, and it fetches
+#    most of the warehouse). Each step is resumable and skips finished tables.
+#    IRW_METADATA must point at src/metadata/metadata.csv in the main checkout.
+python vignettes/nn_irt_expand_compute.py    # fits/expand_results.csv
+python vignettes/nn_irt_expand_loadings.py   # fits/expand_loadings.csv
+python vignettes/nn_irt_expand_keying.py     # nn_irt_data/expand_summary.csv
+
+# 6. Re-render this page
 quarto render vignettes/nn_irt.qmd
 ```
 

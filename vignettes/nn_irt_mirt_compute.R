@@ -1,9 +1,9 @@
 # Offline companion to nn_irt.qmd: fit R mirt models on the same train/test
 # split the page uses and write held-out predictions to nn_irt_data/.
 #
-# Run from vignettes/ after the page has written nn_irt_data/<table>_split.csv.gz
+# Run from vignettes/ after the page has written nn_irt_data/fits/<table>_split.csv.gz
 # (the page writes them on its first render). Then re-render the page; it reads
-# nn_irt_data/<table>_mirt_preds.csv.gz if present.
+# nn_irt_data/fits/<table>_mirt_preds.csv.gz if present.
 #
 #   Rscript nn_irt_mirt_compute.R
 #
