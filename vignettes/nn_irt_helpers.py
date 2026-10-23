@@ -195,18 +195,26 @@ def make_models():
     import torch.nn as nn
 
     class Rasch(nn.Module):
-        """logit P(correct) = theta_person + d_item  (d = -difficulty)."""
+        """logit P(correct) = c * theta_person + d_item  (d = -difficulty).
+
+        c is a single slope shared by every item, so it is a Rasch model: the
+        items still differ only in difficulty. It is free only in the
+        constrained version, where theta is standardised to SD 1 and something
+        has to carry the scale. In the prior version the spread of theta
+        carries it, c would be redundant, and it is held at 1.
+        """
 
         def __init__(self, n_persons, n_items, constrained=False):
             super().__init__()
             self.constrained = constrained
             self.theta = nn.Embedding(n_persons, 1)
             self.d = nn.Embedding(n_items, 1)
+            self.c = nn.Parameter(torch.ones(1), requires_grad=constrained)
             nn.init.normal_(self.theta.weight, std=0.1)
             nn.init.zeros_(self.d.weight)
 
         def forward(self, p, i):
-            return (theta_rows(self, p) + self.d(i)).squeeze(-1)
+            return (self.c * theta_rows(self, p) + self.d(i)).squeeze(-1)
 
     class TwoPL(nn.Module):
         """logit P(correct) = a_item * theta_person + d_item.

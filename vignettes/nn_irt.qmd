@@ -1,10 +1,12 @@
 ---
-title: "The 2PL Is a Tiny Neural Network: Does a Bigger One Predict Responses Any Better?"
+title: "The 2PL Is a Tiny Neural Network: Making It Bigger Mostly Finds Your Reverse-Keyed Items"
 description: |
   The Rasch and 2PL models are two-embedding networks with no hidden layer.
   Part I builds them in PyTorch, checks them against `mirt`, then widens and
   deepens them and asks, on 24 IRW tables, whether a neural network predicts
-  held-out item responses any better than the 2PL. Scored with the InterModel
+  held-out item responses any better than the 2PL. Mostly it does not, and
+  where it does, the second dimension it finds is usually items that were
+  never recoded. Scored with the InterModel
   Vigorish, the answer is: only where there is a second dimension to find, and
   a two-dimensional MIRT finds it as well as a multilayer perceptron does, at
   the table sizes we fit here. A rule-based sweep over 242 further tables then
@@ -218,7 +220,13 @@ single hidden layer of 16 units, and a large one with two hidden layers of
 The PyTorch models are fit by minibatch gradient descent (Adam) on the mean
 negative log-likelihood plus a $N(0,1)$ prior on $\theta_p$, which makes each
 fit a maximum a posteriori estimate rather than joint maximum likelihood (the
-section that follows builds this up line by line). Each model is trained for
+section that follows builds this up line by line). The prior is the only thing
+identifying the scale of $\theta$ on this page, and it is used that way
+throughout: everything in Part I is the MAP fit. The obvious alternative is to
+standardise $\theta$ to mean zero and SD one inside the model, which fixes the
+scale exactly rather than softly; [Part II](#constraining-the-scale) fits every
+model both ways and reports what that costs, which is why the prior is what we
+use here. Each model is trained for
 up to 30 epochs and the epoch with the lowest held-out loss is reported. That
 is early stopping with the held-out set doing double duty as a validation
 set; a production comparison would carve out a third split, and we return to
@@ -612,6 +620,21 @@ note that it fixes which comparisons are fair: networks against the PyTorch
 estimator).
 
 ```{python}
+#| label: tbl-imv-rule
+#| echo: false
+# A rule between the two column blocks of the table below. The boundary is computed
+# rather than hardcoded so it follows the table if the model list changes: one cell
+# for the row label, then the IMV columns, so the first log-loss column is child
+# imv_tab.shape[1] + 2.
+cut = imv_tab.shape[1] + 2
+display(HTML(
+    f"<style>#tbl-imv table thead tr:first-child th:nth-child(3),"
+    f"#tbl-imv table thead tr:nth-child(2) th:nth-child({cut}),"
+    f"#tbl-imv table tbody tr > :nth-child({cut})"
+    f"{{border-left:2px solid var(--bs-border-color,#b4b4b4);}}</style>"))
+```
+
+```{python}
 #| label: tbl-imv
 #| code-summary: "The numbers: IMV vs 2PL and held-out log-loss"
 ll2 = pd.Series({t: log_loss(pr["y"], pr["2PL"]) for t, pr in preds.items()}, name="2PL")
@@ -619,6 +642,7 @@ ll_tab = res.pivot(index="table", columns="model", values="log-loss").reindex(ro
 ll_tab.insert(0, "2PL", ll2.reindex(rows_order))
 out = pd.concat({"IMV vs 2PL": imv_tab.round(4), "held-out log-loss": ll_tab.round(4)}, axis=1)
 out.index = [SHORT[t] for t in out.index]
+
 out
 ```
 
@@ -635,8 +659,12 @@ three-attribute Q-matrix, and a model built to find structure still predicts
 no better, because the attributes are too correlated to carry separate
 signal in held-out cells. Structure that is real in the design can be
 invisible in prediction. The one clear exception in this group is the FSIQ
-mental-rotation test, where every wider network gains about 0.03, which says
-the test is not unidimensional in practice whatever it was built to measure.
+mental-rotation test, where every wider network gains about 0.03. We first read
+that as the test failing to be unidimensional in practice whatever it was built
+to measure. The sweep below says otherwise: 42% of its items take a negative
+2PL slope, the highest share of any table named on this page, and the second
+dimension lines up with that split almost perfectly. The gain is scoring, not
+spatial ability.
 
 ### Where the networks win, a dot product already finds it
 
@@ -645,14 +673,18 @@ the ADQ anhedonia scale, 0.02 on the Eysenck EPI (three scales in one
 table), 0.008 on the Woodworth, with smaller gains on the Author Recognition
 Test and the GMI. Seven of the 24 tables show a gain above 0.005 and the
 other seventeen sit within noise of the 2PL, so the positive result rests on a
-minority of the corpus; that is what one would expect if a second dimension is
+minority of these tables; that is what one would expect if a second dimension is
 something an instrument has or lacks rather than a general property of item
 response data. In every one of these the MLPs match or trail the
 two-dimensional MIRT, and the large MLP is never reliably better than the
 small one. Once the embeddings are two-dimensional, a nonlinear decoder adds
 nothing on these data. Put differently: the signal a network can find in a
 person-by-item table of this kind is a second dimension, and a dot product
-already finds it. Depth is not where the signal is.
+already finds it. Depth is not where the signal is. What that second dimension
+*is* turns out to vary, and the sweep below separates two cases: the ADQ, the
+EPI and the mental-rotation test all carry reverse-keyed items, while the GMI
+and the Author Recognition Test gain with every slope positive. Keying explains
+most of the gains on this page, but not all of them.
 
 The Rasch row shows the same thing from the other side. Its large losses
 (0.11 on the NPI, 0.08 on the ADQ, 0.07 on the Denver screener) are tables
@@ -1004,8 +1036,10 @@ with 20 training responses per person, where the gap to `mirt` is 0.185.
 
 ## Constraining the scale
 
-The constrained versions are the other half of the question. Fixing $\theta$ at
-$N(0,1)$ removes the drift above, and the next figure checks whether it also
+The constrained versions are the other half of the question, and the reason
+Part I is fit the way it is. Fixing $\theta$ at $N(0,1)$ exactly, rather than
+leaning on the prior, removes the drift above; what follows is whether it costs
+anything to do so. The next figure checks first whether the constraint
 recovers the item parameters on the residency exam. The `mirt` estimates are the
 reference. The top row is the prior version, scaled by the spread of
 $\hat\theta$; the bottom row is the constrained version, whose spread is one by
@@ -1063,16 +1097,31 @@ out = pd.concat([res.round(4), res.mean().rename("mean over tables").round(4).to
 out
 ```
 
-The constrained Rasch is the clearest case. It is worse than the prior Rasch on
-every one of the 24 tables, by 0.03 on average and by 0.19 on the Onah test. The
-prior Rasch lets the data set the spread of $\theta$: it comes out at 0.56 on the
-residency exam and 0.40 on the Onah test, so the penalty does not hold the scale
-at one. The constraint forces one, and the Rasch model has no slope to absorb the
-difference. The 2PL pays almost nothing for the same constraint, because its
-slopes can take up the scale. The wider networks are close to unchanged on
-average, with the constrained MIRT and MLPs within about 0.003 of the prior
-versions, but with losses on the short tests (the listening test, the Ding
-knowledge test and the psychTools ability test).
+The Rasch row is worth pausing on, because it first told us something false.
+With the Rasch model written the usual way --- $\theta_p + d_i$, no slope --- the
+constraint was catastrophic: worse on every one of the 24 tables, by 0.03 on
+average and by 0.19 on the Onah test. That is not what it costs to fix the
+scale. It is what it costs to fix the scale with nothing left to absorb it. The
+prior version lets the data set the spread of $\theta$, which comes out at 0.56
+on the residency exam and 0.40 on the Onah test, and the slopeless Rasch has no
+way to express that the spread should not be one. Giving it a single slope
+$c$ shared by every item --- still a Rasch model, since the items continue to
+differ only in difficulty --- removes the problem entirely: the constrained
+Rasch is then within 0.0001 of the prior version on average and ahead of it on
+half the tables. The lesson is about identification, not about the constraint:
+a model that cannot represent the scale should not be asked to fix it.
+
+With that repaired, the cost of the constraint is small and consistent across
+the five networks: $-0.0017$ for the 2PL, $-0.0021$ for the MIRT, $-0.0030$ and
+$-0.0028$ for the two MLPs, and $+0.0001$ for the Rasch. It is also
+concentrated where theory says it should be. On tests where people answer many
+items the constraint is free or slightly positive; on short tests every model
+pays, with the worst single losses on the ASQ (17 training responses per
+person) and the Ding knowledge test (19). Standardising $\theta$ divides out the
+spread of estimates that are mostly noise on a short test, which stretches
+poorly determined person parameters back to a spread of one instead of
+shrinking them toward zero. That is the same incidental-parameter story as
+above, seen from the other side.
 
 The constraint does not stop the wide networks from overfitting, either. The
 figure refits the prior and constrained networks on the residency exam, for 30
