@@ -42,21 +42,41 @@
 # the grid's endpoint falls from the adaptive total.
 # ------------------------------------------------------------------------------
 
-geo_grid <- function(a, d, n_nodes = NULL, pad_u = 20, dx_target = 0.01,
-                     max_nodes = 20001L) {
+geo_grid <- function(a, d, pad_u = 20, per_item = 801L, n_nodes = NULL) {
   b <- -d / a
   lo <- min(b - pad_u / a); hi <- max(b + pad_u / a)
-  if (is.null(n_nodes)) {
-    n_nodes <- min(max_nodes, max(2001L, ceiling((hi - lo) / dx_target) + 1L))
+  if (!is.null(n_nodes)) {
+    nodes <- seq(lo, hi, length.out = n_nodes)          # uniform, for the checks
+  } else {
+    # One fine local grid per item, in its own units, then the union. A sharp
+    # item and a near-flat one in the same test live on scales that differ by
+    # orders of magnitude, so no single uniform grid resolves both: capping a
+    # uniform grid leaves the sharp items unresolved, and resolving them makes
+    # the grid enormous. The union costs per_item nodes per item.
+    nodes <- sort(unique(c(lo, hi, unlist(lapply(seq_along(a), function(j)
+      seq(b[j] - pad_u / a[j], b[j] + pad_u / a[j], length.out = per_item))))))
   }
-  nodes <- seq(lo, hi, length.out = n_nodes)
-  list(nodes = nodes, dx = nodes[2] - nodes[1], lo = lo, hi = hi,
-       pad_u = pad_u, n_nodes = n_nodes)
+  list(nodes = nodes, lo = lo, hi = hi, pad_u = pad_u, n_nodes = length(nodes),
+       breaks = sort(unique(pmax(pmin(c(lo, hi, unlist(lapply(seq_along(a), function(j)
+         b[j] + c(-20, -8, -4, -2, -1, -0.5, 0, 0.5, 1, 2, 4, 8, 20) / a[j]))),
+         hi), lo))))
 }
 
-# Adaptive quadrature of an integrand over the grid's full range.
+# Trapezoid rule on an unequally spaced grid.
+cum_trapz_nu <- function(f, nodes) {
+  c(0, cumsum((f[-1] + f[-length(f)]) / 2 * diff(nodes)))
+}
+
+# Adaptive quadrature over the full range, split at every item's location and
+# at its own natural scale. integrate() over one wide interval samples from a
+# coarse start and can miss a narrow peak completely: on a test holding both a
+# slope of 2.2 and a slope of 0.007 it returned one item's worth of length
+# instead of seven. Splitting at the breakpoints removes the guesswork.
 geo_total <- function(f, grid, rel.tol = 1e-8) {
-  integrate(f, grid$lo, grid$hi, subdivisions = 10000L, rel.tol = rel.tol)$value
+  br <- grid$breaks
+  sum(vapply(seq_len(length(br) - 1L), function(i)
+    integrate(f, br[i], br[i + 1L], subdivisions = 2000L, rel.tol = rel.tol)$value,
+    numeric(1)))
 }
 
 # Test information g(theta) = sum_j a_j^2 P_j (1 - P_j).
@@ -78,7 +98,7 @@ cum_trapz <- function(f, dx) {
 geodesic_ability <- function(a, d, grid = NULL) {
   if (is.null(grid)) grid <- geo_grid(a, d)
   g <- test_info(a, d, grid$nodes)
-  A <- cum_trapz(sqrt(g), grid$dx)
+  A <- cum_trapz_nu(sqrt(g), grid$nodes)
   total <- geo_total(function(x) sqrt(test_info(a, d, x)), grid)
   # Length left outside the range: about 4 exp(-pad_u / 2) per item.
   tail_abs <- 4 * length(a) * exp(-grid$pad_u / 2)
@@ -97,7 +117,7 @@ ramsay_integrand <- function(a, d, nodes) {
 
 ramsay_length <- function(a, d, grid = NULL) {
   if (is.null(grid)) grid <- geo_grid(a, d)
-  L <- cum_trapz(ramsay_integrand(a, d, grid$nodes), grid$dx)
+  L <- cum_trapz_nu(ramsay_integrand(a, d, grid$nodes), grid$nodes)
   list(nodes = grid$nodes, L = L,
        L_total = geo_total(function(x) ramsay_integrand(a, d, x), grid))
 }
@@ -136,7 +156,7 @@ sum_score_info <- function(a, d, nodes) {
 sum_score_geodesic <- function(a, d, grid = NULL) {
   if (is.null(grid)) grid <- geo_grid(a, d)
   I_S <- sum_score_info(a, d, grid$nodes)
-  A <- cum_trapz(sqrt(I_S), grid$dx)
+  A <- cum_trapz_nu(sqrt(I_S), grid$nodes)
   list(nodes = grid$nodes, I_S = I_S, A = A,
        A_total = geo_total(function(x) sqrt(sum_score_info(a, d, x)), grid),
        A_total_grid = A[length(A)])
@@ -163,7 +183,11 @@ geodesic_population <- function(a, d, latent_sd, geo = NULL, pop = NULL) {
   # Population SD on the geodesic scale: A interpolated at the population nodes.
   A_pop <- approx(geo$nodes, geo$A, xout = pop$nodes, rule = 2)$y
   mA <- sum(pop$w * A_pop)
-  list(h_theta = h_theta, E_log_sqrt_g = E_log_sqrt_g, h_A = h_A,
+  # The geodesic length the population actually spans (+/- 4 latent SD). Unlike
+  # A(+inf) this is not inflated by near-flat items, whose pi of length sits
+  # thousands of theta units away from anybody.
+  span <- diff(approx(geo$nodes, geo$A, xout = c(-4, 4) * latent_sd, rule = 2)$y)
+  list(h_theta = h_theta, E_log_sqrt_g = E_log_sqrt_g, h_A = h_A, A_pop_span = span,
        I_CB = h_A - HALF_LOG_2PIE,
        sd_A = sqrt(sum(pop$w * (A_pop - mA)^2)), mean_A = mA,
        A_pop = A_pop, A_total = geo$A_total,

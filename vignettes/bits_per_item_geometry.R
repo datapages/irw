@@ -123,6 +123,7 @@ model_geometry <- function(a, d, latent_sd, model, I_X_stored, n_items) {
     A_total = geo$A_total, A_total_grid = geo$A_total_grid,
     A_tail_share = geo$tail_share, A_grid_rel_err = geo$grid_rel_err,
     L_ramsay = ram$L_total,
+    A_pop_span = pop$A_pop_span,
     h_theta = pop$h_theta, E_log_sqrt_g = pop$E_log_sqrt_g, h_A = pop$h_A,
     sd_A = pop$sd_A, I_CB = pop$I_CB, I_X = I_X_stored,
     CB_diff = pop$I_CB - I_X_stored,
@@ -136,10 +137,10 @@ model_geometry <- function(a, d, latent_sd, model, I_X_stored, n_items) {
     A_sumscore_shortfall = geo$A_total - ss$A_total,
     A_sumscore_prop = 1 - ss$A_total / geo$A_total
   )
-  list(row = row,
-       curves = tibble(theta = geo$nodes, g = geo$g, A = geo$A,
-                       L_ramsay = ram$L, A_sumscore = ss$A),
-       capacity_input = tibble(theta = cap_nodes, q = ba$q))
+  # The curves are large (one fine local grid per item) and no corpus figure
+  # reads them, so they stay out of the saved object; the showcases get their
+  # own curves below.
+  list(row = row, capacity_input = tibble(theta = cap_nodes, q = ba$q))
 }
 
 one_table <- function(table_name) {
@@ -163,8 +164,6 @@ one_table <- function(table_name) {
     }
     list(table = table_name,
          summary = bind_rows(g2$row, if (!is.null(gR)) gR$row),
-         curves = bind_rows(mutate(g2$curves, model = "2PL"),
-                            if (!is.null(gR)) mutate(gR$curves, model = "Rasch")),
          capacity_input = bind_rows(mutate(g2$capacity_input, model = "2PL"),
                                     if (!is.null(gR)) mutate(gR$capacity_input, model = "Rasch")))
   }, error = function(e) {
@@ -263,7 +262,6 @@ if (file.exists(poly_file)) {
 results <- list(
   summary = bind_rows(map(cached, function(x)
     mutate(x$summary, table = x$table, .before = 1))),
-  curves = bind_rows(map(cached, function(x) mutate(x$curves, table = x$table, .before = 1))),
   capacity_inputs = bind_rows(map(cached, function(x)
     mutate(x$capacity_input, table = x$table, .before = 1))),
   showcases = showcases,
@@ -271,8 +269,9 @@ results <- list(
   tables_attempted = tables,
   settings = list(MAX_ENUM = MAX_ENUM, BA_TOL = BA_TOL, N_CAP = N_CAP,
                   N_SIM = N_SIM, N_TRUE = N_TRUE, WITH_RASCH = WITH_RASCH,
-                  geo_grid = paste("range [min(b - 20/a), max(b + 20/a)];",
-                                   "totals adaptive, curves trapezoid on <= 20001 nodes"),
+                  geo_grid = paste("range [min(b - 20/a), max(b + 20/a)]; curves on the",
+                                   "union of 801 nodes per item in its own units;",
+                                   "totals by adaptive quadrature split at every item"),
                   scoring_grid = "801 nodes on [-10, 10]",
                   workers = WORKERS),
   pilot = PILOT,

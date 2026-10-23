@@ -169,6 +169,11 @@ if (file.exists(gf)) {
   record("G8b sum-score geodesic length never exceeds the full-data length",
          length(bad_ss) == 0,
          if (length(bad_ss)) paste(bad_ss, collapse = ",") else "none")
+  bad_grid <- gs$table[gs$A_grid_rel_err > 1e-4]
+  record("G8d the curve's trapezoid total agrees with the adaptive total (< 1e-4)",
+         length(bad_grid) == 0,
+         sprintf("max relative difference %.1e; violations: %s", max(gs$A_grid_rel_err),
+                 if (length(bad_grid)) paste(bad_grid, collapse = ",") else "none"))
   record("G8c Blahut-Arimoto reached the 1e-4 bit bound gap on every table",
          length(bad_gap) == 0,
          sprintf("max gap %.1e; not converged: %s", max(gs$C_gap),
