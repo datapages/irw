@@ -290,6 +290,9 @@ if (file.exists(pf)) {
            sprintf("%d table-models", nrow(poly$summary)))
 }
 
+# Geometry checks (the "Two rulers" block): own file, same record() and `out`.
+source("vignettes/bits_per_item_geometry_checks.R")
+
 checks <- do.call(rbind, out)
 write.csv(checks, "vignettes/bits_per_item_data/checks_results.csv", row.names = FALSE)
 message(sum(checks$pass), " of ", nrow(checks), " checks passed")
