@@ -9,10 +9,11 @@ description: |
   second dimension, and an ordinary two-dimensional MIRT finds it as well as a
   multilayer perceptron does. Part III applies a selection rule to the whole
   warehouse and fits both models on 242 tables: the median table gains nothing
-  and the mean gain matches the published benchmark. Part IV asks what the
-  tables that do gain have in common, and finds a second dimension organised
-  around reverse-keyed items rather than a second trait. An appendix takes
-  apart a small gap between the torch 2PL and the `mirt` 2PL.
+  and the mean gain matches the published benchmark, carried by a seventh of
+  the corpus that turns out to have reverse-keyed items in common. Part IV
+  takes apart a small gap between the torch 2PL and the `mirt` 2PL: the
+  estimator explains it, and fixing the scale of the person parameters does
+  not.
 date: today
 ---
 
@@ -56,9 +57,10 @@ two `nn.Embedding` layers and no hidden layer at all. The 2PL adds a second
 item lookup, the slope $a_i$, and multiplies before it adds. Once the models
 are written this way, a question that is awkward to pose in the psychometric
 idiom becomes the obvious next step: what happens when the network is made
-wider (more latent dimensions) or deeper (a multilayer perceptron between
-the embeddings and the response)? Does a neural network predict item responses
-better than the 2PL?
+wider or deeper? Does a neural network predict item responses better than the
+2PL? Both words are defined precisely below, but in short: width is how many
+numbers the network looks up for each person and item, and depth is how many
+layers sit between those numbers and the predicted response.
 
 The question is not new. Variational IRT [@wu2020variational] and the
 recommender-systems literature [@koren2009matrix; @he2017ncf] both treat
@@ -84,19 +86,19 @@ rather than a judgment to 24 tables, and fitting the 2PL against a
 two-dimensional MIRT on all 242 tables that qualify. The median table gains
 nothing; the mean gain, +0.0025, matches the published benchmark and is carried
 almost entirely by a seventh of the corpus. Those tables turn out to have
-something specific in common, and it is not a second trait --- it is a second
-dimension organised around reverse-keyed items that were never recoded. All of
+something specific in common, and it is reverse-keyed items rather than a
+second trait. All of
 this holds at the sizes we fit here: tables are capped at 5,000 respondents and
 116 items, and scale is the one advantage a wider network is supposed to have,
 so the null is a null at this scale.
 
-The page is in four parts, with an appendix. [Part I](#part-i) builds the
+The page is in four parts. [Part I](#part-i) builds the
 models and checks them against `mirt`. [Part II](#part-ii) widens and deepens
 them on the 24 tables. [Part III](#part-iii) asks how often the one move that
-worked actually works, across 242 tables chosen by rule. [Part IV](#part-iv)
-asks what the tables that gain have in common. One of the comparisons also
-turned up a small but consistent gap between the same 2PL fit in torch and in
-`mirt`; the [appendix](#appendix-estimation) takes it apart.
+worked actually works, across 242 tables chosen by rule, and closes by asking
+what the tables that gain have in common. One of the comparisons also turned up
+a small but consistent gap between the same 2PL fit in torch and in `mirt`;
+[Part IV](#part-iv) takes it apart.
 
 ## Data and methods
 
@@ -184,6 +186,24 @@ weights and that of the large one 4,545, so even the large network is mostly
 embeddings: the step from one dimension to two more than doubles the
 parameter count, and depth adds comparatively little on top.
 
+Two words carry the argument from here on, so it is worth pinning them down.
+**Width** is the size of the embeddings: how many numbers the network looks up
+for each person and for each item, written $k$ in the table above. Widening a
+model is adding latent dimensions, so a wider 2PL is a multidimensional 2PL and
+nothing more exotic than that; the Rasch model and the 2PL have width 1, and
+every wider model on this page has width 2. **Depth** is the number of hidden
+layers between the embeddings and the logit. The Rasch model, the 2PL and the
+MIRT have none: the looked-up numbers are combined by a dot product and that
+sum *is* the logit. The two MLPs have one and two hidden layers respectively.
+
+Put differently, width governs what the model can represent about a person and
+an item, and depth governs how freely what has been represented is allowed to
+combine. A dot product says that a person's standing on each dimension pays off
+additively and at a rate set by the item; depth lets that payoff bend. The 2PL
+is the width-1, depth-0 corner of this space, and every other model here moves
+away from it in one direction or the other --- which is what makes "is a bigger
+network better?" a question with two separate answers rather than one.
+
 The models are written in slope-intercept form, $a_i\theta_p + d_i$, as
 `mirt` writes them, rather than the textbook $a_i(\theta_p - b_i)$. This is
 not cosmetic. In the textbook form the gradient for $b_i$ is scaled by
@@ -214,7 +234,7 @@ section that follows builds this up line by line). The prior is the only thing
 identifying the scale of $\theta$ on this page, and it is used that way
 throughout: everything in the body of the page is the MAP fit. The obvious alternative is to
 standardise $\theta$ to mean zero and SD one inside the model, which fixes the
-scale exactly rather than softly; the [appendix](#appendix-estimation) fits every
+scale exactly rather than softly; [Part IV](#part-iv) fits every
 model both ways and reports what that costs, which is why the prior is what we
 use here. Each model is trained for
 up to 30 epochs and the epoch with the lowest held-out loss is reported. That
@@ -673,7 +693,8 @@ small one. Once the embeddings are two-dimensional, a nonlinear decoder adds
 nothing on these data. Put differently: the signal a network can find in a
 person-by-item table of this kind is a second dimension, and an ordinary
 two-dimensional 2PL finds it. Depth is not where the signal is. What that second dimension
-*is* turns out to vary, and [Part IV](#part-iv) takes that question up.
+*is* turns out to vary, and the close of [Part III](#part-iii) takes that
+question up.
 
 The Rasch row shows the same thing from the other side. Its large losses
 (0.11 on the NPI, 0.08 on the ADQ, 0.07 on the Denver screener) are tables
@@ -730,7 +751,7 @@ point estimates. With a dozen or twenty responses per person those estimates
 are poor, and the item parameters inherit the error, which is the
 incidental-parameter problem; `mirt` integrates the persons out instead. That
 is a story about the estimator rather than the model, and it is worth more than
-a paragraph, so the [appendix](#appendix-estimation) takes it apart. We have left the network as
+a paragraph, so [Part IV](#part-iv) takes it apart. We have left the network as
 it is so that the effect stays visible here: it is the price of the simplest
 possible estimator, and readers who build their own networks should know it is
 there.
@@ -802,101 +823,28 @@ come from, but it makes the 24 useless for saying *how common* they are. Of the
 24, 22 clear the rule; the two that do not are the developmental screeners,
 which are age-adaptive and so fail the density threshold.
 
-# Part IV. Where the gains are {#part-iv}
+## The exceptions have something in common
 
-If a two-dimensional model wins on a seventh of the warehouse, what do those
-tables have in common? The answer is specific enough to be worth stating
-carefully, and it is not a second trait.
-
-## An unrecoded reversal costs the 2PL nothing
-
-Start with the thing that is *not* the explanation. IRW does not harmonise the
-direction of responses, so some tables contain reverse-worded items that were
-never recoded. One might expect a one-dimensional model to be in trouble there,
-and it is not. The 2PL fits such an item by giving it a negative slope, which is
-a perfectly good fit: direction is absorbed in $a_i$ and the likelihood never
-notices. Whatever the gain is, it is not about coding direction.
-
-So if reverse-keyed items are implicated --- and they are, as the next section
-shows --- the mechanism has to be heterogeneity *across people* in how the
-reversal is handled. Some respondents track it and some do not. That is a factor
-over persons, and a unidimensional model has nowhere to put it: it must pick one
-ordering of persons and eat the misfit on the reversed items. A second dimension
-gives it somewhere to put them.
-
-That story makes a falsifiable prediction about the loadings, which is what
-makes it worth testing rather than merely asserting. Rotate the two-dimensional
-loading matrix so that its first column lies along the 2PL slope vector --- which
-is permitted, because the solution is identified only up to rotation --- and look
-at the residual second column. If the second dimension is a response style tied
-to keying, those residual loadings should **flip sign with the sign of the 2PL
-slope**: forward and reverse items should load oppositely. Call the correlation
-between the residual loading and the slope sign the *keying shape* of the second
-dimension.
-
-::: {.callout-note collapse="true"}
-## A statistic we got wrong first
-
-The obvious thing to compute is the raw alignment between the MIRT loadings and
-the 2PL slopes, taking whichever of the two dimensions aligns better. It
-correlates +0.59 with IMV, which looks like a finding and is an artifact: MIRT's
-first dimension recovers the 2PL direction *by construction*, so the statistic is
-largely measuring how well the fit converged. Orienting the solution first drops
-it to +0.17. The share of loading variance in the orthogonal column --- the
-natural "is there extra structure here?" statistic --- correlates +0.09 over the
-whole sweep. Neither the size of the second dimension nor its alignment is what
-pays. Its shape is.
-:::
-
-## It is the shape of the second dimension, not the count of reversed items
-
-```{python}
-#| label: fig-keying
-#| code-summary: "Keying shape against the gain, the 87 tables with any negative slope"
-ex = pd.read_csv(DATA / "expand_summary.csv")
-mix = ex[ex.frac_neg > 0].copy()
-mix["keyshape"] = mix.orth_sign_r.abs()
-many = mix.frac_neg > 0.10
-LABEL = {"li_2024_sad": "li sad", "vogel_2024_citizen_attributes_s2": "vogel s2",
-         "vogel_2024_citizen_attributes_s3": "vogel s3", "wooly_hartman2022": "wooly",
-         "goldberg_2018_spa_bfi_forced_choice": "goldberg (forced choice)",
-         "fullscaleiq_mentalrotation_options": "mental rotation",
-         "gilbert_meta_53": "gilbert 53", "project_kids_wj_mf": "project kids (1 item in 114)"}
-
-fig, ax = plt.subplots(figsize=(6.6, 4.0))
-ax.axvspan(0.5, 1.0, color="0.94", zorder=0)
-ax.axhline(0, color="0.3", lw=0.8)
-for sel, col, lab in [(~many, "0.62", "1–10% of slopes negative"),
-                      (many, "#2a78d6", "over 10% negative")]:
-    s = mix[sel]
-    ax.scatter(s.keyshape, s.imv, s=30, color=col, alpha=0.85,
-               edgecolor="white", lw=0.4, label=f"{lab} (n={len(s)})", zorder=3)
-for t, r in mix.set_index("table").iterrows():
-    if t in LABEL and r.imv > 0.03:
-        ax.annotate(LABEL[t], (abs(r.orth_sign_r), r.imv), fontsize=7,
-                    xytext=(5, 2), textcoords="offset points", color="0.25")
-ax.set(xlabel="keying shape of the second dimension,  |corr(residual loading, sign of 2PL slope)|",
-       ylabel="IMV of MIRT k=2 over the 2PL", xlim=(-0.03, 1.0))
-ax.legend(frameon=False, fontsize=8, loc="lower right")
-ax.grid(color="0.9", lw=0.6); ax.set_axisbelow(True)
-for sp in ("top", "right"): ax.spines[sp].set_visible(False)
-plt.tight_layout(); plt.show()
-```
+Fourteen per cent of tables gain more than 0.005, and they are not a random
+fourteen per cent. IRW does not harmonise the direction of responses, so some
+tables contain reverse-worded items that were never recoded, and the 2PL fits
+such an item by giving it a negative slope. Counting those slopes sorts the
+sweep more sharply than anything else we tried.
 
 ```{python}
 #| label: tbl-keying
-#| code-summary: "The gain by keying shape"
+#| code-summary: "The gain by keying, 242 tables"
 from scipy import stats as _st
-m = mix[many]
+mix = ex[ex.frac_neg > 0].copy()
+mix["keyshape"] = mix.orth_sign_r.abs()
+m = mix[mix.frac_neg > 0.10]
 hi, lo = m[m.keyshape > 0.5], m[m.keyshape <= 0.5]
 rows = [("over 10% negative, keying-shaped", hi), ("over 10% negative, not keying-shaped", lo),
-        ("1–10% negative", mix[~many]), ("no negative slope", ex[ex.frac_neg == 0])]
-print(f"within the {len(m)} tables with over 10% negative slopes, correlation with IMV:")
-for lab, v in [("keying shape", m.keyshape), ("fraction of slopes negative", m.frac_neg),
-               ("size of the second dimension", m.orth_share)]:
-    print(f"  {lab:30s} {_st.pearsonr(v, m.imv)[0]:+.2f}  (Spearman {_st.spearmanr(v, m.imv)[0]:+.2f})")
-print(f"  keying-shaped vs not, Mann-Whitney p = "
-      f"{_st.mannwhitneyu(hi.imv, lo.imv, alternative='greater').pvalue:.1e}")
+        ("1–10% negative", mix[mix.frac_neg <= 0.10]), ("no negative slope", ex[ex.frac_neg == 0])]
+print(f"within the {len(m)} tables with over 10% negative slopes, correlation with IMV:"
+      f"\n  keying shape of the second dimension  {_st.pearsonr(m.keyshape, m.imv)[0]:+.2f}"
+      f"\n  fraction of slopes negative           {_st.pearsonr(m.frac_neg, m.imv)[0]:+.2f}"
+      f"\n  size of the second dimension          {_st.pearsonr(m.orth_share, m.imv)[0]:+.2f}")
 tab = pd.DataFrame([{"tables": len(s), "mean": round(s.imv.mean(), 4),
                      "median": round(s.imv.median(), 4),
                      "% above 0.005": f"{100 * (s.imv > 0.005).mean():.0f}%"} for _, s in rows],
@@ -905,150 +853,43 @@ tab.index.name = "items with a negative 2PL slope"
 tab
 ```
 
-The prediction holds. Among the 42 tables where more than a tenth of the slopes
-are negative, the 11 whose second dimension is keying-shaped gain a mean of
-**+0.0366**, with 91% of them above 0.005; the other 31 gain +0.0084, with 29%
-above. Mann--Whitney gives $p = 2\times10^{-4}$ for that split. Tables with no
-negatively-sloped item at all gain nothing (−0.0004, 7% above 0.005), and
-neither do tables with only a handful. The keying shape itself averages 0.14 on
-the tables with one to ten per cent negative slopes and 0.31 on the rest.
+Tables with no negatively-sloped item gain nothing at all. Among the 42 where
+more than a tenth of the slopes are negative, what matters is not how many
+there are but whether the second dimension is *organised around* them: orient
+the loading matrix so its first column lies along the 2PL slope vector, and the
+eleven tables whose residual loadings flip sign with the sign of the slope gain
+a mean of +0.0366, against +0.0084 for the other thirty-one. That is why the
+keying shape correlates twice as strongly with the gain as the mere proportion
+of reversed items does, and four times as strongly as the size of the second
+dimension --- the statistic one would compute when simply asking whether a
+table is multidimensional.
 
-The ordering of the three correlations is the result. Within the mixed-keying
-tables, the keying shape correlates +0.41 with the gain and the *proportion* of
-reversed items only +0.20 --- so it is not how many reversed items an instrument
-has, it is whether the second dimension is organised around them. The size of
-the second dimension, which is what one would compute if one were simply asking
-"is this table multidimensional?", correlates +0.19, and +0.07 by Spearman. A
-table can have plenty of structure beyond the first dimension and gain nothing
-from it.
+An unrecoded reversal costs the 2PL nothing by itself, since direction is
+absorbed in $a_i$ and the likelihood never notices. So a gain tied to keying
+has to be heterogeneity *across people* in how the reversal is handled, which
+is a factor over persons that a unidimensional model has nowhere to put.
+Whether that heterogeneity is careless responding, acquiescence, or a genuine
+asymmetry between an item and its negation is not something held-out prediction
+can settle, and we never read a line of item wording. The counterexamples, the
+cautions and the checks that would settle it are set out in
+[issue #3197](https://github.com/ben-domingue/irw/issues/3197); they do not
+belong on this page.
 
-## What this does not establish
+What does belong here is the consequence for [Part II](#part-ii), which is
+qualified rather than overturned. That a two-dimensional 2PL finds whatever a
+deeper network finds is a claim about depth, and nothing in the sweep touches
+it. What changes is the interpretation of the gains: a reader tempted to read a
+high IMV as evidence of a second trait should check the sign of the slopes
+first.
 
-Three readings produce the same sign flip, and nothing here separates them.
-Respondents may be answering carelessly and missing the reversal; they may be
-acquiescing, agreeing regardless of content, which is the classical account and
-has a literature this page does not engage; or the reverse items may genuinely
-measure something partly distinct, since "not sad" is not the negation of "sad."
-The first two are nuisance and the third is substance. Our reading is that it is
-mostly the first two, on the grounds that the effect tracks the shape of the
-loading pattern rather than the content of the items --- but that is an argument,
-not evidence, and we offer it as such.
+# Part IV. Which estimator closes the gap to mirt? {#part-iv}
 
-Four further cautions, in descending order of how much they worry us.
-
-The headline contrast rests on **eleven tables**, three of which are the same
-instrument administered to the same 1,632 people (`domaradzka_2018_adq_*`).
-Treat the effective count as nearer eight.
-
-We **never read a single item's wording**. "Reverse-keyed" is inferred entirely
-from the sign of a fitted slope, and a negative slope can also mean a mis-scored
-key or a badly behaved item.
-
-**Two of the eleven are not reverse keying at all.** The two mental-rotation and
-memory tables are option-level, where a row is a *distractor* indicator, so a
-negative slope means "more able people pick this option less." That is a
-correct-answer contrast, not a wording reversal. Either the finding generalises
-to sign-mixed indicator sets however the mixing arose, or the keying shape picks
-up something more generic than we are claiming. We do not know which.
-
-**A keying-shaped second dimension is not necessary for a gain.** Three of the
-eight largest gains in the sweep come from mixed-keying tables whose second
-dimension is not keying-shaped: `vogel_2024_citizen_attributes_s3` at +0.091,
-Goldberg's forced-choice BFI at +0.063 (forced choice has its own reasons for
-extra structure), and `zhou_2016_personality` at +0.034. The two Vogel tables
-are the sharpest counterexample available, since they come from one deposit and
-only one of them fits the story. And the seventh-largest gain in the whole
-sweep, `project_kids_wj_mf`, has exactly one negatively-sloped item in 114.
-
-So: reverse keying is the best single account we have of where a second
-dimension pays, and it is not the whole of it.
-
-## What it does to Part II
-
-It qualifies that part rather than overturning it. The claim that a
-two-dimensional 2PL finds whatever a deeper network finds is a claim about
-depth, and nothing in the sweep touches it. The claim that the gains cluster in
-personality and clinical inventories survives too --- those are exactly the
-instruments that mix keying directions. What changes is the interpretation. The
-ADQ, the EPI and the mental-rotation test all carry reverse-keyed items, while
-the GMI and the Author Recognition Test gain with every slope positive, so
-keying explains most of the gains on this page but not all of them. Readers
-tempted to read a high IMV as evidence of a second trait should check the sign
-of the slopes first.
-
-# Limitations
-
-## Of the model comparison
-
-- **The held-out set is also the validation set.** Each PyTorch model is
-  reported at its best held-out epoch, which flatters every network by a
-  small amount and the wider ones by slightly more, since they have more
-  epochs at which to get lucky. A third split would fix this; we judged that
-  at 24 tables and five models the bias is small relative to the effects
-  reported, and the direction is known: it works against the 2PL, not for
-  it. Note that the same practice tilts the appendix the other way. There the
-  networks and the alternating JML fits stop on the held-out cells while
-  `mirt` never sees them, so the estimator gap reported there is if anything
-  an underestimate. In both parts the thumb is on the networks' side.
-- **Two estimators, one model.** The PyTorch 2PL (MAP by gradient descent)
-  and the `mirt` 2PL (marginal maximum likelihood) are the same model and do
-  not give the same held-out loss. The comparison that is fair is therefore
-  networks against the PyTorch 2PL and flexible curves against the `mirt`
-  2PL, and the body of the page is written that way. The appendix shows that an
-  estimator which integrates over the persons closes the gap in torch, and that
-  fixing the scale of $\theta$ does not.
-- **Only person and item identities enter the model.** The networks see
-  exactly what the classical models see, so this is a comparison of
-  functional forms, not of information. Sequential models of learning
-  [@piech2015dkt] use the order of responses; models with item text as input
-  can predict items never seen in training; variational IRT replaces the
-  point estimates with an encoder network. All of these use more than the
-  (person, item, response) triple, and all can be scored with the same
-  held-out cells and the same IMV, but none is on this page.
-- **Dichotomous, dense tables only.** The cell-level split and the
-  Bernoulli loss are written for 0/1 responses. Polytomous tables need a
-  different output layer and a different loss; sparse tables raise the
-  question of whether the missingness is informative.
-- **Subsampling.** Tables are capped at 5,000 respondents and 116 items.
-  The gains reported for the inventories are therefore gains at that size;
-  a wider network may do relatively better with more data, which is the
-  usual pattern and is not tested here.
-- **Twenty-four tables, chosen by hand.** The groups were picked to span
-  kinds of structure, not sampled from the warehouse, and the counts per
-  group are small. The qualitative pattern (dimension helps where there is
-  one, depth does not) is consistent across the groups; the sizes of the
-  gains are specific to these tables, and the sweep confirms that the set is
-  enriched — roughly double the corpus rate of gains above 0.005.
-- **The sweep is narrower than the comparison it generalises.** The 242-table
-  sweep fits the 2PL against a two-dimensional MIRT and nothing else. It can
-  say how often the one move that worked in Part II pays, and it can say what
-  the paying tables have in common, but it says nothing about depth, about
-  flexible item curves, or about the estimator gap — all of which rest on the
-  24 tables alone. Its selection rule also caps fetched tables at two million
-  responses, which excludes the largest mass administrations (the
-  million-respondent ENEM forms among them), and its density threshold of 0.9
-  excludes adaptive instruments, including two of the 24 hand-picked tables.
-- **The sweep treats tables as independent, and the warehouse does not.** IRW
-  holds several tables from some deposits, and two of them sit among the
-  largest gains in the sweep (`vogel_2024_citizen_attributes_s2` and `_s3`, at
-  +0.094 and +0.091). Nothing in the selection rule or the summaries accounts
-  for that, so the tail is less varied than a count of 242 suggests, and any
-  standard error computed as though those tables were independent would be too
-  small. We report no such standard error for that reason.
-- **Keying is measured, not established, and the mechanism is not identified.**
-  The fraction of items with a negative fitted 2PL slope is a symptom of
-  reverse-keyed items that were not recoded, not a direct observation of the
-  wording; a negative slope can also mean a mis-scored key or a badly behaved
-  item. We did not read the items. Nor can we separate careless responding,
-  acquiescence and genuine construct asymmetry, which all produce the loading
-  pattern reported in [Part IV](#part-iv). Those cautions are set out there in
-  full, and the headline contrast rests on eleven tables.
-
-# Appendix. Which estimator closes the gap to mirt? {#appendix-estimation}
-
-This is a methodological aside rather than part of the argument. It is here
-because anyone who builds the networks above will meet the same gap, and because
-one of our attempts to close it was wrong in an instructive way.
+[Part II](#part-ii) left a promise unkept: the same 2PL, fit in torch and in
+`mirt`, does not give the same held-out loss, and the gap is largest on short
+tests. This part takes it apart. It is an aside rather than part of the main
+argument, which is why it is short, but anyone who builds the networks above
+will meet the same gap --- and one of our attempts to close it was wrong in an
+instructive way.
 
 Two things differ between the torch 2PL and the `mirt` 2PL. One is how the scale
 of the person parameters is set: the PyTorch 2PL puts an $N(0,1)$ penalty on
@@ -1187,7 +1028,76 @@ also does nothing to stop the wide networks overfitting: they reach their best
 held-out loss early and climb after it in both versions. Early stopping is still
 what keeps them honest.
 
-## Limitations of the estimator comparison
+# Limitations
+
+## Of the model comparison
+
+- **The held-out set is also the validation set.** Each PyTorch model is
+  reported at its best held-out epoch, which flatters every network by a
+  small amount and the wider ones by slightly more, since they have more
+  epochs at which to get lucky. A third split would fix this; we judged that
+  at 24 tables and five models the bias is small relative to the effects
+  reported, and the direction is known: it works against the 2PL, not for
+  it. Note that the same practice tilts Part IV the other way. There the
+  networks and the alternating JML fits stop on the held-out cells while
+  `mirt` never sees them, so the estimator gap reported there is if anything
+  an underestimate. In both parts the thumb is on the networks' side.
+- **Two estimators, one model.** The PyTorch 2PL (MAP by gradient descent)
+  and the `mirt` 2PL (marginal maximum likelihood) are the same model and do
+  not give the same held-out loss. The comparison that is fair is therefore
+  networks against the PyTorch 2PL and flexible curves against the `mirt`
+  2PL, and Parts I to III are written that way. Part IV shows that an
+  estimator which integrates over the persons closes the gap in torch, and that
+  fixing the scale of $\theta$ does not.
+- **Only person and item identities enter the model.** The networks see
+  exactly what the classical models see, so this is a comparison of
+  functional forms, not of information. Sequential models of learning
+  [@piech2015dkt] use the order of responses; models with item text as input
+  can predict items never seen in training; variational IRT replaces the
+  point estimates with an encoder network. All of these use more than the
+  (person, item, response) triple, and all can be scored with the same
+  held-out cells and the same IMV, but none is on this page.
+- **Dichotomous, dense tables only.** The cell-level split and the
+  Bernoulli loss are written for 0/1 responses. Polytomous tables need a
+  different output layer and a different loss; sparse tables raise the
+  question of whether the missingness is informative.
+- **Subsampling.** Tables are capped at 5,000 respondents and 116 items.
+  The gains reported for the inventories are therefore gains at that size;
+  a wider network may do relatively better with more data, which is the
+  usual pattern and is not tested here.
+- **Twenty-four tables, chosen by hand.** The groups were picked to span
+  kinds of structure, not sampled from the warehouse, and the counts per
+  group are small. The qualitative pattern (dimension helps where there is
+  one, depth does not) is consistent across the groups; the sizes of the
+  gains are specific to these tables, and the sweep confirms that the set is
+  enriched — roughly double the corpus rate of gains above 0.005.
+- **The sweep is narrower than the comparison it generalises.** The 242-table
+  sweep fits the 2PL against a two-dimensional MIRT and nothing else. It can
+  say how often the one move that worked in Part II pays, and it can say what
+  the paying tables have in common, but it says nothing about depth, about
+  flexible item curves, or about the estimator gap — all of which rest on the
+  24 tables alone. Its selection rule also caps fetched tables at two million
+  responses, which excludes the largest mass administrations (the
+  million-respondent ENEM forms among them), and its density threshold of 0.9
+  excludes adaptive instruments, including two of the 24 hand-picked tables.
+- **The sweep treats tables as independent, and the warehouse does not.** IRW
+  holds several tables from some deposits, and two of them sit among the
+  largest gains in the sweep (`vogel_2024_citizen_attributes_s2` and `_s3`, at
+  +0.094 and +0.091). Nothing in the selection rule or the summaries accounts
+  for that, so the tail is less varied than a count of 242 suggests, and any
+  standard error computed as though those tables were independent would be too
+  small. We report no such standard error for that reason.
+- **Keying is measured, not established, and the mechanism is not identified.**
+  The fraction of items with a negative fitted 2PL slope is a symptom of
+  reverse-keyed items that were not recoded, not a direct observation of the
+  wording; a negative slope can also mean a mis-scored key or a badly behaved
+  item. We did not read the items. Nor can we separate careless responding,
+  acquiescence and genuine construct asymmetry, which all produce the loading
+  pattern reported at the close of [Part III](#part-iii), where the headline
+  contrast rests on eleven tables. The cautions, the counterexamples and the
+  checks that would settle it are in `ben-domingue/irw` issue #3197.
+
+## Of the estimator comparison
 
 - **Two estimators are on a common footing; the networks are not.** The MML fits
   are the same model as `mirt` and are compared directly. The Adam networks and
@@ -1204,6 +1114,7 @@ what keeps them honest.
 - **Dichotomous 2PL only.** The estimators here are for the 2PL on 0/1 responses,
   and the multidimensional and nonlinear networks are not refit with them.
 
+
 # Reproducibility
 
 **Source code for this page:**
@@ -1211,7 +1122,7 @@ what keeps them honest.
 [`nn_irt_helpers.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_helpers.py),
 [`nn_irt_chart.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_chart.py),
 [`nn_irt_mirt_compute.R`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_mirt_compute.R),
-and, for the appendix,
+and, for Part IV,
 [`nn_irt_estimation.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_estimation.py),
 [`nn_irt_estimation_compute.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_estimation_compute.py)
 and [`nn_irt_estimation_drift.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_estimation_drift.py).
@@ -1221,7 +1132,7 @@ and [`nn_irt_estimation_drift.py`](https://github.com/datapages/irw/blob/main/vi
      line are written by hand (see irt_python.qmd). -->
 
 Results were computed on 15 October 2026 (Parts I–II) and 16 October 2026
-(the appendix); the 242-table sweep on 22 October 2026. The tables were fetched on 15 October from `item_response_warehouse`
+(Part IV); the 242-table sweep on 22 October 2026. The tables were fetched on 15 October from `item_response_warehouse`
 v72.0 and `item_response_warehouse_6` v5.11.
 
 This page is rendered with Quarto's `freeze` option: the PyTorch training runs
@@ -1247,7 +1158,7 @@ pip install irw imvpy scipy matplotlib pandas jupyter
 # 2. The network fits, both versions, all tables
 python vignettes/nn_irt_torch_compute.py
 
-# 3. The 2PL three further ways on all tables, plus the drift trace (appendix)
+# 3. The 2PL three further ways on all tables, plus the drift trace (Part IV)
 python vignettes/nn_irt_estimation_compute.py
 python vignettes/nn_irt_estimation_drift.py
 
