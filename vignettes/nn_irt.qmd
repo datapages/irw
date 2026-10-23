@@ -34,7 +34,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import torch
 import irw
-from nn_irt_helpers import (TABLES, GROUPS, GROUP_OF, SHORT, DATA, prepare, fit,
+from nn_irt_helpers import (TABLES, GROUPS, GROUP_OF, SHORT, DATA, FITS, prepare, fit,
                             predict, imv, log_loss, make_models, SEED)
 from nn_irt_chart import imv_stripchart_html
 from imvpy import vanilla_imv
@@ -786,11 +786,11 @@ rows, stops = [], []
 for t in TABLES:
     d = prepare(t)
     te = d[d.test]
-    m = te[["id", "item"]].merge(pd.read_csv(DATA / f"{t}_mirt_preds.csv.gz", dtype={"id": str, "item": str}),
+    m = te[["id", "item"]].merge(pd.read_csv(FITS / f"{t}_mirt_preds.csv.gz", dtype={"id": str, "item": str}),
                                  on=["id", "item"], how="left")
     mirt = m["mirt_2pl"].values
-    e = pd.read_csv(DATA / f"{t}_estimation_preds.csv.gz")
-    tp = pd.read_csv(DATA / f"{t}_torch_preds.csv.gz")
+    e = pd.read_csv(FITS / f"{t}_estimation_preds.csv.gz")
+    tp = pd.read_csv(FITS / f"{t}_torch_preds.csv.gz")
     y = e.y.values
     est = {"Adam prior": tp["2PL"].values, "Adam constr.": tp["2PL (constr.)"].values,
            "JML prior": e["alt JML (prior)"].values, "JML constr.": e["alt JML (constr.)"].values,
@@ -905,7 +905,7 @@ rows = []
 for t in TABLES:
     d = prepare(t)
     y = d[d.test].resp.values
-    tp = pd.read_csv(DATA / f"{t}_torch_preds.csv.gz")
+    tp = pd.read_csv(FITS / f"{t}_torch_preds.csv.gz")
     base = tp["2PL"].values
     r = {"table": SHORT[t]}
     for name in ["Rasch", "2PL", "MIRT k=2", "MLP small", "MLP large"]:
@@ -1037,15 +1037,19 @@ and [`nn_irt_estimation_drift.py`](https://github.com/datapages/irw/blob/main/vi
 
 Results were computed on 15 October 2026 (Part I) and 16 October 2026 (Part
 II). The tables were fetched on 15 October from `item_response_warehouse`
-v72.0 and `item_response_warehouse_6` v5.11 and are cached as
-`vignettes/nn_irt_data/*_split.csv.gz` together with the holdout mask, so the
-page re-renders without Redivis access. The estimator comparison and the drift
-trace are cached beside them (`*_estimation_preds.csv.gz`,
-`*_estimation_info.csv`, `drift_borges_alt_jml.csv`). The figures that refit a
-network do so on the residency exam at the page's seed, so they re-render
-without those caches. This page is rendered with Quarto's `freeze` option: the
-PyTorch training runs on a laptop and the outputs are committed, so the site
-build does not need PyTorch. To regenerate:
+v72.0 and `item_response_warehouse_6` v5.11.
+
+This page is rendered with Quarto's `freeze` option: the PyTorch training runs
+on a laptop and the outputs are committed under `_freeze/`, so the site build
+needs neither PyTorch nor a Redivis credential. The heavy intermediates behind
+those outputs — the fetched tables, the splits, and the held-out predictions
+from every model — are regenerable, so they are kept out of the repository in
+`vignettes/nn_irt_data/fits/`, which `.gitignore` excludes. What is committed
+beside the page is the small, slow-to-rebuild material: the `mirt` item
+parameters, the estimator diagnostics, the drift trace and the bibliography.
+Re-rendering the page from source therefore means regenerating the caches,
+which needs Redivis access and an R installation; building the site from the
+committed freeze needs neither. To regenerate:
 
 ```bash
 # 1. A Python environment with CPU torch (from the project root)

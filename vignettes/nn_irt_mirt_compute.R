@@ -24,6 +24,7 @@ source(file.path(HERE, "asymmetric_irt_helpers.R"))
 set.seed(20261015)
 
 DATA <- "nn_irt_data"
+FITS <- file.path(DATA, "fits")   # regenerable caches, gitignored
 tables <- sub("_split\\.csv\\.gz$", "", basename(list.files(DATA, "_split\\.csv\\.gz$")))
 
 specs <- list(
@@ -67,9 +68,9 @@ predict_cells <- function(fit, wide, test_long, n_quad = 61) {
 }
 
 for (tb in tables) {
-  out <- file.path(DATA, paste0(tb, "_mirt_preds.csv.gz"))
+  out <- file.path(FITS, paste0(tb, "_mirt_preds.csv.gz"))
   if (file.exists(out)) { cat(tb, "already done\n"); next }
-  d <- fread(file.path(DATA, paste0(tb, "_split.csv.gz")))
+  d <- fread(file.path(FITS, paste0(tb, "_split.csv.gz")))
   d[, id := as.character(id)][, item := as.character(item)]
   train <- d[test == FALSE]
   wide <- dcast(train, id ~ item, value.var = "resp")

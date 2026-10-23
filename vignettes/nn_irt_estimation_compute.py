@@ -20,7 +20,7 @@ import pandas as pd
 
 def run(name):
     import torch
-    from nn_irt_helpers import DATA, prepare
+    from nn_irt_helpers import DATA, FITS, prepare
     from nn_irt_estimation import alt_jml_2pl, alt_jml_predict, em_mml_2pl, mml_lbfgs_2pl
 
     torch.set_num_threads(2)
@@ -33,7 +33,7 @@ def run(name):
     p_em, _, _, info_em = em_mml_2pl(d)
     p_ml, _, _, info_ml = mml_lbfgs_2pl(d)
     pd.DataFrame({"y": y, "alt JML (prior)": p_ajp, "alt JML (constr.)": p_ajc,
-                  "EM MML": p_em, "MML L-BFGS": p_ml}).to_csv(DATA / f"{name}_estimation_preds.csv.gz", index=False)
+                  "EM MML": p_em, "MML L-BFGS": p_ml}).to_csv(FITS / f"{name}_estimation_preds.csv.gz", index=False)
     info = pd.DataFrame([{"estimator": k, **v} for k, v in
                          [("alt JML (prior)", info_p), ("alt JML (constr.)", info_c), ("EM MML", info_em),
                           ("MML L-BFGS", info_ml)]])

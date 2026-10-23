@@ -13,6 +13,11 @@ import pandas as pd
 
 HERE = Path(__file__).resolve().parent
 DATA = HERE / "nn_irt_data"
+# Heavy, regenerable caches (fetches, splits, predictions) live in a subdirectory
+# that .gitignore excludes via vignettes/**/fits/. Small derived outputs that are
+# costly to rebuild -- the mirt item parameters, the estimator diagnostics, the
+# bibliography -- stay in DATA and are committed.
+FITS = DATA / "fits"
 SEED = 20261015
 TEST_FRAC = 0.2
 MAX_PERSONS = 5000   # larger tables are subsampled so every fit stays laptop-sized
@@ -63,8 +68,8 @@ def load_table(name: str) -> pd.DataFrame:
     The cache is the file the offline R script reads, so Python and R see the
     same rows. Fetched once; a fresh fetch at a later IRW version may differ.
     """
-    DATA.mkdir(exist_ok=True)
-    path = DATA / f"{name}.parquet"
+    FITS.mkdir(parents=True, exist_ok=True)
+    path = FITS / f"{name}.parquet"
     if path.exists():
         return pd.read_parquet(path)
     import irw
@@ -139,7 +144,7 @@ def prepare(name: str) -> pd.DataFrame:
         cand = df.index[(df.iid == iid) & df.test & (df.resp != only)]
         if len(cand):
             df.loc[cand[0], "test"] = False
-    out = DATA / f"{name}_split.csv.gz"
+    out = FITS / f"{name}_split.csv.gz"
     if not out.exists():
         df[["id", "item", "resp", "test"]].to_csv(out, index=False)
     return df
@@ -357,7 +362,7 @@ def torch_preds(t, d, epochs=30):
     " (constr.)" appended for the constrained version. Cached as
     nn_irt_data/<t>_torch_preds.csv.gz; delete the cache to refit.
     """
-    cache = DATA / f"{t}_torch_preds.csv.gz"
+    cache = FITS / f"{t}_torch_preds.csv.gz"
     if cache.exists():
         c = pd.read_csv(cache)
         return {k: c[k].values for k in c.columns}
