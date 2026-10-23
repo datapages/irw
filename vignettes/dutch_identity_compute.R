@@ -65,36 +65,9 @@ pattern_key <- function(mat) apply(mat, 1, paste, collapse = "")
 # appeared to beat the model it is nested inside.
 # ==============================================================================
 
-# Poisson log-likelihood for pattern counts, including the −Σ log(y!) constant,
-# so it is on exactly the scale logLik() reports for a Poisson GLM.
-pois_ll <- function(log_mu, counts) {
-  sum(counts * log_mu - exp(log_mu) - lgamma(counts + 1))
-}
-
-# Multinomial log-likelihood kernel, Σ y log p̂ with p̂ = μ̂ / Σ μ̂. Always ≤ 0.
-# It differs from pois_ll by a model-free constant whenever Σ μ̂ = N, which holds
-# for every model here because each has a free intercept.
-mult_ll <- function(log_mu, counts) {
-  log_p <- log_mu - log(sum(exp(log_mu)))
-  sum(counts * log_p)
-}
-
-# Fitted log-mean of the restricted log-quadratic model:
-#   log μ(x) = α + x'β + (1/2)(x'γ)²
-log_quad_log_mu <- function(params, X) {
-  J <- ncol(X)
-  as.numeric(
-    params[1] +
-      X %*% params[2:(J + 1)] +
-      0.5 * (X %*% params[(J + 2):(2 * J + 1)])^2
-  )
-}
-
-# Negative Poisson log-likelihood for that model, on the pois_ll scale
-log_quad_nll <- function(params, X, counts) {
-  nll <- -pois_ll(log_quad_log_mu(params, X), counts)
-  if (!is.finite(nll)) 1e10 else nll
-}
+# All log-likelihood, restricted log-quadratic and Γ rank-1 helpers live in
+# vignettes/dutch_identity_helpers.R so that other scripts can reuse them.
+source("vignettes/dutch_identity_helpers.R")
 
 small_tables <- irw_filter(
   n_categories   = 2,
@@ -151,60 +124,31 @@ for (tbl in small_tables) {
   )
   if (is.null(soe_model)) next
 
-  # Extract J×J Γ matrix from SOE coefficients
-  soe_coefs    <- coef(soe_model)
-  gamma_matrix <- matrix(0, J, J, dimnames = list(item_cols, item_cols))
-  for (nm in names(soe_coefs)[grepl(":", names(soe_coefs))]) {
-    parts <- strsplit(nm, ":")[[1]]
-    if (length(parts) == 2 && all(parts %in% item_cols)) {
-      gamma_matrix[parts[1], parts[2]] <- soe_coefs[nm]
-      gamma_matrix[parts[2], parts[1]] <- soe_coefs[nm]
-    }
-  }
+  # J×J Γ matrix from the SOE coefficients. Γ_jj = 0 by construction: x_j² = x_j
+  # for binary items, so there is no squared term to estimate and any diagonal
+  # contribution is absorbed into the main effects. Hence trace(Γ) = 0 and the
+  # eigenvalues of Γ sum to zero -- which is why the eigenvalues are NOT a test
+  # of the Dutch Identity's rank-1 prediction. See dutch_identity_helpers.R.
+  gamma_matrix <- gamma_from_soe(soe_model, item_cols)
 
   eig     <- eigen(gamma_matrix, symmetric = TRUE)
   eig_val <- eig$values
   eig_vec <- eig$vectors
 
+  # guard: the diagonal really is zero, so the eigenvalues really do sum to zero
+  stopifnot(all(diag(gamma_matrix) == 0))
+  stopifnot(abs(sum(eig_val)) < 1e-8)
+
   # Restricted log-quadratic, by direct Poisson ML on the same 2^J counts.
-  # γ enters only through (x'γ)², so its overall sign is unidentified and the
-  # surface has at least two equivalent optima; use several starts and keep the
-  # best, then report how many starts reached it.
   gamma_lead  <- sqrt(abs(eig_val[1])) * eig_vec[, 1]
   alpha_start <- coef(ind_model)[1]
   beta_start  <- coef(ind_model)[-1]
 
-  starts <- list(
-    c(alpha_start, beta_start,  gamma_lead),
-    c(alpha_start, beta_start, -gamma_lead),
-    c(alpha_start, beta_start, rep( 0.0, J)),
-    c(alpha_start, beta_start, rep( 0.3, J)),
-    c(alpha_start, beta_start, rep(-0.3, J))
-  )
-  for (i in seq_len(15)) {
-    starts[[length(starts) + 1]] <-
-      c(alpha_start, beta_start, gamma_lead + rnorm(J, 0, 0.5))
-  }
+  rq_fit <- fit_log_quad(X, all_pats$count, alpha_start, beta_start, gamma_lead)
+  if (is.null(rq_fit)) { message("  all log-quadratic starts failed"); next }
+  opt            <- rq_fit$opt
+  rq_convergence <- rq_fit$convergence
 
-  opts <- lapply(starts, function(st) tryCatch(
-    optim(st, log_quad_nll, X = X, counts = all_pats$count,
-          method = "BFGS", control = list(maxit = 10000, reltol = 1e-12)),
-    error = function(e) NULL
-  ))
-  opts <- Filter(Negate(is.null), opts)
-  if (!length(opts)) { message("  all log-quadratic starts failed"); next }
-
-  nll_vals <- vapply(opts, function(o) o$value, numeric(1))
-  opt      <- opts[[which.min(nll_vals)]]
-
-  rq_convergence <- list(
-    n_starts    = length(starts),
-    n_fitted    = length(opts),
-    n_at_best   = sum(nll_vals < min(nll_vals) + 1e-4),
-    best_nll    = min(nll_vals),
-    optim_code  = opt$convergence,
-    gamma       = opt$par[(J + 2):(2 * J + 1)]
-  )
   message("  log-quadratic: ", rq_convergence$n_at_best, "/",
           rq_convergence$n_fitted, " starts reached the best optimum (nll = ",
           round(rq_convergence$best_nll, 3), ", optim code ",
@@ -278,6 +222,30 @@ for (tbl in small_tables) {
   # Identical on the Poisson and multinomial scales (they differ by a constant).
   rq_gap_share <- (ll_rq - ll_ind) / (ll_soe - ll_ind)
 
+  # ---- Γ rank-1 diagnostics, with a parametric-bootstrap reference ----------
+  # The eigenvalues of Γ cannot test the rank-1 prediction (zero trace). What
+  # can: the share of the OFF-diagonal sum of squares a rank-1 structure
+  # explains, with the diagonal left free, calibrated against data simulated
+  # from the fitted rank-1 model at this same N.
+  gamma_rank1 <- gamma_rank1_diagnostics(
+    pats      = all_pats[, c(item_cols, "count")],
+    item_cols = item_cols,
+    soe_model = soe_model,
+    log_mu_rq = log_mu_rq,
+    gamma_rq  = rq_convergence$gamma,
+    N         = N,
+    n_boot    = 200,
+    seed      = 20260101
+  )
+  message("  Γ off-diagonal rank-1 share: ",
+          sprintf("%.1f%% weighted, %.1f%% unweighted; %d positive eigenvalue(s); ",
+                  100 * gamma_rank1$rank1_weighted$share,
+                  100 * gamma_rank1$rank1_unweighted$share,
+                  gamma_rank1$eigen_facts$n_positive),
+          sprintf("bootstrap pctl %.2f (weighted), %d/%d replicates failed",
+                  gamma_rank1$pctl$share_w,
+                  gamma_rank1$n_boot_failed, gamma_rank1$n_boot))
+
   # Fitted log-p for the scatter plots, normalised within each model
   all_pats$log_p_ind <- log_mu_ind - log(sum(exp(log_mu_ind)))
   all_pats$log_p_rq  <- log_mu_rq  - log(sum(exp(log_mu_rq)))
@@ -291,6 +259,7 @@ for (tbl in small_tables) {
     patterns       = all_pats,
     gamma_matrix   = gamma_matrix,
     eigenvalues    = eig_val,
+    gamma_rank1    = gamma_rank1,
     bic_table      = bic_table,
     bic_n          = bic_n,
     ll_multinomial = c(ind = mll_ind, rq = mll_rq, soe = mll_soe),
@@ -453,15 +422,7 @@ fit_dim_analysis <- function(table_name, max_n = 15000) {
       error = function(e) NULL
     )
     if (!is.null(soe_m)) {
-      gmat <- matrix(0, J, J, dimnames = list(colnames(resp_c), colnames(resp_c)))
-      sc   <- coef(soe_m)
-      for (nm in names(sc)[grepl(":", names(sc))]) {
-        pts <- strsplit(nm, ":")[[1]]
-        if (length(pts) == 2 && all(pts %in% colnames(resp_c))) {
-          gmat[pts[1], pts[2]] <- sc[nm]
-          gmat[pts[2], pts[1]] <- sc[nm]
-        }
-      }
+      gmat <- gamma_from_soe(soe_m, colnames(resp_c))
       soe_eigval <- eigen(gmat, symmetric = TRUE, only.values = TRUE)$values
     }
   }
@@ -602,6 +563,7 @@ saveRDS(
     s5       = s5_result,
     s6       = s6_result,
     date_run = Sys.Date(),
+    irw_pkg_version = as.character(utils::packageVersion("irw")),
     session  = sessionInfo()
   ),
   file = file.path(out_dir, "dutch_identity_results.rds")

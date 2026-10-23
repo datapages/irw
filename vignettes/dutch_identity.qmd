@@ -38,6 +38,8 @@ irw_grey <- "grey50"
 cache_path <- "dutchdata/dutch_identity_results.rds"
 cache_ok   <- file.exists(cache_path)
 
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
 if (cache_ok) {
   .cache   <- readRDS(cache_path)
   s1_3     <- .cache$s1_3
@@ -45,6 +47,7 @@ if (cache_ok) {
   s5       <- .cache$s5
   s6       <- .cache$s6
   date_run <- .cache$date_run
+  irw_pkg_version <- .cache$irw_pkg_version %||% "unrecorded"
 } else {
   # Placeholder objects so inline R expressions in prose don't crash
   na_dataset <- list(table_name = "—", J = NA_integer_, N = NA_integer_,
@@ -58,7 +61,22 @@ if (cache_ok) {
                               ll_multinomial = NA_real_,
                               rq_gap_share = NA_real_,
                               rq_convergence = list(n_starts = NA_integer_,
-                                                    n_at_best = NA_integer_)))
+                                                    n_at_best = NA_integer_),
+                              gamma_rank1 = list(
+                                scatter = NULL, reference_eigen = NA_real_,
+                                n_boot = NA_integer_, n_offdiag = NA_integer_,
+                                n_resid_z_gt_3 = NA_integer_,
+                                boot_prop_one_positive = NA_real_,
+                                worst_resid = list(item1 = "—",
+                                                   item2 = "—",
+                                                   z = NA_real_),
+                                eigen_facts = list(n_positive = NA_integer_,
+                                                   leading_abs_share = NA_real_),
+                                rank1_weighted = list(share = NA_real_),
+                                rank1_unweighted = list(share = NA_real_),
+                                boot_summary = list(share_w_median = NA_real_,
+                                                    share_w_lo = NA_real_,
+                                                    share_w_hi = NA_real_))))
   s4   <- list(good_rasch = na_dataset, poor_rasch = na_dataset,
                rasch_meta = tibble(table_name = "—", r2_quad = NA_real_,
                                    ll_diff_per_resp = NA_real_))
@@ -66,6 +84,7 @@ if (cache_ok) {
   s6   <- tibble(table_name = character(), J = integer(),
                  imv_1v2 = numeric(), imv_2v3 = numeric())
   date_run <- Sys.Date()
+  irw_pkg_version <- "unrecorded"
 }
 
 # Disable all subsequent code chunks when cache is missing
@@ -409,30 +428,77 @@ other — the color profile across columns should look identical up to intensity
 Systematic blocks or rows that deviate from the common pattern signal local
 dependence that a single latent factor cannot absorb.
 
-### Eigenvalue decay of Γ
+### Is Γ rank-1?
+
+The Dutch Identity's prediction about $\boldsymbol{\Gamma}$ concerns the
+**off-diagonal** entries only. Expanding the quadratic term and using
+$x_j^2 = x_j$ for binary items,
+
+$$\frac{1}{2}\!\left(\sum_j \gamma_j x_j\right)^{\!2}
+  = \frac{1}{2}\sum_j \gamma_j^2 x_j \;+\; \sum_{j<k} \gamma_j \gamma_k x_j x_k,$$
+
+so the squared terms are absorbed into the main effects and the prediction is
+$\Gamma_{jk} \approx \gamma_j \gamma_k$ for $j \neq k$. The diagonal is free; in
+the SOE fit $\Gamma_{jj} = 0$ by construction, because there is no $x_j^2$ term
+to estimate.
+
+That construction has a consequence worth stating before any eigenvalues are
+plotted: $\operatorname{trace}(\boldsymbol{\Gamma}) = 0$, so the eigenvalues of
+$\boldsymbol{\Gamma}$ must sum to zero. Large negative eigenvalues are forced by
+the zero diagonal and say nothing about dimensionality. Indeed for *any*
+$\boldsymbol{\gamma}$, the exactly rank-1 structure
+$\boldsymbol{\gamma}\boldsymbol{\gamma}' - \operatorname{diag}(\gamma_j^2)$ has
+at most one positive eigenvalue, from which
+$\lambda_1 / \sum_j |\lambda_j| \le 1/2$ with equality precisely when one
+eigenvalue is positive. A scree plot of $\boldsymbol{\Gamma}$ is therefore not a
+test of the rank-1 prediction, and "the leading eigenvalue explains 50% of the
+absolute eigenvalue mass" is the *ceiling* of that statistic rather than a
+shortfall. An earlier version of this page read it the other way around.
+
+The diagnostic that does test the prediction leaves the diagonal alone: fit the
+best rank-1 structure to the off-diagonal entries, minimising
+$\sum_{j<k} w_{jk}(\Gamma_{jk} - g_j g_k)^2$ with weights
+$w_{jk} = 1/\mathrm{SE}(\Gamma_{jk})^2$ from the SOE fit, and ask what share of
+the off-diagonal (weighted) sum of squares it explains.
+
+```{r}
+#| label: fig-gamma-rank1-scatter
+#| fig-cap: "Off-diagonal entries of Γ from the full SOE fit against γⱼγₖ from the fitted restricted log-quadratic model, with the 45° line. Error bars are ±1 SE of the SOE coefficient. This is the direct check of the Dutch Identity's prediction; the diagonal plays no part in it."
+#| fig-height: 3.8
+
+sc <- s1_3$gamma_rank1$scatter
+
+ggplot(sc, aes(x = gamma_pred, y = gamma_soe)) +
+  geom_abline(slope = 1, intercept = 0, colour = irw_grey, linetype = "dashed") +
+  geom_errorbar(aes(ymin = gamma_soe - se, ymax = gamma_soe + se),
+                width = 0, colour = irw_grey, alpha = 0.8) +
+  geom_point(colour = irw_blue, size = 2.4, alpha = 0.9) +
+  labs(x = expression(gamma[j] * gamma[k] ~ "(restricted log-quadratic)"),
+       y = expression(Gamma[jk] ~ "(full SOE)"))
+```
 
 ```{r}
 #| label: fig-gamma-scree
-#| fig-cap: "Eigenvalue scree plot of the SOE interaction matrix Γ. The Dutch Identity predicts a single dominant eigenvalue (Γ is approximately rank-1)."
+#| fig-cap: "Eigenvalues of Γ (bars), with the eigenvalues of an exactly rank-1 reference structure γγ′ with its diagonal zeroed (points). Both sets are constrained to sum to zero by the zero diagonal, so the negative eigenvalues are not evidence against rank-1 — the rank-1 ideal has them too."
 #| fig-height: 3.5
 
 eig_df <- tibble(
   component  = seq_along(s1_3$eigenvalues),
   eigenvalue = s1_3$eigenvalues,
-  pct_var    = abs(s1_3$eigenvalues) / sum(abs(s1_3$eigenvalues))
+  reference  = s1_3$gamma_rank1$reference_eigen
 )
 
 ggplot(eig_df, aes(x = component, y = eigenvalue)) +
   geom_col(fill = irw_blue, alpha = 0.7, width = 0.6) +
   geom_hline(yintercept = 0, colour = irw_grey) +
+  geom_point(aes(y = reference), colour = irw_red, size = 2.6) +
   scale_x_continuous(breaks = seq_len(s1_3$J)) +
   labs(
     x       = "Component",
     y       = "Eigenvalue of Γ",
     caption = paste0(
-      "Leading eigenvalue explains ",
-      round(eig_df$pct_var[1] * 100, 1),
-      "% of |eigenvalue| sum."
+      "Bars: observed Γ. Points: exactly rank-1 reference. Both sum to zero ",
+      "by construction (trace Γ = 0)."
     )
   )
 ```
@@ -442,18 +508,49 @@ closes `r sprintf("%.1f%%", 100 * s1_3$rq_gap_share)` of the gap between the
 independence model and the full SOE ($1 + J + \binom{J}{2}$ parameters) — the
 Dutch Identity's economy claim, holding up here.
 
-The eigenvalue plot is the more equivocal of the two views. A strictly rank-1
-$\boldsymbol{\Gamma}$ would show one dominant eigenvalue and the rest at zero.
-What we get instead is one clearly dominant positive eigenvalue
-(`r sprintf("%.2f", s1_3$eigenvalues[1])`) alongside a non-trivial negative one
-(`r sprintf("%.2f", min(s1_3$eigenvalues))`), so the leading eigenvalue accounts
-for only about
-`r round(100 * abs(s1_3$eigenvalues[1]) / sum(abs(s1_3$eigenvalues)))`% of the
-absolute eigenvalue mass. The two diagnostics are not in conflict: the rank-1
-model re-estimates its own main effects, and the extra interaction freedom the
-SOE spends on those smaller eigenvalues buys it very little likelihood. Rank-1
-is a good enough description of the association structure for prediction without
-$\boldsymbol{\Gamma}$ being literally rank-1.
+The rank-1 claim about $\boldsymbol{\Gamma}$ itself is a separate question, and
+it needs a reference point: a test this short at this $N$ will never return an
+exactly rank-1 $\boldsymbol{\Gamma}$, so a high share proves nothing on its own.
+We simulate `r s1_3$gamma_rank1$n_boot` sets of pattern counts from the fitted
+restricted log-quadratic model at the same $N$ — a world where the Dutch
+Identity holds exactly — refit the SOE, and recompute the diagnostic. Under that
+null the weighted off-diagonal share has median
+`r sprintf("%.1f%%", 100 * s1_3$gamma_rank1$boot_summary$share_w_median)`
+and 95% of replicates fall in
+[`r sprintf("%.1f%%", 100 * s1_3$gamma_rank1$boot_summary$share_w_lo)`,
+`r sprintf("%.1f%%", 100 * s1_3$gamma_rank1$boot_summary$share_w_hi)`].
+
+The observed share is
+`r sprintf("%.1f%%", 100 * s1_3$gamma_rank1$rank1_weighted$share)`
+(`r sprintf("%.1f%%", 100 * s1_3$gamma_rank1$rank1_unweighted$share)`
+unweighted), below every one of the
+`r s1_3$gamma_rank1$n_boot` null replicates. So $\boldsymbol{\Gamma}$ here is
+**not** rank-1, and the departure is not a sampling artefact. @fig-gamma-rank1-scatter
+shows where it lives:
+`r s1_3$gamma_rank1$n_resid_z_gt_3` of the
+`r s1_3$gamma_rank1$n_offdiag` off-diagonal entries sit more than three standard
+errors from $\gamma_j\gamma_k$, the largest being
+`r s1_3$gamma_rank1$worst_resid$item1`–`r s1_3$gamma_rank1$worst_resid$item2`
+at `r sprintf("%.1f", s1_3$gamma_rank1$worst_resid$z)` SE. That is local
+dependence between particular item pairs — structure a single latent dimension
+cannot absorb.
+
+Note also that the eigenvalue count has no power to detect this.
+$\boldsymbol{\Gamma}$ has exactly
+`r s1_3$gamma_rank1$eigen_facts$n_positive` positive eigenvalue, which is the
+rank-1 prediction — but so do
+`r sprintf("%.0f%%", 100 * s1_3$gamma_rank1$boot_prop_one_positive)` of the null
+replicates, and so does any rank-1 matrix with a zeroed diagonal. Passing that
+check is not evidence.
+
+The two findings are not in conflict, and the combination is the useful lesson.
+Rank-1 is rejected as a description of $\boldsymbol{\Gamma}$ while remaining an
+excellent *predictive* approximation: the five extra interaction parameters the
+SOE spends on the non-rank-1 structure buy it only
+`r sprintf("%.1f%%", 100 * (1 - s1_3$rq_gap_share))` of the likelihood gap.
+Statistical rejection and practical adequacy are answers to different questions,
+and at $N = `r format(s1_3$N, big.mark=",")`$ a real but small departure is
+detectable without being important for prediction.
 
 ---
 
@@ -554,11 +651,18 @@ this page, met in the data.
 ## Section 5: Dimensionality via second-order interaction matrices
 
 Holland ([-@holland1990dutch], Section 3.3) shows that for a $D$-dimensional IRT
-model, the matrix $\boldsymbol{\Gamma}$ of pairwise SOE interactions has rank at
-most $D$. This gives a direct route to dimensionality assessment: fit the SOE
-loglinear model, extract $\boldsymbol{\Gamma}$, and read off the number of
-non-negligible eigenvalues. We compare this to the standard approach of examining
-eigenvalues of the inter-item correlation matrix.
+model, the **off-diagonal** structure of $\boldsymbol{\Gamma}$ is approximately
+of rank $D$ — and, as in Section 3, this is an approximation that sharpens as
+$J$ grows, about the off-diagonals with the diagonal left free. It is tempting
+to read it as "count the non-negligible eigenvalues of
+$\boldsymbol{\Gamma}$", but that reading does not work: the SOE fit forces
+$\Gamma_{jj} = 0$, so the eigenvalues sum to zero and the negative ones are an
+artefact of the constraint rather than a count of dimensions. Section 3 gives the
+diagnostic that does work, and shows that even the $D = 1$ case has to be judged
+against a simulated rank-1 reference rather than by eye. So this section stays
+with the standard approach — eigenvalues of the inter-item correlation matrix,
+whose diagonal is 1 and which is a different, conventional setup — and treats
+$\boldsymbol{\Gamma}$ only through Section 3's machinery.
 
 We use **`r s5$unidim$table_name`** ($J = `r s5$unidim$J`$) as the
 unidimensional candidate and **`r s5$multidim$table_name`**
@@ -601,32 +705,24 @@ ggplot(scree_df, aes(x = component, y = eigenvalue)) +
   )
 ```
 
-```{r}
-#| label: fig-gamma-scree-dim
-#| fig-cap: "Eigenvalue scree plot of the SOE interaction matrix Γ for the unidimensional dataset. A single dominant eigenvalue is consistent with D = 1."
-#| fig-height: 3.5
-
-if (!is.null(s5$unidim$soe_eigval)) {
-  tibble(
-    component  = seq_along(s5$unidim$soe_eigval),
-    eigenvalue = s5$unidim$soe_eigval
-  ) |>
-    ggplot(aes(x = component, y = eigenvalue)) +
-    geom_col(fill = irw_blue, alpha = 0.7, width = 0.6) +
-    geom_hline(yintercept = 0, colour = irw_grey) +
-    scale_x_continuous(breaks = seq_len(s5$unidim$J)) +
-    labs(x = "Component", y = "Eigenvalue of Γ  (SOE model)")
-} else {
-  message("SOE eigenvalues not available for this dataset (J too large for pattern enumeration).")
-}
-```
 
 **What to notice.** A clearly unidimensional instrument shows one eigenvalue
 well above the rest, with a sharp elbow. A multidimensional instrument shows
-multiple eigenvalues above 1, with a more gradual decline. The SOE
-$\boldsymbol{\Gamma}$ scree plot makes a stronger theoretical claim: the number
-of non-trivial eigenvalues *equals* the number of latent dimensions, not just the
-number that exceed an arbitrary threshold.
+multiple eigenvalues above 1, with a more gradual decline. The threshold is
+conventional rather than principled, which is what makes Holland's result
+attractive in theory: rank is a sharper notion than "above 1".
+
+In practice the attraction does not survive contact with the estimator. The rank
+claim is about $\boldsymbol{\Gamma}$'s off-diagonals with the diagonal free, and
+Section 3 shows what it takes to test even $D = 1$ — a weighted rank-1 fit to the
+off-diagonals plus a simulated reference distribution, because the eigenvalue
+count has no power and the share has no interpretable scale without one. Doing
+that for general $D$ means minimum-rank fitting at each candidate rank with a
+reference distribution for each, on a model that needs all $2^J$ cells. For the
+$J$ at which instruments are actually screened for dimensionality, the SOE cannot
+be fitted at all. The correlation-matrix scree above is the pragmatic tool; the
+$\boldsymbol{\Gamma}$ result is a statement about what dimensionality *means*
+rather than a procedure for measuring it.
 
 ---
 
@@ -722,7 +818,8 @@ tables should override the automatic selection.
 
 {{< include ../components/_data-version.qmd >}}
 
-Results were computed on `r format(date_run, "%B %d, %Y")`. To regenerate:
+Results were computed on `r format(date_run, "%B %d, %Y")` with
+`irw` version `r irw_pkg_version`. To regenerate:
 
 ```r
 # 1. Re-run the compute script (from the project root)
@@ -731,6 +828,13 @@ source("vignettes/dutch_identity_compute.R")
 # 2. Re-render this page
 quarto::quarto_render("vignettes/dutch_identity.qmd")
 ```
+
+The model-fitting and Γ-diagnostic helpers live in
+`vignettes/dutch_identity_helpers.R`, which `dutch_identity_compute.R` sources.
+`vignettes/dutch_identity_gamma_rerun.R` updates only the Section 3 Γ
+diagnostics in the cached result, refitting the loglinear models from the stored
+pattern counts and asserting that Table 1 is unchanged, so a figure fix does not
+require re-running the corpus-wide sections.
 
 ::: {.callout-tip}
 To cite the IRW datasets used, run:
