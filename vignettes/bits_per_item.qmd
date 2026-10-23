@@ -82,6 +82,11 @@ poly <- if (file.exists(poly_path)) readRDS(poly_path) else NULL
 poly_ok <- !is.null(poly)
 sim_path <- "bits_per_item_data/reliability_sim_results.rds"
 rel_sim <- if (file.exists(sim_path)) readRDS(sim_path)$sim else NULL
+geo_path <- "bits_per_item_data/geometry_results.rds"
+geo <- if (file.exists(geo_path)) readRDS(geo_path) else NULL
+geo_ok <- !is.null(geo)
+geo_df <- if (geo_ok) geo$summary else tibble()
+geo_show <- if (geo_ok) geo$showcases else list()
 knitr::opts_chunk$set(eval = cache_ok)
 # Every ggplot printed on this page goes through wl().
 registerS3method("knit_print", "ggplot", function(x, ...) print(wl(x)), envir = asNamespace("knitr"))
@@ -1949,6 +1954,536 @@ gives `r fmt(showcases[[main]]$bin_convergence$bits[1])` bits. With 64 it gives
 Because the tests deliver only one or two bits, six bits of groups is far
 more resolution than any of them can use.
 
+## Two rulers: bits and distances
+
+Everything above counts in bits. There is a second unit for the same facts,
+and the detour is worth taking: measure a test not by how many questions it
+answers but by how long it is.
+
+The need for it comes from a soft spot underneath everything above. θ is a
+convention. Nothing in a 2PL fixes its scale; replace θ by any strictly
+increasing function of it, adjust the item parameters to match, and every
+probability the model assigns to every answer pattern is unchanged. The data
+cannot tell the two versions apart. So anything that depends on how θ is
+spaced — a distance, a standard error, "one SD below the mean" — is a
+statement about the convention as much as about the test. Bits escape this,
+which is why they were the unit for the whole page: mutual information is
+invariant under relabelling, because relabelling is one-to-one and can neither
+create nor destroy information.
+
+There is a second invariant quantity, and it is a length. A test assigns, at
+every θ, a precision: the test information g(θ) = Σ~j~ a~j~^2^ P~j~(θ)(1 −
+P~j~(θ)). Treat √g(θ) as a local exchange rate between θ and distance, and
+integrate it:
+
+$$A(\theta) = \int_{-\infty}^{\theta} \sqrt{g(t)}\; dt$$
+
+This is the **geodesic ability** of @tuerlinckx2026geodesic, following the
+geometric reading of item response models in @ramsay1996geometrical. A(θ)
+measures distance along the one-dimensional curve the model traces through the
+space of response distributions, and that curve does not care what its points
+are called. Reparametrize θ however you like and A is unmoved. It is a
+distance between probability distributions, in the same family as the
+geometric accounts of model complexity in @myung2000counting.
+
+### The test's own ruler
+
+```{r}
+#| label: geo-prep
+#| eval: !expr geo_ok
+
+gd <- geo_df |>
+  mutate(bucket = cut(n_items, c(0, 8, 12, 16, 24, 40, Inf),
+                      labels = c("≤8", "9–12", "13–16", "17–24", "25–40", "41+"))) |>
+  left_join(items_df |> group_by(table) |> summarise(sd_log_a = sd(log(a)), .groups = "drop"),
+            by = "table")
+geo_floor <- 0.05                      # below this a table is broken, not mismatched
+gd_ok     <- filter(gd, I_X >= geo_floor)
+gd_low    <- filter(gd, I_X <  geo_floor)
+# x positions for the per-band medians drawn over the scatter
+band_x    <- c("≤8" = 6, "9–12" = 10.5, "13–16" = 14.5, "17–24" = 20,
+               "25–40" = 32, "41+" = 50)
+cb_bucket <- gd |> group_by(bucket) |>
+  summarise(n = n(), med = median(CB_diff), .groups = "drop") |>
+  mutate(x = band_x[as.character(bucket)])
+geo_best  <- arrange(gd_ok, desc(match_ratio))
+geo_worst <- arrange(gd_ok, match_ratio)
+sf_worst  <- arrange(gd, desc(A_sumscore_prop))
+# The four sub-floor tables have normal capacity but a ruler no longer than a
+# couple of units, and on their own they halve the fitted slope; excluded here
+# for the same reason they are excluded from the match-ratio figure.
+cap_slope <- coef(lm(C_lower ~ log2(A_pop_span), gd_ok))[2]
+# Distinct atoms of the capacity-achieving input, in A (grid nodes in the flat
+# tails all map to the same point on the ruler and are one atom, not many).
+cap_atom <- function(nm) {
+  d <- subset(geo_show[[nm]]$distributions, which == "capacity")
+  a <- tapply(d$p, round(d$A, 1), sum)
+  a[a > 0.01]
+}
+cap_atoms <- vapply(names(geo_show), function(nm) length(cap_atom(nm)), integer(1))
+cap_ends  <- vapply(names(geo_show), function(nm) {
+  a <- cap_atom(nm); unname(a[1] + a[length(a)]) }, numeric(1))
+cb_rho    <- cor(gd$n_items, abs(gd$CB_diff), method = "spearman")
+sf_rho    <- cor(gd$sd_log_a, gd$A_sumscore_prop, method = "spearman")
+# Equally likely population slices, measured on each test's own ruler. The
+# first and last are open-ended in theta, so they are kept apart.
+geo_slots <- bind_rows(lapply(names(geo_show), function(nm) {
+  gr <- geo_show[[nm]]$groups
+  tibble(test = unname(show_titles[nm]), slot = 1:64, width = gr$width_A[1:64]) |>
+    mutate(kind = ifelse(slot %in% c(1, 64), "open-ended tail slice", "interior slice"))
+}))
+slot_int <- geo_slots |> filter(kind == "interior slice") |> group_by(test) |>
+  summarise(ratio = max(width) / min(width), .groups = "drop")
+slot_r   <- function(nm) slot_int$ratio[slot_int$test == unname(show_titles[nm])]
+gsc      <- function(nm, col) gd[[col]][gd$table == nm]
+pal      <- setNames(c(irw_blue, irw_accent, "black"), unname(show_titles))
+```
+
+```{r}
+#| label: geo-two-rulers
+#| eval: !expr geo_ok
+#| fig-height: 4
+#| fig-width: 7.5
+
+cur <- bind_rows(lapply(names(geo_show), function(nm)
+  geo_show[[nm]]$curves |> filter(theta >= -4, theta <= 4) |>
+    mutate(test = unname(show_titles[nm]))))
+p_g <- ggplot(cur, aes(theta, sqrt(g), colour = test)) +
+  geom_line(linewidth = 1) + scale_colour_manual(values = pal, name = NULL) +
+  labs(x = "θ", y = "√g(θ)", title = "Precision: the exchange rate") +
+  theme(plot.title = element_text(size = 12))
+p_a <- ggplot(cur, aes(theta, A, colour = test)) +
+  geom_line(linewidth = 1) + scale_colour_manual(values = pal, name = NULL) +
+  labs(x = "θ", y = "A(θ), geodesic distance", title = "Distance: its running total") +
+  theme(plot.title = element_text(size = 12))
+((p_g | p_a) + plot_layout(guides = "collect") +
+    plot_annotation(
+      title = "A test's own ruler is the running total of its precision",
+      subtitle = wrap(paste("Left: √g, the local exchange rate between θ and distance.",
+                            "Right: its integral, A(θ) — steep where the test is sharp,",
+                            "flat where it is blind."), 95),
+      theme = theme(plot.title = element_text(face = "bold", size = 14),
+                    plot.subtitle = element_text(size = 10.5)))) &
+  theme(legend.position = "top")
+```
+
+Read the two panels together. The left is the test information curve every
+psychometrician already knows, under a square root. The right is its running
+total, and it is the thing to keep: a ruler, laid out along θ, whose tick
+marks crowd together where the test can tell people apart and spread out where
+it cannot. The fraction-subtraction test is
+`r fmt(gsc("frac20", "A_total"))` units long end to end; the numeracy test is
+`r fmt(gsc("fitz_2024_numeracy", "A_total"))`.
+
+Two features of A merit comment before anything is built on it. First, a
+single item has length exactly π, whatever its slope — under the 2PL, √g for
+one item integrates to π — but items do not simply add, because it is g that
+adds while A integrates its square root. A test of m identical items therefore
+has length π√m, and a test of m items placed far enough apart that each works
+alone has length πm. Those are the two extremes, and warehouse tests sit
+nearer the first: a median of
+`r fmt(median(gd$A_total / (pi * sqrt(gd$n_items))))` times π√m against
+`r fmt(median(gd$A_total / (pi * gd$n_items)))` times πm. Items overlap.
+
+Second, and more practically, A(+∞) is not the number to use. A flat item is
+not a short item; it is a long one whose π of length is spread over a stretch
+of θ where nobody lives. Across the warehouse A(+∞) runs
+`r fmt(min(gd$A_total))`–`r fmt(max(gd$A_total))` with a median of
+`r fmt(median(gd$A_total))`, and it correlates
+`r fmt(cor(gd$A_total, gd$n_items, method = "spearman"), 2)` with the item
+count — close to a restatement of test length. For claims about the people
+actually tested, the quantity worth using is the stretch of ruler they span,
+A at +4 latent SD minus A at −4: a median of
+`r fmt(median(gd$A_pop_span))` units, and for one table
+`r fmt(max(gd$A_total / gd$A_pop_span), 1)` times shorter than A(+∞), whose
+flat items put most of their length thousands of θ units from anybody.
+Everything below uses the population span.
+
+The length is not a bespoke invention, incidentally. Ramsay's arc length over
+the same curve comes to a near-constant fraction of it: across all
+`r nrow(gd)` tables the ratio sits between
+`r fmt(min(gd$L_ramsay / gd$A_total))` and
+`r fmt(max(gd$L_ramsay / gd$A_total))`. The two are one ruler in different
+units.
+
+### Equally likely, unequally spaced
+
+```{r}
+#| label: geo-slots
+#| eval: !expr geo_ok
+#| fig-height: 4
+#| fig-width: 7.5
+
+ggplot(geo_slots, aes(slot, width, colour = kind)) +
+  geom_point(size = 1.3) +
+  facet_wrap(~ test, nrow = 1) +
+  scale_colour_manual(values = c("interior slice" = irw_blue,
+                                 "open-ended tail slice" = irw_red), name = NULL) +
+  scale_x_continuous(breaks = NULL, expand = expansion(add = 2.5)) +
+  scale_y_log10() +
+  labs(x = "the population in 64 equally likely slices, lowest θ on the left",
+       y = "slice width (log scale)",
+       title = "Equally likely slices of the population are not equally wide on the test's own ruler",
+       subtitle = sprintf("Among the 62 bounded slices the widest is %s to %s times the narrowest. The two tail slices run off to the ends of the scale.",
+                          fmt(min(slot_int$ratio), 1), fmt(max(slot_int$ratio), 1))) +
+  theme(legend.position = "top", panel.grid.major.x = element_blank(),
+        strip.text = element_text(size = 10))
+```
+
+The 64 slices are the ones from the game above: equally likely groups, each
+holding a sixty-fourth of the population. On the θ scale they are uneven by
+construction, narrow in the middle where people are dense. The point worth
+making is that they stay uneven after the test's own ruler is applied. For the
+vocabulary checklist the widest bounded slice is
+`r fmt(slot_r("machivallianism_test_vcl"), 1)` times the narrowest; for the
+numeracy test, `r fmt(slot_r("fitz_2024_numeracy"), 1)`; for fraction
+subtraction, which spreads its items more evenly,
+`r fmt(slot_r("frac20"), 1)`. The two end slices are wider still, but they are
+open-ended in θ and their width says more about that than about the test,
+which is why they are coloured separately.
+
+This is the geometric version of a point this page has now made three times. A
+test does not resolve the population uniformly. It has a sweet spot, and the
+ruler makes the sweet spot visible as a stretch where the tick marks bunch up.
+
+### One unit of error everywhere
+
+```{r}
+#| label: geo-error
+#| eval: !expr geo_ok
+#| fig-height: 4.2
+#| fig-width: 7.5
+
+err <- bind_rows(lapply(names(geo_show), function(nm)
+  geo_show[[nm]]$error |> mutate(test = unname(show_titles[nm])))) |>
+  select(test, true_theta, sd_theta_wle, sd_theta_eap, sd_A_wle, sd_A_eap) |>
+  pivot_longer(-c(test, true_theta), names_to = "what", values_to = "sd") |>
+  mutate(scale = ifelse(grepl("_A_", what), "on the geodesic scale A", "on the θ scale"),
+         est   = ifelse(grepl("wle", what), "WLE", "EAP"))
+err_mid <- err |> filter(abs(true_theta) <= 1) |> group_by(test, scale, est) |>
+  summarise(lo = min(sd), hi = max(sd), .groups = "drop")
+emid <- function(nm, sc, e, which) {
+  r <- err_mid |> filter(test == unname(show_titles[nm]), scale == sc, est == e)
+  fmt(r[[which]])
+}
+ggplot(err, aes(true_theta, sd, colour = test, linetype = est)) +
+  geom_hline(data = tibble(scale = "on the geodesic scale A", y = 1),
+             aes(yintercept = y), colour = irw_grey, linewidth = 0.4) +
+  geom_line(linewidth = 0.9) +
+  facet_wrap(~ scale, scales = "free_y") +
+  scale_colour_manual(values = pal, name = NULL) +
+  scale_linetype_manual(values = c(WLE = "solid", EAP = "dashed"), name = NULL) +
+  labs(x = "true θ", y = "SD of the estimate",
+       title = "On the geodesic scale the standard error is about one unit, wherever the person sits",
+       subtitle = "2,000 simulated respondents at each of 41 true values. Grey line: one unit. Over the same range the θ-scale error moves by a factor of two or more.") +
+  theme(legend.position = "top", legend.box = "vertical",
+        legend.spacing.y = unit(0, "pt"), legend.text = element_text(size = 10))
+```
+
+Here is the payoff, and it is the reason the paper is worth reading. Estimate
+a person's ability by weighted likelihood, convert to the A scale, and the
+standard error is about one unit no matter where the person sits. Over the
+middle of the range, |θ| ≤ 1, the simulated A-scale SD runs
+`r emid("fitz_2024_numeracy", "on the geodesic scale A", "WLE", "lo")`–`r emid("fitz_2024_numeracy", "on the geodesic scale A", "WLE", "hi")`
+for the numeracy test,
+`r emid("machivallianism_test_vcl", "on the geodesic scale A", "WLE", "lo")`–`r emid("machivallianism_test_vcl", "on the geodesic scale A", "WLE", "hi")`
+for the vocabulary checklist and
+`r emid("frac20", "on the geodesic scale A", "WLE", "lo")`–`r emid("frac20", "on the geodesic scale A", "WLE", "hi")`
+for fraction subtraction. On the θ scale the same simulations give
+`r emid("fitz_2024_numeracy", "on the θ scale", "WLE", "lo")`–`r emid("fitz_2024_numeracy", "on the θ scale", "WLE", "hi")`,
+`r emid("machivallianism_test_vcl", "on the θ scale", "WLE", "lo")`–`r emid("machivallianism_test_vcl", "on the θ scale", "WLE", "hi")`
+and
+`r emid("frac20", "on the θ scale", "WLE", "lo")`–`r emid("frac20", "on the θ scale", "WLE", "hi")`:
+the error depends on who is being measured. The A scale absorbs that
+dependence, because it was built out of precision in the first place. A unit
+of A *is* a standard error.
+
+Two qualifications, both of which matter in practice. The constancy is a
+property of the weighted likelihood estimate; the posterior mean is pulled
+toward the prior, and its A-scale SD falls to
+`r fmt(min(err$sd[err$est == "EAP" & err$scale == "on the geodesic scale A"]))`
+in the tails of the fraction-subtraction test, where shrinkage is doing most
+of the work. And the constancy fails at the ends for either estimator: a test
+with no items out at θ = 3 cannot deliver a unit of resolution there, and the
+A scale does not conjure one. It simply reports fewer units of distance
+between the people out there — which is the honest answer, and is exactly what
+the uneven tail slices in the previous figure were showing.
+
+### Bits are the log of the length
+
+```{r}
+#| label: geo-cb
+#| eval: !expr geo_ok
+#| fig-height: 4.2
+#| fig-width: 7.5
+
+ggplot(gd, aes(n_items, CB_diff)) +
+  geom_hline(yintercept = 0, colour = irw_grey, linewidth = 0.4) +
+  geom_point(alpha = 0.45, colour = irw_blue, size = 1.9) +
+  geom_line(data = cb_bucket, aes(x, med), colour = irw_red, linewidth = 1.1) +
+  geom_point(data = cb_bucket, aes(x, med), colour = irw_red, size = 2.6) +
+  scale_x_continuous(transform = "log2", breaks = c(5, 10, 20, 40, 60)) +
+  labs(x = "number of items", y = "approximation − exact, bits",
+       title = sprintf("The geometric approximation to the bits undershoots in all %d tables", nrow(gd)),
+       subtitle = "Each point is one table; red marks the median within item-count bands. The shortfall shrinks with test length, as the asymptotics say it should, but never reverses.")
+```
+
+The two rulers are now easy to connect, and the connection is an old result.
+If the standard error is one unit of A everywhere, then a test resolves the
+population into about as many distinguishable groups as its ruler has units,
+and the bits it carries is the logarithm of that count. Made precise, with
+h(A) the differential entropy of the population measured on the geodesic
+scale, this is the asymptotic expansion of @clarke1990information:
+
+$$I(\theta; X) \approx h(A) - \tfrac{1}{2}\log_2(2\pi e)$$
+
+The log of the number of one-standard-error-wide slots the population spans.
+It is a satisfying identity, and on warehouse-sized tests it is reliably wrong
+in one direction. In all `r nrow(gd)` tables the approximation comes in below
+the exact mutual information, by a median of
+`r fmt(abs(median(gd$CB_diff)))` bits, with a spread from
+`r fmt(abs(max(gd$CB_diff)))` to `r fmt(abs(min(gd$CB_diff)))`. The error
+shrinks as tests lengthen, as an asymptotic result should — a median shortfall
+of `r fmt(abs(cb_bucket$med[cb_bucket$bucket == "≤8"]))` bits on tests of 8
+items or fewer, `r fmt(abs(cb_bucket$med[cb_bucket$bucket == "17–24"]))` at
+17–24 items and `r fmt(abs(cb_bucket$med[cb_bucket$bucket == "41+"]))` above
+40, with a correlation of `r fmt(abs(cb_rho), 2)` between length and the size
+of the error. But it does not reverse, not once.
+
+That one-sidedness is the useful part. Treat the geometric formula as a lower
+bound on the bits rather than as an estimate of them and it is a bound
+computable from the item parameters and the population distribution alone,
+with no enumeration of answer patterns at all. Treat it as an approximation and you will
+understate a short test by half a bit, which on tests delivering one or two
+bits in total is not a rounding error.
+
+### Length buys bits slowly
+
+```{r}
+#| label: geo-length
+#| eval: !expr geo_ok
+#| fig-height: 4.2
+#| fig-width: 7.5
+
+asym <- tibble(A = seq(min(gd_ok$A_pop_span), max(gd_ok$A_pop_span), length.out = 200)) |>
+  mutate(C = log2(A / sqrt(2 * pi * exp(1))))
+ggplot(gd_ok, aes(A_pop_span, C_lower)) +
+  geom_line(data = asym, aes(A, C), colour = irw_grey, linetype = "dashed", linewidth = 0.6) +
+  geom_point(aes(colour = n_items), alpha = 0.8, size = 2) +
+  scale_x_continuous(transform = "log2", breaks = c(4, 6, 8, 12, 16, 24)) +
+  scale_colour_viridis_c(option = "mako", direction = -1, end = 0.9, name = "items") +
+  coord_cartesian(ylim = range(gd_ok$C_lower)) +
+  labs(x = "A across the population (±4 SD of θ), geodesic units",
+       y = "channel capacity, bits",
+       title = sprintf("Doubling the length of the ruler buys about %s of a bit, not a whole one", fmt(cap_slope)),
+       subtitle = sprintf("Each point is one of the %d tables above the %s-bit floor: its capacity, the most any population could extract from it. Dashed: the asymptotic log₂(A/√(2πe)).",
+                          nrow(gd_ok), fmt(geo_floor))) +
+  theme(legend.position = "top")
+```
+
+A longer ruler must carry more bits, and the asymptotic formula says how many:
+capacity goes as log~2~ A, so each doubling of the ruler adds one bit. Across
+the warehouse a doubling adds `r fmt(cap_slope)`. (The four sub-floor tables
+are left out here as well. They have ordinary capacities on rulers barely two
+units long, and including them drags the fitted slope down to
+`r fmt(coef(lm(C_lower ~ log2(A_pop_span), gd))[2])`.)
+
+Why the gap? Partly because the asymptotic line is again a bound rather than a
+prediction — it sits below the computed capacity by a median of
+`r fmt(abs(median(log2(gd_ok$A_pop_span / sqrt(2 * pi * exp(1))) - gd_ok$C_lower)))`
+bits using the population span, and
+`r fmt(abs(median(gd_ok$C_asymptotic - gd_ok$C_lower)))` bits using A(+∞). But
+mostly because the warehouse is not a designed experiment. The tables with
+long rulers are the tables with many items, and since items overlap, m of them
+lengthen the ruler by about √m while adding far less than that to what the
+test can distinguish. Lengthening a ruler by crowding more tick marks into a
+stretch that already has them is not the same as making it longer.
+
+### What the test could carry, and to whom
+
+```{r}
+#| label: geo-capacity
+#| eval: !expr geo_ok
+#| fig-height: 4.4
+#| fig-width: 7.5
+
+# geom_text rather than ggrepel: the render environment is pinned by renv.lock
+# and ggrepel is not in it.
+lab <- bind_rows(head(geo_best, 2), head(geo_worst, 2)) |>
+  mutate(hj = c(1.1, 1.1, 1.1, -0.1), ny = c(0.06, -0.06, 0.07, -0.07))
+ggplot(gd_ok, aes(C_lower, I_X)) +
+  geom_abline(slope = 1, intercept = 0, colour = irw_grey, linewidth = 0.4) +
+  geom_abline(slope = 0.5, intercept = 0, colour = irw_grey,
+              linetype = "dotted", linewidth = 0.5) +
+  geom_point(alpha = 0.5, colour = irw_blue, size = 2) +
+  geom_point(data = lab, colour = irw_red, size = 2.4) +
+  geom_text(data = lab, aes(label = table, hjust = hj, y = I_X + ny),
+            size = 2.9, colour = irw_red) +
+  scale_x_continuous(expand = expansion(mult = c(0.16, 0.1))) +
+  labs(x = "channel capacity: bits to the best-matched population",
+       y = "bits delivered to its own population",
+       title = sprintf("The median test delivers %s of the bits it could carry",
+                       scales::percent(median(gd_ok$match_ratio), accuracy = 1)),
+       subtitle = sprintf("Solid: a perfectly matched test. Dotted: half of capacity. %d tables delivering under %s bits are omitted; they are broken, not mismatched.",
+                          nrow(gd_low), fmt(geo_floor)))
+```
+
+Capacity is the last quantity worth adding, and it answers a question the bits
+do not. I(θ; X) is the bits a test delivers *to the population that took it*.
+Its channel capacity is the most it could deliver to any population —
+Shannon's capacity for the channel whose input is θ and whose output is the
+answer pattern, maximized over input distributions. The ratio of the two is a
+measure of fit between an instrument and the people it was handed to.
+
+Capacity is strikingly uniform across the warehouse: a median of
+`r fmt(median(gd$C_lower))` bits, an interquartile range of
+`r fmt(quantile(gd$C_lower, 0.25))` to `r fmt(quantile(gd$C_lower, 0.75))`,
+and `r fmt(max(gd$C_lower))` bits at the very top. Two bits is roughly what a
+test is *for*, whatever its length. Delivered bits have a median of
+`r fmt(median(gd$I_X))`, and the match ratio a median of
+`r fmt(median(gd_ok$match_ratio))`: the typical warehouse test hands its
+respondents about half of what it holds.
+
+The two ends of that distribution say what a match is made of, and it is
+nothing subtle. `r geo_best$table[1]` reaches
+`r fmt(geo_best$match_ratio[1])`, and its items sit a median of
+`r fmt(median(abs(with(subset(items_df, table == geo_best$table[1]), -d / a))))`
+from the population mean — right where the people are. The worst matches above
+the floor, `r geo_worst$table[1]` at
+`r fmt(geo_worst$match_ratio[1], 3)` and `r geo_worst$table[2]` at
+`r fmt(geo_worst$match_ratio[2], 3)`, sit a median of
+`r fmt(median(abs(with(subset(items_df, table == geo_worst$table[1]), -d / a))))`
+and
+`r fmt(median(abs(with(subset(items_df, table == geo_worst$table[2]), -d / a))))`
+away: every item is so far out on the trait that nearly everyone gives the
+same answer. A short battery of extreme items is a test whose ruler lies almost
+entirely outside the population.
+
+Below the floor the ratio stops meaning anything. `r nrow(gd_low)` tables
+deliver under `r fmt(geo_floor)` bits — the worst,
+`r gd_low$table[which.min(gd_low$I_X)]`, delivers
+`r fmt(min(gd_low$I_X), 4)` bits against a capacity of
+`r fmt(gd_low$C_lower[which.min(gd_low$I_X)])` — and a ratio of 0.001 there
+reports a failed instrument, not a mismatched one. They are left out of the
+figure.
+
+```{r}
+#| label: geo-capacity-prior
+#| eval: !expr geo_ok
+#| fig-height: 4
+#| fig-width: 7.5
+
+dist <- bind_rows(lapply(names(geo_show), function(nm)
+  geo_show[[nm]]$distributions |> mutate(test = unname(show_titles[nm])))) |>
+  arrange(test, which, A) |>
+  group_by(test, which) |> mutate(cum = cumsum(p) / sum(p)) |> ungroup() |>
+  mutate(which = ifelse(which == "capacity", "the population capacity wants",
+                        "the population that took it"))
+ggplot(dist, aes(A, cum, colour = which)) +
+  geom_step(linewidth = 1) +
+  facet_wrap(~ test, nrow = 1, scales = "free_x") +
+  scale_colour_manual(values = c("the population capacity wants" = irw_red,
+                                 "the population that took it" = irw_blue), name = NULL) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "position on the test's ruler, A", y = "share of people at or below",
+       title = "Capacity is reached by a handful of discrete levels, not by a population",
+       subtitle = "Cumulative share along each test's own scale. Every jump in the red staircase is one ability level the optimal input uses; it uses nothing in between.") +
+  theme(legend.position = "top", strip.text = element_text(size = 10))
+```
+
+That figure says where the missing half goes, and the answer is not the one I
+expected. The input distribution that achieves capacity is not a spread-out
+population at all: it is *discrete*, a staircase with
+`r min(cap_atoms)`–`r max(cap_atoms)` steps on these three tests, placing all
+its mass on that many ability levels and nothing in between. This is a general
+property of channels of this kind rather than a quirk of these tests. The two
+outermost levels alone carry
+`r scales::percent(min(cap_ends), accuracy = 1)` to
+`r scales::percent(max(cap_ends), accuracy = 1)` of the mass, because people
+at the ends of the ruler are the easiest to tell apart from everybody else.
+
+No real population looks remotely like that. Real populations are smooth and
+heaped in the middle, which is the one stretch where a test resolves people
+poorly relative to how many of them are standing there. So the gap between the
+two curves is not a defect in any particular instrument, and no amount of item
+writing closes it: it is the price of measuring a continuously distributed
+trait with a finite test, and across the warehouse it comes to about a factor
+of two.
+
+### Sufficiency, again, as distance
+
+```{r}
+#| label: geo-sumscore
+#| eval: !expr geo_ok
+#| fig-height: 4.2
+#| fig-width: 7.5
+
+ggplot(gd, aes(sd_log_a, A_sumscore_prop)) +
+  geom_hline(yintercept = 0, colour = irw_grey, linewidth = 0.4) +
+  geom_point(alpha = 0.5, colour = irw_blue, size = 2) +
+  geom_smooth(method = "loess", se = FALSE, colour = irw_red,
+              linewidth = 0.9, span = 0.9) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "SD of log slope within a table", y = "ruler lost to sum-scoring",
+       title = "Sum-scoring shortens the ruler, by about as much as the slopes disagree",
+       subtitle = sprintf("Each point is one table; Spearman %s. Under Rasch, where every slope is equal, the loss is exactly zero.",
+                          fmt(sf_rho, 2)))
+```
+
+The sufficiency question has a geometric form too, and it is the cleanest of
+the three ways this page has asked it. Score a test by its sum rather than by
+its pattern and the ruler gets shorter: the sum score's own information
+function integrates to less than the test's. Under the Rasch model the loss is
+exactly zero, which is Andersen's theorem in a new unit
+[@andersen1977sufficient]. Under the 2PL the median table loses
+`r scales::percent(median(gd$A_sumscore_prop), accuracy = 0.1)` of its length,
+the middle half loses
+`r scales::percent(quantile(gd$A_sumscore_prop, 0.25), accuracy = 0.1)` to
+`r scales::percent(quantile(gd$A_sumscore_prop, 0.75), accuracy = 0.1)`, and
+the worst case, `r sf_worst$table[1]`, loses
+`r scales::percent(sf_worst$A_sumscore_prop[1], accuracy = 1)`.
+
+What makes this the cleanest version is the correlation. The loss tracks the
+spread of the slopes at Spearman `r fmt(sf_rho, 2)` — tighter than the same
+relationship measured in bits earlier on this page, and with no exceptions in
+either tail. Sum-scoring costs something because it weights every item alike
+when the model says to weight them by their slopes. Measure the cost as a
+distance and that is all there is to see.
+
+### How the geometry was computed
+
+A(θ) integrates √g over the whole real line, which sounds harmless and is the
+one place this section needed care. A single item lays down its π of length
+over a θ range of order 1/a~j~, so a test with one near-flat item accumulates
+length thousands of θ units from the origin, and integrating over a range
+padded in θ silently discards it. The grids here are built in each item's own
+units, u~j~ = a~j~(θ − b~j~), over
+[min~j~(b~j~ − 20/a~j~), max~j~(b~j~ + 20/a~j~)], and the totals come from
+adaptive quadrature split at every item's break points rather than from the
+plotted grid. The two agree to a relative error of
+`r fmt(max(gd$A_grid_rel_err) * 1e6, 1)` × 10^−6^ at worst, and the discarded
+tails come to at most `r fmt(max(gd$A_tail_share) * 1e4, 1)` × 10^−4^ of
+A(+∞). The invariance of A is
+checked directly, by integrating a fixed θ interval and its image under two
+reparametrizations; note that trapezoid quadrature is not itself invariant
+even though A is, so that check needs adaptive quadrature to pass.
+
+Capacity is computed by the Blahut–Arimoto algorithm
+[@blahut1972computation; @arimoto1972algorithm] on a
+`r geo$settings$N_CAP`-point θ grid. It yields a lower and an upper bound at
+every iteration, and every table here is certified to a gap below
+10^−4^ bits. For the
+`r sum(gd$C_kind == "pattern_exact")` tables with
+`r geo$settings$MAX_ENUM` items or fewer the channel is the exact distribution
+over all 2^n^ answer patterns; for the remaining
+`r sum(gd$C_kind == "sum_score_lower_bound")` it is the distribution over sum
+scores, which makes the reported capacity a lower bound. The figures above
+therefore understate the match ratio for long tests, which is the conservative
+direction. Plain Blahut–Arimoto will not reach a 10^−4^ gap on a
+2^16^-pattern channel in any reasonable time; the implementation uses
+over-relaxation with a step-back whenever the lower bound falls, plus support
+pruning with periodic recertification.
+
 ## More than right and wrong
 
 Many tables in the warehouse do not record right and wrong answers. They record
@@ -2266,9 +2801,38 @@ print(knitr::kable(tab, align = "lrrrrr",
   answer pattern on a θ grid, so they are limited to 16 items. For the
   fraction-subtraction test they use the 12 items with the highest expected
   bits. The within-score surprisal needs no θ grid and uses all items.
+- **Capacity is a lower bound on long tests.** Channel capacity is computed
+  over exact answer patterns for the `r if (geo_ok) sum(gd$C_kind == "pattern_exact")`
+  tables of 16 items or fewer, and over sum scores for the
+  `r if (geo_ok) sum(gd$C_kind == "sum_score_lower_bound")` longer ones.
+  Sum-scoring cannot raise capacity, so the longer tables' capacities — and
+  hence their match ratios — are understated. The direction is known; the size
+  is not.
+- **The geodesic scale is a model-implied scale.** A(θ) is built from the
+  fitted test information function, so a wrong model gives a wrong ruler. The
+  constant-standard-error result in particular comes from simulating
+  respondents *under the fitted model* and scoring them with it, which is the
+  most favourable case; it shows that the geodesic scale has the property its
+  derivation claims, not that a real respondent's error is constant.
+  Reparametrization invariance is exact and does not depend on the model being
+  right.
+- **Length is not a quality measure.** A(+∞) rewards near-flat items, which
+  contribute their full π of geodesic length over a stretch of θ containing
+  nobody. The geometry figures therefore use the population span (A at ±4
+  latent SD); the one table whose A(+∞) is
+  `r if (geo_ok) fmt(max(gd$A_total / gd$A_pop_span), 1)` times its population
+  span is the clearest case of why.
+- **Match ratios have a floor.** `r if (geo_ok) nrow(gd_low)` tables deliver
+  under 0.05 bits, so their match ratios run to a thousandth and report
+  measurement failure rather than a mismatch between test and population. They
+  are excluded from the capacity figure and from the match-ratio quantiles.
+  One of them, `mexico_2023_quality_problems`, is independently on record as
+  defective.
 - **Scope.** The warehouse-wide numbers cover only dichotomous items, and no
   ENEM tables in this version. The polytomous section uses three tables, chosen
-  by hand, not a sample of the warehouse's polytomous tables.
+  by hand, not a sample of the warehouse's polytomous tables. The geometry
+  section is dichotomous and 2PL throughout: geodesic ability and capacity are
+  defined for polytomous models too, but no polytomous arm was computed here.
 - **Polytomous models and choices.** The polytomous bits depend on the model as
   much as the dichotomous ones do. The section reports the generalized partial
   credit model; under the partial credit and graded response models a test's
@@ -2302,6 +2866,10 @@ source("vignettes/bits_per_item_compute.R")
 
 # 1b. The polytomous section (three tables; checks are the "P" block above)
 source("vignettes/bits_per_item_poly_compute.R")
+
+# 1c. The geodesic geometry and channel capacity section (checks are the
+#     "G" block above; the 2PL fits from step 1 are reused, nothing is refetched)
+source("vignettes/bits_per_item_geometry.R")
 
 # 2. Re-render this page
 quarto::quarto_render("vignettes/bits_per_item.qmd")
