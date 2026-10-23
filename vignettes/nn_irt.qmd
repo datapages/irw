@@ -1015,8 +1015,9 @@ for t in TABLES:
     tp = pd.read_csv(FITS / f"{t}_torch_preds.csv.gz")
     base = tp["2PL"].values
     for name in models:
-        cost = (vanilla_imv(base, tp[f"{name} (constr.)"].values, y)
-                - vanilla_imv(base, tp[name].values, y))
+        # baseline is the SAME network fit with the prior, so no third model
+        # enters: a dot is what fixing the scale buys or costs that network.
+        cost = vanilla_imv(tp[name].values, tp[f"{name} (constr.)"].values, y)
         con_rows.append({"table": t, "short": SHORT[t], "group": GROUP_OF[t], "panel": name,
                          "x": int(nresp[SHORT[t]]), "y": round(float(cost), 4)})
 con = pd.DataFrame(con_rows)
@@ -1024,8 +1025,22 @@ notes = {m: f"mean {con[con.panel == m].y.mean():+.4f}" for m in models}
 display(HTML(facet_scatter_html(con.to_dict("records"), models, group_colour,
                                 div_id="con-facets", notes=notes,
                                 xlabel="median training responses per person",
-                                ylabel="IMV cost of fixing the scale")))
+                                ylabel="IMV over the same network fit with the prior")))
+
+# how strongly the cost depends on test length, per panel -- quoted in the text
+# below, so computed here rather than typed in
+w = con.pivot(index="short", columns="panel", values="y")[models]
+ln = np.log(con.groupby("short").x.first()[w.index])
+print("corr(log median responses per person, cost):")
+print("  " + "   ".join(f"{m} {np.corrcoef(ln, w[m])[0, 1]:+.2f}" for m in models))
 ```
+
+The baseline here is not the 2PL. Each panel scores one network's constrained
+fit against **the same network fit with the prior**, so a dot at zero means
+fixing the scale changed nothing for that model on that table, and a dot below
+zero means it cost something. Nothing is compared across panels, which is why
+the Rasch panel can sit at zero while the MLP panels sit below it without that
+being a statement about Rasch versus an MLP.
 
 The Rasch panel is worth pausing on, because it first told us something false. With
 the Rasch model written the usual way --- $\theta_p + d_i$, no slope --- the
@@ -1046,12 +1061,12 @@ the five networks: the panel means run from zero for the Rasch model to
 $-0.003$ for the large MLP. In four of the five panels it is also concentrated
 where theory says it should be. The Rasch model, the 2PL, the MIRT and the small
 MLP all fan out below zero at the left, where people answer few items, and close
-toward the zero line at the right; the correlation between the cost and the log
-of median responses per person runs from +0.31 to +0.45 for those four, and the
-spread of the costs halves or better between the short tables and the long ones.
-The large MLP is the exception and worth noting as one: it pays about $-0.003$
-whatever the test length, with a correlation of +0.05. Whatever it is losing to
-the constraint is not the thing short tests cause. Standardising $\theta$ divides out the spread of estimates
+toward the zero line at the right; the correlations printed under the figure run
+from +0.30 to +0.45 for those four, and the spread of the costs halves or better
+between the short tables and the long ones. The large MLP is the exception and
+worth noting as one: it pays about $-0.003$ whatever the test length, and its
+correlation is the +0.05 at the end of that printed line. Whatever it is losing
+to the constraint is not the thing short tests cause. Standardising $\theta$ divides out the spread of estimates
 that are mostly noise on a short test, stretching poorly determined person
 parameters back to a spread of one instead of shrinking them toward zero. That is
 the incidental-parameter story again, seen from the other side. The constraint
