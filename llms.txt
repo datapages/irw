@@ -11,9 +11,19 @@ Home: https://itemresponsewarehouse.org
 R package: https://itemresponsewarehouse.github.io/Rpkg/
 Python package: https://github.com/itemresponsewarehouse/Python-pkg
 
-The IRW is a corpus of ~4,200 harmonized item-response tables — cognitive tests,
-personality inventories, RCT outcome measures, psycholinguistic tasks — all
-reshaped to one schema so the same code runs across all of them.
+<!-- asof:start -->
+AS OF: 2026-10-24 · irw_meta v49.0
+Every count in this file is generated from the published catalog at that date by
+landing/agent_guide_stamp.R. If you are reading a copy older than a few weeks,
+the numbers have grown; the structure has not.
+<!-- asof:end -->
+
+The IRW is a corpus of <!-- counts:core -->6,720<!-- /counts:core --> harmonized
+item-response tables in its core family — cognitive tests, personality
+inventories, RCT outcome measures, psycholinguistic tasks — all reshaped to one
+schema so the same code runs across all of them, and
+<!-- counts:all -->8,596<!-- /counts:all --> response tables in all across the
+six families below.
 
 --------------------------------------------------------------------------
 ## 0. START HERE — a real analysis with no account and no download
@@ -84,18 +94,27 @@ RESERVED optional columns (exact names — do not invent variants):
   timepoint     alternative occasion marker
   treat         1 = treatment, 0 = control
   rater         external observer, distinct from id
-  item_family   testlet / clone grouping (only ~2 tables have it)
+  item_family   testlet / clone grouping (<!-- counts:item_family -->20<!-- /counts:item_family --> tables have it)
   qmatrix1..N   Q-matrix attributes for cognitive diagnostic models
   cov_*         person-level covariates (constant within id)
   itemcov_*     item-level covariates (constant within item)
   trial_*       trial-level details (trial_number, trial_block); `item` still
                 identifies the probe -- it is always authoritative
 
-Tables come in five DATA FAMILIES, one Redivis dataset each, chosen with the
-`source` argument: core ("core", the default, all of the above), nominal
-("nom"), competitions ("comp"), simulated/synthetic ("sim", core schema, no
-real respondents) and conjoint ("conj"). Three families are NOT id/item/resp.
-Do not apply the above to them:
+Tables come in SIX DATA FAMILIES, each its own Redivis dataset or shard list,
+chosen with the `source` argument. The counts are generated; the list is not,
+and a family missing from it stops the site build.
+
+<!-- families:start -->
+  core    6,720  (default)   id/item/resp, everything above
+  conj    1,157  source="conj"
+  rank      452  source="rank"
+  nom       140  source="nom"
+  comp      110  source="comp"
+  sim        17  source="sim"
+<!-- families:end -->
+
+FOUR families are NOT plain id/item/resp. Do not apply the above to them:
   - Competitions (`source="comp"`): agent_a, agent_b, score_a, score_b, winner,
     homefield, date. Contests and paired comparisons of fixed things, e.g.
     `collegefb_2021and2022`.
@@ -108,6 +127,16 @@ Do not apply the above to them:
     restrictions) are in `irw_metadata(source = "conj")`.
     e.g. `kreps_2020_covid_vaccine`. Standard:
     https://itemresponsewarehouse.org/conjoint_standard.html
+  - Rankings (`source="rank"`): id/item/resp is KEPT, and `resp` is a POSITION
+    as recorded, not a score. Skipped positions are gaps and a candidate marked
+    twice is two rows, so do not model `resp` as an ordered response without
+    deciding what to do about both. `irw_rank_compress(df)` renumbers positions
+    and drops repeated marks. Ranked-choice ballots, jury rankings and survey
+    ranking questions. Standard:
+    https://itemresponsewarehouse.org/rankings_standard.html
+
+Simulated/synthetic (`source="sim"`) keeps the core schema and has no real
+respondents, so it is the one family defined by provenance rather than shape.
 
 Item text lives in a separate dataset: `irw_itemtext(table)`,
 `irw_list_itemtext_tables()`. IMPORTANT: item-text licensing is separate from
@@ -239,7 +268,8 @@ For a known-multidimensional vs known-unidimensional contrast, the site pairs
 --------------------------------------------------------------------------
 
     irw_filter(...)             by metadata and tags; returns table NAMES
-    irw_metadata()              the full metadata frame (~4,200 rows — see §7)
+    irw_metadata()              the full metadata frame
+                                (<!-- counts:core -->6,720<!-- /counts:core --> rows — see §7)
     irw_info("table")           one table's summary
     irw_tags(tables)            qualitative tags
     irw_tag_options(col)        allowed values for a tag column
@@ -296,7 +326,8 @@ Caveats on selection metadata, all real:
     verified. Read it as "the ones we know of".
 
 Do not treat any of these as ground truth about a construct. They are a way to
-narrow 4,200 tables to a workable candidate set, which you then check.
+narrow <!-- counts:core -->6,720<!-- /counts:core --> tables to a workable
+candidate set, which you then check.
 
 --------------------------------------------------------------------------
 ## 6. Fitting models — thresholds and costs that hold up
@@ -412,30 +443,39 @@ tell the researcher which one you think it is.
     import irw
     irw.list_tables(); irw.filter(var="rt"); df = irw.fetch("4thgrade_math_sirt")
 
-R is the fuller surface. In Python there is no `metadata()`, no `tags()`, and no
-version pinning — `version()` reports what the corpus is at, but cannot pin an
-analysis to it, so anything that must be reproducible by version number should
-be written in R. Also note `source="main"` in Python where R uses
-`source="core"`, and no `irw_` prefix on function names.
+<!-- pypkg:start -->
+This section describes PyPI `irw` 0.7.7, read from the released wheel.
+<!-- pypkg:end -->
 
-The concepts in sections 1-3 and 6-8 apply in both languages, but several of
-the remedies named there are R-only. In Python:
+**Python is not the thin surface this file used to describe.** Every remedy in
+sections 1-3 and 6-8 has a Python form, including the four that were listed here
+as missing. Differences that are real:
 
-  - The nominal schema in §1 is not reachable at all: Python's `source` accepts
-    "main", "sim" and "comp" but not "nom", and `long2resp()` has no `resp_col`
-    argument to reshape `text` in place of `resp`. Use R for those tables.
-  - There is no `covariates()`, so the aligned covariate reattachment in
-    pitfall 2 of §2 has no Python equivalent. Merge on `id` against the wide
-    frame's index yourself — never positionally, which is the exact error that
-    pitfall warns about.
-  - There is no `table_sets()`, so the quota-free route in §3 does not exist:
-    in Python the `n_responses=[0, 1e6]` guard is the only protection, and
-    finding out what items or response values a large table holds means
-    downloading it.
-  - There is no `check_resp()` for a pre-fit sanity check on response values.
+  - **No `tags()`.** Get the tag columns from `metadata()`, which carries them,
+    or use `filter()`'s tag arguments.
+  - **No `predict()`** and no `simu_diff()`.
+  - **`source="main"` in Python where R says `source="core"`.** Python's
+    `source` accepts "main", "nom", "sim", "comp", "conj" and "rank" — all six
+    families, nominal included.
+  - **No `irw_` prefix** on function names: `irw.fetch()`, not `irw.irw_fetch()`.
+  - R's error and type handling is not Python's. `filter(n_responses="abc")`
+    raises `InvalidFilterValue` in Python and reports "0 tables matched" in R;
+    `info()` on a missing table raises in R and returns `{}` in Python; a wide
+    frame's columns come back in numeric order in R and lexicographic order in
+    Python.
 
-Also R-only: `merge()`, `recode()`, `decode()`, `imv()`, `predict()`,
-`resp2long()`, `simdata()` and `simu_diff()`.
+So, in Python: `metadata()`, `use_version()` / `set_version()` /
+`reset_version()` (version pinning works, and pins the whole corpus the way R
+does), `covariates()`, `covariate_labels()`, `table_sets()`, `check_resp()`,
+`long2resp(df, resp_col="text")` for nominal tables, `resp2long()`, `merge()`,
+`recode()`, `decode()`, `imv()`, `simdata()`, `conj_long()`, `rank_compress()`,
+`itemtext()`, `itemtext_licence()`, `collections()`, `save_bibtex()` and
+`validate()` all exist.
+
+Why this section was wrong for so long: it was written by hand against an early
+release and never checked against a published one. Nine claims, eight of them
+false by 0.7.7 — `irw_meta`'s own numbers go stale by growing, but a capability
+list goes stale by inverting.
 
 --------------------------------------------------------------------------
 ## 10. Citing
