@@ -245,6 +245,18 @@ datasets_tagged <- metadata |> inner_join(tags) |> inner_join(urls) |> inner_joi
 
 ojs_define(datasets_tagged = datasets_tagged)
 ojs_define(datasets_all = datasets_all)
+
+# The PRE-filter denominator, so the explorer can name what it is not showing.
+#
+# Both frames above are already filtered: `datasets_all` drops anything without
+# a bibliography row or quantitative descriptors, and `datasets_tagged` drops
+# untagged tables on top of that. The explorer then reported "out of N total"
+# using whichever frame was active, so with the default toggle on it said
+# 6,473 where the corpus is 6,720 -- the 247 it had removed were invisible at
+# the moment of selection, which is the moment a user decides their sample is
+# complete. Caveat pages do not help here; the number has to be where the
+# choice is made.
+ojs_define(n_corpus = nrow(metadata_table))
 ojs_define(tags = tag_vals)
 ojs_define(vars = var_vals)
 ojs_define(color_vars = color_vars)
