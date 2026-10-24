@@ -56,6 +56,56 @@ fmt <- function(n) format(n, big.mark = ",")
 searched_txt <- if (is.na(n_searched)) "the tables" else
   glue("the **{fmt(n_searched)} of {fmt(n_total)}** tables")
 n_part <- sum(reg$coverage == "tagged-subset-only")
+
+## Where the construct-name gap actually is, measured rather than asserted.
+##
+## This paragraph used to say the field is "much sparser in the newer
+## warehouses" and that tagged-subset collections "lean toward older tables".
+## By October 2026 that was wrong in DIRECTION, not just in degree: shard 8 is
+## 100% covered, shard 7 is 95.6% and shard 1 is 98.2%, while the thin ones are
+## shards 3 (25.6%), 4 (27.1%) and 6 (51.4%) -- the middle of the corpus, not
+## its new end. A directional claim about a moving quantity is the one kind of
+## caveat that cannot be left to hand maintenance, because when it inverts it
+## does not read as stale, it reads as information. So it is computed here, and
+## named by shard rather than by age.
+shard_gap <- tryCatch({
+  md <- irw_metadata()
+  tg <- irw_tags()
+  cn_col <- names(tg)[gsub("[^a-z]", "", tolower(names(tg))) == "constructname"][1]
+  stopifnot(!is.na(cn_col), all(c("table", "dataset") %in% names(md)))
+  tagged <- tolower(tg$table[!is.na(tg[[cn_col]]) &
+                             nzchar(trimws(tg[[cn_col]])) &
+                             toupper(trimws(tg[[cn_col]])) != "NA"])
+  cov <- md |>
+    mutate(has = tolower(table) %in% tagged) |>
+    group_by(dataset) |>
+    summarise(n = n(), pct = 100 * mean(has), .groups = "drop") |>
+    arrange(pct)
+  glue("Coverage runs from **{round(cov$pct[1])}%** in `{cov$dataset[1]}` to ",
+       "**{round(cov$pct[nrow(cov)])}%** in `{cov$dataset[nrow(cov)]}`, and it ",
+       "does not track a warehouse's age --- the newest shards are among the ",
+       "best covered. ")
+}, error = function(e) "")
+
+## What the page was rendered against.
+##
+## The registry is read live, but the SITE is republished only when its own
+## repository moves (datapages/irw#205), and a new irw_meta release changes what
+## this page would say without changing anything here. So the published page can
+## disagree with the published registry -- on 2026-10-24 it showed rct 259,
+## clustered 147 and response_time 172 against a registry at 272, 157 and 178,
+## which reads as a contradiction and is in fact an age. A page that names the
+## release it read is a page whose staleness is legible instead of looking like
+## an error. Reported daily by ben-domingue/irw's drift-report.yml, which is the
+## thing that notices; this line is what a reader notices.
+rendered_against <- tryCatch({
+  v <- irw_version()
+  glue("Rendered against **IRW v{attr(v, 'irw_version')}** on ",
+       "{format(Sys.Date(), '%e %B %Y')}. ",
+       "The site is republished when its own source changes, so a newer IRW ",
+       "release can leave these counts behind for a few days; ",
+       "`irw_collections()` always reads the current one.")
+}, error = function(e) "")
 cat(glue(
   '::: {{.callout-warning appearance="simple"}}\n',
   '## Please check a collection before relying on it\n\n',
@@ -71,12 +121,14 @@ cat(glue(
   '`irw_collection_members()` --- so you can inspect a collection and form your own view; ',
   'please do so before using one as the sample for an analysis.\n\n',
   '**Coverage is also uneven.** Collections built from the tag annotations searched only ',
-  '{searched_txt} whose tags include a construct name, and that field is much sparser in ',
-  'the newer warehouses. {n_part} of the ',
+  '{searched_txt} whose tags include a construct name, and that field is unevenly ',
+  'filled across the warehouses. {n_part} of the ',
   '{nrow(reg)} collections below are marked `tagged-subset-only` for that reason: they are ',
-  'useful starting points, but they are not exhaustive, and they lean toward older tables. ',
+  'useful starting points, but they are not exhaustive. ',
+  '{shard_gap}',
   'Treat them as "the ones we know of", not "all of them". The rest searched every ',
   'documented table.\n\n',
+  '{rendered_against}\n\n',
   'Corrections are welcome --- open an issue on ',
   '[ben-domingue/irw](https://github.com/ben-domingue/irw/issues).\n',
   ':::\n\n'
