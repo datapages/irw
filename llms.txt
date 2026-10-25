@@ -151,8 +151,9 @@ If you remember nothing else, remember these. Each one runs without error and
 gives you numbers that are wrong.
 
 **(1) `irw_filter()` is already filtering before you ask it to.**
-Its default is `density = c(0.5, 1)`, so sparse matrices are silently excluded.
-It also drops NAs on any argument you name. If you mean "everything", say so:
+Its default is `density = c(0.5, Inf)`, so sparse matrices are silently
+excluded. It also drops NAs on any argument you name. If you mean "everything",
+say so:
 
     irw_filter(n_categories = 2, density = NULL)
 
@@ -307,6 +308,14 @@ n_items, n_categories, responses_per_participant, responses_per_item, density.
 Use these to NARROW a candidate set — then verify on the actual matrix. In
 particular `n_categories` here is metadata and can disagree with what you fit;
 see §2(3).
+
+`density` is RESPONSES PER PERSON-ITEM CELL — n_responses / (n_participants *
+n_items) — not the proportion of cells that are filled, and NOT bounded by 1.
+768 of the core tables are above 1 because they measure a person-item pair more
+than once; 700 of those carry an occasion column (wave, rater, trial_*,
+session, ...) and the largest is 3,624.6, a go/no-go task. Do not treat
+density > 1 as a data defect, and do not read density as a completeness score:
+the proportion of distinct cells filled is a quantity IRW does not publish.
 
 Tag arguments: age_range, child_age__for_child_focused_studies_, construct_type,
 construct_name, sample, measurement_tool, item_format, primary_language_s_.
