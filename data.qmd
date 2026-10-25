@@ -43,6 +43,11 @@ import {yamultiselect} from '@saneef/yet-another-multi-select'
 md_tagged = transpose(datasets_tagged)
 md_notags = transpose(datasets_all)
 md = use_qual_filters ? md_tagged : md_notags
+// ojs_define() wraps a scalar from R in a length-1 array on some Quarto
+// versions and passes it through on others, so unwrap defensively: the
+// denominator being quietly NaN is exactly the failure this line exists to
+// prevent.
+n_all = Array.isArray(n_corpus) ? +n_corpus[0] : +n_corpus
 ```
 
 {{< include components/_style.qmd >}}
@@ -347,9 +352,13 @@ Plot.plot({
 
 ::: {.table-container}
 ```{ojs result-message}
-html`<i>Filtered to ${ds.length} datasets out of ${md.length} total. ${use_qual_filters
-  ? "Datasets with incomplete metadata (tags, bibliography, or quantitative descriptors) are excluded from this table."
-  : "Qualitative filtering is disabled, so datasets missing qualitative tags are included; datasets with incomplete bibliography or quantitative descriptors are still excluded."}</i>`
+html`<i>Filtered to <b>${ds.length.toLocaleString("en")}</b> datasets.${
+  Number.isFinite(n_all) && md.length < n_all
+    ? html` This tool can show ${md.length.toLocaleString("en")} of the <b>${n_all.toLocaleString("en")}</b> tables in the corpus; the ${(n_all - md.length).toLocaleString("en")} it cannot show ${use_qual_filters
+        ? "are missing tags, a bibliography entry, or quantitative descriptors \u2014 turn off qualitative filtering below to include the untagged ones"
+        : "are missing a bibliography entry or quantitative descriptors"}.`
+    : html` ${md.length.toLocaleString("en")} datasets are available to filter.`
+}</i>`
 ```
 
 ```{ojs table-funs}

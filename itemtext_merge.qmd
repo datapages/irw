@@ -9,17 +9,93 @@ title: "Merging item text and IRW response data"
 
 This dataset is designed to be interoperable with the core IRW item response data. Specifically, the `table` identifier should allow for merging across these two data resources. Researchers can link these item text records to response-level data using the `item` field, which serves as a shared, persistent identifier across both datasets.
 
-To incorporate response option text, the `resp` field in this dataset provides a mapping between response codes (consistent with `resp` in the response-level data) and their corresponding option_text. This allows users to reconstruct full item presentations or analyze response behavior with access to the literal item wording. Below is an example of how the data can be merged (so that each row contains information about a single response, including information about the probe used to solicit information from the respondent).
+To incorporate response option text, the `resp` field in this dataset provides a mapping between response codes and their corresponding `option_text`. This allows users to reconstruct full item presentations or analyze response behavior with access to the literal item wording.
+
+## Two joins, not one
+
+Item text is **two tables stacked in one**, and they have different keys:
+
+- **item wording** — `instrument`, `instructions`, `section_prompt`, `item_text` — is one
+  record per `item`;
+- **option wording** — `option_text` — is one record per `item` **and response code**.
+
+So a single join cannot be right for both, and the key for the second one is the response
+**as the source recorded it**: `resp_raw` where the table has that column, and `resp` only
+where it does not. `resp` in the response data is the analysis value — scored, recoded or
+reversed — and matching it against an option code gives a wrong answer rather than no answer.
+
+The join must also be a **left join on the response data**. Every response is a fact about a
+respondent; item text is an annotation that may be missing, partial or ambiguous. A join that
+can drop a response has changed the data, not described it.
+
+::: {.callout-important}
+## Do not use `merge(items, df)`
+
+R's `merge()` with no `by=` joins on *every* column the two frames share, which here is
+`item` **and** `resp`. On `gilbert_meta_40` that keeps 132,157 of 207,858 responses — **36.4%
+of the data disappears**, silently, with no warning and no error. Where an item has several
+option rows it goes the other way and multiplies each response once per option, attaching a
+distractor the respondent may never have chosen.
+
+The Python equivalent, `pd.merge(items, df, on=["table", "item"])`, fails differently: the
+response data has no `table` column at all, so it raises `KeyError`, and joining on `item`
+alone multiplies every response by the number of options for its item.
+
+Both of these were on this page until 2026-10-24.
+:::
+
+## A join that preserves every response
+
+The helper below does the two joins in order, asserts that neither changed the row count, and
+reports what did not match instead of hiding it.
 
 ::: panel-tabset
 ## R
 
 ```{r}
 #| echo: true
-items<-irw::irw_itemtext("gilbert_meta_49")
-df<-irw::irw_fetch("gilbert_meta_49")
-df<-merge(items,df)
-head(df)
+irw_join_itemtext <- function(df, items) {
+  n0 <- nrow(df)
+
+  ## 1. Item wording: one record per item.
+  wording_cols <- intersect(c("item", "instrument", "instructions",
+                              "section_prompt", "item_text"), names(items))
+  wording <- unique(items[, wording_cols])
+  stopifnot(!anyDuplicated(wording$item))          # ambiguous wording: stop
+  out <- merge(df, wording, by = "item", all.x = TRUE)
+
+  ## 2. Option wording: one record per item and response CODE. The code is the
+  ##    response as recorded, so prefer resp_raw where the table has it.
+  code <- if ("resp_raw" %in% names(df)) "resp_raw" else "resp"
+  ## `resp` in the item text can be a character column holding the literal
+  ## string "NA" for an item whose options were never coded.
+  mapped <- !is.na(items$resp) & trimws(as.character(items$resp)) != "NA"
+  if (any(mapped)) {
+    opts <- unique(items[mapped, c("item", "resp", "option_text")])
+    stopifnot(!anyDuplicated(opts[, c("item", "resp")]))   # ambiguous options: stop
+    names(opts)[names(opts) == "resp"] <- ".code"
+    opts$.code <- as.character(opts$.code)
+    out$.code <- as.character(out[[code]])
+    out <- merge(out, opts, by = c("item", ".code"), all.x = TRUE)
+    out$.code <- NULL
+  } else {
+    out$option_text <- NA_character_
+    message("This table's item text carries no response codes, so option ",
+            "wording cannot be joined. Item wording is joined as normal.")
+  }
+
+  stopifnot(nrow(out) == n0)                       # a left join cannot change n
+  out
+}
+
+items <- irw::irw_itemtext("gilbert_meta_49")
+df    <- irw::irw_fetch("gilbert_meta_49")
+joined <- irw_join_itemtext(df, items)
+
+c(responses = nrow(df),
+  joined = nrow(joined),
+  no_item_wording = sum(is.na(joined$item_text)),
+  no_option_wording = sum(is.na(joined$option_text)))
 ```
 
 ## Python
@@ -29,18 +105,65 @@ head(df)
 #| echo: true
 #| python.reticulate: false
 import irw
-import pandas as pd
+
+
+def join_itemtext(df, items):
+    n0 = len(df)
+
+    # 1. Item wording: one record per item.
+    wording_cols = [c for c in ["item", "instrument", "instructions",
+                                "section_prompt", "item_text"] if c in items.columns]
+    wording = items[wording_cols].drop_duplicates()
+    # validate= is the guard: pandas raises if the right side has duplicate keys.
+    out = df.merge(wording, on="item", how="left", validate="many_to_one")
+
+    # 2. Option wording: one record per item and response CODE, which is the
+    #    response as recorded -- resp_raw where the table has it.
+    code = "resp_raw" if "resp_raw" in df.columns else "resp"
+    resp = items["resp"].astype("string").str.strip()
+    mapped = resp.notna() & (resp != "NA")
+    if mapped.any():
+        opts = (items.loc[mapped, ["item", "resp", "option_text"]]
+                .drop_duplicates()
+                .assign(_code=lambda d: d["resp"].astype(str))
+                .drop(columns="resp"))
+        out = (out.assign(_code=out[code].astype(str))
+               .merge(opts, on=["item", "_code"], how="left", validate="many_to_one")
+               .drop(columns="_code"))
+    else:
+        out["option_text"] = None
+        print("This table's item text carries no response codes, so option "
+              "wording cannot be joined. Item wording is joined as normal.")
+
+    assert len(out) == n0, "a left join cannot change the row count"
+    return out
+
 
 items = irw.itemtext("gilbert_meta_49")
 df = irw.fetch("gilbert_meta_49")
-merged = pd.merge(items, df, on=["table", "item"])
-print(merged.head())
+joined = join_itemtext(df, items)
+
+print(len(df), len(joined),
+      joined["item_text"].isna().sum(),
+      joined["option_text"].isna().sum())
 ```
 :::
+
+### What the counts are for
+
+On `gilbert_meta_49` every response matches, so all four numbers behave as you would hope.
+`gilbert_meta_40` is the instructive case: all 207,858 responses survive, and **75,701 of them
+have no item wording** — the same 36.4% that `merge(items, df)` used to delete. The gap is in
+the item text, not in your join, and seeing it is the point. `itemtext_issues.html` records
+what is known about each table's text.
+
+The two `stopifnot()` / `validate=` guards stop rather than guess. A duplicated `item` in the
+wording, or a duplicated `item` + code in the options, means the mapping is ambiguous, and
+there is no join that resolves an ambiguous mapping correctly — fanning the responses out over
+both candidates is the failure this page used to demonstrate.
 
 Merging these datasets allows for a more complete view of the data, including:
 
 - The full wording of each item and response option
 - Analysis of how item phrasing may influence responses
 - Richer visualizations and content-based filtering
-
