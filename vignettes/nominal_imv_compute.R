@@ -13,29 +13,46 @@
 # judged on the same thing the 2PL predicts: they only get to use the extra
 # information, which wrong answer was chosen, on the training cells.
 #
-# A second, multinomial IMV judges the models on the option chosen. A 2PL has no
-# opinion about the wrong options, so it enters as "2PL + shares": P(key) from
-# the 2PL, with the rest split among the wrong options in the proportions they
-# were chosen on that item's training cells. The binary IMV's weighted coin
-# becomes a weighted K-sided die (see imv_cat() below). A third IMV looks only at
-# the held-out wrong answers and asks which one was chosen; there the baseline
-# is the shares alone, so it measures what theta says about the choice of
-# distractor.
+# A second IMV judges the models on the option chosen: omega_c, the polytomous
+# IMV of Kanopka (2023, ch. 3), built from binary IMVs over pairs of options (see
+# section 4). A 2PL has no opinion about the wrong options, so it enters as
+# "2PL + shares": P(key) from the 2PL, with the rest split among the wrong
+# options in the proportions they were chosen on that item's training cells. A
+# third IMV looks only at the held-out wrong answers and asks which one was
+# chosen: omega_c over the pairs of wrong options. There the baseline is the
+# shares alone, so it measures what theta says about the choice of distractor.
 #
 # Uncertainty: every table is fitted on N_DRAWS independent draws of up to
 # SUBSAMPLE_N respondents, each with its own split into folds. The IMVs are
 # averaged over draws and their standard errors come from the draw-to-draw
 # spread, which covers both which respondents were sampled and how their cells
-# were split. With N_DRAWS = 1 the first draw is exactly the single draw the
-# script used to make.
+# were split.
 #
 # Output: vignettes/nominal_imv_data/nominal_imv_results.rds (all tables) and
 # vignettes/nominal_imv_data/references.bib. Per-table results go to
 # vignettes/nominal_imv_data/fits/<table>_draws<N_DRAWS>.rds (gitignored resume
-# cache; a table with a file there is skipped). Subsampled inputs and held-out
-# predictions are cached in ~/.cache/irw_nominal_imv (not committed).
+# cache; a table with a file there is skipped, so delete fits/ after changing
+# this script). Subsampled inputs and held-out predictions are cached in
+# ~/.cache/irw_nominal_imv (not committed; delete it to fetch newer IRW data),
+# and irw keeps its own copy of each downloaded table (see irw_cache_info()).
 #
-# Usage: Rscript vignettes/nominal_imv_compute.R   # from project root
+# Usage, from the project root:
+#   export REDIVIS_API_TOKEN=...   # read scope, for irw_fetch() and
+#                                  # irw_save_bibtex(); without it, redivis opens
+#                                  # a browser to log in and waits up to 10 min
+#   N_DRAWS=10 WORKERS=4 Rscript vignettes/nominal_imv_compute.R
+# Packages: irw, mirt, imv, furrr, data.table, dplyr, tibble.
+# Environment variables, all optional:
+#   N_DRAWS  draws per table (default 10)
+#   WORKERS  tables fitted in parallel (default min(4, cores / 2)); does not
+#            change the results
+#   TABLES   comma-separated subset of cands, to check the pipeline. Each
+#            table's draws and folds depend on its position in the list and on
+#            the tables fetched before it, so its numbers differ from a full
+#            run's, and it overwrites the committed .rds and .bib.
+# Time: about 40 minutes for the full run with WORKERS = 7 on an 18-core Mac,
+# and about two minutes for TABLES=psychtools_ability_nom,vocabulary_iq_nom
+# N_DRAWS=2 WORKERS=2. Fetching holds one ENEM table (about 3 GB) in memory.
 
 library(irw)
 library(mirt)
@@ -66,7 +83,7 @@ N_FOLDS     <- 5
 RARE        <- 0.01   # a wrong option chosen by fewer than 1% is pooled
 MIN_ITEMS   <- 10
 DENSE_ITEMS <- 40     # sparse tables: the most-answered items kept (see fetch_one)
-WORKERS     <- min(4, parallel::detectCores() %/% 2)
+WORKERS     <- as.integer(Sys.getenv("WORKERS", min(4, parallel::detectCores() %/% 2)))
 PILOT       <- FALSE  # TRUE: only PILOT_TABLES, to check the pipeline and page
 # Known answers: RMET is easy and its gain sits at the bottom of theta; ENEM
 # math is hard and its gain sits at the top (near-random guessing at the bottom).
@@ -130,6 +147,10 @@ fetch_one <- function(tn) {
   n <- data.table::as.data.table(n)[!is.na(text) & !is.na(resp), .(id, item, resp, text)]
   # Repeated attempts (EdNet, the adaptive practice systems): keep one per cell.
   n <- unique(n, by = c("id", "item"))
+  # irw_fetch() does not return rows in a fixed order, and the draws and folds
+  # below follow row order: without sorting, two downloads of the same table give
+  # different draws from the same seed.
+  data.table::setorder(n, id, item)
   n_full <- data.table::uniqueN(n$id)
   # Sparse designs, where the typical respondent sees under half the items
   # (EdNet, Anatom, CIFAR-10H), would lose everyone to prep()'s half-the-items
@@ -150,10 +171,9 @@ fetch_one <- function(tn) {
       return(invisible(NULL))
     }
   }
-  # N_DRAWS independent draws of up to SUBSAMPLE_N respondents. With N_DRAWS = 1
-  # this is the single draw the script used to take. A table with no more than
-  # SUBSAMPLE_N respondents gives the same people in every draw, so its draws
-  # differ only in the split into folds.
+  # N_DRAWS independent draws of up to SUBSAMPLE_N respondents. A table with no
+  # more than SUBSAMPLE_N respondents gives the same people in every draw, so its
+  # draws differ only in the split into folds.
   ids <- unique(n$id)
   draws <- lapply(seq_len(N_DRAWS), function(d) {
     as.data.frame(if (length(ids) > SUBSAMPLE_N) n[id %in% sample(ids, SUBSAMPLE_N)] else n)
@@ -227,66 +247,149 @@ prep <- function(n) {
 }
 
 # ------------------------------------------------------------------------------
-# 4. The multinomial IMV. The binary IMV turns a model's mean log-likelihood on
-#    the held-out cells into a weighted coin: the w whose entropy,
-#    -(w log w + (1 - w) log(1 - w)), matches it. Here the coin becomes a
-#    K-sided die that lands on the observed option with probability w and on
-#    each other side with (1 - w) / (K - 1). K varies by item, so w solves
-#        mean_i[ w log w + (1 - w) log((1 - w) / (K_i - 1)) ] = mean_i log p_i,
-#    where p_i is the probability the model gave the option chosen in cell i.
-#    The IMV is then (w1 - w0) / w0, as before. With K = 2 everywhere this is
-#    imv.binary(). p0 and p1 are the two models' probabilities of the observed
-#    option; sigma clips them as imv.binary() does. The left side is convex in w
-#    and smallest somewhere between 1/max(K) and 1/min(K) (the fair die when K is
-#    constant); w is the root above that minimum, and a model no better than the
-#    minimum gets the minimum. Kanopka (2023, ch. 3) extends the IMV to
-#    polytomous outcomes differently, through threshold (omega_t) and pairwise
-#    (omega_c) binary IMVs that stay on the dichotomous scale; see the .qmd for
-#    why this page uses the die instead.
+# 4. The polytomous IMV, omega_c (Kanopka, 2023, ch. 3). For each pair of options
+#    on an item, it takes the held-out cells where one of the two was chosen and
+#    computes a binary IMV for which of the two it was, from each model's
+#    probabilities of the two options rescaled to sum to one. Within an option,
+#    its pairwise IMVs are averaged weighting by how many cells each pair has;
+#    the options are then averaged weighting by how often each was chosen on the
+#    item's training cells. Every piece is a binary IMV, so omega_c stays on the
+#    binary IMV's scale whatever the number of options. It is computed per item
+#    on all the held-out cells of a draw (the five folds together, as for the
+#    binary IMV above) and averaged over items. ben-domingue/imvpolly computes it
+#    fold by fold and averages the folds; that version is kept as a check
+#    (omega_foldwise), and by_fold holds the per-fold values.
+#
+#    irtimv_imv() and irtimv_imv_c() are imv() and imv_c() from
+#    ben-domingue/irtimv (irtimv-helper/R/00_funs.R), unchanged except for their
+#    names (the imv package already exports an imv()) and one line in
+#    irtimv_imv_c() that skips a pair of options with no cells, which cannot be
+#    scored: on some items and thirds of theta two rare options are both absent.
 # ------------------------------------------------------------------------------
 
-imv_cat <- function(p0, p1, K, sigma = 1e-4) {
-  die <- function(p) {
-    ll <- mean(log(pmin(pmax(p, sigma), 1 - sigma)))
-    f <- function(w) mean(w * log(w) + (1 - w) * log((1 - w) / (K - 1))) - ll
-    lo <- if (min(K) == max(K)) 1 / K[1] else
-      optimize(f, c(1 / max(K), 1 / min(K)), tol = 1e-12)$minimum
-    if (f(lo) >= 0) return(lo)
-    uniroot(f, c(lo, 1 - 1e-12), tol = 1e-12)$root
+irtimv_imv<-function(pr,p1,p2,eps=1e-6) {
+    pr$pv1<-pr[[p1]]
+    pr$pv2<-pr[[p2]]
+    pr$pv1<-ifelse(pr$pv1 < eps,eps,pr$pv1)
+    pr$pv2<-ifelse(pr$pv2 < eps,eps,pr$pv2)
+    pr$pv1<-ifelse(pr$pv1 > 1-eps,1-eps,pr$pv1)
+    pr$pv2<-ifelse(pr$pv2 > 1-eps,1-eps,pr$pv2)
+    ##
+    ll<-function(x,p='pv') {
+        z<-log(x[[p]])*x$resp+log(1-x[[p]])*(1-x$resp)
+        z<-sum(z)/nrow(x)
+        exp(z)
+    }
+    loglik1<-ll(pr,'pv1')
+    loglik2<-ll(pr,'pv2')
+    getcoins<-function(a) {
+        f<-function(p,a) abs(p*log(p)+(1-p)*log(1-p)-log(a))
+        nlminb(.5,f,lower=0.001,upper=.999,a=a)$par
+    }
+    c1<-getcoins(loglik1)
+    c2<-getcoins(loglik2)
+    ew<-function(p1,p0) (p1-p0)/p0
+    imv<-ew(c2,c1)
+    imv
+}
+
+irtimv_imv_c<-function(y,pctt.tab,p1,p2) {
+    nn<-length(pctt.tab)
+    om<-numeric()
+    iis<-0:(nn-1)
+    for (ii in iis) {
+        ns<-om.tmp<-numeric()
+        jjs<-iis[-match(ii,iis)]
+        for (jj in jjs) {
+            y2<-y[y$resp %in% c(ii,jj),]
+            if (nrow(y2) == 0) next   # added: a pair with no cells cannot be scored
+            resp<-ifelse(y2$resp==ii,1,0)
+            ##irt p-values for being
+            p1.ii<-y2[[paste(p1,ii,sep='')]]
+            p1.jj<-y2[[paste(p1,jj,sep='')]]
+            p2.ii<-y2[[paste(p2,ii,sep='')]]
+            p2.jj<-y2[[paste(p2,jj,sep='')]]
+            ##
+            z<-data.frame(resp=resp,
+                          p1=p1.ii/(p1.ii+p1.jj),
+                          p2=p2.ii/(p2.ii+p2.jj)
+                          )
+            j0<-as.character(jj)
+            om.tmp[j0]<-irtimv_imv(z,p1="p1",p2="p2")
+            ns[as.character(jj)]<-nrow(z)
+        }
+        om[ii+1]<-sum(om.tmp*ns)/sum(ns)
+    }
+    sum(om*pctt.tab)/sum(pctt.tab)
+}
+
+# omega_c for one item. y: the option chosen (1..K) on a set of held-out cells;
+# P0, P1: the two models' probabilities of the K options on those cells; w: how
+# often each option was chosen on the item's training cells.
+omega_item <- function(y, P0, P1, w) {
+  d <- data.frame(resp = y - 1)
+  for (k in seq_along(w)) {
+    d[[paste0("a", k - 1)]] <- P0[, k]
+    d[[paste0("b", k - 1)]] <- P1[, k]
   }
-  w0 <- die(p0); w1 <- die(p1)
-  (w1 - w0) / w0
+  irtimv_imv_c(d, w, "a", "b")
+}
+
+# The six omega_c comparisons on a set of held-out cells: the option chosen
+# (cat_*), over all cells and options, and which wrong answer (wrong_*), over
+# the cells answered wrongly and the wrong options only. P holds each model's
+# probabilities of every option, one row per cell (NA beyond an item's options);
+# w and sh hold, per item, the training proportions of every option and of the
+# wrong options. In a pair of wrong options the 2PL + shares baseline gives
+# share_i / (share_i + share_j), which knows nothing about theta. Items are
+# averaged with equal weight for the option chosen, as in imvpolly, and weighted
+# by their wrong answers for which wrong answer, so that an easy item with a few
+# dozen wrong answers counts less than a hard one with hundreds. An item with no
+# held-out wrong answer drops out of the second.
+CAT_PAIRS <- list(cat_rasch_to_2pl = c("rasch", "twopl"), cat_twopl_to_nom = c("twopl", "nominal"),
+                  cat_twopl_to_nest = c("twopl", "nested"), cat_nest_to_nom = c("nested", "nominal"))
+WRONG_PAIRS <- list(wrong_shares_to_nom = c("twopl", "nominal"), wrong_shares_to_nest = c("twopl", "nested"))
+omegas <- function(cells, P, w, sh) {
+  by_item <- split(seq_len(nrow(cells)), cells$item)
+  one <- function(pairs, wrong_only) sapply(pairs, function(m) {
+    v <- n <- numeric(0)
+    for (j in names(by_item)) {
+      r <- by_item[[j]]; K <- cells$K[r[1]]
+      if (wrong_only) r <- r[cells$opt[r] != K]
+      if (!length(r)) next
+      k <- seq_len(if (wrong_only) K - 1 else K)
+      v <- c(v, omega_item(cells$opt[r], P[[m[1]]][r, k, drop = FALSE], P[[m[2]]][r, k, drop = FALSE],
+                           (if (wrong_only) sh else w)[[j]][k]))
+      n <- c(n, length(r))
+    }
+    if (wrong_only) sum(v * n) / sum(n) else mean(v)
+  })
+  c(one(CAT_PAIRS, FALSE), one(WRONG_PAIRS, TRUE))
 }
 
 # ------------------------------------------------------------------------------
 # 5. Cross-validated comparison for one table.
 # ------------------------------------------------------------------------------
 
-# The three IMVs for a set of held-out cells (see section 4 and the .qmd).
-imvs <- function(d) {
-  wr <- d[d$y == 0, ]
-  given_wrong <- function(m) wr[[paste0("obs_", m)]] / (1 - wr[[m]])
-  c(
-    # Binary: right/wrong on the held-out cells.
-    rasch_to_2pl   = imv.binary(d$y, d$rasch, d$twopl),
-    twopl_to_nom   = imv.binary(d$y, d$twopl, d$nominal),
-    twopl_to_nest  = imv.binary(d$y, d$twopl, d$nested),
-    nest_to_nom    = imv.binary(d$y, d$nested, d$nominal),
-    # Multinomial: the option chosen, K options per item.
-    cat_rasch_to_2pl  = imv_cat(d$obs_rasch, d$obs_twopl, d$K),
-    cat_twopl_to_nom  = imv_cat(d$obs_twopl, d$obs_nominal, d$K),
-    cat_twopl_to_nest = imv_cat(d$obs_twopl, d$obs_nested, d$K),
-    cat_nest_to_nom   = imv_cat(d$obs_nested, d$obs_nominal, d$K),
-    # Which wrong answer, among the held-out wrong answers (K - 1 options).
-    # The 2PL's given-wrong prediction is the shares alone.
-    wrong_shares_to_nom  = imv_cat(given_wrong("twopl"), given_wrong("nominal"), wr$K - 1),
-    wrong_shares_to_nest = imv_cat(given_wrong("twopl"), given_wrong("nested"), wr$K - 1)
-  )
+# The four binary IMVs for a set of held-out cells: right/wrong.
+imvs_binary <- function(d) c(
+  rasch_to_2pl   = imv.binary(d$y, d$rasch, d$twopl),
+  twopl_to_nom   = imv.binary(d$y, d$twopl, d$nominal),
+  twopl_to_nest  = imv.binary(d$y, d$twopl, d$nested),
+  nest_to_nom    = imv.binary(d$y, d$nested, d$nominal)
+)
+
+# Proportion of each option among an item's cells (all options, or the wrong
+# options only), from a person x item matrix of options.
+option_props <- function(m, ncat, wrong_only = FALSE) {
+  setNames(lapply(seq_len(ncol(m)), function(j) {
+    z <- m[, j]; z <- z[!is.na(z) & (!wrong_only | z != ncat[j])]
+    tabulate(z, ncat[j]) / length(z)
+  }), seq_len(ncol(m)))
 }
 
-# One draw: prep, five-fold cross-validation and the IMVs. This is the body the
-# script ran once per table before draws were added; it returns a reason string
-# when the draw cannot be fitted.
+# One draw: prep, five-fold cross-validation and the IMVs. It returns a reason
+# string when the draw cannot be fitted.
 fit_draw <- function(n, d) {
   P <- prep(n)
   if (is.character(P)) return(P)
@@ -313,14 +416,13 @@ fit_draw <- function(n, d) {
     y_opt <- opt[ho]
     # Wrong-option shares on this fold's training cells: how the 2PL and Rasch
     # spread their P(wrong) when they are asked about options.
-    shares <- lapply(seq_len(ncol(opt)), function(j) {
-      z <- opt_tr[, j]; z <- z[!is.na(z) & z != ncat[j]]
-      tabulate(z, ncat[j]) / length(z)
-    })
+    shares <- option_props(opt_tr, ncat, wrong_only = TRUE)
+    probs <- list()
     preds <- lapply(names(mods), function(m) {
       th <- fscores(mods[[m]], method = "EAP")[, 1]
       binary <- m %in% c("rasch", "twopl")
       p_key <- p_obs <- numeric(length(ho))
+      Pm <- matrix(NA_real_, length(ho), max(ncat))   # every option's probability, for omega_c
       for (j in unique(rc[, 2])) {
         w <- which(rc[, 2] == j)
         pr <- probtrace(extract.item(mods[[m]], j), matrix(th[rc[w, 1]]))
@@ -331,27 +433,45 @@ fit_draw <- function(n, d) {
         # The keyed option is always the last category of the option models.
         p_key[w] <- P[, ncat[j]]
         p_obs[w] <- P[cbind(seq_along(w), y_opt[w])]
+        Pm[w, seq_len(ncat[j])] <- P
       }
+      probs[[m]] <<- Pm
       setNames(data.frame(p_key, p_obs), paste0(c("", "obs_"), m))
     })
     th2 <- fscores(mods$twopl, method = "EAP")[, 1]
-    list(cells = data.frame(y = x01[ho], K = ncat[rc[, 2]], do.call(cbind, preds),
-                            theta_2pl = th2[rc[, 1]], fold = k), conv = conv)
+    cells <- data.frame(y = x01[ho], K = ncat[rc[, 2]], item = rc[, 2], opt = y_opt, do.call(cbind, preds),
+                        theta_2pl = th2[rc[, 1]], fold = k)
+    list(cells = cells, conv = conv, probs = probs,
+         # omega_c on this fold, weighted by this fold's training proportions.
+         omega = omegas(cells, probs, option_props(opt_tr, ncat), shares))
   })
   converged <- t(sapply(per_fold, `[[`, "conv"))
   cells <- do.call(rbind, lapply(per_fold, `[[`, "cells"))
+  probs <- setNames(lapply(names(per_fold[[1]]$probs), function(m)
+    do.call(rbind, lapply(per_fold, function(f) f$probs[[m]]))), names(per_fold[[1]]$probs))
   cuts <- quantile(cells$theta_2pl, c(0, 1/3, 2/3, 1))
   cells$tercile <- cut(cells$theta_2pl, cuts, include.lowest = TRUE, labels = c("low", "mid", "high"))
   cells$draw <- d
+  omega_folds <- do.call(rbind, lapply(per_fold, `[[`, "omega"))   # folds x comparisons
+  # omega_c on all of the draw's held-out cells, overall and within thirds of
+  # theta, weighted by the options' proportions over all of the draw's cells
+  # (each cell trains four of the five folds' models).
+  w_all <- option_props(opt, ncat); sh_all <- option_props(opt, ncat, wrong_only = TRUE)
+  by_tercile <- t(sapply(levels(cells$tercile), function(tc) {
+    r <- which(cells$tercile == tc)
+    c(imvs_binary(cells[r, ]), omegas(cells[r, ], lapply(probs, function(M) M[r, , drop = FALSE]), w_all, sh_all))
+  }))
   list(
     cells = cells, converged = converged,
+    probs = if (d == 1) probs,   # kept for the first draw only, to check omega_c
     n_persons = nrow(opt), n_items = ncol(opt), p_correct = mean(x01, na.rm = TRUE),
     n_options = table(ncat),
     n_items_dropped = P$n_items_dropped, n_persons_dropped = P$n_persons_dropped,
     n_cells_dropped = P$n_cells_dropped, n_cells_nonresponse = P$n_cells_nonresponse,
-    imv_all = imvs(cells),
-    by_fold = t(sapply(split(cells, cells$fold), imvs)),
-    by_tercile = t(sapply(split(cells, cells$tercile), imvs))
+    imv_all = c(imvs_binary(cells), omegas(cells, probs, w_all, sh_all)),
+    omega_foldwise = colMeans(omega_folds),   # imvpolly's way, as a check
+    by_fold = cbind(t(sapply(split(cells, cells$fold), imvs_binary)), omega_folds),
+    by_tercile = by_tercile
   )
 }
 
@@ -363,7 +483,9 @@ fit_one <- function(tn) {
     saveRDS(res, out_file); return(res)
   }
   f <- draws_file(cache_dir, tn)
-  if (!file.exists(f)) return(NULL)
+  # No draws means the fetch failed: list the table as skipped rather than drop it.
+  if (!file.exists(f)) return(list(table = tn, skipped = "fetch failed (see the run's messages)",
+                                   date_run = as.character(Sys.Date())))
   draws <- readRDS(f)
   t0 <- Sys.time()
 
@@ -382,7 +504,7 @@ fit_one <- function(tn) {
   }
   D <- length(per_draw)
   cells <- do.call(rbind, lapply(per_draw, `[[`, "cells"))
-  saveRDS(cells, draws_file(cells_dir, tn))
+  saveRDS(list(cells = cells, probs_draw1 = per_draw[[1]]$probs), draws_file(cells_dir, tn))
 
   # Means over draws, and standard errors from the draw-to-draw spread.
   se <- function(x) if (D > 1) sd(x) / sqrt(D) else NA_real_
@@ -401,6 +523,7 @@ fit_one <- function(tn) {
     n_cells_dropped = per("n_cells_dropped"), n_cells_nonresponse = per("n_cells_nonresponse"),
     dense_block = attr(draws, "dense_block"),
     converged = do.call(rbind, lapply(per_draw, `[[`, "converged")),      # (draws x folds) x models
+    omega_foldwise = do.call(rbind, lapply(per_draw, `[[`, "omega_foldwise")),  # draws x comparisons, imvpolly's way
     imv_all = colMeans(imv_draws), imv_se = apply(imv_draws, 2, se), imv_draws = imv_draws,
     imv_by_fold = do.call(rbind, lapply(per_draw, `[[`, "by_fold")),      # (draws x folds) x comparisons
     imv_by_tercile = apply(terc_draws, c(1, 2), mean),
@@ -414,6 +537,10 @@ fit_one <- function(tn) {
   res
 }
 
+# furrr derives each table's seed, and so its folds, from the session's RNG
+# state. fetch_one() moves that state only when it takes new draws, so without
+# this a run on cached draws would split the folds differently from a fresh run.
+set.seed(20260930)
 plan(multisession, workers = WORKERS)
 # scheduling = Inf hands out one table at a time, so the slow tables (the four
 # ENEM tests and the residency exams sit next to each other in cands) do not
@@ -437,7 +564,7 @@ saveRDS(list(
   candidate_tables = cands,
   n_all_candidates = length(all_cands),
   n_draws          = N_DRAWS,
-  pilot            = PILOT,
+  pilot            = PILOT || nzchar(Sys.getenv("TABLES")),   # a TABLES run is partial too
   date_run         = date_run,
   session          = sessionInfo()
 ), file.path(out_dir, "nominal_imv_results.rds"))
