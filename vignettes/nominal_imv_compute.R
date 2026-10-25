@@ -22,6 +22,12 @@
 # chosen: omega_c over the pairs of wrong options. There the baseline is the
 # shares alone, so it measures what theta says about the choice of distractor.
 #
+# The nominal model is fitted with a1 fixed at 1 and every category slope free
+# except the reference category's (see nominal_pars() below). This is the same
+# model as mirt's default parameterization, which on these data stops below the
+# maximum while reporting convergence; the first draw also fits the default, to
+# record by how much.
+#
 # Uncertainty: every table is fitted on N_DRAWS independent draws of up to
 # SUBSAMPLE_N respondents, each with its own split into folds. The IMVs are
 # averaged over draws and their standard errors come from the draw-to-draw
@@ -368,6 +374,30 @@ omegas <- function(cells, P, w, sh) {
 }
 
 # ------------------------------------------------------------------------------
+# 4b. The nominal model with a1 fixed at 1. mirt's default writes the slope of
+#     option k as a1 * ak, with ak fixed for the reference option (0) and for the
+#     last option (K - 1, the key here). Fixing a1 at 1 and freeing the last ak
+#     gives the same model without the product. On these data the default stops
+#     below the maximum while reporting convergence: the EM drifts into a valley
+#     with a1 near 0 and large ak and moves through it more slowly than mirt's
+#     tolerance. The parameterization here reaches the maximum.
+# ------------------------------------------------------------------------------
+
+nominal_pars <- function(opt_tr) {
+  pv <- mirt(opt_tr, 1, "nominal", pars = "values")
+  pv$value[pv$name == "a1"] <- 1
+  pv$est[pv$name == "a1"] <- FALSE
+  for (it in unique(pv$item[pv$item != "GROUP"])) {
+    ak <- which(pv$item == it & grepl("^ak\\d+$", pv$name))
+    # The last option mirt numbers on this item (the key). Looked up in mirt's
+    # own table, since an option missing from a fold's training cells shifts
+    # the numbering.
+    pv$est[ak[which.max(as.integer(sub("^ak", "", pv$name[ak])))]] <- TRUE
+  }
+  pv
+}
+
+# ------------------------------------------------------------------------------
 # 5. Cross-validated comparison for one table.
 # ------------------------------------------------------------------------------
 
@@ -408,10 +438,19 @@ fit_draw <- function(n, d) {
       twopl   = mirt(x_tr, 1, "2PL", verbose = FALSE),
       # The option models need more than mirt's default 500 EM cycles on the
       # long tests (the residency exams, ENEM math).
-      nominal = mirt(opt_tr, 1, "nominal", verbose = FALSE, technical = list(NCYCLES = 2000)),
+      nominal = mirt(opt_tr, 1, "nominal", pars = nominal_pars(opt_tr), verbose = FALSE,
+                     technical = list(NCYCLES = 2000)),
       nested  = mirt(opt_tr, 1, "2PLNRM", key = ncat, verbose = FALSE, technical = list(NCYCLES = 2000))
     )
     conv <- sapply(mods, function(m) extract.mirt(m, "converged"))
+    # First draw only: mirt's default nominal parameterization on the same
+    # cells, to record how far below the maximum it stops. Not used for any IMV.
+    nominal_check <- if (d == 1) {
+      def <- mirt(opt_tr, 1, "nominal", verbose = FALSE, technical = list(NCYCLES = 2000))
+      c(loglik_a1 = extract.mirt(mods$nominal, "logLik"), loglik_default = extract.mirt(def, "logLik"),
+        iter_a1 = extract.mirt(mods$nominal, "iterations"), iter_default = extract.mirt(def, "iterations"),
+        converged_default = extract.mirt(def, "converged"))
+    }
     rc <- arrayInd(ho, dim(opt))
     y_opt <- opt[ho]
     # Wrong-option shares on this fold's training cells: how the 2PL and Rasch
@@ -441,7 +480,7 @@ fit_draw <- function(n, d) {
     th2 <- fscores(mods$twopl, method = "EAP")[, 1]
     cells <- data.frame(y = x01[ho], K = ncat[rc[, 2]], item = rc[, 2], opt = y_opt, do.call(cbind, preds),
                         theta_2pl = th2[rc[, 1]], fold = k)
-    list(cells = cells, conv = conv, probs = probs,
+    list(cells = cells, conv = conv, probs = probs, nominal_check = nominal_check,
          # omega_c on this fold, weighted by this fold's training proportions.
          omega = omegas(cells, probs, option_props(opt_tr, ncat), shares))
   })
@@ -464,6 +503,7 @@ fit_draw <- function(n, d) {
   list(
     cells = cells, converged = converged,
     probs = if (d == 1) probs,   # kept for the first draw only, to check omega_c
+    nominal_check = if (d == 1) do.call(rbind, lapply(per_fold, `[[`, "nominal_check")),
     n_persons = nrow(opt), n_items = ncol(opt), p_correct = mean(x01, na.rm = TRUE),
     n_options = table(ncat),
     n_items_dropped = P$n_items_dropped, n_persons_dropped = P$n_persons_dropped,
@@ -523,6 +563,7 @@ fit_one <- function(tn) {
     n_cells_dropped = per("n_cells_dropped"), n_cells_nonresponse = per("n_cells_nonresponse"),
     dense_block = attr(draws, "dense_block"),
     converged = do.call(rbind, lapply(per_draw, `[[`, "converged")),      # (draws x folds) x models
+    nominal_check = per_draw[[1]]$nominal_check,                         # first draw: folds x (log-likelihoods, iterations)
     omega_foldwise = do.call(rbind, lapply(per_draw, `[[`, "omega_foldwise")),  # draws x comparisons, imvpolly's way
     imv_all = colMeans(imv_draws), imv_se = apply(imv_draws, 2, se), imv_draws = imv_draws,
     imv_by_fold = do.call(rbind, lapply(per_draw, `[[`, "by_fold")),      # (draws x folds) x comparisons

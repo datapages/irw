@@ -173,6 +173,10 @@ cost_txt  <- if (length(cost_parts) == 2) paste0(cost_parts[1], ", and ", cost_p
 top_share <- slice_max(summ, share, n = 1)
 low_share <- slice_min(summ, share, n = 1)
 cat_over_yard <- summ$label[summ$cat_nest > summ$cat_yard]
+# The nominal model with a1 = 1 against mirt's default parameterization, on the
+# first draw's folds (nominal_check in the compute script).
+nc <- bind_rows(lapply(fitted, function(r) as_tibble(r$nominal_check %||% matrix(nrow = 0, ncol = 0))))
+nc_gap <- if (nrow(nc)) nc$loglik_a1 - nc$loglik_default else numeric()
 
 folds <- terc <- tibble()
 if (length(fitted)) {
@@ -297,6 +301,8 @@ Three item response models are fitted to every table, with the Rasch model along
 
 The course lesson walks through both option models on one test; this page does not re-derive them.
 
+**How the nominal model is fitted.** `mirt`'s default writes each option's slope as a common slope $a_1$ times an option weight, with the weights of two options fixed. We fix $a_1$ at 1 instead and leave every option's slope free except the reference option's. This is the same model, written without the product. The difference is in where `mirt`'s EM stops. On these data the default's EM drifts toward a small $a_1$ with large option weights and moves so slowly there that it meets `mirt`'s tolerance before the maximum. `r if (length(nc_gap)) paste0("In the first draw of each table (", length(nc_gap), " folds in all), the default parameterization ended a median of ", formatC(median(nc_gap), format = 'f', digits = 1), " log-likelihood units below the one used here (up to ", round(max(nc_gap)), ")", if (all(nc$converged_default == 1)) ", while reporting convergence every time" else "", ".") else ""` Both are fitted to the same training cells, so the gap is the default stopping short, not a different model.
+
 ### Per-table computation
 
 For each candidate table, `fit_one()` in the compute script:
@@ -322,7 +328,8 @@ fit_draw <- function(n, d) {                    # one draw of up to 3,000 respon
     mods <- list(
       rasch   = mirt(x_tr, 1, "Rasch"),
       twopl   = mirt(x_tr, 1, "2PL"),
-      nominal = mirt(opt_tr, 1, "nominal", technical = list(NCYCLES = 2000)),
+      nominal = mirt(opt_tr, 1, "nominal", pars = nominal_pars(opt_tr),  # a1 fixed at 1
+                     technical = list(NCYCLES = 2000)),
       nested  = mirt(opt_tr, 1, "2PLNRM", key = ncat, technical = list(NCYCLES = 2000))
     )
     # Each model's EAP theta -> P(key) and every option's probability on the hidden cells.
