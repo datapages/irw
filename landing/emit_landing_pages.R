@@ -1186,7 +1186,17 @@ btn(x$redivis_url, "Browse on Redivis", "sign in to download"),
 if (x$src != "core") paste0(", source = \"", x$src, "\"") else "", ")</pre>\n",
 "<pre># Python\npip install irw\n\n",
 "import irw\ndf = irw.fetch(\"", esc(x$table), "\"",
-if (x$src != "core") paste0(", source=\"", x$src, "\"") else "", ")</pre>\n")
+if (x$src != "core") paste0(", source=\"", x$src, "\"") else "", ")</pre>\n",
+# Stata reads the anonymous CSV above rather than the Redivis SDK, which has
+# no Stata client. So the snippet appears on exactly the pages that offer the
+# CSV button: over ANON_MAX_BYTES, rows_url is "" and Stata cannot get the
+# table at all without a token.
+if (nzchar(x$rows_url)) paste0(
+"<p class=\"note\">Or in <a href=\"https://github.com/itemresponsewarehouse/Stata-pkg\">",
+"Stata</a>, which reads the same no-account CSV as the button above:</p>\n",
+"<pre>* Stata\nnet install irw, from(\"https://raw.githubusercontent.com/itemresponsewarehouse/Stata-pkg/main/\")\n\n",
+"irw_fetch ", esc(x$table), ", clear",
+if (x$src != "core") paste0(" source(", x$src, ")") else "", "</pre>\n") else "")
 
   prov <- kv_rows(list(
     list("IRW version",               paste0("v", x$irw_version)),
