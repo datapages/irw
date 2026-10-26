@@ -14,6 +14,172 @@ This log begins in September 2026, when the page was created. The IRW is older
 than the log, and changes before then are recorded only in the repositories'
 commit history and in the versioned data itself.
 
+## 2026-10-26 — A wide response matrix comes back with the item ids
+
+In R, `irw_long2resp()` named each column of the wide matrix `item_` plus the
+item id; it now names the column by the item id itself, which is what the Python
+client has always returned. The item id is the key that joins a wide matrix back
+to item text, or to anything else keyed by item, so every such merge previously
+needed a strip step in R and none in Python — and on a table whose items are
+already called `item10` the column came back as `item_item10`. Both clients also
+return the item columns in one natural order, `item1`, `item2`, `item10`, with
+digit runs compared as numbers; R used the order the rows happened to arrive in,
+which Redivis does not guarantee, and Python sorted lexicographically. One
+consequence worth knowing: a numeric item id now yields a column named by that
+number, which needs backticks in an R formula and an outright rename for
+`lavaan`.
+
+The same reshape also stopped averaging across occasions without being told to.
+The standard defines nine ways a response can repeat and only `wave` had a
+selector, so a table scored by several raters came back with cells holding the
+mean of raters who disagreed — a value no rater gave — and no argument could
+prevent it. A new `occasion` argument chooses one for any of those columns
+(`occasion = c(rater = "2")` in R, `occasion={"rater": "2"}` in Python), and
+where such a column keys a repeated person-item pair and you have named neither
+it nor an aggregation method, the call now stops and names both ways forward.
+All of this is merged in both packages and released in neither — R is CRAN 1.3.1
+and Python is 0.7.7 — so it reaches users with the next release of each. Refs
+#3221, #3223.
+
+## 2026-10-25 — The published recipe for merging item text was dropping responses
+
+[Merging item text](itemtext_merge.qmd) showed `merge(items, df)` with no `by=`,
+which joins on every column the two frames share — here `item` and `resp` — so
+the response data was being keyed against an option code. Run on
+`gilbert_meta_40`, that recipe silently discards 36.4% of the responses, and
+where an item has several option rows it goes the other way and multiplies each
+response once per option, attaching a distractor the respondent may never have
+chosen. The example the page used was the one shape in which the bug is
+invisible, a table whose responses and option codes are both 0/1. The page now
+does two left joins — item wording keyed on `item`, option wording on `item`
+together with the response code as the source recorded it — asserts the row
+count after each, rejects an ambiguous mapping outright, and reports how many
+responses have no item wording rather than deleting them.
+
+The file the site hands to an AI assistant was stale in the same spirit, and its
+facts are now generated at render time and stamped with a date: it had claimed
+about 4,200 tables against 6,720 live, and named five data families, omitting
+rankings and its 452 tables entirely. An assistant reading that file cannot look
+anything up, so whatever it says is the whole of what the assistant knows. See
+[Using an AI Assistant](agents.qmd).
+
+## 2026-10-25 — `density` is responses per cell, and is not bounded by 1
+
+The catalogue's `density` column is `n_responses / (n_participants * n_items)`,
+the average number of responses per person-item cell — not, as the name invites
+you to read it, the proportion of cells that are filled. So it has no upper
+bound: 768 of 6,720 core tables are above 1 because they measure a person-item
+pair more than once, 700 of those carrying an occasion column such as `wave` or
+`rater`, and the largest is a go/no-go task at 3,624.6. A value above 1 is a
+fact about the design rather than a defect. The [metadata
+documentation](metadata.qmd) now says all of this, and says that the proportion
+of distinct cells filled is a different quantity, which the IRW does not
+publish.
+
+The part that changes behaviour is the filter default. Both clients defaulted
+`density` to `c(0.5, 1)`, which dropped every one of those 768 tables, so no
+unfiltered `irw_filter()` or `irw.filter()` call could return a repeated-measures
+table at all. The default is now a lower bound only, `c(0.5, Inf)`, which is what
+"exclude sparse matrices" was ever meant to do; pass the old range for the old
+behaviour. It is merged in both packages and in neither release. Refs #3222.
+
+## 2026-10-25 — Every correction names the release that carries it
+
+[Corrections](corrections.qmd) lists each fix to a published table beside the
+IRW version that first carries it, and that cell was blank for 92 of the 715
+entries, because those rows had been appended at upload time rather than once
+the release was live. All 715 now name a version. The versions were not inferred
+from the dates, which cannot answer the question — several shard releases can
+land on one day — but observed: Redivis serves a dataset listing at any released
+version, so the release carrying a fix is the first version in which that
+table's content hash stops being what it was before. Checked against the entries
+that already had a version, 24 of a 25-row sample reproduced exactly and the
+25th was reported unresolved rather than guessed.
+
+The catalogue's own numbers got the same treatment. Fifty-nine metadata rows
+contradicted the tables they describe — one publishing 255 items against a true
+25,499, and 58 publishing more responses than their table has rows, which is
+impossible in long format — and 88 more carried a stale column list. All were
+refreshed from the live tables, and a release gate now fails when a published
+record disagrees with the data, rather than leaving a known-false row in place
+until the rolling refresh comes round some five weeks later. Refs #3213, #3214,
+#3216, #3218.
+
+## 2026-10-23 — Ranked-choice ballots from Minneapolis
+
+The rankings family now holds the individual ballots from Minneapolis municipal
+elections, 2009 through 2023, from the city's released cast vote records: one
+row per candidate placed at a position by one ballot, positions kept exactly as
+marked. The counting rules are part of the record rather than left for a reader
+to assume — Minneapolis changed how it treats an overvote, a skipped position
+and a candidate marked twice between election years, and the rules in force for
+each era are recorded beside the build scripts with the ordinance sections
+cited. The tables are in the `irw_rank` dataset and the layout is on [the
+rankings standard](rankings_standard.qmd). Refs #3024.
+
+## 2026-10-21 — An eighth core warehouse, and what an installed client can reach
+
+Core response data is split across Redivis datasets because Redivis caps one
+dataset at 1000 tables, and `item_response_warehouse_8` joined the list on
+2026-10-21, when the seventh came within a day of that cap. A shard list baked
+into a release is its own problem: the seventh warehouse was released on
+2026-10-15 with 761 tables that no released client could see, and could not see
+*silently*, because a shard missing from the list produces no loop iteration, so
+no warning fires and listings simply come back short. Both clients now read the
+Redivis organization catalogue once per session and adopt any shard that extends
+a family they already know — never a new family — and a daily check compares
+what the CRAN and PyPI releases know about against what is live. Both releases
+are currently behind: CRAN `irw` 1.3.1 was cut before the seventh warehouse and
+Python 0.7.7 before the eighth, so an installed copy of either lists fewer core
+tables than the warehouse holds until the next release. Refs #3091, #3126,
+#3136.
+
+Reading the warehouse from R will also stop needing a Redivis account.
+`redivis` 0.12.14 and later send read requests anonymously, now that Redivis has
+opened its dataset-level endpoints, and on the R package's main branch every
+function that reads the warehouse works with no login; only `irw_table_sets()`,
+which runs server-side SQL, still requires one. The CRAN release still requires
+a login throughout, so this too arrives with the next release, and it is R only
+— the Python package and the MCP server always authenticate.
+
+## 2026-10-21 — The catalogue can be filtered by psychometric property
+
+Until now the catalogue could be filtered only by shape: how many responses,
+items and participants a table has. So "tables whose items hang together, span
+the scale, and have no floor effects" was not an askable question. `irw_meta`
+now publishes `item_classical`, one row per table and item giving that item's n,
+mean, sd, number of levels, item-rest correlation and observed range. The
+statistics are classical, with no model fitted anywhere, so they are defined for
+every core table rather than for the dichotomous sixth of the corpus that an IRT
+model would cover. Four per-table summaries reduced from them —
+`difficulty_spread`, `mean_item_rest_r`, `mean_abs_item_rest_r` and
+`prop_items_extreme` — are columns of the `metadata` table, and are filter
+arguments on both packages' main branches, so filtering by them arrives with the
+next release of each.
+
+Two cautions travel with the columns. Response direction is not harmonised
+across the IRW, so a signed mean item-rest correlation near zero can mean a
+reverse-keyed scale rather than an incoherent one; the gap between it and the
+absolute version is the tell. And a rest score says less about a sparse item
+bank, where respondents see almost disjoint sets of items, than about a 20-item
+questionnaire. Refs #1710.
+
+## 2026-10-20 — The intake floor names an item count, and personal data is tiered
+
+Two rulings, both now in the processing repository's data standard. A table needs
+at least three distinct `item` values to be accepted: three is thin but
+shippable, two is not, and the count is of the table as shipped, so a two-item
+block does not qualify by being merged with an unrelated one. And personal
+information in a source file is no longer one undifferentiated stop — a real
+name or an email address disqualifies the whole candidate, with no
+scrub-and-ship option, while a postal code, ZIP or similar geographic code means
+dropping that column and processing the rest of the file.
+
+The [intake policy on this site](standard.qmd#intake) still lists only the
+licence rules, the 100-respondent floor, one file per scale and the naming
+convention; the data standard in the processing repository is authoritative for
+intake and carries both of these. Refs #3077, #3103.
+
 ## 2026-10-18 — The R package is on CRAN
 
 `irw` 1.3.1 was accepted on CRAN on 2026-10-18, so `install.packages("irw")`
