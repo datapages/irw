@@ -22,21 +22,24 @@ The Item Response Warehouse (IRW) applies the same FAIR principles to item respo
 
 ## What is in the IRW
 
-The IRW contains **thousands of datasets** ("tables"), each one a collection of individual responses. A response is generated whenever some person (or other unit) responds to some item (or other probe). Examples include:
+The IRW contains **thousands of datasets** ("tables"), each one a collection of individual responses. A response is generated whenever some person (or other unit) meets a probe and the outcome is recorded. What counts as a probe differs by [data family](/overview.qmd): an item answered on its own, another entity met in a contest, a whole set of options put in order, or a profile assembled from randomly assigned attributes. Examples include:
 
 - Student answers on education and ability tests
 - Survey items measuring personality or attitudes
 - Ratings assigned by human raters
+- Games, matches and head-to-head comparisons, where two entities meet and one wins
+- Ranked-choice ballots, jury rankings and survey ranking questions
+- Conjoint experiments, where respondents choose between randomly built profiles
 - Any other setting involving repeated responses to a set of measurement probes
 
 Every dataset in the IRW is designed to be:
 
 - **Findable.** Each dataset comes with pre-computed metadata — participant and item counts, response density, subject area, and other descriptive tags — so datasets can be located and filtered without downloading them first.
 - **Accessible.** Every dataset can be retrieved through the web browser or the `irw` package, using a free account.
-- **Interoperable.** Each dataset is reshaped into the same simple long-format structure (described below), so the same analysis code can run across many datasets with little or no modification.
+- **Interoperable.** Each dataset is reshaped into long format, one row per response, following the standard for its family (described below), so the same analysis code can run across many datasets with little or no modification.
 - **Reusable.** Each dataset is openly licensed, its origin is documented, and the code used to convert it into the IRW format is public.
 
-Datasets vary widely in size (from a few hundred responses to many millions) and in response type (yes/no items, multi-category ratings, partial-credit scores, and more).
+Datasets vary widely in size (from a few hundred responses to many millions) and in response type (yes/no items, multi-category ratings, partial-credit scores, unordered categories, match outcomes, ranked positions, and more).
 
 ## The data standard
 
