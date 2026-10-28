@@ -1,5 +1,6 @@
 ---
 title: "Data families and their standards"
+css: overview.css
 ---
 
 Data standards are an essential mechanism of increasing reusability and interoperability of data amongst researchers. As such, they play a critical role in increasing the extent to which science is [FAIR](https://www.nature.com/articles/sdata201618) (findable, accessible, interoperable, reusable). The IRW's response data come in several *data families* that use distinct data standards. We focus here on describing the families and the differences between their standards (with pointers to complete descriptions of the specific standards).
@@ -23,12 +24,70 @@ Five families are defined by the shape of the data. Simsyn is defined by where t
 
 Set simsyn aside, and fold nominal into core (it differs only in that the response categories are unordered). That leaves four shapes of data. What separates them is what gets compared, and what we would want a parameter for.
 
-- **Core.** A person responds to an item. Persons and items are categorically different things, and both persist: the same item is answered by many people. The usual model gives each of them a parameter, an ability and a difficulty, say.
-- **Competitions.** There is no item. Two entities meet—teams in a game, chess engines, two essays put in front of a judge, two named options put to a voter—and an outcome is recorded. The entities recur across many comparisons, and the target is a parameter for each of them (an Elo rating, a Bradley–Terry strength). Where there is a judge, the judge is the instrument rather than the object of measurement.
-- **Conjoint.** A person chooses between, or rates, profiles (hypothetical candidates, immigrants, policies) whose attributes are assigned at random. A profile is built for one task and never seen again, so there is nothing to give a parameter to. The target is instead the effect of each attribute on the response, and how that effect varies across people. In IRT terms, this sits closest to an explanatory model such as the LLTM, wherein the items are generated on the fly from their features.
-- **Rankings.** A person puts a fixed set of named options in order: candidates on a ranked-choice ballot, songs before a jury, policies in a survey. The options keep their identity, as items do, but the response is a position, and one ranking compares all the options at once rather than judging each on its own. A Plackett–Luce model gives each option a worth, as a Bradley–Terry model does in competitions. What is peculiar to the data is how incomplete a ranking can be: a voter may stop after two choices, skip a position, or mark the same candidate twice, and the [rankings standard](rankings_standard.qmd) keeps all of that as recorded, because the counting rules that resolve it differ by jurisdiction.
+::: {.family-row}
+::: {.family-text}
+**Core.** A person responds to an item. Persons and items are categorically different things, and both persist: the same item is answered by many people. The usual model gives each of them a parameter, an ability and a difficulty, say.
+:::
+::: {.family-fig}
+![](figures/families/families-core.svg){fig-alt="Core: an id-by-item grid of ordered scores becomes a long table of id, item, resp." .family-svg}
 
-A simple test sorts most new datasets. First ask whether the things being responded to keep a stable identity, so that we would want a parameter for each. If they do not, because each one is assembled fresh from randomized attributes and the question is which attributes drive the response, the data are conjoint. If they do, ask how a person meets them: one at a time is core (nominal when the response categories are unordered), two at a time is competitions, and all at once in order is rankings. Two cases that look like exceptions are not. A "conjoint" study that shows everyone the same fixed set of profiles fails the first question: its profiles have identities, so it belongs in core or competitions. A ranking question that asks only for a single first choice is a pick from a list, which is core or nominal, not rankings.
+[A person meets the items one at a time; one row per person and item, `resp` an ordered score.]{.fig-note}
+:::
+:::
+
+::: {.family-row}
+::: {.family-text}
+**Nominal.** Similar to core: a person responds to an item, and both persist. The difference is that the response categories have no order—the option a candidate marked, the word a child produced—so there is nothing to score. The response is kept as the category itself, in `text` rather than `resp`, and the [nominal standard](nominal_standard.qmd) says how.
+:::
+::: {.family-fig}
+![](figures/families/families-nom.svg){fig-alt="Nominal: an id-by-item grid of unordered categories becomes a long table of id, item, text." .family-svg}
+
+[The same crossing with unordered categories: the response is kept as the category itself, in `text`.]{.fig-note}
+:::
+:::
+
+::: {.family-row}
+::: {.family-text}
+**Competitions.** There is no item. Two entities meet—teams in a game, chess engines, two essays put in front of a judge, two named options put to a voter—and an outcome is recorded. The entities recur across many comparisons, and the target is a parameter for each of them (an Elo rating, a Bradley–Terry strength). Where there is a judge, the judge is the instrument rather than the object of measurement.
+:::
+::: {.family-fig}
+![](figures/families/families-comp.svg){fig-alt="Competitions: an agent-by-agent matrix of contests becomes a table of agent_a, agent_b, winner." .family-svg}
+
+[No items: the entities meet each other, and a row records one contest and who won.]{.fig-note}
+:::
+:::
+
+::: {.family-row}
+::: {.family-text}
+**Conjoint.** A person chooses between, or rates, profiles (hypothetical candidates, immigrants, policies) whose attributes are assigned at random. A profile is built for one task and never seen again, so there is nothing to give a parameter to. The target is instead the effect of each attribute on the response, and how that effect varies across people. In IRT terms, this sits closest to an explanatory model such as the LLTM, wherein the items are generated on the fly from their features.
+:::
+::: {.family-fig}
+![](figures/families/families-conj.svg){fig-alt="Conjoint: randomly built profiles chosen within tasks become a table of id, task, profile, attributes, choice." .family-svg}
+
+[Profiles are rebuilt from attributes for every task, so a row is a profile, not an item.]{.fig-note}
+:::
+:::
+
+::: {.family-row}
+::: {.family-text}
+**Rankings.** A person puts a fixed set of named options in order: candidates on a ranked-choice ballot, songs before a jury, policies in a survey. The options keep their identity, as items do, but the response is a position, and one ranking compares all the options at once rather than judging each on its own. A Plackett–Luce model gives each option a worth, as a Bradley–Terry model does in competitions. What is peculiar to the data is how incomplete a ranking can be: a voter may stop after two choices, skip a position, or mark the same candidate twice, and the [rankings standard](rankings_standard.qmd) keeps all of that as recorded, because the counting rules that resolve it differ by jurisdiction.
+:::
+::: {.family-fig}
+![](figures/families/families-rank.svg){fig-alt="Rankings: ballots ordering a fixed set of options become a table of id, task, item, resp where resp is a position; skipped positions are gaps." .family-svg}
+
+[One ballot orders the whole set at once; a row is a marked position, and skips stay gaps.]{.fig-note}
+:::
+:::
+
+A simple test sorts most new datasets. First ask whether the things being responded to keep a stable identity, so that we would want a parameter for each. If they do not, because each one is assembled fresh from randomized attributes and the question is which attributes drive the response, the data are conjoint. If they do, ask how a person meets them: one at a time is core (nominal when the response categories are unordered), two at a time is competitions, and all at once in order is rankings.
+
+::: {.family-tree}
+![](figures/families/families-tree.svg){fig-alt="Two questions that sort a dataset into an IRW family." .family-svg}
+
+[The same two questions, as a chart.]{.fig-note}
+:::
+
+Two cases that look like exceptions are not. A "conjoint" study that shows everyone the same fixed set of profiles fails the first question: its profiles have identities, so it belongs in core or competitions. A ranking question that asks only for a single first choice is a pick from a list, which is core or nominal, not rankings.
 
 Item text and the metadata are not families. They hold no responses and describe the tables in the families.
 
