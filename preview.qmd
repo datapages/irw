@@ -152,6 +152,14 @@ homeRoot = {
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
+  // specimens.json carries the family key ("competitions"), not its display
+  // name; FAMILIES is the one place that spells the names, so read it from
+  // there rather than title-casing the key.
+  const famName = (key) => {
+    const f = FAMILIES.find(x => x.key === key);
+    return f ? f.name : String(key == null ? "" : key);
+  };
+
   // ---- Totals line.
   //
   // The tables figure is the sum of the five families' counts, since
@@ -271,7 +279,7 @@ homeRoot = {
         // family on screen reads as pressed.
         const first = S.findIndex(x => x.family === s.family);
         return (first === k)
-          ? `<button type="button" class="spec-pill" data-go="${k}" aria-pressed="${S[i].family === s.family ? "true" : "false"}">${esc(s.name || s.family)}</button>`
+          ? `<button type="button" class="spec-pill" data-go="${k}" aria-pressed="${S[i].family === s.family ? "true" : "false"}">${esc(famName(s.family))}</button>`
           : "";
       }).join("");
 
