@@ -486,6 +486,57 @@ source_codebook_html <- function(links) {
   ""
 }
 
+# One line on respondent uniqueness, under the covariate list that prompts the
+# question (irw#3273, from the #3232 ruling). `k1_prop` is the share of a table's
+# respondents alone in their cell when respondents are grouped by the `cov_*`
+# quasi-identifiers the table publishes -- nobody else in the table sharing their
+# exact combination of age, sex, region and the rest.
+#
+# Said here because the alternative is that it is not said anywhere a reader will
+# look: the covariate list shows eight demographics without showing that eight
+# demographics on 3,000 people leaves nearly all of them unique, and before this
+# column existed answering that took a 2,942-query study. It is deliberately a
+# statement and not a warning. The number is a necessary condition for
+# re-identification rather than re-identification; it is mostly a sample-size
+# effect, but only on the tables where that is true, which is why that clause is
+# conditional below; and the IRW's position -- republish what the source
+# published, never at finer granularity -- is what the sentence ends on, so a
+# reader who wants the reasoning has one click to it.
+#
+# Blank for the non-core families, whose metadata tables carry no such column,
+# and blank at zero quasi-identifiers: "0% unique on 0 covariates" is noise on
+# the 1,799 core tables that publish no demographics at all.
+uniqueness_html <- function(x) {
+  nq <- suppressWarnings(as.numeric(x$m$n_quasi_identifiers %||% NA))
+  k  <- suppressWarnings(as.numeric(x$m$k1_prop %||% NA))
+  n  <- suppressWarnings(as.numeric(x$m$n_participants %||% NA))
+  if (!length(nq) || !length(k) || is.na(nq) || is.na(k) || nq < 1) return("")
+  cols <- paste0("the ", if (nq == 1) "single covariate" else paste(nq, "covariates"), " above")
+  # The arithmetic caveat is true of the corpus and not of every table in it:
+  # the median table under 100 respondents is 41.2% unique against 0.3% above
+  # 10,000, so uniqueness there really is a sample-size effect. On a table of
+  # thousands it is not, and friedman_2018_risks_discrimination -- 100% of
+  # 3,110 on twelve quasi-identifiers -- is exactly the page where saying "it
+  # is mostly arithmetic" would be the misleading sentence. So it is said only
+  # where it holds.
+  small <- !is.na(n) && n < 1000
+  fact <- if (k <= 0)
+    paste0("No respondent in this table is unique on ", cols,
+           ": every one of them shares their combination with someone else.")
+  else paste0(
+    if (k < 0.005) "Under 1%" else if (k > 0.995 && k < 1) "Over 99%"
+    else paste0(format(round(100 * k), big.mark = ","), "%"),
+    " of this table&rsquo;s respondents are alone in their combination of ", cols,
+    " &mdash; no one else in the table shares it.")
+  paste0("<p class=\"note\"><strong>Respondent uniqueness.</strong> ", fact,
+    if (k > 0) paste0(" That is a necessary condition for re-identification and not ",
+                      "re-identification itself",
+                      if (small) ", and on a sample this size it is largely arithmetic" else "",
+                      ".") else "",
+    " The IRW republishes the demographics its sources published and never at finer ",
+    "granularity: see the <a href=\"", STANDARD_URL, "\">data standard</a>.</p>\n")
+}
+
 codebook_html <- function(x, standard) {
   d <- x$coldocs
   if (is.null(d) || !nrow(d) || !length(x$variables)) return("")
@@ -1169,7 +1220,9 @@ section("Design", design, id = "design"),
 section("Classification", tagbody),
 section("Item text", itext),
 { cb <- codebook_html(x, STANDARD)
-  if (nzchar(cb)) section("Codebook", cb, id = "codebook") else section("Columns", vars) },
+  uniq <- uniqueness_html(x)   # irw#3273; appended to whichever branch renders
+  if (nzchar(cb)) section("Codebook", paste0(cb, uniq), id = "codebook")
+  else section("Columns", paste0(vars, uniq)) },
 section("Get the data", access),
 section("How to cite", cite),
 section("Related tables", related$list, id = "related"),
