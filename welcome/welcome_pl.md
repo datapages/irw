@@ -28,51 +28,47 @@ Badacze zajmujący się pomiarem — w edukacji, psychologii i pokrewnych dziedz
 
 To dobrze znany problem. Społeczność badawcza sformułowała wspólny standard, aby go rozwiązać: dane powinny być **FAIR** — możliwe do odnalezienia (Findable), dostępne (Accessible), interoperacyjne (Interoperable) i możliwe do ponownego wykorzystania (Reusable) (Wilkinson et al., 2016). Inne dziedziny wcieliły te zasady w życie, budując wspólne, ustandaryzowane zasoby danych. W informatyce zbiór oznaczonych obrazów ImageNet dał badaczom wspólny punkt odniesienia (benchmark) i pomógł napędzić szybki postęp w AI. Genetyka i neuronauka zbudowały podobne wspólne zasoby dla swoich danych.
 
-Item Response Warehouse (IRW) stosuje te same zasady FAIR do danych o odpowiedziach na zadania. Gromadzi setki istniejących zbiorów danych i przekształca je w jeden wspólny format — dzięki czemu metoda przetestowana na jednym zbiorze danych może łatwo zostać przetestowana na setkach innych.
+Item Response Warehouse (IRW) stosuje te same zasady FAIR do danych o odpowiedziach na zadania. Gromadzi tysiące istniejących zbiorów danych i przekształca je w jeden wspólny format — dzięki czemu metoda przetestowana na jednym zbiorze danych może łatwo zostać przetestowana na tysiącach innych.
 
 ## Co zawiera IRW
 
-IRW zawiera **setki zbiorów danych** ("tabel"), z których każdy jest zbiorem indywidualnych odpowiedzi. Odpowiedź powstaje za każdym razem, gdy jakaś osoba (lub inna jednostka) odpowiada na zadanie (item) lub inny bodziec pomiarowy. Przykłady obejmują:
+IRW zawiera **tysiące zbiorów danych** ("tabel"), z których każdy jest zbiorem indywidualnych odpowiedzi. Odpowiedź powstaje za każdym razem, gdy jakaś osoba (lub inna jednostka) styka się z bodźcem pomiarowym i wynik zostaje zapisany. To, co jest bodźcem, zależy od [rodziny danych](/overview.qmd): zadanie, na które odpowiada się osobno; inny podmiot napotkany w starciu; cały zestaw opcji, który należy uporządkować; albo profil złożony z losowo przypisanych cech. Przykłady obejmują:
 
 - Odpowiedzi uczniów w testach edukacyjnych i testach zdolności
 - Pozycje kwestionariuszy mierzące osobowość lub postawy
 - Oceny przyznawane przez ludzkich sędziów (raterów)
+- Mecze, partie i bezpośrednie porównania, w których dwa podmioty mierzą się ze sobą i jeden wygrywa
+- Karty do głosowania preferencyjnego, rankingi jury oraz pytania rankingowe w ankietach
+- Eksperymenty conjoint, w których respondenci wybierają spośród losowo zbudowanych profili
 - Każdą inną sytuację obejmującą powtarzane odpowiedzi na zestaw narzędzi pomiarowych
 
 Każdy zbiór danych w IRW jest zaprojektowany tak, aby był:
 
 - **Możliwy do odnalezienia (Findable).** Każdy zbiór danych zawiera wstępnie obliczone metadane — liczbę uczestników, liczbę zadań, gęstość odpowiedzi, dziedzinę tematyczną oraz inne opisowe etykiety — dzięki czemu zbiory danych można znaleźć i filtrować bez konieczności ich wcześniejszego pobrania.
 - **Dostępny (Accessible).** Każdy zbiór danych można pobrać przez przeglądarkę internetową lub pakiet `irw`, korzystając z bezpłatnego konta.
-- **Interoperacyjny (Interoperable).** Każdy zbiór danych jest przekształcany do tej samej prostej struktury (opisanej poniżej), dzięki czemu ten sam kod analityczny może działać na wielu zbiorach danych przy niewielkiej modyfikacji lub bez żadnej.
+- **Interoperacyjny (Interoperable).** Każdy zbiór danych jest przekształcany do formatu długiego, jeden wiersz na odpowiedź, zgodnie ze standardem swojej rodziny (opisanym poniżej), dzięki czemu ten sam kod analityczny może działać na wielu zbiorach danych przy niewielkiej modyfikacji lub bez żadnej.
 - **Możliwy do ponownego wykorzystania (Reusable).** Każdy zbiór danych jest udostępniony na otwartej licencji, jego pochodzenie jest udokumentowane, a kod użyty do przekształcenia go do formatu IRW jest publicznie dostępny.
 
-Zbiory danych różnią się znacznie pod względem wielkości (od kilkuset odpowiedzi do wielu milionów) oraz rodzaju odpowiedzi (zadania tak/nie, oceny wielokategorialne, wyniki częściowe i inne). Do każdego zbioru danych dołączone są również wstępnie obliczone metadane — liczba uczestników, liczba zadań, gęstość odpowiedzi, dziedzina tematyczna oraz inne opisowe etykiety — dzięki czemu badacze mogą znaleźć odpowiednie zbiory danych bez konieczności ich wcześniejszego pobierania i przetwarzania.
+Zbiory danych różnią się znacznie pod względem wielkości (od kilkuset odpowiedzi do wielu milionów) oraz rodzaju odpowiedzi (zadania tak/nie, oceny wielokategorialne, wyniki częściowe, kategorie nieuporządkowane, wyniki starć, pozycje w rankingu i inne).
 
 ## Standard danych
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagram przedstawiający kolorową siatkę komórek id-item, przekształconą za pomocą strzałki w tabelę w formacie długim z kolumnami id, item i resp, gdzie kolor każdej komórki resp odpowiada kolorowi jej komórki źródłowej w siatce." class="welcome-figure">
+Każda tabela IRW jest w **formacie długim**: jeden wiersz na odpowiedź. To, czym *jest* wiersz, zależy od rodziny, do której należy tabela, podobnie jak kolumny, które go niosą.
 
+<img src="/figures/families/families-tree.svg" alt="Dwa pytania, które przypisują zbiór danych do rodziny IRW."
+     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
 
-Każdy zbiór danych IRW jest przekształcany do **formatu długiego (long format)**: jeden wiersz na odpowiedź. Każdy wiersz zawiera co najmniej trzy informacje:
+| Rodzina | `source =` | Standard |
+|---|---|---|
+| Core | `"core"` | [Core](/standard.qmd) |
+| Nominal | `"nom"` | [Nominal](/nominal_standard.qmd) |
+| Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
+| Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
+| Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
+| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
 
-| Kolumna | Znaczenie |
-|---|---|
-| `id` | Kto (lub co) wygenerowało odpowiedź — zazwyczaj osoba |
-| `item` | Które narzędzie pomiarowe wygenerowało odpowiedź — zazwyczaj pytanie lub zadanie |
-| `resp` | Sama odpowiedź, przechowywana jako wynik porządkowy (ordinalny) |
+Simsyn nie występuje na schemacie: ta rodzina jest określona przez pochodzenie danych, a nie przez ich kształt, więc tabela symulowana może mieć dowolny z tych kształtów. Kolumny każdej rodziny podaje [przegląd standardów](/overview.qmd).
 
-**Przykład:**
-
-| `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
-|----|------|------|-----|-----|-------|
-| 1  | Q1   | 1    | 2.3 | 26  | a     |
-| 1  | Q2   | 0    | 1.8 | 26  | a     |
-| 2  | Q1   | 1    | 2.1 | 31  | b     |
-| 2  | Q2   | 1    | 2.5 | 31  | b     |
-
-Gdy zbiór danych zawiera dodatkowe informacje — czas odpowiedzi, tożsamość ratera, kowarianty takie jak wiek — informacje te są przechowywane w dodatkowych, spójnie nazwanych kolumnach. Ta jedna prosta struktura obejmuje ogromny zakres sytuacji pomiarowych, co sprawia, że możliwe jest napisanie kodu analitycznego raz i zastosowanie go w całym magazynie.
-
-Pełna specyfikacja techniczna standardu jest dostępna pod adresem [itemresponsewarehouse.org/standard.html](/standard.qmd). Istnieją także powiązane, bardziej wyspecjalizowane standardy dla tekstu zadań, danych porównań parami (pairwise) oraz odpowiedzi nominalnych (kategorii nieuporządkowanych).
 
 ## Jak z niego korzystać
 
@@ -82,7 +78,7 @@ Istnieją trzy sposoby pozyskania danych IRW, w zależności od tego, ile chcesz
 Przeglądaj zbiory danych i ich metadane bezpośrednio w [przeglądarce danych IRW](/data.qmd) — bez konieczności zakładania konta. Pobranie pełnego zbioru danych wymaga bezpłatnego konta [Redivis](https://redivis.com), ponieważ to ta platforma przechowuje bazowe dane.
 
 **2. Użyj pakietu `irw` (zalecane)**
-Pakiet `irw`, dostępny zarówno dla **R**, jak i **Pythona**, oferuje proste funkcje do wyszukiwania, filtrowania i pobierania danych.
+Pakiet `irw` jest dostępny zarówno dla **R**, jak i **Pythona**.
 
 ```r
 # R
@@ -93,6 +89,9 @@ irw_info()                     # overview of the IRW
 irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
 ```python
@@ -104,9 +103,12 @@ irw.info()
 irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
-Przy pierwszym użyciu pakietu zostaniesz poproszony o zalogowanie się za pomocą bezpłatnego konta Redivis. Od tego momentu jedna linijka kodu pobiera dowolny zbiór danych bezpośrednio do R lub Pythona. Od tego etapu dane są gotowe do analizy za pomocą standardowego oprogramowania — na przykład pakietów do teorii odpowiedzi na zadania (IRT) lub analizy czynnikowej.
+Przy pierwszym użyciu pakietu zostaniesz poproszony o zalogowanie się za pomocą bezpłatnego konta Redivis.
 
 **3. Użyj bezpośrednio bibliotek klienckich Redivis**
 W przypadku bardziej niskopoziomowych przepływów pracy lub przepływów spoza R/Python dane można również uzyskać za pomocą własnych bibliotek klienckich R i Python firmy Redivis. Szczegóły znajdziesz w [Przewodniku dla początkujących](/getstarted.qmd).
