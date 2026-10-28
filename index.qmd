@@ -1,7 +1,352 @@
 ---
 pagetitle: "The Item Response Warehouse"
+css: preview.css
+format:
+  html:
+    # The project sets include-in-header to logos/_head.html; naming it again
+    # here keeps it, because a document-level value replaces the project one
+    # rather than adding to it. The fonts this page uses are declared there.
+    include-in-header:
+      - logos/_head.html
 ---
 
-{{< include components/_hero_playful.qmd >}}
+<!--
+index.qmd -- the IRW homepage.
 
-{{< include welcome/welcome_en.md >}}
+Structure: hero (copy + rotating specimen card), family tiles, workflow cards,
+then the homepage prose. The prose is the SHARED English prose,
+welcome/_prose_en.md, which welcome/welcome_en.md includes too -- there is one
+copy of this text and both pages render it. The language switcher below it is
+the shared welcome/_lang_switch.md, the same widget all 25 welcome pages
+include. See welcome/README.md.
+
+This page was developed as preview.qmd (#385) and promoted here once Ben had
+approved it. The previous homepage was components/_hero_playful.qmd plus an
+include of welcome/welcome_en.md; that hero partial is now unreferenced but is
+kept rather than deleted.
+
+Numbers come from data/hero_stats.json, the same file the old hero read, via
+the same tolerant read: a missing or malformed file falls back rather than
+failing the render, and any individual count that is absent is hidden instead of
+printed as 0 or NA. See landing/hero_stats.R for what writes it. Note that
+totals.n_tables there is nrow() of the CORE metadata table, not a grand total --
+the other four families are counted separately into n_tables_comp/_nom/_conj/
+_rank -- so each tile reads its own family's count and the page shows no
+warehouse-wide total.
+
+The specimen card reads data/specimens.json, written by specimens.R from a
+hand-edited specimens_list.csv. Twenty real tables, four per family. Nothing
+here calls Redivis from the browser.
+
+All CSS is in preview.css, scoped under .irw-home.
+-->
+
+```{r}
+#| label: load-home-stats
+#| include: false
+
+library(jsonlite)
+
+# Same contract as components/_hero_playful.qmd: data/hero_stats.json is written
+# by the pre-render step landing/hero_stats.R and is not tracked, so it is
+# missing only in a local render with no Redivis token. Fall back rather than
+# fail, and let the page hide whatever is absent.
+home_stats_fallback <- list(
+  totals = list(
+    n_tables = NULL, n_tables_comp = NULL, n_tables_nom = NULL,
+    n_tables_conj = NULL, n_tables_rank = NULL
+  )
+)
+
+home_stats <- tryCatch({
+  parsed <- fromJSON("data/hero_stats.json", simplifyVector = FALSE)
+  if (!is.list(parsed$totals)) stop("hero_stats.json has no totals")
+  parsed
+}, error = function(e) {
+  warning("preview.qmd: data/hero_stats.json missing or malformed (",
+          conditionMessage(e), ") -- counts will be hidden.")
+  home_stats_fallback
+})
+
+ojs_define(home_stats = home_stats)
+```
+
+```{ojs}
+//| label: home-formatters
+//| echo: false
+
+// Copied from components/_hero_playful.qmd so the two pages format the same
+// figure the same way: thousands-grouped, not abbreviated. The page shows only
+// table counts, which are in the thousands, so the hero's K/M/B fmtAbbrev is
+// not needed here.
+fmtInt = (n) => (n == null || isNaN(n)) ? "" : Math.round(n).toLocaleString("en-US");
+```
+
+```{ojs}
+//| label: home-config
+//| echo: false
+
+totals = home_stats.totals || {}
+
+// A count is shown only if it is a positive number; anything else is treated as
+// absent and the number is dropped from the tile, as the live hero does.
+count = (v) => (typeof v === "number" && isFinite(v) && v > 0) ? v : null
+
+// One entry per family. Adding a family means adding an entry here: the tiles,
+// the tiles and the specimen card's family buttons both read this list.
+// `count` is the field in hero_stats.totals that holds that family's table
+// count -- core's is n_tables, which is the core count and not a grand total.
+FAMILIES = [
+  { key: "core",         name: "Core",         count: count(totals.n_tables),
+    href: "standard.html",
+    desc: "A person answers an item; the response is ordered.",
+    // Simsyn is nested under core rather than given a tile of its own: the
+    // page talks about five families, and simsyn is the one family defined by
+    // where the data come from rather than by its shape. No count -- 
+    // landing/hero_stats.R writes no n_tables_sim (agent_guide_stamp.R counts
+    // it for llms.txt, which is where the figure 17 comes from), and that
+    // script is not this branch's to change. See datapages/irw#386.
+    sub: { name: "Simulated and synthetic", href: "simsyn.html",
+           desc: "Responses no real person produced." } },
+  { key: "nominal",      name: "Nominal",      count: count(totals.n_tables_nom),
+    href: "nominal_standard.html",
+    desc: "Categories with no order, like kept distractors." },
+  { key: "competitions", name: "Competitions", count: count(totals.n_tables_comp),
+    href: "comps_standard.html",
+    desc: "Two entities meet; one wins, or they draw." },
+  { key: "rankings",     name: "Rankings",     count: count(totals.n_tables_rank),
+    href: "rankings_standard.html",
+    desc: "A person puts a set of options in order." },
+  { key: "conjoint",     name: "Conjoint",     count: count(totals.n_tables_conj),
+    href: "conjoint_standard.html",
+    desc: "Choices between profiles built from attributes." }
+]
+
+// Six steps, in order. The last one gets the dashed pink treatment.
+//
+// Deliberately not links (Ben, 2026-10-28). These cards explain the shape of
+// the workflow; they are not navigation. As links two of them pointed at the
+// same page (Fetch and Cite both went to getstarted.html) and Understand went
+// to the raw A-Z table index, which is a wall of links rather than an
+// explanation -- and every page they would have reached is in the navbar
+// already.
+STEPS = [
+  { name: "Find",       call: "irw_filter()",
+    desc: "Filter on metadata before downloading anything." },
+  { name: "Understand", call: "irw_info()",
+    desc: "Provenance, licence and notes on every table page." },
+  { name: "Fetch",      call: "irw_fetch()",
+    desc: "One call for every family, long format." },
+  { name: "Analyze",    call: "irw_long2resp()",
+    desc: "Loop your method over hundreds of tables." },
+  { name: "Cite",       call: "irw_save_bibtex()",
+    desc: "Credit the original data authors in one call." },
+  { name: "Contribute", call: "validate.html",
+    desc: "Validate your file; it becomes the next table.", accent: true }
+]
+
+specimens = FileAttachment("data/specimens.json").json()
+```
+
+```{ojs}
+//| label: home-page
+//| echo: false
+
+homeRoot = {
+  const esc = (s) => String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+  // specimens.json carries the family key ("competitions"), not its display
+  // name; FAMILIES is the one place that spells the names, so read it from
+  // there rather than title-casing the key.
+  const famName = (key) => {
+    const f = FAMILIES.find(x => x.key === key);
+    return f ? f.name : String(key == null ? "" : key);
+  };
+
+  // ---- Tiles and steps.
+  //
+  // No totals line beside the heading: the per-family counts on the tiles are
+  // the figures, and hero_stats.json has no warehouse-wide people or response
+  // total to put next to them (its n_participants and n_responses are sums
+  // over the CORE metadata table alone).
+  // A family with a `sub` is wrapped so the sub-entry sits indented beneath it
+  // in the same grid cell; an <a> cannot be nested inside another <a>.
+  const tile = (f) => `
+    <a class="tile" href="${esc(f.href)}">
+      ${f.count != null ? `<span class="tile-count">${fmtInt(f.count)}</span>` : ""}
+      <span class="tile-name">${esc(f.name)}</span>
+      <span class="tile-desc">${esc(f.desc)}</span>
+    </a>`;
+
+  const tiles = FAMILIES.map(f => f.sub ? `
+    <div class="tile-group">
+      ${tile(f)}
+      <a class="tile-sub" href="${esc(f.sub.href)}">
+        <span class="tile-sub-name">${esc(f.sub.name)}</span>
+        <span class="tile-sub-desc">${esc(f.sub.desc)}</span>
+      </a>
+    </div>` : tile(f)).join("") + `
+    <a class="tile next" href="contact.html">
+      <span class="tile-count">+</span>
+      <span class="tile-name">Next family</span>
+      <span class="tile-desc">Have data that fits none of these? Tell us.</span>
+    </a>`;
+
+  const steps = STEPS.map((s, i) => `
+    <li class="step${s.accent ? " contribute" : ""}">
+      <span class="step-n" aria-hidden="true">${i + 1}</span>
+      <span class="step-name">${esc(s.name)}</span>
+      <span class="step-desc">${esc(s.desc)}</span>
+      <span class="step-call mono">${esc(s.call)}</span>
+    </li>`).join("");
+
+  const root = document.createElement("div");
+  root.className = "irw-home";
+  root.innerHTML = `
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">AN OPEN WAREHOUSE OF RESPONSE DATA</p>
+        <h1>Every table, documented, citable, one line away.</h1>
+        <p class="subhead">Test answers, survey ratings, chess games, ranked ballots and choice experiments from thousands of studies, reshaped so one analysis runs across all of them.</p>
+        <div class="hero-actions">
+          <a class="btn-solid" href="data.html">Explore the data</a>
+          <a class="btn-ghost" href="https://doi.org/10.3758/s13428-025-02796-y">Read the paper</a>
+        </div>
+      </div>
+      <article class="specimen" id="irw-home-specimen" aria-live="polite"></article>
+    </section>
+
+    <section class="families" aria-labelledby="irw-home-families-h">
+      <div class="families-inner">
+        <div class="section-head">
+          <h2 id="irw-home-families-h"><a href="overview.html#families">Explore by family</a></h2>
+        </div>
+        <div class="tiles">${tiles}</div>
+      </div>
+    </section>
+
+    <section class="workflow" aria-labelledby="irw-home-workflow-h">
+      <div class="workflow-head">
+        <h2 id="irw-home-workflow-h">From a question to an analysis at scale</h2>
+        <p>Six steps, each one a short call in the R or Python package.</p>
+      </div>
+      <ol class="steps">${steps}</ol>
+      <p class="loop-note">↺ Step 6 feeds step 1: contributed data becomes findable, fetchable and citable for everyone.</p>
+    </section>
+  `;
+
+  // ---- Specimen card.
+  //
+  // Plain DOM with listeners rather than reactive cells, so the card's state
+  // stays inside this one element. No auto-rotation: the reader advances it.
+  //
+  // Each family carries several specimens, so the card's state is a family and
+  // a position within it. The family buttons switch family; "Show another"
+  // cycles within the family on screen and is disabled for a family with only
+  // one specimen. The counter is per family ("SPECIMEN 2 OF 4"), not a global
+  // index, and is hidden when a family has a single specimen. It opens on a
+  // random family at a random position, so the page does not always lead with
+  // the same table.
+  const card = root.querySelector("#irw-home-specimen");
+  const S = Array.isArray(specimens) ? specimens : [];
+
+  // Families in FAMILIES order first, then any family present in the JSON that
+  // FAMILIES does not name, so a specimen can never be silently dropped.
+  const known = FAMILIES.map(f => f.key);
+  const extra = [...new Set(S.map(x => x.family))].filter(k => !known.includes(k));
+  const groups = [...known, ...extra]
+    .map(key => ({ key, name: famName(key), items: S.filter(x => x.family === key) }))
+    .filter(g => g.items.length);
+
+  if (!groups.length) {
+    card.innerHTML = `<p class="spec-meta">No specimens available.</p>`;
+  } else {
+    let fi = Math.floor(Math.random() * groups.length);
+    let si = Math.floor(Math.random() * groups[fi].items.length);
+    // The fetch call is behind a disclosure: a black code block is the most
+    // assertive thing on the page, and a reader who has not yet decided to use
+    // the package does not need it shouted at them. Kept across specimens, so
+    // someone who opened it once does not have to reopen it on every card.
+    let codeOpen = false;
+
+    const draw = () => {
+      const group = groups[fi];
+      const d = group.items[si];
+      const cols = Array.isArray(d.columns) ? d.columns : [];
+      const rows = Array.isArray(d.rows) ? d.rows : [];
+      // The 72px floor is what makes the wrapper scroll instead of crushing
+      // cells on a narrow screen; see .spec-grid-wrap in preview.css.
+      const grid = `grid-template-columns: repeat(${Math.max(cols.length, 1)}, minmax(72px, 1fr));`;
+
+      const head = `<div class="spec-row head" style="${grid}">${
+        cols.map(c => `<span>${esc(c)}</span>`).join("")}</div>`;
+      const body = rows.map((r, k) =>
+        `<div class="spec-row${k % 2 ? " alt" : ""}" style="${grid}">${
+          (Array.isArray(r) ? r : []).map(v => `<span>${esc(v)}</span>`).join("")}</div>`).join("");
+      const more = (typeof d.n_rows === "number" && d.n_rows > 0)
+        ? `<div class="spec-more">… ${fmtInt(d.n_rows)} rows</div>` : "";
+
+      // One button per family that has at least one specimen; the family on
+      // screen reads as pressed.
+      const pills = groups.map((g, k) =>
+        `<button type="button" class="spec-pill" data-go="${k}" aria-pressed="${k === fi ? "true" : "false"}">${esc(g.name)}</button>`
+      ).join("");
+
+      const many = group.items.length > 1;
+
+      card.innerHTML = `
+        <div class="spec-top">
+          <span class="spec-pos">${many ? `SPECIMEN ${si + 1} OF ${group.items.length}` : ""}</span>
+          <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+            ${d.placeholder ? `<span class="spec-fake">placeholder</span>` : ""}
+            <span class="spec-chip">${esc(String(d.family || "").toUpperCase())}</span>
+          </span>
+        </div>
+        <div class="spec-head">
+          <h2>${esc(d.title)}</h2>
+          <div class="spec-meta">
+            <span class="spec-name mono">${esc(d.table)}</span>
+            <span>${esc(d.dims)}</span>
+          </div>
+        </div>
+        <div class="spec-grid-wrap">${head}${body}${more}</div>
+        <div class="spec-fetch">
+          <button type="button" class="spec-code-toggle" data-toggle-code
+                  aria-expanded="${codeOpen ? "true" : "false"}">
+            ${codeOpen ? "Hide code" : "Show code to fetch"}
+          </button>
+          <div class="spec-code"${codeOpen ? "" : " hidden"}>${esc(d.fetch)}</div>
+        </div>
+        <div class="spec-foot">
+          <div class="spec-pills" role="group" aria-label="Jump to a family">${pills}</div>
+          <button type="button" class="spec-next" data-next="1"${many ? "" : " disabled"}>Show another →</button>
+        </div>
+        ${(!d.placeholder && d.page_url) ? `<p class="spec-page"><a href="${esc(d.page_url)}">Table page for ${esc(d.table)} →</a></p>` : ""}
+      `;
+
+      card.querySelector("[data-toggle-code]")
+        .addEventListener("click", () => { codeOpen = !codeOpen; draw(); });
+      card.querySelectorAll("[data-go]").forEach(b =>
+        b.addEventListener("click", () => { fi = Number(b.dataset.go); si = 0; draw(); }));
+      card.querySelector("[data-next]")
+        .addEventListener("click", () => { si = (si + 1) % group.items.length; draw(); });
+    };
+
+    draw();
+  }
+
+  return root;
+}
+```
+
+::: {.irw-home-prose}
+
+{{< include /welcome/_prose_en.md >}}
+
+## Other languages
+
+{{< include /welcome/_lang_switch.md >}}
+
+:::
