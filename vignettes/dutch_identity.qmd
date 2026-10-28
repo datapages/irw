@@ -109,6 +109,10 @@ gs_sum <- if (gs_ok) {
     med_beyond_nats = median(u$cv_gap_soe_nats - u$cv_gap_rq_nats),
     this_out   = if (nrow(this)) this$share_out_floor[1] else NA_real_,
     n_thin     = sum(u$cv_gap_soe_nats < 0.05),
+    # the plotted share floors fitted cell probabilities; how much does that matter?
+    med_out_raw   = median(u$share_out),
+    n_floor_moves = sum(abs(u$share_out - u$share_out_floor) > 0.05),
+    max_floor_move = max(abs(u$share_out - u$share_out_floor)),
     by_j       = aggregate(share_out_floor ~ J, data = u, FUN = median)
   )
 } else {
@@ -116,7 +120,8 @@ gs_sum <- if (gs_ok) {
        j_min = NA_integer_, j_max = NA_integer_,
        med_out = NA_real_, q1_out = NA_real_, q3_out = NA_real_,
        med_rq_nats = NA_real_, med_soe_nats = NA_real_,
-       med_beyond_nats = NA_real_,
+       med_beyond_nats = NA_real_, med_out_raw = NA_real_,
+       n_floor_moves = NA_integer_, max_floor_move = NA_real_,
        this_out = NA_real_, n_thin = NA_integer_, by_j = NULL)
 }
 # Disable all subsequent code chunks when cache is missing
@@ -598,7 +603,17 @@ the same nested triple to its own pattern counts and form the same ratio, but
 out of sample: five-fold cross-validation over respondents, scoring each
 held-out fold under models fitted on the other four. In-sample the ratio is
 bounded in $[0,1]$ and inflated when $J$ is small, which would flatter the
-restricted model exactly where it has least to explain.
+restricted model exactly where it has least to explain. Out of sample it is
+bounded by neither, so a few tables land slightly above 1.
+
+Fitted cell probabilities are floored at $1/(10 N_{\text{train}})$ before
+scoring, because a single held-out respondent landing in a numerically empty
+cell would otherwise dominate its fold — a fact about an empty cell, not about
+overfitting. That choice is immaterial in aggregate (the median moves from
+`r sprintf("%.3f", gs_sum$med_out_raw)` unfloored to
+`r sprintf("%.3f", gs_sum$med_out)` floored) but not for every table: it shifts
+`r gs_sum$n_floor_moves` of the `r gs_sum$n_usable` by more than 0.05, at most
+`r sprintf("%.2f", gs_sum$max_floor_move)`. Both versions are in the CSV.
 
 ```{r}
 #| label: fig-gapshare-corpus
