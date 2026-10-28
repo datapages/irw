@@ -14,6 +14,41 @@ This log begins in September 2026, when the page was created. The IRW is older
 than the log, and changes before then are recorded only in the repositories'
 commit history and in the versioned data itself.
 
+## 2026-10-28 — The warehouse reads in Stata
+
+There is now a third client, [`irw` for Stata](https://github.com/itemresponsewarehouse/Stata-pkg),
+alongside the R and Python packages, and it needs no Redivis account. Redivis has no
+Stata library, which had been taken to rule a Stata package out; it turns out not to
+matter. Every public IRW table is served as CSV over plain unauthenticated HTTPS — the
+same path behind the "Download CSV" button on each table's page — and Stata's `copy`
+and `import delimited` are enough to read it. The cost is that endpoint's 100 MB limit.
+Roughly 3% of the warehouse, the largest PISA, ENEM and five-factor tables among them,
+cannot be read this way, and for those the R and Python packages, which authenticate,
+remain the way in. The endpoint also cannot be paged, so `maxrows()` returns whichever
+rows Redivis sends first; row order in the warehouse is arbitrary, and a 200,000-row
+slice of a large table in one test held 146,840 respondents across 32 items. That is a
+preview of a table, not a sample of one, and the help says so wherever the option appears.
+
+The part that is not a port of the R package is `irw_wide`. IRW tables are long and
+`irt` and `gsem` want one row per respondent, so the reshape is the bridge, and it is
+where the sharp edges are. Stata allows 32 characters in a variable name and warehouse
+item ids are frequently longer, so items are numbered and their ids kept as variable
+labels and in a crosswalk the command writes out. Duplicate id–item pairs stop the
+command rather than being quietly collapsed, given that in the warehouse they are often
+real data — repeated administrations, trial-level tables. And the item count is checked
+against `c(maxvar)`, the limit that actually binds, before anything is reshaped.
+
+The package is new, and we have no Stata licence here, so what it does is only as
+established as someone else's logs. An outside tester has now run it on Stata 16.0 and
+on StataNow 19.5: the example above works end to end on both — fetch, reshape, a
+converged two-parameter model — and the package's offline test suite passes all 29 of
+its checks on each. Four real bugs surfaced in the course of that, two in the package
+and two in its tests, and all are fixed. Stata 15 is a different matter: the package
+declares 15.0 as its floor, one command was using a Stata 16 option until a 15 user
+hit it, and 15 remains unconfirmed. If you work in 15, or on Windows or Linux, where
+nothing has been run at all, please
+[report anything that misbehaves](https://github.com/itemresponsewarehouse/Stata-pkg/issues).
+
 ## 2026-10-26 — A wide response matrix comes back with the item ids
 
 In R, `irw_long2resp()` named each column of the wide matrix `item_` plus the

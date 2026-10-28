@@ -4,7 +4,7 @@ title: "Getting Started"
 
 IRW datasets are hosted on [Redivis](https://redivis.com), a platform for academic data sharing and analysis. There are a few different ways you can access IRW data—whether you’re just browsing, downloading tables, or working programmatically in R or Python.
 
-NOTE: You can explore datasets, and download a table under 100 MB as a CSV from its page on this site, without logging in. A free Redivis account is required for everything else: larger downloads, the R and Python packages, the IRW MCP server, and the Redivis website and notebooks. You can create an account [here](https://redivis.com/?createAccount).
+NOTE: You can explore datasets, and download a table under 100 MB as a CSV from its page on this site, without logging in. The Stata package reads that same no-account path, so it needs no Redivis account either, within the same 100 MB limit. A free Redivis account is required for everything else: larger downloads, the R and Python packages, the IRW MCP server, and the Redivis website and notebooks. You can create an account [here](https://redivis.com/?createAccount).
 
 The sections below walk through each access option and include example code to help you get started.
 
@@ -18,13 +18,15 @@ If you're just looking to explore or manually download individual datasets, you 
 
 This is the simplest way to get started if you don’t need programmatic access.
 
-## Option 2: Use the `irw` packages for R or Python (Recommended)
+## Option 2: Use the `irw` packages for R, Python or Stata (Recommended)
 
-We recommend the `irw` packages for R or Python if you want a simple, streamlined way to access IRW data.
+We recommend the `irw` packages if you want a simple, streamlined way to access IRW data.
 
-You can find setup instructions and function references for the [R package](https://itemresponsewarehouse.github.io/Rpkg/) and the [Python package](https://github.com/itemresponsewarehouse/Python-pkg).
+You can find setup instructions and function references for the [R package](https://itemresponsewarehouse.github.io/Rpkg/), the [Python package](https://github.com/itemresponsewarehouse/Python-pkg) and the [Stata package](https://github.com/itemresponsewarehouse/Stata-pkg).
 
-On first use, you’ll be prompted to log in with your Redivis account and grant access via OAuth (or use an API token). This authentication step is required once per session to securely connect to Redivis. For details, see the "Redivis Authentication" section in the package documentation. Scripts and CI jobs, which cannot open a browser, need either a cached login from an earlier interactive session or a Redivis API token in the `REDIVIS_API_TOKEN` environment variable.
+In R and Python, your first call will prompt you to log in with your Redivis account and grant access via OAuth (or use an API token). This authentication step is required once per session to securely connect to Redivis. For details, see the "Redivis Authentication" section in the package documentation. Scripts and CI jobs, which cannot open a browser, need either a cached login from an earlier interactive session or a Redivis API token in the `REDIVIS_API_TOKEN` environment variable.
+
+The Stata package works differently, and needs no Redivis account at all: it reads the same public CSV endpoint that the per-table download buttons on this site use. The trade-off is that endpoint's 100 MB limit, which puts roughly 3% of the warehouse — the largest PISA, ENEM and five-factor tables — out of reach anonymously. The Stata package is new. It has been run on Stata 16.0 and StataNow 19.5; it declares Stata 15 as its floor, but 15 is so far unconfirmed. Please [report anything that misbehaves](https://github.com/itemresponsewarehouse/Stata-pkg/issues).
 
 ### Setup & Example Usage
 
@@ -56,6 +58,28 @@ irw.info()                  # Overview of the IRW
 irw.list_tables()          # List available tables
 irw.filter(var = "rt")     # Search for tables with a specific variable
 df = irw.fetch("4thgrade_math_sirt")
+```
+
+## Stata
+
+```stata
+* Install with:
+* net install irw, from("https://raw.githubusercontent.com/itemresponsewarehouse/Stata-pkg/main/")
+
+irw_info                          // Overview of the IRW
+irw_search, variable(rt)          // Search for tables with a specific variable
+irw_describe 4thgrade_math_sirt   // Shape and columns, without downloading
+irw_fetch 4thgrade_math_sirt, clear
+```
+
+IRW tables are long — one row per response — and Stata's `irt` and `gsem` want one
+row per respondent, so the Stata package carries that reshape:
+
+```stata
+irw_fetch 4thgrade_math_sirt, clear
+irw_wide, key(mathkey.dta) replace   // item names kept as variable labels
+irt 2pl resp*
+irw_cite 4thgrade_math_sirt
 ```
 :::
 
