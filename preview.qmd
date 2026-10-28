@@ -264,6 +264,11 @@ homeRoot = {
   } else {
     let fi = Math.floor(Math.random() * groups.length);
     let si = Math.floor(Math.random() * groups[fi].items.length);
+    // The fetch call is behind a disclosure: a black code block is the most
+    // assertive thing on the page, and a reader who has not yet decided to use
+    // the package does not need it shouted at them. Kept across specimens, so
+    // someone who opened it once does not have to reopen it on every card.
+    let codeOpen = false;
 
     const draw = () => {
       const group = groups[fi];
@@ -306,7 +311,13 @@ homeRoot = {
           </div>
         </div>
         <div class="spec-grid-wrap">${head}${body}${more}</div>
-        <div class="spec-code">${esc(d.fetch)}</div>
+        <div class="spec-fetch">
+          <button type="button" class="spec-code-toggle" data-toggle-code
+                  aria-expanded="${codeOpen ? "true" : "false"}">
+            ${codeOpen ? "Hide code" : "Show code to fetch"}
+          </button>
+          <div class="spec-code"${codeOpen ? "" : " hidden"}>${esc(d.fetch)}</div>
+        </div>
         <div class="spec-foot">
           <div class="spec-pills" role="group" aria-label="Jump to a family">${pills}</div>
           <button type="button" class="spec-next" data-next="1"${many ? "" : " disabled"}>Show another →</button>
@@ -314,6 +325,8 @@ homeRoot = {
         ${(!d.placeholder && d.page_url) ? `<p class="spec-page"><a href="${esc(d.page_url)}">Table page for ${esc(d.table)} →</a></p>` : ""}
       `;
 
+      card.querySelector("[data-toggle-code]")
+        .addEventListener("click", () => { codeOpen = !codeOpen; draw(); });
       card.querySelectorAll("[data-go]").forEach(b =>
         b.addEventListener("click", () => { fi = Number(b.dataset.go); si = 0; draw(); }));
       card.querySelector("[data-next]")
