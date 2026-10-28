@@ -91,3 +91,49 @@ Run single-threaded and niced, as everything else here is:
 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 \
   nice -n 19 ionice -c3 python3 export_and_fit.py
 ```
+
+## Does any of this reach the 437-table results?
+
+No published number changes, and the draft's claims about the ridge are now verified rather
+than asserted. Two sweeps, 2026-10-28.
+
+**Where could the ridge be doing identification work?** Under full-set semantics an unmarked
+candidate still sits in every denominator, so the likelihood is monotone in their worth and
+only the ridge stops θ running to −∞. `scan_sparsity.py` counts marks per candidate across all
+**417 fitted tables**: exactly **one** table has a candidate nobody marked
+(`rcv_mpls_20171107_mayor`), and **four more** have a candidate under ten marks
+(`rcv_mpls_20211102_mayor`, `voterautrement_2024_rep_top2`, `voterautrement_2024_self_top2`,
+`rcv_mpls_20171107_parksboardal`). Every other table identifies every candidate from at least
+ten marks.
+
+**What the ridge is worth there.** `ridge_and_noise.py` recomputes the consensus gain at ridge
+0.01 and ridge 0 on the same fold split, for those five plus a 23-table control sample
+stratified across the eight sources:
+
+| | tables | max \|Δ gain\| | median |
+|---|---|---|---|
+| candidate under 10 marks | 5 | **0.0114** | 0.0004 |
+| controls | 23 | **0.00001** | 0.00000 |
+
+The single largest effect is `voterautrement_2024_rep_top2`, 1.288 → 1.277 — under 1% of a
+value that is itself inflated by having 37 candidates. The widget's claim that the ridge
+"matters only for candidates with almost no marks" is exactly right, and now measured.
+
+**Fold-split noise, which is larger than the ridge.** Three fold seeds at production settings:
+median spread **0.0003**, max **0.0110** (`eurovision_2021_sf2`, 100 ballots). Small tables
+carry noise in the third decimal; the published gains should not be read past it. This is a
+separate and much smaller problem than the known EM-restart noise in the *camps* number
+(~0.02).
+
+Published values sit inside the seed range on 22 of 28 tables, and the six outside differ by
+0.0002–0.003 — the published run drew its folds from a different point in a shared RNG stream,
+so an offset of that size is the expected split noise, not a discrepancy. The largest,
+`atsusaka_2024_alaska_rcv_survey`, is −0.0009 published against −0.0028 to −0.0034 here: both
+are "no consensus at all", which is how the draft reads it.
+
+**What does change is a claim the draft should make.** Because fitting a top-k ballot under
+subset semantics collapses the gain — and collapses it hardest exactly where ballots are most
+truncated — the treatment of unmarked candidates is not a detail but the most consequential
+modelling choice on the page. The widget already states it correctly under *Partial ballots*;
+the limitations section should say that the alternative convention, which is what the standard
+R package implements, would move every number in the family and flip some below chance.
