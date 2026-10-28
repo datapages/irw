@@ -72,7 +72,7 @@ There are three ways to get IRW data, depending on how much you want to automate
 Explore datasets and their metadata directly on the [IRW data browser](/data.qmd) — no account needed. Downloading a full dataset requires a free [Redivis](https://redivis.com) account, since that is the platform that hosts the underlying data.
 
 **2. Use the `irw` package (recommended)**
-The `irw` package, available for both **R** and **Python**, gives simple functions for finding, filtering, and downloading data.
+The `irw` package is available for both **R** and **Python**.
 
 ```r
 # R
@@ -96,7 +96,7 @@ irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 ```
 
-The first time you use the package, you will be asked to log in with a free Redivis account. After that, one line of code downloads any dataset directly into R or Python. From there, the data is ready for analysis with standard software — for example, item response theory or factor analysis packages.
+The first time you use the package, you will be asked to log in with a free Redivis account.
 
 **3. Use the Redivis client libraries directly**
 For lower-level or non-R/Python workflows, the data can also be accessed through Redivis's own R and Python client libraries. See the [Getting Started guide](/getstarted.qmd) for details.
