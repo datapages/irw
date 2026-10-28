@@ -32,12 +32,36 @@
 #   - the display rows come from irw_fetch(..., max_rows = SAMPLE_ROWS), a
 #     bounded pushdown, which is cheap even against a 45M-row table.
 #
+# max_rows IS NOT A SAMPLE. It returns the first N rows in whatever order
+# Redivis stores them, and that order can be perfectly correlated with the
+# column you care about: the first 20,000 rows of fivethirtyeight_nba are ALL
+# agent_a wins (the table overall is 45,158/28,205), and the first 20,000 rows
+# of narcissistic_personality_inventory are ALL resp = 1 (the table overall is
+# 216,672/231,626). No amount of picking rows out of such a prefix can show
+# variation that is not in it. So any table small enough to fetch whole is
+# fetched whole (FULL_FETCH_MAX), and the prefix is used only where the table
+# is too large for that -- today only enem_2013_1mil_mt_nom at 45M rows.
+#
 # SAMPLE_ROWS is well above the 5 rows shown because Redivis returns rows in
 # arbitrary order (there is no stored row order to rely on), so a 5-row fetch
 # would hand back 5 unrelated respondents and the card would show a ballot
 # with one mark and a conjoint task with one profile. Sorting a few thousand
 # rows by the family's key columns and taking the top 5 gives a coherent
 # excerpt -- consecutive rows of one respondent -- at no meaningful cost.
+#
+# Which respondent is then chosen, rather than simply the first (Ben,
+# 2026-10-28). max_rows returns an arbitrary CONTIGUOUS slice, not a random
+# one, so taking the lowest id gave excerpts that misrepresent the table: the
+# PHQ-9 specimen showed 1,0,0,0,0 under a dimensions line reading "4
+# categories", a 5-category risk-perception table came back all 1s, and a
+# chess table showed agent_a winning all five games. pick_rows() therefore
+# shows the first respondent in the sample whose rows are NOT constant in the
+# outcome column.
+#
+# This is a display choice and worth being honest about: the rows are still
+# real, still consecutive, and still all from one real respondent -- the
+# excerpt simply does not lead with someone who answered zero to everything.
+# It is not a random draw and should not be read as one.
 
 suppressPackageStartupMessages({
   library(irw)
@@ -47,7 +71,10 @@ suppressPackageStartupMessages({
 LIST_PATH   <- "specimens_list.csv"
 OUT_PATH    <- "data/specimens.json"
 N_ROWS      <- 5
-SAMPLE_ROWS <- 5000L
+SAMPLE_ROWS <- 20000L
+# Below this many rows the whole table is fetched instead of a bounded prefix.
+# See the note on max_rows bias in the header.
+FULL_FETCH_MAX <- 2000000
 
 # Family label shown in the card's chip and on its buttons, per `source`.
 FAMILY <- c(core = "core", nom = "nominal", comp = "competitions",
@@ -76,6 +103,52 @@ SORT_COLS <- list(
   rank = c("id", "task", "resp"),
   conj = c("id", "task", "profile")
 )
+
+# The respondent key to group an excerpt by, and the column whose variation
+# makes the excerpt worth showing. Competitions have no respondent, so their
+# rows are chosen a row at a time instead. Conjoint's outcome is whichever of
+# choice/rating the table has, which cols_for has already resolved, so it is
+# taken from the resolved column list rather than named here.
+KEY_COL <- list(core = "id", nom = "id", comp = NULL, rank = "id", conj = "id")
+OUTCOME_COL <- list(core = "resp", nom = "text", comp = "winner", rank = "resp",
+                    conj = NULL)
+
+# Five rows that show something. For a family with a respondent key: the first
+# respondent in the sample whose rows vary in the outcome column, falling back
+# to the first respondent when none of them do. For competitions: one row per
+# distinct outcome first (a win either way, a draw), then fill in order.
+pick_rows <- function(df, cols, src) {
+  outcome <- OUTCOME_COL[[src]]
+  if (is.null(outcome)) outcome <- tail(cols, 1)
+  # Always five rows: showing fewer looks like a broken table, and a short
+  # excerpt is worse than an unvaried one.
+  fallback <- function() head(df[, cols, drop = FALSE], N_ROWS)
+  if (!outcome %in% names(df)) return(fallback())
+
+  key <- KEY_COL[[src]]
+  if (!is.null(key) && key %in% names(df)) {
+    idx <- split(seq_len(nrow(df)), df[[key]])
+    # Groups in the order they appear in the sorted sample, so the pick is
+    # deterministic rather than dependent on how split() orders its names.
+    idx <- idx[order(vapply(idx, function(i) i[1], integer(1)))]
+    # Only respondents with five rows to give. Without this the pick could
+    # land on a respondent holding a single row and the card would show one
+    # row: ENEM's slice is one item across many candidates, letki is one row
+    # per respondent by design, and a bullet-voted ballot has one mark.
+    idx <- idx[vapply(idx, length, integer(1)) >= N_ROWS]
+    if (!length(idx)) return(fallback())
+    n_distinct <- vapply(idx,
+      function(i) length(unique(df[[outcome]][head(i, N_ROWS)])), integer(1))
+    # which.max takes the first maximum, so a tie resolves to the earliest
+    # respondent.
+    return(df[head(idx[[which.max(n_distinct)]], N_ROWS), cols, drop = FALSE])
+  }
+
+  firsts <- vapply(unique(df[[outcome]]),
+                   function(v) which(df[[outcome]] == v)[1], integer(1))
+  take <- unique(c(firsts, seq_len(nrow(df))))
+  df[head(take, N_ROWS), cols, drop = FALSE]
+}
 
 # Where each family's metadata keeps the figures the card prints. The names
 # differ by family: core and nominal count responses, conjoint and rankings
@@ -179,12 +252,14 @@ meta_for <- function(source, table) {
 # specimen.
 FETCH_TRIES <- 3L
 
-fetch_one <- function(tbl, src) {
+fetch_one <- function(tbl, src, cap) {
   for (attempt in seq_len(FETCH_TRIES)) {
     got <- tryCatch(
       {
-        df <- if (identical(src, "core")) irw_fetch(tbl, max_rows = SAMPLE_ROWS)
-              else irw_fetch(tbl, source = src, max_rows = SAMPLE_ROWS)
+        args <- list(tbl)
+        if (!identical(src, "core")) args$source <- src
+        if (!is.null(cap)) args$max_rows <- cap
+        df <- do.call(irw_fetch, args)
         df <- as.data.frame(df)
         if (!nrow(df)) stop("fetched 0 rows", call. = FALSE)
         df
@@ -208,9 +283,16 @@ for (k in seq_len(nrow(spec_list))) {
   row <- spec_list[k, ]
   tbl <- trimws(row$table)
   src <- trimws(row$source)
-  message("fetching ", tbl, " (source = ", src, ", max_rows = ", SAMPLE_ROWS, ") ...")
+  # Metadata first: its row count decides whether the whole table is fetched.
+  meta_row <- meta_for(src, tbl)
+  n_rows <- if (is.null(meta_row)) NA_real_ else
+    suppressWarnings(as.numeric(meta_row[[META_ROWS[[src]]]][1]))
+  cap <- if (!is.na(n_rows) && n_rows > FULL_FETCH_MAX) SAMPLE_ROWS else NULL
 
-  df <- fetch_one(tbl, src)
+  message("fetching ", tbl, " (source = ", src, ", ",
+          if (is.null(cap)) "whole table" else paste0("max_rows = ", cap), ") ...")
+
+  df <- fetch_one(tbl, src, cap)
   # Carry on through a failure rather than halting, so one run reports every
   # broken specimen instead of only the first. Nothing is written unless all of
   # them succeed; see the all-or-nothing check below.
@@ -228,8 +310,7 @@ for (k in seq_len(nrow(spec_list))) {
   sort_by <- intersect(SORT_COLS[[src]], names(df))
   if (length(sort_by)) df <- df[do.call(order, unname(as.list(df[sort_by]))), , drop = FALSE]
 
-  meta_row <- meta_for(src, tbl)
-  head_df <- head(df[, cols, drop = FALSE], N_ROWS)
+  head_df <- pick_rows(df, cols, src)
   # Every cell goes out as a string: the card renders text, and a numeric
   # column would otherwise arrive as 1 vs "1" depending on the column's type.
   rows <- lapply(seq_len(nrow(head_df)), function(j) {
@@ -238,9 +319,6 @@ for (k in seq_len(nrow(spec_list))) {
       if (is.na(v)) "" else as.character(v)
     }, character(1), USE.NAMES = FALSE)
   })
-
-  n_rows <- if (is.null(meta_row)) NA_real_ else
-    suppressWarnings(as.numeric(meta_row[[META_ROWS[[src]]]][1]))
 
   entries[[k]] <- list(
     table = tbl,
