@@ -29,7 +29,8 @@ failing the render, and any individual count that is absent is hidden instead of
 printed as 0 or NA. See landing/hero_stats.R for what writes it. Note that
 totals.n_tables there is nrow() of the CORE metadata table, not a grand total --
 the other four families are counted separately into n_tables_comp/_nom/_conj/
-_rank -- so the grand total is computed here as the sum of the five.
+_rank -- so each tile reads its own family's count and the page shows no
+warehouse-wide total.
 
 The specimen card reads data/specimens.json, written by specimens.R from a
 hand-edited specimens_list.csv. The committed file is placeholders; the card
@@ -51,8 +52,8 @@ library(jsonlite)
 # fail, and let the page hide whatever is absent.
 home_stats_fallback <- list(
   totals = list(
-    n_tables = NULL, n_responses = NULL, n_participants = NULL,
-    n_tables_comp = NULL, n_tables_nom = NULL, n_tables_conj = NULL, n_tables_rank = NULL
+    n_tables = NULL, n_tables_comp = NULL, n_tables_nom = NULL,
+    n_tables_conj = NULL, n_tables_rank = NULL
   )
 )
 
@@ -74,21 +75,9 @@ ojs_define(home_stats = home_stats)
 //| echo: false
 
 // Copied from components/_hero_playful.qmd so the two pages format the same
-// figure the same way. fmtAbbrev: 3 significant figures with a K/M/B suffix,
-// trailing ".0" dropped. fmtInt: thousands-grouped, used for table counts.
-fmtAbbrev = (n) => {
-  if (n == null || isNaN(n)) return "";
-  const units = [[1e9, "B"], [1e6, "M"], [1e3, "K"]];
-  for (const [threshold, suffix] of units) {
-    if (Math.abs(n) >= threshold) {
-      const scaled = n / threshold;
-      const digits = Math.abs(scaled) >= 100 ? 0 : 1;
-      return scaled.toFixed(digits).replace(/\.0$/, "") + suffix;
-    }
-  }
-  return Math.round(n).toLocaleString("en-US");
-}
-
+// figure the same way: thousands-grouped, not abbreviated. The page shows only
+// table counts, which are in the thousands, so the hero's K/M/B fmtAbbrev is
+// not needed here.
 fmtInt = (n) => (n == null || isNaN(n)) ? "" : Math.round(n).toLocaleString("en-US");
 ```
 
@@ -103,7 +92,7 @@ totals = home_stats.totals || {}
 count = (v) => (typeof v === "number" && isFinite(v) && v > 0) ? v : null
 
 // One entry per family. Adding a family means adding an entry here: the tiles,
-// the totals line and the specimen card's family buttons all read this list.
+// the tiles and the specimen card's family buttons both read this list.
 // `count` is the field in hero_stats.totals that holds that family's table
 // count -- core's is n_tables, which is the core count and not a grand total.
 FAMILIES = [
@@ -160,31 +149,12 @@ homeRoot = {
     return f ? f.name : String(key == null ? "" : key);
   };
 
-  // ---- Totals line.
-  //
-  // The tables figure is the sum of the five families' counts, since
-  // totals.n_tables is core only. n_participants and n_responses in
-  // hero_stats.json are sums over the CORE metadata table alone, so they are
-  // labelled as the core family's rather than passed off as warehouse-wide --
-  // there is no grand total of either to read, and landing/hero_stats.R is not
-  // this branch's to change. Any piece that is missing drops out of the line.
-  const famCounts = FAMILIES.map(f => f.count).filter(c => c != null);
-  const nTables = famCounts.length ? famCounts.reduce((a, b) => a + b, 0) : null;
-  const nPeople = count(totals.n_participants);
-  const nResp = count(totals.n_responses);
-
-  const totalsBits = [];
-  if (nTables != null) totalsBits.push(`<strong>${fmtInt(nTables)}</strong> tables in all`);
-  if (nPeople != null && nResp != null) {
-    totalsBits.push(`the core family alone holds <strong>${fmtAbbrev(nPeople)}</strong> people and <strong>${fmtAbbrev(nResp)}</strong> responses`);
-  } else if (nPeople != null) {
-    totalsBits.push(`<strong>${fmtAbbrev(nPeople)}</strong> people in the core family`);
-  } else if (nResp != null) {
-    totalsBits.push(`<strong>${fmtAbbrev(nResp)}</strong> responses in the core family`);
-  }
-  const totalsLine = totalsBits.join(" · ");
-
   // ---- Tiles and steps.
+  //
+  // No totals line beside the heading: the per-family counts on the tiles are
+  // the figures, and hero_stats.json has no warehouse-wide people or response
+  // total to put next to them (its n_participants and n_responses are sums
+  // over the CORE metadata table alone).
   const tiles = FAMILIES.map(f => `
     <a class="tile" href="${esc(f.href)}">
       ${f.count != null ? `<span class="tile-count">${fmtInt(f.count)}</span>` : ""}
@@ -227,7 +197,6 @@ homeRoot = {
       <div class="families-inner">
         <div class="section-head">
           <h2 id="irw-home-families-h">Explore by family</h2>
-          ${totalsLine ? `<p class="totals">${totalsLine}</p>` : ""}
         </div>
         <div class="tiles">${tiles}</div>
       </div>
