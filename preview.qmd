@@ -201,7 +201,7 @@ homeRoot = {
     <section class="families" aria-labelledby="irw-home-families-h">
       <div class="families-inner">
         <div class="section-head">
-          <h2 id="irw-home-families-h">Explore by family</h2>
+          <h2 id="irw-home-families-h"><a href="overview.html#families">Explore by family</a></h2>
         </div>
         <div class="tiles">${tiles}</div>
       </div>
@@ -221,18 +221,34 @@ homeRoot = {
   //
   // Plain DOM with listeners rather than reactive cells, so the card's state
   // stays inside this one element. No auto-rotation: the reader advances it.
-  // Opens on a random specimen so the page does not always lead with the same
-  // family.
+  //
+  // Each family carries several specimens, so the card's state is a family and
+  // a position within it. The family buttons switch family; "Show another"
+  // cycles within the family on screen and is disabled for a family with only
+  // one specimen. The counter is per family ("SPECIMEN 2 OF 4"), not a global
+  // index, and is hidden when a family has a single specimen. It opens on a
+  // random family at a random position, so the page does not always lead with
+  // the same table.
   const card = root.querySelector("#irw-home-specimen");
   const S = Array.isArray(specimens) ? specimens : [];
 
-  if (!S.length) {
+  // Families in FAMILIES order first, then any family present in the JSON that
+  // FAMILIES does not name, so a specimen can never be silently dropped.
+  const known = FAMILIES.map(f => f.key);
+  const extra = [...new Set(S.map(x => x.family))].filter(k => !known.includes(k));
+  const groups = [...known, ...extra]
+    .map(key => ({ key, name: famName(key), items: S.filter(x => x.family === key) }))
+    .filter(g => g.items.length);
+
+  if (!groups.length) {
     card.innerHTML = `<p class="spec-meta">No specimens available.</p>`;
   } else {
-    let i = Math.floor(Math.random() * S.length);
+    let fi = Math.floor(Math.random() * groups.length);
+    let si = Math.floor(Math.random() * groups[fi].items.length);
 
     const draw = () => {
-      const d = S[i];
+      const group = groups[fi];
+      const d = group.items[si];
       const cols = Array.isArray(d.columns) ? d.columns : [];
       const rows = Array.isArray(d.rows) ? d.rows : [];
       // The 72px floor is what makes the wrapper scroll instead of crushing
@@ -247,19 +263,17 @@ homeRoot = {
       const more = (typeof d.n_rows === "number" && d.n_rows > 0)
         ? `<div class="spec-more">… ${fmtInt(d.n_rows)} rows</div>` : "";
 
-      const pills = S.map((s, k) => {
-        // One button per family present in the file. Several specimens can share
-        // a family; the button goes to the first of them and the button for the
-        // family on screen reads as pressed.
-        const first = S.findIndex(x => x.family === s.family);
-        return (first === k)
-          ? `<button type="button" class="spec-pill" data-go="${k}" aria-pressed="${S[i].family === s.family ? "true" : "false"}">${esc(famName(s.family))}</button>`
-          : "";
-      }).join("");
+      // One button per family that has at least one specimen; the family on
+      // screen reads as pressed.
+      const pills = groups.map((g, k) =>
+        `<button type="button" class="spec-pill" data-go="${k}" aria-pressed="${k === fi ? "true" : "false"}">${esc(g.name)}</button>`
+      ).join("");
+
+      const many = group.items.length > 1;
 
       card.innerHTML = `
         <div class="spec-top">
-          <span class="spec-pos">SPECIMEN ${i + 1} OF ${S.length}</span>
+          <span class="spec-pos">${many ? `SPECIMEN ${si + 1} OF ${group.items.length}` : ""}</span>
           <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
             ${d.placeholder ? `<span class="spec-fake">placeholder</span>` : ""}
             <span class="spec-chip">${esc(String(d.family || "").toUpperCase())}</span>
@@ -276,15 +290,15 @@ homeRoot = {
         <div class="spec-code">${esc(d.fetch)}</div>
         <div class="spec-foot">
           <div class="spec-pills" role="group" aria-label="Jump to a family">${pills}</div>
-          <button type="button" class="spec-next" data-next="1">Show another →</button>
+          <button type="button" class="spec-next" data-next="1"${many ? "" : " disabled"}>Show another →</button>
         </div>
         ${(!d.placeholder && d.page_url) ? `<p class="spec-page"><a href="${esc(d.page_url)}">Table page for ${esc(d.table)} →</a></p>` : ""}
       `;
 
       card.querySelectorAll("[data-go]").forEach(b =>
-        b.addEventListener("click", () => { i = Number(b.dataset.go); draw(); }));
+        b.addEventListener("click", () => { fi = Number(b.dataset.go); si = 0; draw(); }));
       card.querySelector("[data-next]")
-        .addEventListener("click", () => { i = (i + 1) % S.length; draw(); });
+        .addEventListener("click", () => { si = (si + 1) % group.items.length; draw(); });
     };
 
     draw();
