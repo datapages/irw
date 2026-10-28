@@ -37,6 +37,18 @@ pages) source it, so the two cannot drift. The rules were settled by Ben on
   Covariates also show their value labels from `metadata/covariate_labels.csv`
   (irw#1775), in the source's own words; codes that all carry the withheld
   institution label are described, not listed.
+  It closes with **one line on respondent uniqueness** (irw#3273), from
+  `irw_meta.metadata`'s `k1_prop`: the share of the table's respondents alone in
+  their combination of the `cov_*` quasi-identifiers it publishes. It is a
+  statement, not a warning, and it ends on the IRW's position -- republish what
+  the source published, never finer -- with a link to `datastandard.md` for the
+  reasoning (irw#3232). Blank for the non-core families, whose metadata carries
+  no such column, blank for the core tables publishing no demographics, and
+  blank on any release of `irw_meta` predating the column, so the page is
+  correct before and after that release rather than needing them in step. The
+  arithmetic caveat ("on a sample this size") is printed only under 1,000
+  respondents, where the corpus shows uniqueness really is a sample-size effect;
+  on a table of thousands it would be the misleading half of the sentence.
 - **Withdrawn tables keep their URL as a tombstone.** The list is the data
   repo's withdrawal ledger, `itemtext/withdrawals.csv` in ben-domingue/irw, read at
   build time (whole-table rows, not `irw_text`), plus `withdrawn.tsv` here for
