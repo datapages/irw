@@ -106,7 +106,11 @@ cols_for <- function(df, source) {
   want <- STANDARD_COLS[[source]]
   if (identical(source, "conj")) {
     attrs <- grep("^attr_", names(df), value = TRUE)
-    want <- c(setdiff(want, "choice"), head(sort(attrs), 2), "choice")
+    # The conjoint standard's outcome is `choice` OR `rating` -- a design that
+    # asked for a rating has no `choice` column at all, and hardcoding `choice`
+    # dropped the outcome from the card entirely for those tables.
+    outcome <- head(intersect(c("choice", "rating"), names(df)), 1)
+    want <- c(setdiff(want, "choice"), head(sort(attrs), 2), outcome)
   }
   intersect(want, names(df))
 }
