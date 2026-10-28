@@ -40,29 +40,53 @@ Datasets vary widely in size (from a few hundred responses to many millions) and
 
 ## The data standard
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagram showing a colored grid of id-by-item cells reshaped, via an arrow, into a long-format table of id, item, and resp columns, where each resp cell's color matches its source cell in the grid." class="welcome-figure">
+::: {.callout-warning appearance="simple"}
+**Temporary.** Three candidate replacements for this section are shown side by side below. Only one will stay; the tabset goes with the other two.
+:::
 
+::: {.panel-tabset}
 
-Every IRW dataset is reshaped into **long format**: one row per response. At minimum, each row has three pieces of information:
+### Option A
 
-| Column | Meaning |
-|---|---|
-| `id` | Who (or what) produced the response — typically a person |
-| `item` | Which measurement probe produced the response — typically a question or task |
-| `resp` | The response itself, stored as an ordinal score |
+Every IRW table is in **long format**: one row per response. What a row *is* depends on the family the table belongs to, and so do the columns that carry it.
 
-**Example:**
+| Family | One row is | Key columns | `source =` | Standard |
+|---|---|---|---|---|
+| Core | one response by one person to one item | `id`, `item`, `resp` | `"core"` | [The IRW data standard](/standard.qmd) |
+| Nominal | the same, with the response kept as its category rather than scored | `id`, `item`, `text` | `"nom"` | [Nominal](/nominal_standard.qmd) |
+| Competitions | one contest between two entities, and its outcome | `agent_a`, `agent_b`, `winner`, `score_a`, `score_b` | `"comp"` | [Competitions](/comps_standard.qmd) |
+| Rankings | one position marked on one ballot | `id`, `task`, `item`, `resp` (a position) | `"rank"` | [Rankings](/rankings_standard.qmd) |
+| Conjoint | one profile shown in one task to one respondent | `id`, `task`, `profile`, `attr_<name>`, `choice` or `rating` | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
+| Simulated and synthetic | whatever the core standard says — this family is defined by where the data come from, not by their shape | `id`, `item`, `resp` | `"sim"` | [Simulated and synthetic](/simsyn.qmd) |
 
-| `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
-|----|------|------|-----|-----|-------|
-| 1  | Q1   | 1    | 2.3 | 26  | a     |
-| 1  | Q2   | 0    | 1.8 | 26  | a     |
-| 2  | Q1   | 1    | 2.1 | 31  | b     |
-| 2  | Q2   | 1    | 2.5 | 31  | b     |
+Extra information travels in consistently named columns: `rt` for response time, `cov_<name>` for covariates such as age, `trial_<name>` for details of a trial. The [overview of the standards](/overview.qmd) sets out how the families relate and which one a given dataset belongs in.
 
-When a dataset includes extra information — response time, rater identity, covariates such as age — that information is stored in additional, consistently named columns. This one simple structure covers a huge range of measurement situations, which is what makes it possible to write analysis code once and apply it across the entire warehouse.
+### Option B
 
-The full technical specification of the standard is available at [itemresponsewarehouse.org/standard.html](/standard.qmd). What is described above is the core family; the warehouse also holds competition, nominal, rankings and conjoint tables, each with its own standard and its own columns, and the [overview of the standards](/overview.qmd) sets out how the families relate and which one a given dataset belongs in.
+Every IRW table is in **long format**: one row per response. What a row *is* depends on the family the table belongs to, and so do the columns that carry it.
+
+<img src="figures/families/families-tree.svg" alt="Two questions that sort a dataset into an IRW family." class="standard-tree">
+
+| Family | `source =` | Standard |
+|---|---|---|
+| Core | `"core"` | [The IRW data standard](/standard.qmd) |
+| Nominal | `"nom"` | [Nominal](/nominal_standard.qmd) |
+| Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
+| Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
+| Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
+| Simulated and synthetic | `"sim"` | [Simulated and synthetic](/simsyn.qmd) |
+
+Simsyn is not on the chart: it is defined by where the data come from, not by their shape, so a simulated table can have any of these shapes. The [overview of the standards](/overview.qmd) has the columns for each family.
+
+### Option C
+
+Every IRW table is in **long format**: one row per response. What a row *is* depends on the family the table belongs to, and so do the columns that carry it.
+
+<a href="/overview.qmd"><img src="figures/families/families-all.svg" alt="The IRW data families compared: core, nominal, competitions, rankings and conjoint, each shown as what a respondent meets and the long table it becomes, plus a two-question guide to which family a dataset belongs in." class="standard-all"></a>
+
+Simulated and synthetic data are not shown: that family is defined by where the data come from, not by their shape. The [overview of the standards](/overview.qmd) gives each family's columns and links its standard.
+
+:::
 
 ## How to use it
 
