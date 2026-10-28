@@ -87,6 +87,43 @@ if (cache_ok) {
   irw_pkg_version <- "unrecorded"
 }
 
+# The corpus-wide sweep (vignettes/dutch_identity_gapshare.R) is a separate
+# artefact: one row per table, written as CSV rather than into the rds cache.
+gs_path <- "dutchdata/gapshare_tables.csv"
+gs_ok   <- file.exists(gs_path)
+gs      <- if (gs_ok) read.csv(gs_path, stringsAsFactors = FALSE) else NULL
+
+gs_sum <- if (gs_ok) {
+  u <- gs[gs$share_out_usable, ]
+  this <- gs[gs$table == s1_3$table_name, ]
+  list(
+    n_tables   = nrow(gs),
+    n_usable   = nrow(u),
+    j_min      = min(gs$J), j_max = max(gs$J),
+    med_out    = median(u$share_out_floor),
+    q1_out     = quantile(u$share_out_floor, 0.25, names = FALSE),
+    q3_out     = quantile(u$share_out_floor, 0.75, names = FALSE),
+    med_rq_nats  = median(u$cv_gap_rq_nats),
+    med_soe_nats = median(u$cv_gap_soe_nats),
+    # median of the per-table difference, NOT the difference of the medians
+    med_beyond_nats = median(u$cv_gap_soe_nats - u$cv_gap_rq_nats),
+    this_out   = if (nrow(this)) this$share_out_floor[1] else NA_real_,
+    n_thin     = sum(u$cv_gap_soe_nats < 0.05),
+    # the plotted share floors fitted cell probabilities; how much does that matter?
+    med_out_raw   = median(u$share_out),
+    n_floor_moves = sum(abs(u$share_out - u$share_out_floor) > 0.05),
+    max_floor_move = max(abs(u$share_out - u$share_out_floor)),
+    by_j       = aggregate(share_out_floor ~ J, data = u, FUN = median)
+  )
+} else {
+  list(n_tables = NA_integer_, n_usable = NA_integer_,
+       j_min = NA_integer_, j_max = NA_integer_,
+       med_out = NA_real_, q1_out = NA_real_, q3_out = NA_real_,
+       med_rq_nats = NA_real_, med_soe_nats = NA_real_,
+       med_beyond_nats = NA_real_, med_out_raw = NA_real_,
+       n_floor_moves = NA_integer_, max_floor_move = NA_real_,
+       this_out = NA_real_, n_thin = NA_integer_, by_j = NULL)
+}
 # Disable all subsequent code chunks when cache is missing
 knitr::opts_chunk$set(eval = cache_ok)
 ```
@@ -552,6 +589,106 @@ Statistical rejection and practical adequacy are answers to different questions,
 and at $N = `r format(s1_3$N, big.mark=",")`$ a real but small departure is
 detectable without being important for prediction.
 
+### Is this table unusual?
+
+Everything above concerns one instrument. The economy claim — that a single
+dimension closes almost all of the gap between independence and the full SOE —
+is worth asking of the corpus, because on one table it could be a property of
+these five items rather than of item response data.
+
+So we ask it of every IRW table that admits the same three fits: binary items,
+$`r gs_sum$j_min` \le J \le `r gs_sum$j_max`$, and enough respondents to
+populate $2^J$ cells. That is `r gs_sum$n_tables` tables. For each one we fit
+the same nested triple to its own pattern counts and form the same ratio, but
+out of sample: five-fold cross-validation over respondents, scoring each
+held-out fold under models fitted on the other four. In-sample the ratio is
+bounded in $[0,1]$ and inflated when $J$ is small, which would flatter the
+restricted model exactly where it has least to explain. Out of sample it is
+bounded by neither, so a few tables land slightly above 1.
+
+Fitted cell probabilities are floored at $1/(10 N_{\text{train}})$ before
+scoring, because a single held-out respondent landing in a numerically empty
+cell would otherwise dominate its fold — a fact about an empty cell, not about
+overfitting. That choice is immaterial in aggregate (the median moves from
+`r sprintf("%.3f", gs_sum$med_out_raw)` unfloored to
+`r sprintf("%.3f", gs_sum$med_out)` floored) but not for every table: it shifts
+`r gs_sum$n_floor_moves` of the `r gs_sum$n_usable` by more than 0.05, at most
+`r sprintf("%.2f", gs_sum$max_floor_move)`. Both versions are in the CSV.
+
+```{r}
+#| label: fig-gapshare-corpus
+#| fig-cap: "Held-out gap share for every IRW table admitting the three fits, against the number of items. Each blue point is one table. The dashed line is the median over all tables — the 96.3% quoted below. Red segments are per-J medians, which is where the decline with J shows up. The circled point is the table analysed in this vignette. A value of 1 means one latent dimension captures all of the pairwise association the full SOE finds."
+#| fig-height: 4.2
+
+gs_u    <- gs[gs$share_out_usable, ]
+gs_this <- gs_u[gs_u$table == s1_3$table_name, ]
+set.seed(1)   # fixed jitter, so the figure is stable across renders
+gs_u$xj <- gs_u$J + runif(nrow(gs_u), -0.14, 0.14)
+
+ggplot(gs_u, aes(x = xj, y = share_out_floor)) +
+  geom_hline(yintercept = gs_sum$med_out, linetype = "dashed",
+             colour = irw_grey) +
+  annotate("text", x = gs_sum$j_max + 0.42, y = gs_sum$med_out,
+           label = sprintf("median %.3f", gs_sum$med_out),
+           hjust = 1, vjust = -0.6, size = 3.2, colour = irw_grey) +
+  geom_point(alpha = 0.5, colour = irw_blue, size = 1.9) +
+  geom_segment(data = gs_sum$by_j,
+               aes(x = J - 0.32, xend = J + 0.32,
+                   y = share_out_floor, yend = share_out_floor),
+               colour = irw_red, linewidth = 1) +
+  geom_point(data = gs_this, aes(x = J, y = share_out_floor),
+             shape = 21, size = 3.6, stroke = 1.1,
+             colour = "grey15", fill = NA) +
+  scale_x_continuous(breaks = gs_sum$j_min:gs_sum$j_max,
+                     limits = c(gs_sum$j_min - 0.45, gs_sum$j_max + 0.45)) +
+  labs(x = "Number of items (J)", y = "Held-out gap share",
+       caption = paste0(
+         "Dashed: median over all ", gs_sum$n_usable,
+         " tables. Red: per-J medians.\n",
+         "Circled: ", s1_3$table_name, "."
+       )) +
+  theme(plot.caption = element_text(hjust = 0, colour = irw_grey))
+```
+
+**What to notice.** The dashed line is the headline: the median table gives one
+dimension `r sprintf("%.1f%%", 100 * gs_sum$med_out)` of the gap (IQR
+[`r sprintf("%.2f", gs_sum$q1_out)`, `r sprintf("%.2f", gs_sum$q3_out)`]). The
+circled point is this vignette's table, at
+`r sprintf("%.1f%%", 100 * gs_sum$this_out)` — above the median but well inside
+the cloud of its $J = `r s1_3$J`$ neighbours, so ordinary rather than
+exceptional. In absolute terms the residual is small too: across tables the
+restricted model is worth a median
+`r sprintf("%.3f", gs_sum$med_rq_nats)` nats per held-out respondent over
+independence, the full SOE `r sprintf("%.3f", gs_sum$med_soe_nats)`, and the
+median table's own difference between the two is
+`r sprintf("%.4f", gs_sum$med_beyond_nats)` nats — about
+`r sprintf("%.0f%%", 100 * gs_sum$med_beyond_nats / gs_sum$med_rq_nats)` of what
+the first dimension buys. The economy claim is a property of these data broadly,
+not of this instrument.
+
+It does decay with $J$, monotonically over most of the range, from
+`r sprintf("%.2f", gs_sum$by_j$share_out_floor[1])` at $J = `r gs_sum$by_j$J[1]`$
+to
+`r sprintf("%.2f", tail(gs_sum$by_j$share_out_floor, 1))` at
+$J = `r tail(gs_sum$by_j$J, 1)`$. Whether that is about item count or about what
+long instruments measure, these data cannot say: more items means more pairs
+that *can* depart from rank-1, and it also means instruments that sprawl across
+facets. The low outliers favour the second reading — the worst cases are item
+sets that were never indicators of one trait, such as a battery asking which
+*sources* someone used for COVID information, or a short subscale that mixes
+material deprivation with supervision. They look like separate clusters because
+they are.
+
+Two cautions. The ratio's denominator can be small: for `r gs_sum$n_thin` of the
+`r gs_sum$n_usable` tables the full SOE beats independence by under 0.05 nats
+per respondent, and a low share there means there was little to explain rather
+than that one dimension failed. More importantly, this is a share of
+*second-order* association. The SOE is itself a restricted model — no three-way
+or higher interactions — so a table at 96% has one dimension capturing 96% of
+what the pairwise model captures, which is silent about dependence neither model
+can see. The per-table numbers, the exclusions and the diagnostics are in
+`vignettes/dutchdata/gapshare_summary.md`.
+
 ---
 
 ## Section 4: The γₖ diagnostic for the Rasch model
@@ -835,6 +972,15 @@ The model-fitting and Γ-diagnostic helpers live in
 diagnostics in the cached result, refitting the loglinear models from the stored
 pattern counts and asserting that Table 1 is unchanged, so a figure fix does not
 require re-running the corpus-wide sections.
+
+The corpus sweep behind @fig-gapshare-corpus is a separate, slower job:
+`vignettes/dutch_identity_gapshare.R` fits the three models to every eligible
+IRW table and writes one row per table to
+`vignettes/dutchdata/gapshare_tables.csv`, which is what this page reads.
+`vignettes/dutch_identity_gapshare_report.R` turns that CSV into
+`gapshare_summary.md` with the full breakdown, the exclusion counts and the
+diagnosed outliers. Both pin the IRW version they ran against and cache per
+table, so the sweep resumes rather than restarting.
 
 ::: {.callout-tip}
 To cite the IRW datasets used, run:
