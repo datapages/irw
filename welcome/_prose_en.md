@@ -31,7 +31,8 @@ Datasets vary widely in size (from a few hundred responses to many millions) and
 
 Every IRW table is in **long format**: one row per response. What a row *is* depends on the family the table belongs to, and so do the columns that carry it.
 
-<img src="/figures/families/families-tree.svg" alt="Two questions that sort a dataset into an IRW family." class="standard-tree">
+<img src="/figures/families/families-tree.svg" alt="Two questions that sort a dataset into an IRW family."
+     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
 
 | Family | `source =` | Standard |
 |---|---|---|
