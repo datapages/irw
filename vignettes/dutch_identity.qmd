@@ -617,31 +617,45 @@ overfitting. That choice is immaterial in aggregate (the median moves from
 
 ```{r}
 #| label: fig-gapshare-corpus
-#| fig-cap: "Held-out gap share for every IRW table admitting the three fits, against the number of items. Each point is one table; red segments are per-J medians. The dashed line is the table analysed in this vignette. A value of 1 means one latent dimension captures all of the pairwise association the full SOE finds."
-#| fig-height: 4
+#| fig-cap: "Held-out gap share for every IRW table admitting the three fits, against the number of items. Each blue point is one table. The dashed line is the median over all tables — the 96.3% quoted below. Red segments are per-J medians, which is where the decline with J shows up. The circled point is the table analysed in this vignette. A value of 1 means one latent dimension captures all of the pairwise association the full SOE finds."
+#| fig-height: 4.2
 
-ggplot(gs[gs$share_out_usable, ], aes(x = J, y = share_out_floor)) +
-  geom_hline(yintercept = gs_sum$this_out, linetype = "dashed",
+gs_u    <- gs[gs$share_out_usable, ]
+gs_this <- gs_u[gs_u$table == s1_3$table_name, ]
+set.seed(1)   # fixed jitter, so the figure is stable across renders
+gs_u$xj <- gs_u$J + runif(nrow(gs_u), -0.14, 0.14)
+
+ggplot(gs_u, aes(x = xj, y = share_out_floor)) +
+  geom_hline(yintercept = gs_sum$med_out, linetype = "dashed",
              colour = irw_grey) +
-  geom_jitter(width = 0.14, height = 0, alpha = 0.55, colour = irw_blue,
-              size = 1.9) +
+  annotate("text", x = gs_sum$j_max + 0.42, y = gs_sum$med_out,
+           label = sprintf("median %.3f", gs_sum$med_out),
+           hjust = 1, vjust = -0.6, size = 3.2, colour = irw_grey) +
+  geom_point(alpha = 0.5, colour = irw_blue, size = 1.9) +
   geom_segment(data = gs_sum$by_j,
-               aes(x = J - 0.3, xend = J + 0.3,
+               aes(x = J - 0.32, xend = J + 0.32,
                    y = share_out_floor, yend = share_out_floor),
                colour = irw_red, linewidth = 1) +
-  scale_x_continuous(breaks = gs_sum$j_min:gs_sum$j_max) +
+  geom_point(data = gs_this, aes(x = J, y = share_out_floor),
+             shape = 21, size = 3.6, stroke = 1.1,
+             colour = "grey15", fill = NA) +
+  scale_x_continuous(breaks = gs_sum$j_min:gs_sum$j_max,
+                     limits = c(gs_sum$j_min - 0.45, gs_sum$j_max + 0.45)) +
   labs(x = "Number of items (J)", y = "Held-out gap share",
        caption = paste0(
-         "Five-fold CV over respondents. Dashed line: ",
-         s1_3$table_name, "."
-       ))
+         "Dashed: median over all ", gs_sum$n_usable,
+         " tables. Red: per-J medians.\n",
+         "Circled: ", s1_3$table_name, "."
+       )) +
+  theme(plot.caption = element_text(hjust = 0, colour = irw_grey))
 ```
 
-**What to notice.** The median table gives one dimension
-`r sprintf("%.1f%%", 100 * gs_sum$med_out)` of the gap (IQR
-[`r sprintf("%.2f", gs_sum$q1_out)`, `r sprintf("%.2f", gs_sum$q3_out)`]), and
-this vignette's table, at
-`r sprintf("%.1f%%", 100 * gs_sum$this_out)`, is ordinary rather than
+**What to notice.** The dashed line is the headline: the median table gives one
+dimension `r sprintf("%.1f%%", 100 * gs_sum$med_out)` of the gap (IQR
+[`r sprintf("%.2f", gs_sum$q1_out)`, `r sprintf("%.2f", gs_sum$q3_out)`]). The
+circled point is this vignette's table, at
+`r sprintf("%.1f%%", 100 * gs_sum$this_out)` — above the median but well inside
+the cloud of its $J = `r s1_3$J`$ neighbours, so ordinary rather than
 exceptional. In absolute terms the residual is small too: across tables the
 restricted model is worth a median
 `r sprintf("%.3f", gs_sum$med_rq_nats)` nats per held-out respondent over
