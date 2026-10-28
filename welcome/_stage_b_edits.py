@@ -482,6 +482,103 @@ EDITS["hi"] = {
 }
 
 
+# --------------------------------------------------------------------- ms ---
+EDITS["ms"] = {
+ "1": para("Ia menghimpunkan ratusan set data",
+     "Item Response Warehouse (IRW) menerapkan prinsip FAIR yang sama untuk data respons item. Ia menghimpunkan ribuan set data sedia ada dan membentuk semula ke dalam satu format yang sama — supaya sesuatu kaedah yang diuji ke atas satu set data boleh diuji dengan mudah ke atas ribuan set data yang lain."),
+ "2": para("IRW mengandungi **ratusan set data**",
+     'IRW mengandungi **ribuan set data** ("jadual"), setiap satunya adalah koleksi respons individu. Satu respons dihasilkan setiap kali seseorang (atau unit lain) berdepan dengan sesuatu alat pengukuran dan hasilnya direkodkan. Apa yang dikira sebagai alat pengukuran berbeza mengikut [keluarga data](/overview.qmd): sesuatu item yang dijawab secara berasingan, entiti lain yang ditemui dalam sesuatu pertandingan, keseluruhan set pilihan yang perlu disusun mengikut urutan, atau profil yang dibentuk daripada ciri-ciri yang diberikan secara rawak. Contohnya termasuk:'),
+ "3": line("Mana-mana situasi lain yang melibatkan respons berulang",
+     "- Perlawanan, permainan dan perbandingan secara langsung, di mana dua entiti bertemu dan satu menang\n- Kertas undi keutamaan, susunan kedudukan oleh panel juri, dan soalan menyusun kedudukan dalam tinjauan\n- Eksperimen conjoint, di mana responden memilih antara profil yang dibina secara rawak\n- Mana-mana situasi lain yang melibatkan respons berulang kepada satu set alat pengukuran"),
+ "4": line("**Boleh berinteroperasi (Interoperable).**",
+     "- **Boleh berinteroperasi (Interoperable).** Setiap set data dibentuk semula ke dalam format panjang, satu baris bagi setiap respons, mengikut standard keluarganya (diterangkan di bawah), supaya kod analisis yang sama boleh dijalankan ke atas banyak set data dengan sedikit atau tiada pengubahsuaian."),
+ "5": para("Set data berbeza dengan ketara dari segi saiz",
+     "Set data berbeza dengan ketara dari segi saiz (daripada beberapa ratus respons kepada berjuta-juta) dan jenis respons (item ya/tidak, penilaian pelbagai kategori, skor separa, kategori tanpa urutan, keputusan pertandingan, kedudukan dalam susunan, dan banyak lagi)."),
+ "7": line("Pakej `irw`, yang tersedia untuk kedua-dua",
+     "Pakej `irw` tersedia untuk kedua-dua **R** dan **Python**."),
+ "10": para("Pada kali pertama anda menggunakan pakej ini",
+     "Pada kali pertama anda menggunakan pakej ini, anda akan diminta untuk log masuk dengan akaun Redivis percuma."),
+ "6": section(
+     "## Standard data",
+     "Setiap jadual IRW berada dalam **format panjang**: satu baris bagi setiap respons. Apa yang sesuatu baris itu *wakili* bergantung pada keluarga jadual tersebut, begitu juga lajur-lajur yang membawanya.",
+     "Dua soalan yang meletakkan sesuatu set data dalam keluarga IRW.",
+     "Keluarga", "Standard",
+     "Simsyn tiada dalam carta: keluarga ini ditakrifkan oleh asal usul data, bukan bentuknya, jadi jadual simulasi boleh mempunyai mana-mana daripada bentuk ini. Lajur bagi setiap keluarga ada dalam [gambaran keseluruhan standard](/overview.qmd)."),
+}
+
+# --------------------------------------------------------------------- sw ---
+EDITS["sw"] = {
+ "1": para("Inakusanya mamia ya seti za data",
+     "Item Response Warehouse (IRW) inatumia kanuni hizohizo za FAIR kwa data ya majibu ya vipengele. Inakusanya maelfu ya seti za data zilizopo na kuzibadilisha kuwa muundo mmoja wa pamoja — ili mbinu iliyojaribiwa kwenye seti moja ya data iweze kujaribiwa kwa urahisi kwenye maelfu ya seti nyingine."),
+ "2": para("IRW ina **mamia ya seti za data**",
+     'IRW ina **maelfu ya seti za data** ("majedwali"), kila moja ikiwa mkusanyiko wa majibu ya mtu mmoja mmoja. Jibu hutokea kila mara mtu (au kitengo kingine) anapokutana na kifaa cha upimaji na matokeo yakarekodiwa. Kinachohesabiwa kuwa kifaa cha upimaji hutofautiana kulingana na [familia ya data](/overview.qmd): kipengele kinachojibiwa peke yake, kitu kingine kinachokutana nacho katika mashindano, seti nzima ya chaguo inayopaswa kupangwa kwa mpangilio, au wasifu uliojengwa kutokana na sifa zilizotolewa kwa nasibu. Mifano ni pamoja na:'),
+ "3": line("Hali nyingine yoyote inayohusisha majibu yanayojirudia",
+     "- Mechi, michezo na ulinganishaji wa moja kwa moja, ambapo vitu viwili hukutana na kimoja hushinda\n- Karatasi za kupiga kura kwa mpangilio wa upendeleo, upangaji wa majaji, na maswali ya kupanga katika tafiti\n- Majaribio ya conjoint, ambapo wahojiwa huchagua kati ya wasifu uliojengwa kwa nasibu\n- Hali nyingine yoyote inayohusisha majibu yanayojirudia kwa seti ya vifaa vya upimaji"),
+ "4": line("**Inayoweza kutumika pamoja na mifumo mingine (Interoperable).**",
+     "- **Inayoweza kutumika pamoja na mifumo mingine (Interoperable).** Kila seti ya data hubadilishwa kuwa muundo mrefu, safu moja kwa kila jibu, kufuatana na kiwango cha familia yake (kilichoelezwa hapa chini), ili msimbo huohuo wa uchambuzi uweze kutumika kwenye seti nyingi za data kwa mabadiliko kidogo au bila mabadiliko yoyote."),
+ "5": para("Seti za data hutofautiana sana kwa ukubwa",
+     "Seti za data hutofautiana sana kwa ukubwa (kutoka majibu mia chache hadi mamilioni mengi) na kwa aina ya majibu (vipengele vya ndiyo/hapana, ukadiriaji wa makundi mengi, alama za sehemu, makundi yasiyo na mpangilio, matokeo ya mashindano, nafasi za upangaji, na mengineyo)."),
+ "7": line("Kifurushi cha `irw`, kinachopatikana kwa",
+     "Kifurushi cha `irw` kinapatikana kwa **R** na **Python**."),
+ "10": para("Mara ya kwanza kutumia kifurushi hiki",
+     "Mara ya kwanza kutumia kifurushi hiki, utaombwa kuingia (login) kwa akaunti huru ya Redivis."),
+ "6": section(
+     "## Kiwango cha data",
+     "Kila jedwali la IRW liko katika **muundo mrefu**: safu moja kwa kila jibu. Safu moja *ni nini* hutegemea familia ambayo jedwali hilo ni mali yake, na vivyo hivyo safu wima zinazoibeba.",
+     "Maswali mawili yanayoweka seti ya data katika familia ya IRW.",
+     "Familia", "Kiwango",
+     "Simsyn haiko kwenye chati: familia hii hufafanuliwa na chanzo cha data, si umbo lake, hivyo jedwali la kuiga linaweza kuwa na umbo lolote kati ya haya. Safu wima za kila familia zimeorodheshwa katika [muhtasari wa viwango](/overview.qmd)."),
+}
+
+
+# ----------------------------------------------------------------- bn, ta ---
+EDITS["bn"] = {
+ "1": para("এটি শত শত বিদ্যমান",
+     "আইটেম রেসপন্স ওয়্যারহাউস (IRW) আইটেম রেসপন্স ডেটার ওপর একই FAIR নীতি প্রয়োগ করে। এটি হাজার হাজার বিদ্যমান ডেটাসেটকে একত্র করে একটি সাধারণ ফরম্যাটে রূপান্তরিত করে — যাতে একটি ডেটাসেটে পরীক্ষিত কোনো পদ্ধতি সহজেই অন্য হাজার হাজার ডেটাসেটে পরীক্ষা করা যায়।"),
+ "2": para("IRW-এ **শত শত ডেটাসেট**",
+     'IRW-এ **হাজার হাজার ডেটাসেট** ("টেবিল") রয়েছে, প্রতিটি পৃথক রেসপন্সের একটি সংগ্রহ। কোনো ব্যক্তি (বা অন্য একক) কোনো পরিমাপ প্রোবের সামনে পড়লে এবং ফলাফল লিপিবদ্ধ হলেই একটি রেসপন্স তৈরি হয়। কোনটি প্রোব হিসেবে গণ্য হবে তা [ডেটা পরিবার](/overview.qmd) অনুসারে ভিন্ন হয়: আলাদাভাবে উত্তর দেওয়া একটি আইটেম, কোনো প্রতিযোগিতায় মুখোমুখি হওয়া অন্য একটি সত্তা, ক্রমে সাজানোর জন্য দেওয়া বিকল্পের পুরো একটি সেট, অথবা এলোমেলোভাবে দেওয়া বৈশিষ্ট্য থেকে গড়া একটি প্রোফাইল। উদাহরণস্বরূপ:'),
+ "3": line("পরিমাপ প্রোবের একটি সেটের প্রতি বারবার",
+     "- খেলা, ম্যাচ এবং সরাসরি তুলনা, যেখানে দুটি সত্তা মুখোমুখি হয় এবং একটি জেতে\n- পছন্দক্রমের ব্যালট, বিচারকমণ্ডলীর ক্রমতালিকা এবং জরিপের ক্রম নির্ধারণের প্রশ্ন\n- কনজয়েন্ট পরীক্ষা, যেখানে উত্তরদাতারা এলোমেলোভাবে তৈরি প্রোফাইলের মধ্যে বেছে নেন\n- পরিমাপ প্রোবের একটি সেটের প্রতি বারবার রেসপন্স জড়িত অন্য যেকোনো পরিস্থিতি"),
+ "4": line("**আন্তঃকার্যযোগ্য (Interoperable)।**",
+     "- **আন্তঃকার্যযোগ্য (Interoperable)।** প্রতিটি ডেটাসেট লং ফরম্যাটে, প্রতি রেসপন্সে একটি সারি, তার পরিবারের স্ট্যান্ডার্ড অনুসারে (নিচে বর্ণিত) রূপান্তরিত, যাতে একই বিশ্লেষণ কোড সামান্য বা কোনো পরিবর্তন ছাড়াই বহু ডেটাসেটে চালানো যায়।"),
+ "5": para("ডেটাসেটগুলো আকারে ব্যাপকভাবে ভিন্ন",
+     "ডেটাসেটগুলো আকারে ব্যাপকভাবে ভিন্ন (কয়েকশো রেসপন্স থেকে লক্ষ লক্ষ পর্যন্ত) এবং রেসপন্সের ধরনেও ভিন্ন (হ্যাঁ/না আইটেম, বহু-শ্রেণির রেটিং, আংশিক-নম্বর স্কোর, ক্রমহীন শ্রেণি, প্রতিযোগিতার ফলাফল, ক্রমতালিকার অবস্থান, আরও অনেক কিছু)।"),
+ "7": line("**R** ও **Python** উভয়ের জন্য উপলব্ধ `irw` প্যাকেজটি",
+     "`irw` প্যাকেজটি **R** ও **Python** উভয়ের জন্যই উপলব্ধ।"),
+ "10": para("প্যাকেজটি প্রথমবার ব্যবহারের সময়",
+     "প্যাকেজটি প্রথমবার ব্যবহারের সময়, একটি বিনামূল্যের Redivis অ্যাকাউন্ট দিয়ে লগ ইন করতে বলা হবে।"),
+ "6": section(
+     "## ডেটা স্ট্যান্ডার্ড",
+     "IRW-এর প্রতিটি টেবিল **লং ফরম্যাটে**: প্রতি রেসপন্সে একটি সারি। একটি সারি ঠিক *কী*, তা নির্ভর করে টেবিলটি কোন পরিবারের উপর, এবং এটি যে কলামগুলোতে ধরা হয় সেগুলোও।",
+     "দুটি প্রশ্ন যা একটি ডেটাসেটকে IRW-এর একটি পরিবারে স্থাপন করে।",
+     "পরিবার", "স্ট্যান্ডার্ড",
+     "Simsyn চার্টে নেই: এই পরিবারটি ডেটার আকার দিয়ে নয়, উৎস দিয়ে নির্ধারিত, তাই একটি সিমুলেটেড টেবিল এই যেকোনো আকারের হতে পারে। প্রতিটি পরিবারের কলাম [স্ট্যান্ডার্ডের সংক্ষিপ্তসার](/overview.qmd)-এ দেওয়া আছে।"),
+}
+
+EDITS["ta"] = {
+ "1": para("இது ஏற்கெனவே உள்ள நூற்றுக்கணக்கான",
+     "Item Response Warehouse (IRW) அதே FAIR கொள்கைகளை உருப்படி பதில் தரவுக்குப் பயன்படுத்துகிறது. இது ஏற்கெனவே உள்ள ஆயிரக்கணக்கான தரவுத் தொகுப்புகளை ஒன்றிணைத்து, அவற்றை ஒரே பொதுவான வடிவமைப்பாக மாற்றுகிறது — இதனால் ஒரு தரவுத் தொகுப்பில் சோதிக்கப்பட்ட ஒரு முறையை, ஆயிரக்கணக்கான மற்ற தரவுத் தொகுப்புகளிலும் எளிதாக சோதிக்க முடியும்."),
+ "2": para("IRW-இல் **நூற்றுக்கணக்கான தரவுத் தொகுப்புகள்**",
+     'IRW-இல் **ஆயிரக்கணக்கான தரவுத் தொகுப்புகள்** ("அட்டவணைகள்") உள்ளன, ஒவ்வொன்றும் தனிப்பட்ட பதில்களின் தொகுப்பாகும். ஒரு நபர் (அல்லது வேறு ஒரு அலகு) ஒரு அளவீட்டுக் கருவியை எதிர்கொள்ளும்போதும், முடிவு பதிவு செய்யப்படும்போதும் ஒரு பதில் உருவாகிறது. எது அளவீட்டுக் கருவி என்பது [தரவுக் குடும்பத்தை](/overview.qmd) பொறுத்து மாறுபடுகிறது: தனியே பதிலளிக்கப்படும் ஒரு உருப்படி, ஒரு போட்டியில் எதிர்கொள்ளும் மற்றொரு அமைப்பு, வரிசைப்படுத்த வேண்டிய முழுமையான தேர்வுகள், அல்லது சீரற்ற முறையில் வழங்கப்பட்ட பண்புகளிலிருந்து உருவாக்கப்பட்ட ஒரு சுருக்குவிவரம். எடுத்துக்காட்டுகள்:'),
+ "3": line("அளவீட்டு கருவிகளின் தொகுப்புக்கு மீண்டும் மீண்டும்",
+     "- இரண்டு தரப்பினர் முட்டி ஒருவர் வெல்லும் போட்டிகள், ஆட்டங்கள் மற்றும் நேரடி ஒப்பீடுகள்\n- வரிசைப் வாக்குச் சீட்டுகள், நடுவர் குழு தரவரிசைகள் மற்றும் கருத்தாய்வு தரவரிசைக் கேள்விகள்\n- conjoint சோதனைகள், அவற்றில் பதிலளிப்பவர்கள் சீரற்ற முறையில் உருவாக்கப்பட்ட சுருக்குவிவரங்களுக்கிடையே தேர்கிறார்கள்\n- அளவீட்டு கருவிகளின் தொகுப்புக்கு மீண்டும் மீண்டும் பதிலளிக்கும் வேறு எந்த சூழலும்"),
+ "4": line("**இயங்கக்கூடியது (Interoperable).**",
+     "- **இயங்கக்கூடியது (Interoperable).** ஒவ்வொரு தரவுத் தொகுப்பும் நீள் வடிவிற்கு, ஒரு பதிலுக்கு ஒரு வரிசை என, அதன் குடும்பத்தின் தரநிலையின்படி (கீழே விவரிக்கப்பட்டுள்ளது) மறுவடிவமைக்கப்படுகிறது, இதனால் ஒரே பகுப்பாய்வுக் குறியீட்டை, சிறிதளவு அல்லது எந்த மாற்றமும் இல்லாமல், பல தரவுத் தொகுப்புகளில் இயக்க முடியும்."),
+ "5": para("தரவுத் தொகுப்புகள் அளவில்",
+     "தரவுத் தொகுப்புகள் அளவில் (சில நூறு பதில்களிலிருந்து பல மில்லியன் வரை) மற்றும் பதில் வகையில் (ஆம்/இல்லை உருப்படிகள், பல-வகை மதிப்பீடுகள், பகுதி மதிப்பெண்கள், வரிசையற்ற வகைகள், போட்டி முடிவுகள், தரவரிசை இடங்கள் மற்றும் பல) பரவலாக மாறுபடுகின்றன."),
+ "7": line("**R** மற்றும் **Python** இரண்டிற்கும் கிடைக்கும் `irw` தொகுப்பு",
+     "`irw` தொகுப்பு **R** மற்றும் **Python** இரண்டிற்கும் கிடைக்கிறது."),
+ "10": para("நீங்கள் இந்தத் தொகுப்பை முதன்முறையாக",
+     "நீங்கள் இந்தத் தொகுப்பை முதன்முறையாகப் பயன்படுத்தும்போது, இலவச Redivis கணக்கு மூலம் உள்நுழையுமாறு கேட்கப்படுவீர்கள்."),
+ "6": section(
+     "## தரவு தரநிலை",
+     "ஒவ்வொரு IRW அட்டவணையும் **நீள் வடிவில்** உள்ளது: ஒரு பதிலுக்கு ஒரு வரிசை. ஒரு வரிசை *எதைக் குறிக்கிறது* என்பது அந்த அட்டவணை சேர்ந்த குடும்பத்தைப் பொருத்தது; அதைச் சுமக்கும் நிரல்களும் அதே போல்.",
+     "ஒரு தரவுத் தொகுப்பை IRW குடும்பத்தில் சேர்க்கும் இரண்டு கேள்விகள்.",
+     "குடும்பம்", "தரநிலை",
+     "Simsyn வரைபடத்தில் இல்லை: இந்தக் குடும்பம் தரவின் வடிவால் அல்ல, அதன் மூலத்தால் வரையறுக்கப்படுகிறது, எனவே ஒரு உருவகம் அட்டவணை இவற்றில் எந்த வடிவில் வேண்டுமானாலும் இருக்கலாம். ஒவ்வொரு குடும்பத்தின் நிரல்கள் [தரநிலைகளின் கண்ணோட்டம்](/overview.qmd) பக்கத்தில் உள்ளன."),
+}
+
+
 def apply(lang):
     path = os.path.join(HERE, "welcome_%s.md" % lang)
     s = io.open(path, encoding="utf-8", newline="").read()

@@ -28,51 +28,47 @@ Watafiti wanaosoma upimaji — katika elimu, saikolojia, na fani zinazohusiana �
 
 Hii ni tatizo linalojulikana sana. Jumuiya ya utafiti imeweka kiwango cha pamoja cha kulitatua: data inapaswa kuwa **FAIR** — inayopatikana kwa urahisi (Findable), inayofikiwa (Accessible), inayoweza kutumika pamoja na mifumo mingine (Interoperable), na inayoweza kutumika tena (Reusable) (Wilkinson et al., 2016). Fani nyingine zimeweka kanuni hizi katika vitendo kwa kujenga rasilimali za data zilizoshirikiwa na kusanifishwa. Katika sayansi ya kompyuta, mkusanyiko wa picha zilizowekwa lebo wa ImageNet uliwapa watafiti kigezo cha kawaida (benchmark) na ukasaidia kuchochea maendeleo ya haraka katika AI. Jenetiki na sayansi ya neva zimejenga rasilimali za pamoja zinazofanana kwa data zao wenyewe.
 
-Item Response Warehouse (IRW) inatumia kanuni hizohizo za FAIR kwa data ya majibu ya vipengele. Inakusanya mamia ya seti za data zilizopo na kuzibadilisha kuwa muundo mmoja wa pamoja — ili mbinu iliyojaribiwa kwenye seti moja ya data iweze kujaribiwa kwa urahisi kwenye mamia ya seti nyingine.
+Item Response Warehouse (IRW) inatumia kanuni hizohizo za FAIR kwa data ya majibu ya vipengele. Inakusanya maelfu ya seti za data zilizopo na kuzibadilisha kuwa muundo mmoja wa pamoja — ili mbinu iliyojaribiwa kwenye seti moja ya data iweze kujaribiwa kwa urahisi kwenye maelfu ya seti nyingine.
 
 ## Kilichomo ndani ya IRW
 
-IRW ina **mamia ya seti za data** ("majedwali"), kila moja ikiwa mkusanyiko wa majibu ya mtu mmoja mmoja. Jibu hutokea kila mara mtu (au kitengo kingine) anapojibu kipengele (item) au uchunguzi mwingine. Mifano ni pamoja na:
+IRW ina **maelfu ya seti za data** ("majedwali"), kila moja ikiwa mkusanyiko wa majibu ya mtu mmoja mmoja. Jibu hutokea kila mara mtu (au kitengo kingine) anapokutana na kifaa cha upimaji na matokeo yakarekodiwa. Kinachohesabiwa kuwa kifaa cha upimaji hutofautiana kulingana na [familia ya data](/overview.qmd): kipengele kinachojibiwa peke yake, kitu kingine kinachokutana nacho katika mashindano, seti nzima ya chaguo inayopaswa kupangwa kwa mpangilio, au wasifu uliojengwa kutokana na sifa zilizotolewa kwa nasibu. Mifano ni pamoja na:
 
 - Majibu ya wanafunzi katika mitihani ya elimu na uwezo
 - Vipengele vya dodoso vinavyopima utu au mitazamo
 - Alama zinazotolewa na wakadiriaji binadamu
+- Mechi, michezo na ulinganishaji wa moja kwa moja, ambapo vitu viwili hukutana na kimoja hushinda
+- Karatasi za kupiga kura kwa mpangilio wa upendeleo, upangaji wa majaji, na maswali ya kupanga katika tafiti
+- Majaribio ya conjoint, ambapo wahojiwa huchagua kati ya wasifu uliojengwa kwa nasibu
 - Hali nyingine yoyote inayohusisha majibu yanayojirudia kwa seti ya vifaa vya upimaji
 
 Kila seti ya data katika IRW imeundwa iwe:
 
 - **Inayopatikana kwa urahisi (Findable).** Kila seti ya data inakuja na metadata iliyokokotolewa tayari — idadi ya washiriki, idadi ya vipengele, msongamano wa majibu, uwanja wa somo, na lebo nyingine za maelezo — ili seti za data ziweze kupatikana na kuchujwa bila kuzipakua kwanza.
 - **Inayofikiwa (Accessible).** Kila seti ya data inaweza kupatikana kupitia kivinjari cha wavuti au kifurushi cha `irw`, kwa akaunti ya bure.
-- **Inayoweza kutumika pamoja na mifumo mingine (Interoperable).** Kila seti ya data hubadilishwa kuwa muundo mmoja rahisi (ulioelezwa hapa chini), ili msimbo huohuo wa uchambuzi uweze kutumika kwenye seti nyingi za data kwa mabadiliko kidogo au bila mabadiliko yoyote.
+- **Inayoweza kutumika pamoja na mifumo mingine (Interoperable).** Kila seti ya data hubadilishwa kuwa muundo mrefu, safu moja kwa kila jibu, kufuatana na kiwango cha familia yake (kilichoelezwa hapa chini), ili msimbo huohuo wa uchambuzi uweze kutumika kwenye seti nyingi za data kwa mabadiliko kidogo au bila mabadiliko yoyote.
 - **Inayoweza kutumika tena (Reusable).** Kila seti ya data ina leseni huria, asili yake imeandikwa, na msimbo uliotumika kuibadilisha kuwa muundo wa IRW ni wa umma.
 
-Seti za data hutofautiana sana kwa ukubwa (kutoka majibu mia chache hadi mamilioni mengi) na kwa aina ya majibu (vipengele vya ndiyo/hapana, ukadiriaji wa makundi mengi, alama za sehemu, na mengineyo). Kila seti ya data pia huja na metadata iliyokokotolewa tayari — idadi ya washiriki, idadi ya vipengele, msongamano wa majibu, uwanja wa somo, na lebo nyingine za maelezo — ili watafiti waweze kupata seti za data zinazofaa bila kulazimika kuzipakua na kuzichambua zote kwanza.
+Seti za data hutofautiana sana kwa ukubwa (kutoka majibu mia chache hadi mamilioni mengi) na kwa aina ya majibu (vipengele vya ndiyo/hapana, ukadiriaji wa makundi mengi, alama za sehemu, makundi yasiyo na mpangilio, matokeo ya mashindano, nafasi za upangaji, na mengineyo).
 
 ## Kiwango cha data
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Mchoro unaoonyesha gridi yenye rangi ya seli za id-item, iliyobadilishwa kupitia mshale kuwa jedwali la muundo mrefu lenye safu za id, item na resp, ambapo rangi ya kila seli ya resp inalingana na rangi ya seli yake asili kwenye gridi." class="welcome-figure">
+Kila jedwali la IRW liko katika **muundo mrefu**: safu moja kwa kila jibu. Safu moja *ni nini* hutegemea familia ambayo jedwali hilo ni mali yake, na vivyo hivyo safu wima zinazoibeba.
 
+<img src="/figures/families/families-tree.svg" alt="Maswali mawili yanayoweka seti ya data katika familia ya IRW."
+     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
 
-Kila seti ya data ya IRW hubadilishwa kuwa **muundo mrefu (long format)**: mstari mmoja kwa kila jibu. Kwa kiwango cha chini kabisa, kila mstari una vipande vitatu vya taarifa:
+| Familia | `source =` | Kiwango |
+|---|---|---|
+| Core | `"core"` | [Core](/standard.qmd) |
+| Nominal | `"nom"` | [Nominal](/nominal_standard.qmd) |
+| Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
+| Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
+| Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
+| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
 
-| Safu | Maana |
-|---|---|
-| `id` | Nani (au nini) alizalisha jibu — kwa kawaida ni mtu |
-| `item` | Ni kifaa gani cha upimaji kilichozalisha jibu — kwa kawaida ni swali au kazi |
-| `resp` | Jibu lenyewe, likihifadhiwa kama alama ya mpangilio (ordinal) |
+Simsyn haiko kwenye chati: familia hii hufafanuliwa na chanzo cha data, si umbo lake, hivyo jedwali la kuiga linaweza kuwa na umbo lolote kati ya haya. Safu wima za kila familia zimeorodheshwa katika [muhtasari wa viwango](/overview.qmd).
 
-**Mfano:**
-
-| `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
-|----|------|------|-----|-----|-------|
-| 1  | Q1   | 1    | 2.3 | 26  | a     |
-| 1  | Q2   | 0    | 1.8 | 26  | a     |
-| 2  | Q1   | 1    | 2.1 | 31  | b     |
-| 2  | Q2   | 1    | 2.5 | 31  | b     |
-
-Wakati seti ya data inapokuwa na taarifa za ziada — muda wa kujibu, utambulisho wa mkadiriaji, vigezo shirikishi kama umri — taarifa hizo huhifadhiwa katika safu za ziada zenye majina thabiti. Muundo huu mmoja rahisi unashughulikia wigo mkubwa wa hali za upimaji, na hii ndiyo inayowezesha kuandika msimbo wa uchambuzi mara moja na kuutumia katika ghala lote.
-
-Maelezo kamili ya kiufundi ya kiwango yanapatikana kwenye [itemresponsewarehouse.org/standard.html](/standard.qmd). Kuna pia viwango vingine vinavyohusiana na maalum zaidi kwa maandishi ya vipengele, data ya kulinganisha kwa jozi (pairwise), na majibu ya nominali (makundi yasiyopangwa).
 
 ## Jinsi ya kuitumia
 
@@ -82,7 +78,7 @@ Kuna njia tatu za kupata data ya IRW, kutegemea unavyotaka kuchakata kiotomatiki
 Chunguza seti za data na metadata yake moja kwa moja kwenye [kivinjari cha data cha IRW](/data.qmd) — hakuna akaunti inayohitajika. Kupakua seti kamili ya data kunahitaji akaunti huru ya [Redivis](https://redivis.com), kwani hicho ndicho jukwaa linalohifadhi data ya msingi.
 
 **2. Tumia kifurushi cha `irw` (kinachopendekezwa)**
-Kifurushi cha `irw`, kinachopatikana kwa **R** na **Python**, kinatoa vitendaji rahisi vya kutafuta, kuchuja, na kupakua data.
+Kifurushi cha `irw` kinapatikana kwa **R** na **Python**.
 
 ```r
 # R
@@ -112,7 +108,7 @@ df = irw.fetch("4thgrade_math_sirt")
 g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
-Mara ya kwanza kutumia kifurushi hiki, utaombwa kuingia (login) kwa akaunti huru ya Redivis. Baada ya hapo, mstari mmoja wa msimbo hupakua seti yoyote ya data moja kwa moja kwenye R au Python. Kuanzia hapo, data iko tayari kwa uchambuzi kwa kutumia programu za kawaida — kwa mfano vifurushi vya nadharia ya majibu ya vipengele (item response theory) au uchambuzi wa vipengele (factor analysis).
+Mara ya kwanza kutumia kifurushi hiki, utaombwa kuingia (login) kwa akaunti huru ya Redivis.
 
 **3. Tumia moja kwa moja maktaba za mteja za Redivis**
 Kwa mtiririko wa kazi wa kiwango cha chini zaidi au usio wa R/Python, data pia inaweza kupatikana kupitia maktaba za mteja za Redivis za R na Python. Angalia [Mwongozo wa Kuanza](/getstarted.qmd) kwa maelezo zaidi.
