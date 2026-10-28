@@ -28,51 +28,47 @@ Onderzoekers die meting bestuderen — in de onderwijskunde, psychologie en verw
 
 Dit is een bekend probleem. De onderzoeksgemeenschap heeft een gedeelde norm geformuleerd om het op te lossen: data moet **FAIR** zijn — vindbaar (Findable), toegankelijk (Accessible), interoperabel (Interoperable) en herbruikbaar (Reusable) (Wilkinson et al., 2016). Andere vakgebieden hebben deze principes in de praktijk gebracht door gedeelde, gestandaardiseerde databronnen te bouwen. In de informatica gaf de ImageNet-verzameling van gelabelde afbeeldingen onderzoekers een gemeenschappelijke benchmark en hielp dit de snelle vooruitgang in AI aan te jagen. Genetica en neurowetenschappen hebben vergelijkbare gedeelde bronnen gebouwd voor hun eigen data.
 
-Het Item Response Warehouse (IRW) past dezelfde FAIR-principes toe op itemresponsdata. Het brengt honderden bestaande datasets samen en vormt ze om naar één gemeenschappelijk formaat — zodat een methode die op één dataset is getest, gemakkelijk op honderden andere kan worden getest.
+Het Item Response Warehouse (IRW) past dezelfde FAIR-principes toe op itemresponsdata. Het brengt duizenden bestaande datasets samen en vormt ze om naar één gemeenschappelijk formaat — zodat een methode die op één dataset is getest, gemakkelijk op duizenden andere kan worden getest.
 
 ## Wat zit er in het IRW
 
-Het IRW bevat **honderden datasets** ("tabellen"), elk een verzameling van individuele responsen. Een respons ontstaat wanneer een persoon (of een andere eenheid) reageert op een item (of een andere meetopgave). Voorbeelden zijn onder meer:
+Het IRW bevat **duizenden datasets** ("tabellen"), elk een verzameling van individuele responsen. Een respons ontstaat wanneer een persoon (of een andere eenheid) een meetopgave tegenkomt en de uitkomst wordt vastgelegd. Wat als meetopgave geldt, verschilt per [datafamilie](/overview.qmd): een item dat op zichzelf wordt beantwoord, een andere eenheid die in een confrontatie wordt ontmoet, een volledige reeks opties die op volgorde wordt gezet, of een profiel dat uit willekeurig toegewezen kenmerken is samengesteld. Voorbeelden zijn onder meer:
 
 - Antwoorden van leerlingen op onderwijs- en vaardigheidstoetsen
 - Vragenlijstitems die persoonlijkheid of attitudes meten
 - Beoordelingen gegeven door menselijke beoordelaars
+- Wedstrijden, partijen en directe vergelijkingen, waarbij twee eenheden tegenover elkaar staan en er één wint
+- Voorkeursstembiljetten, juryranglijsten en rangschikkingsvragen in vragenlijsten
+- Conjoint-experimenten, waarbij respondenten kiezen tussen willekeurig samengestelde profielen
 - Elke andere situatie met herhaalde responsen op een reeks meetinstrumenten
 
 Elke dataset in het IRW is ontworpen om te voldoen aan vier eigenschappen:
 
 - **Vindbaar (Findable).** Elke dataset wordt geleverd met vooraf berekende metadata — aantal deelnemers, aantal items, responsdichtheid, vakgebied en andere beschrijvende labels — zodat datasets kunnen worden gevonden en gefilterd zonder ze eerst te downloaden.
 - **Toegankelijk (Accessible).** Elke dataset kan worden opgehaald via de webbrowser of het `irw`-package, met een gratis account.
-- **Interoperabel (Interoperable).** Elke dataset wordt omgevormd naar dezelfde eenvoudige structuur (hieronder beschreven), zodat dezelfde analysecode met weinig of geen aanpassing op veel datasets kan worden toegepast.
+- **Interoperabel (Interoperable).** Elke dataset wordt omgevormd naar het lange formaat, één rij per respons, volgens de standaard van zijn familie (hieronder beschreven), zodat dezelfde analysecode met weinig of geen aanpassing op veel datasets kan worden toegepast.
 - **Herbruikbaar (Reusable).** Elke dataset is openlijk gelicentieerd, de herkomst ervan is gedocumenteerd, en de code die is gebruikt om de dataset naar het IRW-formaat om te zetten, is openbaar.
 
-Datasets verschillen sterk in omvang (van enkele honderden responsen tot vele miljoenen) en in responstype (ja/nee-items, meerkeuzebeoordelingen, deelscores, en meer). Elke dataset wordt ook geleverd met vooraf berekende metadata — aantal deelnemers, aantal items, responsdichtheid, vakgebied en andere beschrijvende labels — zodat onderzoekers relevante datasets kunnen vinden zonder ze eerst allemaal te downloaden en te verwerken.
+Datasets verschillen sterk in omvang (van enkele honderden responsen tot vele miljoenen) en in responstype (ja/nee-items, meerkeuzebeoordelingen, deelscores, ongeordende categorieën, wedstrijduitslagen, rangposities, en meer).
 
 ## De datastandaard
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagram met een gekleurd rooster van id-item-cellen dat via een pijl wordt omgevormd tot een tabel in lang formaat met kolommen id, item en resp, waarbij de kleur van elke resp-cel overeenkomt met die van de bijbehorende broncel in het rooster." class="welcome-figure">
+Elke IRW-tabel staat in het **lange formaat**: één rij per respons. Wat een rij *is*, hangt af van de familie waartoe de tabel behoort, en dat geldt ook voor de kolommen die haar dragen.
 
+<img src="/figures/families/families-tree.svg" alt="Twee vragen die een dataset in een IRW-familie plaatsen."
+     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
 
-Elke IRW-dataset wordt omgevormd naar **lang formaat (long format)**: één rij per respons. Elke rij bevat minimaal drie stukjes informatie:
+| Familie | `source =` | Standaard |
+|---|---|---|
+| Core | `"core"` | [Core](/standard.qmd) |
+| Nominal | `"nom"` | [Nominal](/nominal_standard.qmd) |
+| Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
+| Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
+| Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
+| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
 
-| Kolom | Betekenis |
-|---|---|
-| `id` | Wie (of wat) de respons heeft geproduceerd — meestal een persoon |
-| `item` | Welk meetinstrument de respons heeft geproduceerd — meestal een vraag of taak |
-| `resp` | De respons zelf, opgeslagen als een ordinale score |
+Simsyn staat niet in het schema: die familie wordt bepaald door waar de data vandaan komen, niet door hun vorm, zodat een gesimuleerde tabel elk van deze vormen kan hebben. Het [overzicht van de standaarden](/overview.qmd) geeft de kolommen van elke familie.
 
-**Voorbeeld:**
-
-| `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
-|----|------|------|-----|-----|-------|
-| 1  | Q1   | 1    | 2.3 | 26  | a     |
-| 1  | Q2   | 0    | 1.8 | 26  | a     |
-| 2  | Q1   | 1    | 2.1 | 31  | b     |
-| 2  | Q2   | 1    | 2.5 | 31  | b     |
-
-Wanneer een dataset extra informatie bevat — responstijd, identiteit van de beoordelaar, covariaten zoals leeftijd — wordt die informatie opgeslagen in extra, consistent benoemde kolommen. Deze ene eenvoudige structuur dekt een enorm scala aan meetsituaties, en dat maakt het mogelijk om analysecode één keer te schrijven en toe te passen op het hele magazijn.
-
-De volledige technische specificatie van de standaard is beschikbaar op [itemresponsewarehouse.org/standard.html](/standard.qmd). Er bestaan ook verwante, meer gespecialiseerde standaarden voor itemtekst, paarsgewijze-vergelijkingsdata en nominale (ongeordende categorie) responsen.
 
 ## Hoe te gebruiken
 
@@ -82,7 +78,7 @@ Er zijn drie manieren om IRW-data te verkrijgen, afhankelijk van hoeveel u wilt 
 Verken datasets en hun metadata rechtstreeks in de [IRW-databrowser](/data.qmd) — geen account nodig. Voor het downloaden van een volledige dataset is een gratis [Redivis](https://redivis.com)-account nodig, aangezien dat het platform is dat de onderliggende data host.
 
 **2. Gebruik het `irw`-pakket (aanbevolen)**
-Het `irw`-pakket, beschikbaar voor zowel **R** als **Python**, biedt eenvoudige functies om data te vinden, filteren en downloaden.
+Het `irw`-pakket is beschikbaar voor zowel **R** als **Python**.
 
 ```r
 # R
@@ -93,6 +89,9 @@ irw_info()                     # overview of the IRW
 irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
 ```python
@@ -104,9 +103,12 @@ irw.info()
 irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
-De eerste keer dat u het pakket gebruikt, wordt u gevraagd in te loggen met een gratis Redivis-account. Daarna downloadt één regel code elke dataset rechtstreeks naar R of Python. Vanaf dat moment is de data klaar voor analyse met standaardsoftware — bijvoorbeeld pakketten voor item response theory of factoranalyse.
+De eerste keer dat u het pakket gebruikt, wordt u gevraagd in te loggen met een gratis Redivis-account.
 
 **3. Gebruik de Redivis-clientbibliotheken rechtstreeks**
 Voor lager-niveau workflows of workflows buiten R/Python is de data ook toegankelijk via Redivis' eigen R- en Python-clientbibliotheken. Zie de [Aan de slag-gids](/getstarted.qmd) voor details.

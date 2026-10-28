@@ -94,6 +94,9 @@ irw_info()                     # overview of the IRW
 irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
 ```python
@@ -105,6 +108,9 @@ irw.info()
 irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
 پہلی بار جب آپ یہ پیکیج استعمال کریں گے، آپ سے ایک مفت Redivis اکاؤنٹ کے ذریعے لاگ ان کرنے کو کہا جائے گا۔ اس کے بعد، کوڈ کی ایک لائن کسی بھی ڈیٹاسیٹ کو براہ راست R یا Python میں ڈاؤن لوڈ کر دیتی ہے۔ اس مقام سے، ڈیٹا معیاری سافٹ ویئر — مثال کے طور پر آئٹم ریسپانس تھیوری یا فیکٹر تجزیہ کے پیکیجز — کے ساتھ تجزیے کے لیے تیار ہوتا ہے۔

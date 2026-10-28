@@ -93,6 +93,9 @@ irw_info()                     # overview of the IRW
 irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
 ```python
@@ -104,6 +107,9 @@ irw.info()
 irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
 पैकेज का पहली बार उपयोग करने पर, आपसे एक निःशुल्क Redivis खाते से लॉग इन करने के लिए कहा जाएगा। उसके बाद, कोड की एक ही पंक्ति किसी भी डेटासेट को सीधे R या Python में डाउनलोड कर देती है। इसके बाद, डेटा मानक सॉफ़्टवेयर से विश्लेषण के लिए तैयार होता है — उदाहरण के लिए, आइटम रिस्पॉन्स थ्योरी या फैक्टर विश्लेषण पैकेज।

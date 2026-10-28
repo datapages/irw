@@ -28,51 +28,47 @@ Chi si occupa di ricerca sulla misurazione — in ambito educativo, psicologico 
 
 È un problema ben noto. La comunità scientifica ha definito uno standard condiviso per risolverlo: i dati devono essere **FAIR** — reperibili (Findable), accessibili (Accessible), interoperabili (Interoperable) e riutilizzabili (Reusable) (Wilkinson et al., 2016). Altri campi hanno messo in pratica questi principi costruendo risorse di dati condivise e standardizzate. Nell'informatica, la raccolta di immagini etichettate ImageNet ha fornito ai ricercatori un benchmark comune e ha contribuito a un rapido progresso nell'IA. La genetica e le neuroscienze hanno costruito risorse condivise analoghe per i propri dati.
 
-L'Item Response Warehouse (IRW) applica gli stessi principi FAIR ai dati di risposta agli item. Riunisce centinaia di dataset esistenti e li riorganizza in un unico formato comune — così che un metodo testato su un dataset possa essere facilmente testato su centinaia di altri.
+L'Item Response Warehouse (IRW) applica gli stessi principi FAIR ai dati di risposta agli item. Riunisce migliaia di dataset esistenti e li riorganizza in un unico formato comune — così che un metodo testato su un dataset possa essere facilmente testato su migliaia di altri.
 
 ## Cosa contiene l'IRW
 
-L'IRW contiene **centinaia di dataset** ("tabelle"), ciascuno una raccolta di risposte individuali. Una risposta viene generata ogni volta che una persona (o un'altra unità) risponde a un item (o un'altra prova). Alcuni esempi:
+L'IRW contiene **migliaia di dataset** ("tabelle"), ciascuno una raccolta di risposte individuali. Una risposta viene generata ogni volta che una persona (o un'altra unità) incontra una prova e l'esito viene registrato. Che cosa sia una prova dipende dalla [famiglia di dati](/overview.qmd): un item a cui si risponde singolarmente, un'altra entità incontrata in un confronto, un intero insieme di opzioni da mettere in ordine, oppure un profilo composto da attributi assegnati casualmente. Alcuni esempi:
 
 - Risposte degli studenti a test di istruzione e abilità
 - Item di questionari che misurano personalità o atteggiamenti
 - Valutazioni assegnate da valutatori umani
+- Partite, incontri e confronti diretti, in cui due entità si affrontano e una vince
+- Schede a voto preferenziale, graduatorie di giurie e domande di ordinamento nei questionari
+- Esperimenti conjoint, in cui i rispondenti scelgono tra profili costruiti casualmente
 - Qualsiasi altra situazione che comporti risposte ripetute a un insieme di strumenti di misurazione
 
 Ogni dataset dell'IRW è progettato per essere:
 
 - **Reperibile (Findable).** Ogni dataset è accompagnato da metadati precalcolati — numero di partecipanti, numero di item, densità delle risposte, area disciplinare e altre etichette descrittive — così i dataset possono essere individuati e filtrati senza doverli prima scaricare.
 - **Accessibile (Accessible).** Ogni dataset può essere ottenuto tramite il browser web o il pacchetto `irw`, con un account gratuito.
-- **Interoperabile (Interoperable).** Ogni dataset viene riorganizzato nella stessa struttura semplice (descritta di seguito), in modo che lo stesso codice di analisi possa essere eseguito su molti dataset con poche o nessuna modifica.
+- **Interoperabile (Interoperable).** Ogni dataset viene riorganizzato in formato lungo, una riga per risposta, secondo lo standard della sua famiglia (descritto di seguito), in modo che lo stesso codice di analisi possa essere eseguito su molti dataset con poche o nessuna modifica.
 - **Riutilizzabile (Reusable).** Ogni dataset ha una licenza aperta, la sua origine è documentata e il codice usato per convertirlo nel formato IRW è pubblico.
 
-I dataset variano molto per dimensione (da poche centinaia di risposte a molti milioni) e per tipo di risposta (item sì/no, valutazioni multi-categoria, punteggi parziali e altro). Ogni dataset include anche metadati precalcolati — numero di partecipanti, numero di item, densità delle risposte, area disciplinare e altre etichette descrittive — così i ricercatori possono trovare i dataset rilevanti senza doverli prima scaricare e processare tutti.
+I dataset variano molto per dimensione (da poche centinaia di risposte a molti milioni) e per tipo di risposta (item sì/no, valutazioni multi-categoria, punteggi parziali, categorie non ordinate, esiti di confronti, posizioni in classifica e altro).
 
 ## Lo standard dei dati
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Diagramma che mostra una griglia colorata di celle id-item trasformata, tramite una freccia, in una tabella in formato lungo con colonne id, item e resp, dove il colore di ogni cella resp corrisponde a quello della cella di origine nella griglia." class="welcome-figure">
+Ogni tabella dell'IRW è in **formato lungo**: una riga per risposta. Che cosa *sia* una riga dipende dalla famiglia a cui appartiene la tabella, e lo stesso vale per le colonne che la compongono.
 
+<img src="/figures/families/families-tree.svg" alt="Due domande che collocano un dataset in una famiglia dell'IRW."
+     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
 
-Ogni dataset IRW viene riorganizzato in **formato lungo (long format)**: una riga per risposta. Come minimo, ogni riga contiene tre informazioni:
+| Famiglia | `source =` | Standard |
+|---|---|---|
+| Core | `"core"` | [Core](/standard.qmd) |
+| Nominal | `"nom"` | [Nominal](/nominal_standard.qmd) |
+| Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
+| Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
+| Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
+| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
 
-| Colonna | Significato |
-|---|---|
-| `id` | Chi (o cosa) ha prodotto la risposta — in genere una persona |
-| `item` | Quale strumento di misurazione ha prodotto la risposta — in genere una domanda o un compito |
-| `resp` | La risposta stessa, memorizzata come punteggio ordinale |
+Simsyn non compare nello schema: questa famiglia è definita dall'origine dei dati e non dalla loro forma, quindi una tabella simulata può avere una qualsiasi di queste forme. La [panoramica degli standard](/overview.qmd) riporta le colonne di ciascuna famiglia.
 
-**Esempio:**
-
-| `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
-|----|------|------|-----|-----|-------|
-| 1  | Q1   | 1    | 2.3 | 26  | a     |
-| 1  | Q2   | 0    | 1.8 | 26  | a     |
-| 2  | Q1   | 1    | 2.1 | 31  | b     |
-| 2  | Q2   | 1    | 2.5 | 31  | b     |
-
-Quando un dataset include informazioni aggiuntive — tempo di risposta, identità del valutatore, covariate come l'età — queste informazioni vengono conservate in colonne aggiuntive con nomi coerenti. Questa singola struttura semplice copre un'ampia gamma di situazioni di misurazione, ed è ciò che rende possibile scrivere il codice di analisi una sola volta e applicarlo all'intero magazzino.
-
-La specifica tecnica completa dello standard è disponibile su [itemresponsewarehouse.org/standard.html](/standard.qmd). Esistono anche standard correlati e più specializzati per il testo degli item, i dati di confronto a coppie (pairwise) e le risposte nominali (categorie non ordinate).
 
 ## Come usarlo
 
@@ -82,7 +78,7 @@ Esistono tre modi per ottenere i dati dell'IRW, a seconda di quanto si desidera 
 Esplora i dataset e i loro metadati direttamente nel [browser dati IRW](/data.qmd) — non serve un account. Scaricare un dataset completo richiede un account gratuito [Redivis](https://redivis.com), poiché è quella la piattaforma che ospita i dati sottostanti.
 
 **2. Usa il pacchetto `irw` (consigliato)**
-Il pacchetto `irw`, disponibile sia per **R** che per **Python**, offre funzioni semplici per trovare, filtrare e scaricare i dati.
+Il pacchetto `irw` è disponibile sia per **R** che per **Python**.
 
 ```r
 # R
@@ -93,6 +89,9 @@ irw_info()                     # overview of the IRW
 irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
 ```python
@@ -104,9 +103,12 @@ irw.info()
 irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
-La prima volta che usi il pacchetto, ti verrà chiesto di accedere con un account Redivis gratuito. Da quel momento, una singola riga di codice scarica qualsiasi dataset direttamente in R o Python. Da lì, i dati sono pronti per l'analisi con software standard — ad esempio pacchetti di teoria della risposta all'item o di analisi fattoriale.
+La prima volta che usi il pacchetto, ti verrà chiesto di accedere con un account Redivis gratuito.
 
 **3. Usa direttamente le librerie client di Redivis**
 Per flussi di lavoro di livello inferiore o non basati su R/Python, i dati sono accessibili anche tramite le librerie client R e Python di Redivis. Per i dettagli, vedi la [Guida introduttiva](/getstarted.qmd).

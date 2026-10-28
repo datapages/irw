@@ -93,6 +93,9 @@ irw_info()                     # overview of the IRW
 irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
 ```python
@@ -104,6 +107,9 @@ irw.info()
 irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
 Przy pierwszym użyciu pakietu zostaniesz poproszony o zalogowanie się za pomocą bezpłatnego konta Redivis. Od tego momentu jedna linijka kodu pobiera dowolny zbiór danych bezpośrednio do R lub Pythona. Od tego etapu dane są gotowe do analizy za pomocą standardowego oprogramowania — na przykład pakietów do teorii odpowiedzi na zadania (IRT) lub analizy czynnikowej.

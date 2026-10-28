@@ -93,6 +93,9 @@ irw_info()                     # overview of the IRW
 irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
 ```python
@@ -104,6 +107,9 @@ irw.info()
 irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
 நீங்கள் இந்தத் தொகுப்பை முதன்முறையாகப் பயன்படுத்தும்போது, இலவச Redivis கணக்கு மூலம் உள்நுழையுமாறு கேட்கப்படுவீர்கள். அதன் பிறகு, ஒரே ஒரு வரி குறியீடு எந்தத் தரவுத் தொகுப்பையும் நேரடியாக R அல்லது Python-இல் பதிவிறக்குகிறது. அங்கிருந்து, தரவு நிலையான மென்பொருளைக் கொண்டு பகுப்பாய்வு செய்யத் தயாராக உள்ளது — உதாரணமாக, உருப்படி பதில் கோட்பாடு (item response theory) அல்லது காரணி பகுப்பாய்வு (factor analysis) தொகுப்புகள்.

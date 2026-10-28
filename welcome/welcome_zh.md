@@ -28,51 +28,47 @@ Translator note: please do NOT translate the following —
 
 这是一个众所周知的问题。学术界已经提出了解决这一问题的共同准则：数据应当具备 **FAIR** 特性——可发现（Findable）、可访问（Accessible）、可互操作（Interoperable）和可重用（Reusable）（Wilkinson et al., 2016）。其他学科正是通过践行这些原则,建立共享的、标准化的数据资源来解决这个问题的。在计算机科学领域，带标注的图像集合 ImageNet 为研究者提供了一个共同的基准,推动了人工智能的快速发展。遗传学和神经科学也为各自的数据建立了类似的共享资源。
 
-Item Response Warehouse（IRW）将同样的 FAIR 原则应用于项目反应数据。它汇集了数百个已有数据集，将它们统一转换为同一种通用格式——这样一来，在某个数据集上验证过的方法，就能轻松地在数百个其他数据集上进行检验。
+Item Response Warehouse（IRW）将同样的 FAIR 原则应用于项目反应数据。它汇集了数千个已有数据集，将它们统一转换为同一种通用格式——这样一来，在某个数据集上验证过的方法，就能轻松地在数千个其他数据集上进行检验。
 
 ## IRW 包含哪些内容
 
-IRW 包含**数百个数据集**（称为"表"），每个数据集都是一组个体反应记录。每当某个人（或其他单位）对某个项目（或其他测量探针）作出反应时，就会产生一条反应记录。例如：
+IRW 包含**数千个数据集**（称为"表"），每个数据集都是一组个体反应记录。每当某个人（或其他单位）遇到一个测量探针并记录下结果时，就会产生一条反应记录。什么算作探针取决于[数据族](/overview.qmd)：单独作答的项目、在对战中遇到的另一个主体、需要排序的一整组选项，或者由随机分配的属性组成的一份档案。例如：
 
 - 学生在教育及能力测验中的作答
 - 测量人格或态度的调查项目
 - 人类评分者给出的评分
+- 比赛、对局与直接比较，其中两个主体交锋、一方获胜
+- 偏好投票的选票、评审团排名以及问卷中的排序题
+- 联合分析实验，受访者在随机生成的档案之间做出选择
 - 任何其他涉及对一组测量探针重复作出反应的情境
 
 IRW 中的每一个数据集都力求做到：
 
 - **可发现（Findable）。** 每个数据集都附带预先计算好的元数据——参与者人数、项目数量、反应密度、学科领域及其他描述性标签——使数据集无需先下载即可被定位和筛选。
 - **可访问（Accessible）。** 每个数据集都可以通过网页浏览器或 `irw` 包获取，只需一个免费账户。
-- **可互操作（Interoperable）。** 每个数据集都被转换为相同的简单结构（详见下文），使得同一套分析代码可以在众多数据集上运行，几乎不需要修改。
+- **可互操作（Interoperable）。** 每个数据集都被转换为长格式，每条反应占一行，并遵循其所属数据族的标准（详见下文），使得同一套分析代码可以在众多数据集上运行，几乎不需要修改。
 - **可重用（Reusable）。** 每个数据集都获得开放授权，其来源均有文档记录，将其转换为 IRW 格式所使用的代码也是公开的。
 
-各数据集在规模上差异很大（从数百条反应记录到数百万条不等），在反应类型上也各不相同（是/否类项目、多类别评分、部分得分等）。每个数据集还附带预先计算好的元数据——参与者人数、项目数量、反应密度、学科领域及其他描述性标签——使研究者无需先下载并处理全部数据,即可找到相关数据集。
+各数据集在规模上差异很大（从数百条反应记录到数百万条不等），在反应类型上也各不相同（是/否类项目、多类别评分、部分得分、无序类别、对战结果、排名位次等）。
 
 ## 数据标准
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="示意图:展示一个按 id 与 item 着色的网格,通过箭头转换为包含 id、item、resp 列的长格式表格,其中每个 resp 单元格的颜色与网格中对应的源单元格颜色一致。" class="welcome-figure">
+每一张 IRW 表都采用**长格式**：每条反应占一行。一行具体*代表什么*，取决于该表所属的数据族，承载它的列也是如此。
 
+<img src="/figures/families/families-tree.svg" alt="将数据集归入某个 IRW 数据族的两个问题。"
+     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
 
-每个 IRW 数据集都被转换为**长格式**：每行对应一条反应记录。每行至少包含三项信息：
+| 数据族 | `source =` | 标准 |
+|---|---|---|
+| Core | `"core"` | [Core](/standard.qmd) |
+| Nominal | `"nom"` | [Nominal](/nominal_standard.qmd) |
+| Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
+| Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
+| Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
+| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
 
-| 列 | 含义 |
-|---|---|
-| `id` | 谁（或什么）作出了该反应——通常是一个人 |
-| `item` | 哪个测量探针引发了该反应——通常是一道题目或一项任务 |
-| `resp` | 反应本身，以有序分数的形式存储 |
+Simsyn 未列入图中：该数据族由数据的来源而非形式界定，因此一张模拟表可以具有其中任一种形式。各数据族的列请见[标准概览](/overview.qmd)。
 
-**示例：**
-
-| `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
-|----|------|------|-----|-----|-------|
-| 1  | Q1   | 1    | 2.3 | 26  | a     |
-| 1  | Q2   | 0    | 1.8 | 26  | a     |
-| 2  | Q1   | 1    | 2.1 | 31  | b     |
-| 2  | Q2   | 1    | 2.5 | 31  | b     |
-
-当某个数据集包含额外信息——例如反应时间、评分者身份、年龄等协变量——这些信息会存储在额外的、命名方式一致的列中。这一种简单结构涵盖了极为广泛的测量情境,这也正是能够只编写一次分析代码、便可应用于整个数据库的原因。
-
-该标准的完整技术规范可在 [itemresponsewarehouse.org/standard.html](/standard.qmd) 查阅。此外还有更专门的标准,分别针对项目文本、两两竞争数据以及名义（无序类别）反应数据。
 
 ## 如何使用
 
@@ -82,7 +78,7 @@ IRW 中的每一个数据集都力求做到：
 直接在 [IRW 数据浏览器](/data.qmd) 中探索数据集及其元数据——无需账号。若要下载完整数据集,则需要一个免费的 [Redivis](https://redivis.com) 账号,因为该平台是承载底层数据的平台。
 
 **2. 使用 `irw` 软件包（推荐）**
-`irw` 软件包同时提供 **R** 和 **Python** 版本,提供了简单的函数用于查找、筛选和下载数据。
+`irw` 软件包同时提供 **R** 和 **Python** 版本。
 
 ```r
 # R
@@ -93,6 +89,9 @@ irw_info()                     # overview of the IRW
 irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
 ```python
@@ -104,9 +103,12 @@ irw.info()
 irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
-首次使用该软件包时,系统会要求你使用免费的 Redivis 账号登录。此后,只需一行代码即可将任意数据集直接下载到 R 或 Python 中。此时,数据便已可以使用标准软件进行分析——例如项目反应理论或因子分析相关软件包。
+首次使用该软件包时,系统会要求你使用免费的 Redivis 账号登录。
 
 **3. 直接使用 Redivis 的客户端库**
 对于更底层的工作流程,或不使用 R/Python 的场景,也可以通过 Redivis 自身提供的 R 和 Python 客户端库访问数据。详见 [入门指南](/getstarted.qmd)。

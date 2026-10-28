@@ -93,6 +93,9 @@ irw_info()                     # overview of the IRW
 irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
 ```python
@@ -104,6 +107,9 @@ irw.info()
 irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
 ครั้งแรกที่คุณใช้แพ็กเกจนี้ ระบบจะขอให้คุณเข้าสู่ระบบด้วยบัญชี Redivis ที่ไม่มีค่าใช้จ่าย หลังจากนั้น โค้ดเพียงบรรทัดเดียวจะดาวน์โหลดชุดข้อมูลใดก็ได้เข้าสู่ R หรือ Python โดยตรง จากจุดนี้ ข้อมูลก็พร้อมสำหรับการวิเคราะห์ด้วยซอฟต์แวร์มาตรฐาน — เช่น แพ็กเกจทฤษฎีการตอบสนองข้อสอบ (item response theory) หรือการวิเคราะห์องค์ประกอบ (factor analysis)

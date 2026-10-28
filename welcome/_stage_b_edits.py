@@ -1,0 +1,341 @@
+#!/usr/bin/env python3
+"""Apply TRANSLATION_CHANGES.md 1-7 and 10 to one welcome_<lang>.md.
+
+Scratch tooling for the Stage B pass, kept beside the files it edits so the
+pass is reproducible and reviewable. Changes 8 and 9 (the code lines) were
+applied separately and mechanically; they are not here.
+
+Each language supplies a dict of {change: (old, new)}. Every `old` must appear
+exactly once in the file or the run aborts without writing, so a translation
+that has drifted from the expected wording fails loudly rather than being
+half-edited.
+
+Run:  python3 welcome/_stage_b_edits.py fr es de
+      python3 welcome/_stage_b_edits.py --all
+"""
+
+import io
+import os
+import re
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+# The six family rows are the same in every language: the names are tied to the
+# `source` values and to English-only standard pages, so they are not
+# translated. Only the two column headers and the surrounding prose are.
+ROWS = """| Core | `"core"` | [Core](/standard.qmd) |
+| Nominal | `"nom"` | [Nominal](/nominal_standard.qmd) |
+| Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
+| Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
+| Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
+| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |"""
+
+
+def section(lang_heading, p1, alt, col_family, col_standard, p2):
+    """The whole replacement body for the data-standard section."""
+    return """%s
+
+%s
+
+<img src="/figures/families/families-tree.svg" alt="%s"\n     class="standard-tree" style="display:block;width:100%%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+
+| %s | `source =` | %s |
+|---|---|---|
+%s
+
+%s
+""" % (lang_heading, p1, alt, col_family, col_standard, ROWS, p2)
+
+
+EDITS = {}
+
+# --------------------------------------------------------------------- fr ---
+EDITS["fr"] = {
+ "1": ("Il rassemble des centaines de jeux de données existants et les remet en forme selon un format commun unique de sorte qu'une méthode testée sur un jeu de données puisse facilement être testée sur des centaines d'autres.",
+       "Il rassemble des milliers de jeux de données existants et les remet en forme selon un format commun unique de sorte qu'une méthode testée sur un jeu de données puisse facilement être testée sur des milliers d'autres."),
+ "2": ("L'IRW contient **des centaines de jeux de données** (« tableaux »), chacun étant un ensemble de réponses individuelles. Une réponse est générée chaque fois qu'une personne (ou une unité) répond à un item (ou une variable). Voici quelques exemples :",
+       "L'IRW contient **des milliers de jeux de données** (« tableaux »), chacun étant un ensemble de réponses individuelles. Une réponse est générée chaque fois qu'une personne (ou une autre unité) est confrontée à une sollicitation et que le résultat est enregistré. La nature de cette sollicitation varie selon la [famille de données](/overview.qmd) : un item auquel on répond isolément, une autre entité rencontrée lors d'une confrontation, un ensemble complet d'options à ordonner, ou un profil composé d'attributs attribués aléatoirement. Voici quelques exemples :"),
+ "3": ("- Résultats attribués par des évaluateurs humains\n- Tout autre contexte impliquant des réponses répétées à un ensemble de mesure",
+       "- Résultats attribués par des évaluateurs humains\n- Parties, matchs et comparaisons directes, où deux entités s'affrontent et l'une l'emporte\n- Bulletins de vote préférentiel, classements de jurys et questions de classement dans les sondages\n- Expériences conjointes, où les répondants choisissent entre des profils construits aléatoirement\n- Tout autre contexte impliquant des réponses répétées à un ensemble de mesure"),
+ "4": ("- **Interopérable.** Chaque jeu de données est remis en forme selon une même structure simplifiée (décrite ci-dessous), de sorte que le même code d'analyse puisse s'exécuter sur de nombreux jeux de données avec peu ou pas de modification.",
+       "- **Interopérable.** Chaque jeu de données est remis en forme au format long, une ligne par réponse, selon le standard propre à sa famille (décrit ci-dessous), de sorte que le même code d'analyse puisse s'exécuter sur de nombreux jeux de données avec peu ou pas de modification."),
+ "5": ("Les jeux de données varient considérablement en taille (allant de quelques dizaines de réponses à plusieurs millions) et en type de réponse (items binaires, évaluations à catégories multiples, scores à crédit partiel, etc.). Chaque jeu de données est également accompagné de métadonnées pré-calculées (nombre de participants, nombre d'items, densité des réponses, domaine du sujet et d'autres étiquettes descriptives pertinentes) afin que les chercheurs puissent trouver les jeux de données pertinents sans devoir d'abord tous les télécharger et les traiter.",
+       "Les jeux de données varient considérablement en taille (allant de quelques dizaines de réponses à plusieurs millions) et en type de réponse (items binaires, évaluations à catégories multiples, scores à crédit partiel, catégories non ordonnées, résultats de confrontations, rangs, etc.)."),
+ "7": ("Le package `irw`, disponible pour **R** et **Python**, fournit des fonctions simples pour trouver, filtrer et télécharger des données.",
+       "Le package `irw` est disponible pour **R** et **Python**."),
+ "10": ("La première fois que vous utilisez le package, il vous sera demandé de vous connecter avec un compte Redivis gratuit. Ensuite, une seule ligne de code télécharge n'importe quel jeu de données directement dans R ou Python. À partir de là, les données sont prêtes à être analysées, par exemple, avec la théorie de réponse aux items ou l'analyse factorielle.",
+        "La première fois que vous utilisez le package, il vous sera demandé de vous connecter avec un compte Redivis gratuit."),
+ "6": section(
+     "## Des données standardisées",
+     "Chaque tableau de l'IRW est au **format long** : une ligne par réponse. Ce que *représente* une ligne dépend de la famille à laquelle appartient le tableau, tout comme les colonnes qui la portent.",
+     "Deux questions qui permettent de classer un jeu de données dans une famille de l'IRW.",
+     "Famille", "Standard",
+     "Simsyn ne figure pas sur le schéma : cette famille est définie par l'origine des données et non par leur forme, de sorte qu'un tableau simulé peut prendre n'importe laquelle de ces formes. L'[aperçu des standards](/overview.qmd) donne les colonnes de chaque famille."),
+}
+
+
+# --------------------------------------------------------------------- es ---
+EDITS["es"] = {
+ "1": ("Reúne cientos de conjuntos de datos existentes y los reformatea en un formato común único —de modo que un método probado en un conjunto de datos pueda probarse fácilmente en cientos de otros.",
+       "Reúne miles de conjuntos de datos existentes y los reformatea en un formato común único —de modo que un método probado en un conjunto de datos pueda probarse fácilmente en miles de otros."),
+ "2": ('El IRW contiene **cientos de conjuntos de datos** ("tablas"), cada uno una colección de respuestas individuales. Se genera una respuesta cada vez que una persona (u otra unidad) responde a un ítem (u otra sonda). Algunos ejemplos:',
+       'El IRW contiene **miles de conjuntos de datos** ("tablas"), cada uno una colección de respuestas individuales. Se genera una respuesta cada vez que una persona (u otra unidad) se enfrenta a una sonda y se registra el resultado. Lo que cuenta como sonda varía según la [familia de datos](/overview.qmd): un ítem respondido por sí solo, otra entidad encontrada en un enfrentamiento, un conjunto completo de opciones puesto en orden, o un perfil compuesto por atributos asignados al azar. Algunos ejemplos:'),
+ "3": ("- Calificaciones asignadas por evaluadores humanos\n- Cualquier otro contexto que implique respuestas repetidas a un conjunto de sondas de medición",
+       "- Calificaciones asignadas por evaluadores humanos\n- Partidas, encuentros y comparaciones directas, donde dos entidades se enfrentan y una gana\n- Papeletas de voto preferencial, clasificaciones de jurados y preguntas de ordenación en encuestas\n- Experimentos conjoint, donde las personas eligen entre perfiles construidos al azar\n- Cualquier otro contexto que implique respuestas repetidas a un conjunto de sondas de medición"),
+ "4": ("- **Interoperable.** Cada conjunto de datos se reformatea según la misma estructura simple (descrita más abajo), de modo que el mismo código de análisis pueda ejecutarse en muchos conjuntos de datos con poca o ninguna modificación.",
+       "- **Interoperable.** Cada conjunto de datos se reformatea en formato largo, una fila por respuesta, siguiendo el estándar de su familia (descrito más abajo), de modo que el mismo código de análisis pueda ejecutarse en muchos conjuntos de datos con poca o ninguna modificación."),
+ "5": ("Los conjuntos de datos varían ampliamente en tamaño (desde unos pocos cientos de respuestas hasta varios millones) y en tipo de respuesta (ítems de sí/no, calificaciones de varias categorías, puntuaciones de crédito parcial, y más). Cada conjunto de datos también viene con metadatos precalculados —número de participantes, número de ítems, densidad de respuestas, área temática y otras etiquetas descriptivas— para que los investigadores puedan encontrar conjuntos de datos relevantes sin tener que descargarlos y procesarlos todos primero.",
+       "Los conjuntos de datos varían ampliamente en tamaño (desde unos pocos cientos de respuestas hasta varios millones) y en tipo de respuesta (ítems de sí/no, calificaciones de varias categorías, puntuaciones de crédito parcial, categorías sin orden, resultados de enfrentamientos, posiciones en un ranking, y más)."),
+ "7": ("El paquete `irw`, disponible tanto para **R** como para **Python**, ofrece funciones simples para buscar, filtrar y descargar datos.",
+       "El paquete `irw` está disponible tanto para **R** como para **Python**."),
+ "10": ("La primera vez que uses el paquete, se te pedirá que inicies sesión con una cuenta gratuita de Redivis. Después de eso, una sola línea de código descarga cualquier conjunto de datos directamente en R o Python. A partir de ahí, los datos están listos para el análisis con software estándar —por ejemplo, paquetes de teoría de respuesta al ítem o de análisis factorial.",
+        "La primera vez que uses el paquete, se te pedirá que inicies sesión con una cuenta gratuita de Redivis."),
+ "6": section(
+     "## El estándar de datos",
+     "Cada tabla del IRW está en **formato largo**: una fila por respuesta. Lo que *es* una fila depende de la familia a la que pertenece la tabla, y lo mismo ocurre con las columnas que la componen.",
+     "Dos preguntas que clasifican un conjunto de datos en una familia del IRW.",
+     "Familia", "Estándar",
+     "Simsyn no aparece en el diagrama: esa familia se define por el origen de los datos, no por su forma, de modo que una tabla simulada puede tener cualquiera de estas formas. La [visión general de los estándares](/overview.qmd) da las columnas de cada familia."),
+}
+
+# --------------------------------------------------------------------- de ---
+EDITS["de"] = {
+ "1": ("Es bringt Hunderte bestehender Datensätze zusammen, formt sie in ein gemeinsames Format um und macht sie frei zugänglich an einem einzigen Ort — sodass eine Methode, die an einem Datensatz getestet wurde, leicht an Hunderten anderer getestet werden kann.",
+       "Es bringt Tausende bestehender Datensätze zusammen, formt sie in ein gemeinsames Format um und macht sie frei zugänglich an einem einzigen Ort — sodass eine Methode, die an einem Datensatz getestet wurde, leicht an Tausenden anderer getestet werden kann."),
+ "2": ('Das IRW enthält **Hunderte von Datensätzen** ("Tabellen"), von denen jeder eine Sammlung individueller Antworten ist. Eine Antwort entsteht immer dann, wenn eine Person (oder eine andere Einheit) auf ein Item (oder eine andere Messsonde) reagiert. Beispiele sind:',
+       'Das IRW enthält **Tausende von Datensätzen** ("Tabellen"), von denen jeder eine Sammlung individueller Antworten ist. Eine Antwort entsteht immer dann, wenn eine Person (oder eine andere Einheit) auf eine Messsonde trifft und das Ergebnis festgehalten wird. Was als Messsonde zählt, hängt von der [Datenfamilie](/overview.qmd) ab: ein einzeln beantwortetes Item, eine andere Einheit, der man im Wettbewerb begegnet, ein ganzer Satz von Optionen, der in eine Reihenfolge gebracht wird, oder ein Profil, das aus zufällig zugewiesenen Merkmalen zusammengesetzt ist. Beispiele sind:'),
+ "3": ("- Bewertungen, die von menschlichen Beurteilenden vergeben werden\n- Jeder andere Kontext mit wiederholten Antworten auf eine Reihe von Messsonden",
+       "- Bewertungen, die von menschlichen Beurteilenden vergeben werden\n- Spiele, Partien und direkte Vergleiche, bei denen zwei Einheiten aufeinandertreffen und eine gewinnt\n- Präferenzwahlzettel, Jury-Rangfolgen und Rangordnungsfragen in Befragungen\n- Conjoint-Experimente, bei denen Befragte zwischen zufällig zusammengestellten Profilen wählen\n- Jeder andere Kontext mit wiederholten Antworten auf eine Reihe von Messsonden"),
+ "4": ("- **Interoperabel (Interoperable).** Jeder Datensatz wird in dieselbe einfache Struktur umgeformt (unten beschrieben), sodass derselbe Analysecode mit wenig oder gar keiner Anpassung auf viele Datensätze angewendet werden kann.",
+       "- **Interoperabel (Interoperable).** Jeder Datensatz wird in das Langformat umgeformt, eine Zeile pro Antwort, nach dem Standard seiner Familie (unten beschrieben), sodass derselbe Analysecode mit wenig oder gar keiner Anpassung auf viele Datensätze angewendet werden kann."),
+ "5": ("Die Datensätze variieren stark in ihrer Größe (von einigen Hundert Antworten bis zu mehreren Millionen) und im Antworttyp (Ja/Nein-Items, mehrkategoriale Bewertungen, Teilpunktzahlen und mehr). Jeder Datensatz kommt zudem mit vorab berechneten Metadaten — Anzahl der Teilnehmenden, Anzahl der Items, Antwortdichte, Themengebiet und weitere beschreibende Tags —, sodass Forschende relevante Datensätze finden können, ohne zunächst alle herunterladen und verarbeiten zu müssen.",
+       "Die Datensätze variieren stark in ihrer Größe (von einigen Hundert Antworten bis zu mehreren Millionen) und im Antworttyp (Ja/Nein-Items, mehrkategoriale Bewertungen, Teilpunktzahlen, ungeordnete Kategorien, Wettkampfergebnisse, Rangplätze und mehr)."),
+ "7": ("Das `irw`-Paket, verfügbar sowohl für **R** als auch für **Python**, bietet einfache Funktionen zum Auffinden, Filtern und Herunterladen von Daten.",
+       "Das `irw`-Paket ist sowohl für **R** als auch für **Python** verfügbar."),
+ "10": ("Beim ersten Gebrauch des Pakets werden Sie aufgefordert, sich mit einem kostenlosen Redivis-Konto anzumelden. Danach lädt eine einzige Codezeile jeden beliebigen Datensatz direkt in R oder Python herunter. Von da an sind die Daten bereit für die Analyse mit gängiger Software — etwa Paketen für Item-Response-Theorie oder Faktorenanalyse.",
+        "Beim ersten Gebrauch des Pakets werden Sie aufgefordert, sich mit einem kostenlosen Redivis-Konto anzumelden."),
+ "6": section(
+     "## Der Datenstandard",
+     "Jede IRW-Tabelle liegt im **Langformat** vor: eine Zeile pro Antwort. Was eine Zeile *ist*, hängt von der Familie ab, zu der die Tabelle gehört, und ebenso die Spalten, die sie tragen.",
+     "Zwei Fragen, die einen Datensatz einer IRW-Familie zuordnen.",
+     "Familie", "Standard",
+     "Simsyn steht nicht im Diagramm: Diese Familie ist über die Herkunft der Daten definiert, nicht über ihre Form, sodass eine simulierte Tabelle jede dieser Formen haben kann. Die [Übersicht der Standards](/overview.qmd) nennt die Spalten jeder Familie."),
+}
+
+
+# --------------------------------------------------------------------- it ---
+EDITS["it"] = {
+ "1": ("Riunisce centinaia di dataset esistenti e li riorganizza in un unico formato comune — così che un metodo testato su un dataset possa essere facilmente testato su centinaia di altri.",
+       "Riunisce migliaia di dataset esistenti e li riorganizza in un unico formato comune — così che un metodo testato su un dataset possa essere facilmente testato su migliaia di altri."),
+ "2": ('L\'IRW contiene **centinaia di dataset** ("tabelle"), ciascuno una raccolta di risposte individuali. Una risposta viene generata ogni volta che una persona (o un\'altra unità) risponde a un item (o un\'altra prova). Alcuni esempi:',
+       'L\'IRW contiene **migliaia di dataset** ("tabelle"), ciascuno una raccolta di risposte individuali. Una risposta viene generata ogni volta che una persona (o un\'altra unità) incontra una prova e l\'esito viene registrato. Che cosa sia una prova dipende dalla [famiglia di dati](/overview.qmd): un item a cui si risponde singolarmente, un\'altra entità incontrata in un confronto, un intero insieme di opzioni da mettere in ordine, oppure un profilo composto da attributi assegnati casualmente. Alcuni esempi:'),
+ "3": ("- Valutazioni assegnate da valutatori umani\n- Qualsiasi altra situazione che comporti risposte ripetute a un insieme di strumenti di misurazione",
+       "- Valutazioni assegnate da valutatori umani\n- Partite, incontri e confronti diretti, in cui due entità si affrontano e una vince\n- Schede a voto preferenziale, graduatorie di giurie e domande di ordinamento nei questionari\n- Esperimenti conjoint, in cui i rispondenti scelgono tra profili costruiti casualmente\n- Qualsiasi altra situazione che comporti risposte ripetute a un insieme di strumenti di misurazione"),
+ "4": ("- **Interoperabile (Interoperable).** Ogni dataset viene riorganizzato nella stessa struttura semplice (descritta di seguito), in modo che lo stesso codice di analisi possa essere eseguito su molti dataset con poche o nessuna modifica.",
+       "- **Interoperabile (Interoperable).** Ogni dataset viene riorganizzato in formato lungo, una riga per risposta, secondo lo standard della sua famiglia (descritto di seguito), in modo che lo stesso codice di analisi possa essere eseguito su molti dataset con poche o nessuna modifica."),
+ "5": ("I dataset variano molto per dimensione (da poche centinaia di risposte a molti milioni) e per tipo di risposta (item sì/no, valutazioni multi-categoria, punteggi parziali e altro). Ogni dataset include anche metadati precalcolati — numero di partecipanti, numero di item, densità delle risposte, area disciplinare e altre etichette descrittive — così i ricercatori possono trovare i dataset rilevanti senza doverli prima scaricare e processare tutti.",
+       "I dataset variano molto per dimensione (da poche centinaia di risposte a molti milioni) e per tipo di risposta (item sì/no, valutazioni multi-categoria, punteggi parziali, categorie non ordinate, esiti di confronti, posizioni in classifica e altro)."),
+ "7": ("Il pacchetto `irw`, disponibile sia per **R** che per **Python**, offre funzioni semplici per trovare, filtrare e scaricare i dati.",
+       "Il pacchetto `irw` è disponibile sia per **R** che per **Python**."),
+ "10": ("La prima volta che usi il pacchetto, ti verrà chiesto di accedere con un account Redivis gratuito. Da quel momento, una singola riga di codice scarica qualsiasi dataset direttamente in R o Python. Da lì, i dati sono pronti per l\'analisi con software standard — ad esempio pacchetti di teoria della risposta all\'item o di analisi fattoriale.",
+        "La prima volta che usi il pacchetto, ti verrà chiesto di accedere con un account Redivis gratuito."),
+ "6": section(
+     "## Lo standard dei dati",
+     "Ogni tabella dell\'IRW è in **formato lungo**: una riga per risposta. Che cosa *sia* una riga dipende dalla famiglia a cui appartiene la tabella, e lo stesso vale per le colonne che la compongono.",
+     "Due domande che collocano un dataset in una famiglia dell\'IRW.",
+     "Famiglia", "Standard",
+     "Simsyn non compare nello schema: questa famiglia è definita dall\'origine dei dati e non dalla loro forma, quindi una tabella simulata può avere una qualsiasi di queste forme. La [panoramica degli standard](/overview.qmd) riporta le colonne di ciascuna famiglia."),
+}
+
+# --------------------------------------------------------------------- pt ---
+EDITS["pt"] = {
+ "1": ("Ele reúne centenas de conjuntos de dados existentes e os reformata em um formato comum único — de modo que um método testado em um conjunto de dados possa ser facilmente testado em centenas de outros.",
+       "Ele reúne milhares de conjuntos de dados existentes e os reformata em um formato comum único — de modo que um método testado em um conjunto de dados possa ser facilmente testado em milhares de outros."),
+ "2": ('O IRW contém **centenas de conjuntos de dados** ("tabelas"), cada um sendo uma coleção de respostas individuais. Uma resposta é gerada sempre que uma pessoa (ou outra unidade) responde a um item (ou outra sonda). Exemplos incluem:',
+       'O IRW contém **milhares de conjuntos de dados** ("tabelas"), cada um sendo uma coleção de respostas individuais. Uma resposta é gerada sempre que uma pessoa (ou outra unidade) se depara com uma sonda e o resultado é registrado. O que conta como sonda varia conforme a [família de dados](/overview.qmd): um item respondido isoladamente, outra entidade enfrentada em uma disputa, um conjunto inteiro de opções colocado em ordem, ou um perfil montado a partir de atributos atribuídos ao acaso. Exemplos incluem:'),
+ "3": ("- Avaliações atribuídas por avaliadores humanos\n- Qualquer outro contexto que envolva respostas repetidas a um conjunto de sondas de medição",
+       "- Avaliações atribuídas por avaliadores humanos\n- Partidas, jogos e comparações diretas, em que duas entidades se enfrentam e uma vence\n- Cédulas de voto preferencial, classificações de júris e questões de ordenação em pesquisas\n- Experimentos conjoint, em que os respondentes escolhem entre perfis construídos ao acaso\n- Qualquer outro contexto que envolva respostas repetidas a um conjunto de sondas de medição"),
+ "4": ("- **Interoperável (Interoperable).** Cada conjunto de dados é reformatado segundo a mesma estrutura simples (descrita abaixo), de modo que o mesmo código de análise possa ser executado em muitos conjuntos de dados com pouca ou nenhuma modificação.",
+       "- **Interoperável (Interoperable).** Cada conjunto de dados é reformatado em formato longo, uma linha por resposta, seguindo o padrão de sua família (descrito abaixo), de modo que o mesmo código de análise possa ser executado em muitos conjuntos de dados com pouca ou nenhuma modificação."),
+ "5": ("Os conjuntos de dados variam amplamente em tamanho (de algumas centenas de respostas a vários milhões) e em tipo de resposta (itens sim/não, avaliações de múltiplas categorias, pontuações de crédito parcial, entre outros). Cada conjunto de dados também vem com metadados pré-calculados — número de participantes, número de itens, densidade de respostas, área temática e outras etiquetas descritivas — para que os pesquisadores possam encontrar conjuntos de dados relevantes sem precisar baixá-los e processá-los todos primeiro.",
+       "Os conjuntos de dados variam amplamente em tamanho (de algumas centenas de respostas a vários milhões) e em tipo de resposta (itens sim/não, avaliações de múltiplas categorias, pontuações de crédito parcial, categorias sem ordem, resultados de disputas, posições em rankings, entre outros)."),
+ "7": ("O pacote `irw`, disponível tanto para **R** quanto para **Python**, oferece funções simples para encontrar, filtrar e baixar dados.",
+       "O pacote `irw` está disponível tanto para **R** quanto para **Python**."),
+ "10": ("Na primeira vez que você usar o pacote, será solicitado que faça login com uma conta gratuita do Redivis. Depois disso, uma única linha de código baixa qualquer conjunto de dados diretamente no R ou Python. A partir daí, os dados estão prontos para análise com software padrão — por exemplo, pacotes de teoria de resposta ao item ou análise fatorial.",
+        "Na primeira vez que você usar o pacote, será solicitado que faça login com uma conta gratuita do Redivis."),
+ "6": section(
+     "## O padrão de dados",
+     "Cada tabela do IRW está em **formato longo**: uma linha por resposta. O que uma linha *é* depende da família à qual a tabela pertence, e o mesmo vale para as colunas que a compõem.",
+     "Duas perguntas que classificam um conjunto de dados em uma família do IRW.",
+     "Família", "Padrão",
+     "Simsyn não aparece no diagrama: essa família é definida pela origem dos dados, não por sua forma, de modo que uma tabela simulada pode ter qualquer uma destas formas. A [visão geral dos padrões](/overview.qmd) traz as colunas de cada família."),
+}
+
+# --------------------------------------------------------------------- nl ---
+EDITS["nl"] = {
+ "1": ("Het brengt honderden bestaande datasets samen en vormt ze om naar één gemeenschappelijk formaat — zodat een methode die op één dataset is getest, gemakkelijk op honderden andere kan worden getest.",
+       "Het brengt duizenden bestaande datasets samen en vormt ze om naar één gemeenschappelijk formaat — zodat een methode die op één dataset is getest, gemakkelijk op duizenden andere kan worden getest."),
+ "2": ('Het IRW bevat **honderden datasets** ("tabellen"), elk een verzameling van individuele responsen. Een respons ontstaat wanneer een persoon (of een andere eenheid) reageert op een item (of een andere meetopgave). Voorbeelden zijn onder meer:',
+       'Het IRW bevat **duizenden datasets** ("tabellen"), elk een verzameling van individuele responsen. Een respons ontstaat wanneer een persoon (of een andere eenheid) een meetopgave tegenkomt en de uitkomst wordt vastgelegd. Wat als meetopgave geldt, verschilt per [datafamilie](/overview.qmd): een item dat op zichzelf wordt beantwoord, een andere eenheid die in een confrontatie wordt ontmoet, een volledige reeks opties die op volgorde wordt gezet, of een profiel dat uit willekeurig toegewezen kenmerken is samengesteld. Voorbeelden zijn onder meer:'),
+ "3": ("- Beoordelingen gegeven door menselijke beoordelaars\n- Elke andere situatie met herhaalde responsen op een reeks meetinstrumenten",
+       "- Beoordelingen gegeven door menselijke beoordelaars\n- Wedstrijden, partijen en directe vergelijkingen, waarbij twee eenheden tegenover elkaar staan en er één wint\n- Voorkeursstembiljetten, juryranglijsten en rangschikkingsvragen in vragenlijsten\n- Conjoint-experimenten, waarbij respondenten kiezen tussen willekeurig samengestelde profielen\n- Elke andere situatie met herhaalde responsen op een reeks meetinstrumenten"),
+ "4": ("- **Interoperabel (Interoperable).** Elke dataset wordt omgevormd naar dezelfde eenvoudige structuur (hieronder beschreven), zodat dezelfde analysecode met weinig of geen aanpassing op veel datasets kan worden toegepast.",
+       "- **Interoperabel (Interoperable).** Elke dataset wordt omgevormd naar het lange formaat, één rij per respons, volgens de standaard van zijn familie (hieronder beschreven), zodat dezelfde analysecode met weinig of geen aanpassing op veel datasets kan worden toegepast."),
+ "5": ("Datasets verschillen sterk in omvang (van enkele honderden responsen tot vele miljoenen) en in responstype (ja/nee-items, meerkeuzebeoordelingen, deelscores, en meer). Elke dataset wordt ook geleverd met vooraf berekende metadata — aantal deelnemers, aantal items, responsdichtheid, vakgebied en andere beschrijvende labels — zodat onderzoekers relevante datasets kunnen vinden zonder ze eerst allemaal te downloaden en te verwerken.",
+       "Datasets verschillen sterk in omvang (van enkele honderden responsen tot vele miljoenen) en in responstype (ja/nee-items, meerkeuzebeoordelingen, deelscores, ongeordende categorieën, wedstrijduitslagen, rangposities, en meer)."),
+ "7": ("Het `irw`-pakket, beschikbaar voor zowel **R** als **Python**, biedt eenvoudige functies om data te vinden, filteren en downloaden.",
+       "Het `irw`-pakket is beschikbaar voor zowel **R** als **Python**."),
+ "10": ("De eerste keer dat u het pakket gebruikt, wordt u gevraagd in te loggen met een gratis Redivis-account. Daarna downloadt één regel code elke dataset rechtstreeks naar R of Python. Vanaf dat moment is de data klaar voor analyse met standaardsoftware — bijvoorbeeld pakketten voor item response theory of factoranalyse.",
+        "De eerste keer dat u het pakket gebruikt, wordt u gevraagd in te loggen met een gratis Redivis-account."),
+ "6": section(
+     "## De datastandaard",
+     "Elke IRW-tabel staat in het **lange formaat**: één rij per respons. Wat een rij *is*, hangt af van de familie waartoe de tabel behoort, en dat geldt ook voor de kolommen die haar dragen.",
+     "Twee vragen die een dataset in een IRW-familie plaatsen.",
+     "Familie", "Standaard",
+     "Simsyn staat niet in het schema: die familie wordt bepaald door waar de data vandaan komen, niet door hun vorm, zodat een gesimuleerde tabel elk van deze vormen kan hebben. Het [overzicht van de standaarden](/overview.qmd) geeft de kolommen van elke familie."),
+}
+
+
+# --------------------------------------------------------------------- ja ---
+EDITS["ja"] = {
+ "1": ("数百の既存データセットを集約し、それらを一つの共通形式に再構成することで、あるデータセットで検証された手法を、他の数百のデータセットでも簡単に検証できるようにします。",
+       "数千の既存データセットを集約し、それらを一つの共通形式に再構成することで、あるデータセットで検証された手法を、他の数千のデータセットでも簡単に検証できるようにします。"),
+ "2": ("IRW には**数百のデータセット**(「テーブル」)が含まれており、それぞれが個々の反応の集合です。反応は、ある人(または他の単位)がある項目(または他の測定プローブ)に応答するたびに生成されます。例えば:",
+       "IRW には**数千のデータセット**(「テーブル」)が含まれており、それぞれが個々の反応の集合です。反応は、ある人(または他の単位)が測定プローブに出会い、その結果が記録されるたびに生成されます。何が測定プローブにあたるかは[データファミリー](/overview.qmd)によって異なります。単独で回答する項目、対決で出会う他の主体、順序をつける選択肢の集合全体、あるいは無作為に割り当てられた属性から構成されたプロファイルなどです。例えば:"),
+ "3": ("- 人間の評価者による評定\n- 一連の測定プローブに対して反復的に反応が行われる、その他あらゆる状況",
+       "- 人間の評価者による評定\n- 試合や直接比較など、二つの主体が対決して一方が勝つ場面\n- 優先順位投票の投票用紙、審査員による順位付け、調査の順位付け質問\n- コンジョイント実験。回答者が無作為に構成されたプロファイルの間で選択します\n- 一連の測定プローブに対して反復的に反応が行われる、その他あらゆる状況"),
+ "4": ("- **相互運用可能(Interoperable)。** 各データセットは同じ単純な構造(以下で説明)に再構成されており、同じ分析コードをほとんど、あるいはまったく変更せずに多くのデータセットで実行できます。",
+       "- **相互運用可能(Interoperable)。** 各データセットは、反応1件につき1行のロング形式で、そのファミリーの標準(以下で説明)に従って再構成されており、同じ分析コードをほとんど、あるいはまったく変更せずに多くのデータセットで実行できます。"),
+ "5": ("データセットは規模(数百件の反応から数百万件まで)や反応の種類(はい/いいえ形式の項目、多カテゴリ評定、部分点方式のスコアなど)において大きく異なります。各データセットには、参加者数、項目数、反応密度、主題分野、その他の記述的タグといった事前計算済みのメタデータも付属しており、研究者はすべてのデータセットをダウンロードして処理する前に、関連するデータセットを見つけることができます。",
+       "データセットは規模(数百件の反応から数百万件まで)や反応の種類(はい/いいえ形式の項目、多カテゴリ評定、部分点方式のスコア、順序のないカテゴリ、対決の結果、順位など)において大きく異なります。"),
+ "7": ("`irw` パッケージは **R** と **Python** の両方で利用可能で、データの検索・フィルタリング・ダウンロードのための簡単な関数を提供します。",
+       "`irw` パッケージは **R** と **Python** の両方で利用できます。"),
+ "10": ("パッケージを初めて使用する際には、無料の Redivis アカウントでログインするよう求められます。その後は、コード1行で任意のデータセットを R または Python に直接ダウンロードできます。それ以降、データは標準的なソフトウェア(たとえば項目反応理論や因子分析のパッケージ)で分析できる状態になっています。",
+        "パッケージを初めて使用する際には、無料の Redivis アカウントでログインするよう求められます。"),
+ "6": section(
+     "## データ標準",
+     "IRW のすべてのテーブルは**ロング形式**です。反応1件につき1行です。1行が*何を表すか*は、そのテーブルが属するファミリーによって異なり、それを担う列も同様です。",
+     "データセットを IRW のファミリーに分類する二つの問い。",
+     "ファミリー", "標準",
+     "Simsyn は図に含まれていません。このファミリーはデータの形ではなく出所によって定義されるため、シミュレーションによるテーブルはこれらのどの形をとることもあります。各ファミリーの列については[標準の概要](/overview.qmd)をご覧ください。"),
+}
+
+# --------------------------------------------------------------------- ko ---
+EDITS["ko"] = {
+ "1": ("수백 개의 기존 데이터셋을 한데 모아 하나의 공통 형식으로 재구성함으로써, 한 데이터셋에서 검증된 방법을 수백 개의 다른 데이터셋에서도 손쉽게 검증할 수 있게 합니다.",
+       "수천 개의 기존 데이터셋을 한데 모아 하나의 공통 형식으로 재구성함으로써, 한 데이터셋에서 검증된 방법을 수천 개의 다른 데이터셋에서도 손쉽게 검증할 수 있게 합니다."),
+ "2": ('IRW는 **수백 개의 데이터셋**("테이블")을 포함하며, 각 데이터셋은 개별 반응들의 모음입니다. 반응은 어떤 사람(또는 다른 단위)이 어떤 문항(또는 다른 측정 도구)에 응답할 때마다 생성됩니다. 예를 들면:',
+       'IRW는 **수천 개의 데이터셋**("테이블")을 포함하며, 각 데이터셋은 개별 반응들의 모음입니다. 반응은 어떤 사람(또는 다른 단위)이 측정 도구와 마주하고 그 결과가 기록될 때마다 생성됩니다. 무엇이 측정 도구에 해당하는지는 [데이터 계열](/overview.qmd)에 따라 다릅니다. 단독으로 응답하는 문항, 대결에서 만나는 다른 개체, 순서를 매기는 선택지 전체, 또는 무작위로 할당된 속성으로 구성된 프로필 등입니다. 예를 들면:'),
+ "3": ("- 인간 평가자가 부여한 평정\n- 측정 도구 집합에 대해 반복적으로 반응이 이루어지는 그 밖의 모든 상황",
+       "- 인간 평가자가 부여한 평정\n- 경기와 직접 비교처럼 두 개체가 맞붙어 한쪽이 이기는 상황\n- 선호 투표 용지, 심사위원단 순위, 설문의 순위 매기기 문항\n- 컬조인트 실험. 응답자가 무작위로 구성된 프로필 중에서 선택합니다\n- 측정 도구 집합에 대해 반복적으로 반응이 이루어지는 그 밖의 모든 상황"),
+ "4": ("- **상호운용 가능함(Interoperable).** 각 데이터셋은 동일한 단순 구조(아래에서 설명)로 재구성되어 있어, 동일한 분석 코드를 거의 또는 전혀 수정하지 않고 여러 데이터셋에 걸쳐 실행할 수 있습니다.",
+       "- **상호운용 가능함(Interoperable).** 각 데이터셋은 반응 하나당 한 행인 롱 형식으로, 해당 계열의 표준(아래에서 설명)에 따라 재구성되어 있어, 동일한 분석 코드를 거의 또는 전혀 수정하지 않고 여러 데이터셋에 걸쳐 실행할 수 있습니다."),
+ "5": ("데이터셋은 규모(수백 건의 반응부터 수백만 건까지)와 반응 유형(예/아니오 문항, 다범주 평정, 부분 점수 등)에서 매우 다양합니다. 각 데이터셋에는 참가자 수, 문항 수, 반응 밀도, 주제 분야 및 기타 서술적 태그와 같은 사전 계산된 메타데이터가 함께 제공되어, 연구자들이 모든 데이터셋을 먼저 다운로드하고 처리하지 않고도 관련 데이터셋을 찾을 수 있습니다.",
+       "데이터셋은 규모(수백 건의 반응부터 수백만 건까지)와 반응 유형(예/아니오 문항, 다범주 평정, 부분 점수, 순서 없는 범주, 대결 결과, 순위 등)에서 매우 다양합니다."),
+ "7": ("**R**과 **Python** 양쪽에서 모두 사용 가능한 `irw` 패키지는 데이터를 찾고, 필터링하고, 다운로드하는 간단한 함수들을 제공합니다.",
+       "`irw` 패키지는 **R**과 **Python** 양쪽에서 모두 사용할 수 있습니다."),
+ "10": ("패키지를 처음 사용할 때는 무료 Redivis 계정으로 로그인하라는 안내를 받게 됩니다. 이후에는 코드 한 줄이면 어떤 데이터셋이든 R이나 Python으로 직접 다운로드할 수 있습니다. 그러면 데이터는 표준 소프트웨어—예를 들어 문항 반응 이론이나 요인분석 패키지—로 바로 분석할 준비가 됩니다.",
+        "패키지를 처음 사용할 때는 무료 Redivis 계정으로 로그인하라는 안내를 받게 됩니다."),
+ "6": section(
+     "## 데이터 표준",
+     "모든 IRW 테이블은 **롱 형식**입니다. 반응 하나당 한 행입니다. 한 행이 *무엇인지*는 그 테이블이 속한 계열에 따라 다르며, 그것을 담는 열도 마찬가지입니다.",
+     "데이터셋을 IRW 계열로 분류하는 두 가지 질문.",
+     "계열", "표준",
+     "Simsyn은 도표에 없습니다. 이 계열은 데이터의 형태가 아니라 출처로 정의되므로, 시뮬레이션 테이블은 이 형태들 중 어느 것이든 가질 수 있습니다. 각 계열의 열은 [표준 개요](/overview.qmd)에 정리되어 있습니다."),
+}
+
+
+# --------------------------------------------------------------------- zh ---
+EDITS["zh"] = {
+ "1": ("它汇集了数百个已有数据集，将它们统一转换为同一种通用格式——这样一来，在某个数据集上验证过的方法，就能轻松地在数百个其他数据集上进行检验。",
+       "它汇集了数千个已有数据集，将它们统一转换为同一种通用格式——这样一来，在某个数据集上验证过的方法，就能轻松地在数千个其他数据集上进行检验。"),
+ '2': ('IRW 包含**数百个数据集**（称为"表"），每个数据集都是一组个体反应记录。每当某个人（或其他单位）对某个项目（或其他测量探针）作出反应时，就会产生一条反应记录。例如：',
+       'IRW 包含**数千个数据集**（称为"表"），每个数据集都是一组个体反应记录。每当某个人（或其他单位）遇到一个测量探针并记录下结果时，就会产生一条反应记录。什么算作探针取决于[数据族](/overview.qmd)：单独作答的项目、在对战中遇到的另一个主体、需要排序的一整组选项，或者由随机分配的属性组成的一份档案。例如：'),
+ "3": ("- 人类评分者给出的评分\n- 任何其他涉及对一组测量探针重复作出反应的情境",
+       "- 人类评分者给出的评分\n- 比赛、对局与直接比较，其中两个主体交锋、一方获胜\n- 偏好投票的选票、评审团排名以及问卷中的排序题\n- 联合分析实验，受访者在随机生成的档案之间做出选择\n- 任何其他涉及对一组测量探针重复作出反应的情境"),
+ "4": ("- **可互操作（Interoperable）。** 每个数据集都被转换为相同的简单结构（详见下文），使得同一套分析代码可以在众多数据集上运行，几乎不需要修改。",
+       "- **可互操作（Interoperable）。** 每个数据集都被转换为长格式，每条反应占一行，并遵循其所属数据族的标准（详见下文），使得同一套分析代码可以在众多数据集上运行，几乎不需要修改。"),
+ "5": ("各数据集在规模上差异很大（从数百条反应记录到数百万条不等），在反应类型上也各不相同（是/否类项目、多类别评分、部分得分等）。每个数据集还附带预先计算好的元数据——参与者人数、项目数量、反应密度、学科领域及其他描述性标签——使研究者无需先下载并处理全部数据,即可找到相关数据集。",
+       "各数据集在规模上差异很大（从数百条反应记录到数百万条不等），在反应类型上也各不相同（是/否类项目、多类别评分、部分得分、无序类别、对战结果、排名位次等）。"),
+ "7": ("`irw` 软件包同时提供 **R** 和 **Python** 版本,提供了简单的函数用于查找、筛选和下载数据。",
+       "`irw` 软件包同时提供 **R** 和 **Python** 版本。"),
+ "10": ("首次使用该软件包时,系统会要求你使用免费的 Redivis 账号登录。此后,只需一行代码即可将任意数据集直接下载到 R 或 Python 中。此时,数据便已可以使用标准软件进行分析——例如项目反应理论或因子分析相关软件包。",
+        "首次使用该软件包时,系统会要求你使用免费的 Redivis 账号登录。"),
+ "6": section(
+     "## 数据标准",
+     "每一张 IRW 表都采用**长格式**：每条反应占一行。一行具体*代表什么*，取决于该表所属的数据族，承载它的列也是如此。",
+     "将数据集归入某个 IRW 数据族的两个问题。",
+     "数据族", "标准",
+     "Simsyn 未列入图中：该数据族由数据的来源而非形式界定，因此一张模拟表可以具有其中任一种形式。各数据族的列请见[标准概览](/overview.qmd)。"),
+}
+
+# ---------------------------------------------------------------- zh-hant ---
+EDITS["zh-hant"] = {
+ "1": ("它彙集了數百個既有資料集，將它們統一轉換為同一種通用格式——如此一來，在某個資料集上驗證過的方法，就能輕易地在數百個其他資料集上進行檢驗。",
+       "它彙集了數千個既有資料集，將它們統一轉換為同一種通用格式——如此一來，在某個資料集上驗證過的方法，就能輕易地在數千個其他資料集上進行檢驗。"),
+ "2": ("IRW 包含**數百個資料集**（稱為「表」），每個資料集都是一組個別反應紀錄。每當某個人（或其他單位）對某個項目（或其他測量探針）作出反應時，就會產生一筆反應紀錄。例如：",
+       "IRW 包含**數千個資料集**（稱為「表」），每個資料集都是一組個別反應紀錄。每當某個人（或其他單位）遇到一個測量探針並記錄下結果時，就會產生一筆反應紀錄。什麼算作探針取決於[資料族](/overview.qmd)：單獨作答的項目、在對戰中遇到的另一個主體、需要排序的一整組選項，或者由隨機分配的屬性組成的一份檔案。例如："),
+ "3": ("- 人類評分者給出的評分\n- 任何其他涉及對一組測量探針重複作出反應的情境",
+       "- 人類評分者給出的評分\n- 比賽、對局與直接比較，其中兩個主體交鋒、一方獲勝\n- 偏好投票的選票、評審團排名以及問卷中的排序題\n- 聯合分析實驗，受訪者在隨機生成的檔案之間做出選擇\n- 任何其他涉及對一組測量探針重複作出反應的情境"),
+ "4": ("- **可互通（Interoperable）。** 每個資料集都被轉換為相同的簡單結構（詳見下文），使得同一套分析程式碼可以在眾多資料集上執行，幾乎不需要修改。",
+       "- **可互通（Interoperable）。** 每個資料集都被轉換為長格式，每筆反應佔一列，並遵循其所屬資料族的標準（詳見下文），使得同一套分析程式碼可以在眾多資料集上執行，幾乎不需要修改。"),
+ "5": ("各資料集在規模上差異很大（從數百筆反應紀錄到數百萬筆不等），在反應類型上也各不相同（是/否類項目、多類別評分、部分給分等）。每個資料集還附帶預先計算好的中繼資料——參與者人數、項目數量、反應密度、學科領域及其他描述性標籤——使研究者無需先下載並處理全部資料，即可找到相關資料集。",
+       "各資料集在規模上差異很大（從數百筆反應紀錄到數百萬筆不等），在反應類型上也各不相同（是/否類項目、多類別評分、部分給分、無序類別、對戰結果、排名位次等）。"),
+ "7": ("`irw` 套件同時提供 **R** 與 **Python** 版本，提供了簡單的函式用於尋找、篩選與下載資料。",
+       "`irw` 套件同時提供 **R** 與 **Python** 版本。"),
+ "10": ("首次使用該套件時，系統會要求你使用免費的 Redivis 帳號登入。此後，只需一行程式碼即可將任意資料集直接下載到 R 或 Python 中。此時，資料便已可以使用標準軟體進行分析——例如項目反應理論或因素分析相關套件。",
+        "首次使用該套件時，系統會要求你使用免費的 Redivis 帳號登入。"),
+ "6": section(
+     "## 資料標準",
+     "每一張 IRW 表都採用**長格式**：每筆反應佔一列。一列具體*代表什麼*，取決於該表所屬的資料族，承載它的欄位也是如此。",
+     "將資料集歸入某個 IRW 資料族的兩個問題。",
+     "資料族", "標準",
+     "Simsyn 未列入圖中：該資料族由資料的來源而非形式界定，因此一張模擬表可以具有其中任一種形式。各資料族的欄位請見[標準概覽](/overview.qmd)。"),
+}
+
+
+def apply(lang):
+    path = os.path.join(HERE, "welcome_%s.md" % lang)
+    s = io.open(path, encoding="utf-8", newline="").read()
+    spec = EDITS[lang]
+
+    # change 6 replaces the whole data-standard section, found by heading
+    body = spec["6"]
+    heading = body.split("\n", 1)[0]
+    starts = [m.start() for m in re.finditer(r"^## ", s, re.M)]
+    try:
+        i = next(p for p in starts if s.startswith(heading, p))
+    except StopIteration:
+        return "heading not found: %s" % heading
+    j = next((p for p in starts if p > i), len(s))
+    s = s[:i] + body + "\n\n" + s[j:]
+
+    for key in sorted(k for k in spec if k != "6"):
+        old, new = spec[key]
+        n = s.count(old)
+        if n != 1:
+            return "change %s matched %d times" % (key, n)
+        s = s.replace(old, new, 1)
+
+    io.open(path, "w", encoding="utf-8", newline="").write(s)
+    return None
+
+
+def main():
+    args = sys.argv[1:]
+    langs = sorted(EDITS) if args == ["--all"] else args
+    bad = 0
+    for lang in langs:
+        if lang not in EDITS:
+            print("  %-7s no edits defined" % lang)
+            bad += 1
+            continue
+        err = apply(lang)
+        print("  %-7s %s" % (lang, err or "ok"))
+        bad += bool(err)
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

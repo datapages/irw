@@ -28,51 +28,47 @@ Les chercheurs qui étudient la mesure, en éducation, en psychologie et dans le
 
 Il s'agit d'un problème bien connu. La communauté scientifique a formulé une norme commune pour le résoudre : les données doivent être **FAIR** — Trouvables (Findable), Accessibles, Interopérables et Réutilisables (Wilkinson et al., 2016). D'autres disciplines ont mis ces principes en pratique en construisant des ressources de données partagées et normalisées. En informatique, la collection d'images étiquetée ImageNet a fourni aux chercheurs un référentiel commun et a contribué à accélérer les progrès de l'intelligence artificielle. La génétique et les neurosciences ont construit des ressources partagées similaires pour leurs propres données.
 
-L'Entreposage de Réponse à l'Item (nous allons utiliser l'acronyme IRW pour être cohérent avec les écrits anglophones sur le sujet) applique les mêmes principes FAIR aux données de réponses aux items. Il rassemble des centaines de jeux de données existants et les remet en forme selon un format commun unique de sorte qu'une méthode testée sur un jeu de données puisse facilement être testée sur des centaines d'autres.
+L'Entreposage de Réponse à l'Item (nous allons utiliser l'acronyme IRW pour être cohérent avec les écrits anglophones sur le sujet) applique les mêmes principes FAIR aux données de réponses aux items. Il rassemble des milliers de jeux de données existants et les remet en forme selon un format commun unique de sorte qu'une méthode testée sur un jeu de données puisse facilement être testée sur des milliers d'autres.
 
 ## Contenu de l'IRW
 
-L'IRW contient **des centaines de jeux de données** (« tableaux »), chacun étant un ensemble de réponses individuelles. Une réponse est générée chaque fois qu'une personne (ou une unité) répond à un item (ou une variable). Voici quelques exemples :
+L'IRW contient **des milliers de jeux de données** (« tableaux »), chacun étant un ensemble de réponses individuelles. Une réponse est générée chaque fois qu'une personne (ou une autre unité) est confrontée à une sollicitation et que le résultat est enregistré. La nature de cette sollicitation varie selon la [famille de données](/overview.qmd) : un item auquel on répond isolément, une autre entité rencontrée lors d'une confrontation, un ensemble complet d'options à ordonner, ou un profil composé d'attributs attribués aléatoirement. Voici quelques exemples :
 
 - Réponses d'élèves à des tests d'éducation et d'aptitude
 - Items de sondage mesurant la personnalité ou les attitudes
 - Résultats attribués par des évaluateurs humains
+- Parties, matchs et comparaisons directes, où deux entités s'affrontent et l'une l'emporte
+- Bulletins de vote préférentiel, classements de jurys et questions de classement dans les sondages
+- Expériences conjointes, où les répondants choisissent entre des profils construits aléatoirement
 - Tout autre contexte impliquant des réponses répétées à un ensemble de mesure
 
 Chaque jeu de données de l'IRW est conçu pour être :
 
 - **Trouvable (Findable).** Chaque jeu de données est accompagné de métadonnées précalculées — nombre de participants, nombre d'items, densité des réponses, domaine du sujet et autres étiquettes descriptives — afin que les jeux de données puissent être localisés et filtrés sans devoir d'abord être téléchargés.
 - **Accessible.** Chaque jeu de données peut être récupéré via le navigateur web ou le package `irw`, avec un compte gratuit.
-- **Interopérable.** Chaque jeu de données est remis en forme selon une même structure simplifiée (décrite ci-dessous), de sorte que le même code d'analyse puisse s'exécuter sur de nombreux jeux de données avec peu ou pas de modification.
+- **Interopérable.** Chaque jeu de données est remis en forme au format long, une ligne par réponse, selon le standard propre à sa famille (décrit ci-dessous), de sorte que le même code d'analyse puisse s'exécuter sur de nombreux jeux de données avec peu ou pas de modification.
 - **Réutilisable.** Chaque jeu de données est sous licence ouverte, son origine est documentée et le code utilisé pour le convertir au format de l'IRW est public.
 
-Les jeux de données varient considérablement en taille (allant de quelques dizaines de réponses à plusieurs millions) et en type de réponse (items binaires, évaluations à catégories multiples, scores à crédit partiel, etc.). Chaque jeu de données est également accompagné de métadonnées pré-calculées (nombre de participants, nombre d'items, densité des réponses, domaine du sujet et d'autres étiquettes descriptives pertinentes) afin que les chercheurs puissent trouver les jeux de données pertinents sans devoir d'abord tous les télécharger et les traiter.
+Les jeux de données varient considérablement en taille (allant de quelques dizaines de réponses à plusieurs millions) et en type de réponse (items binaires, évaluations à catégories multiples, scores à crédit partiel, catégories non ordonnées, résultats de confrontations, rangs, etc.).
 
 ## Des données standardisées
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Schéma montrant une grille colorée de cellules id-item transformée, via une flèche, en un tableau au format long comportant les colonnes id, item et resp, où la couleur de chaque cellule resp correspond à sa cellule d'origine dans la grille." class="welcome-figure">
+Chaque tableau de l'IRW est au **format long** : une ligne par réponse. Ce que *représente* une ligne dépend de la famille à laquelle appartient le tableau, tout comme les colonnes qui la portent.
 
+<img src="/figures/families/families-tree.svg" alt="Deux questions qui permettent de classer un jeu de données dans une famille de l'IRW."
+     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
 
-Chaque jeu de données de l'IRW est remis en forme au **format long** : une ligne par réponse. Au minimum, chaque ligne comporte trois éléments d'information :
+| Famille | `source =` | Standard |
+|---|---|---|
+| Core | `"core"` | [Core](/standard.qmd) |
+| Nominal | `"nom"` | [Nominal](/nominal_standard.qmd) |
+| Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
+| Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
+| Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
+| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
 
-| Colonne | Signification |
-|---|---|
-| `id` | Qui (ou quoi) a produit la réponse (généralement une personne) |
-| `item` | Quelle mesure a produit la réponse (généralement une question ou une tâche) |
-| `resp` | La réponse elle-même, stockée sous forme de score ordinal |
+Simsyn ne figure pas sur le schéma : cette famille est définie par l'origine des données et non par leur forme, de sorte qu'un tableau simulé peut prendre n'importe laquelle de ces formes. L'[aperçu des standards](/overview.qmd) donne les colonnes de chaque famille.
 
-**Exemple :**
-
-| `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
-|----|------|------|-----|-----|-------|
-| 1  | Q1   | 1    | 2.3 | 26  | a     |
-| 1  | Q2   | 0    | 1.8 | 26  | a     |
-| 2  | Q1   | 1    | 2.1 | 31  | b     |
-| 2  | Q2   | 1    | 2.5 | 31  | b     |
-
-Lorsqu'un jeu de données comprend des informations supplémentaires (par exemple, temps de réponse, identité de l'évaluateur, covariables telles que l'âge) ces informations sont stockées dans des colonnes additionnelles, nommées de façon cohérente. Cette structure simple et unique couvre un très large éventail de situations en mesure, ce qui permet d'écrire le code d'analyse une seule fois et de l'appliquer à l'ensemble de l'entrepôt de réponse.
-
-La spécification technique complète de la standardisation est disponible sur [itemresponsewarehouse.org/standard.html](/standard.qmd). Des standards plus spécialisés existent également pour le contenu textuel des items, les données par paires et les réponses nominales (catégories qui ne sont pas ordonnées).
 
 ## Comment l'utiliser?
 
@@ -82,7 +78,7 @@ Il existe trois façons d'obtenir les données de l'IRW selon le degré d'automa
 Explorez les jeux de données et leurs métadonnées directement sur le [navigateur de données de l'IRW](/data.qmd) — aucun compte n'est requis. Le téléchargement d'un jeu de données complet nécessite un compte gratuit [Redivis](https://redivis.com), puisque c'est la plateforme qui héberge les données sous-jacentes.
 
 **2. Utiliser le paquet `irw` (recommandé)**
-Le package `irw`, disponible pour **R** et **Python**, fournit des fonctions simples pour trouver, filtrer et télécharger des données.
+Le package `irw` est disponible pour **R** et **Python**.
 
 ```r
 # R
@@ -93,6 +89,9 @@ irw_info()                     # overview of the IRW
 irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
 ```python
@@ -104,9 +103,12 @@ irw.info()
 irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
-La première fois que vous utilisez le package, il vous sera demandé de vous connecter avec un compte Redivis gratuit. Ensuite, une seule ligne de code télécharge n'importe quel jeu de données directement dans R ou Python. À partir de là, les données sont prêtes à être analysées, par exemple, avec la théorie de réponse aux items ou l'analyse factorielle.
+La première fois que vous utilisez le package, il vous sera demandé de vous connecter avec un compte Redivis gratuit.
 
 **3. Utiliser directement les bibliothèques clientes de Redivis**
 Pour des flux de travail de plus bas niveau ou hors R/Python, les données peuvent également être consultées via les propres bibliothèques clientes R et Python de Redivis. Consultez le [guide de démarrage](/getstarted.qmd) pour plus de détails.
