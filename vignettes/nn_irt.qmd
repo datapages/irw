@@ -9,8 +9,8 @@ description: |
   second dimension, and an ordinary two-dimensional MIRT finds it as well as a
   multilayer perceptron does. Part III applies a selection rule to the whole
   warehouse and fits both models on 242 tables: the median table gains nothing
-  and the mean gain matches the published benchmark, carried by a seventh of
-  the corpus that turns out to have reverse-keyed items in common. Part IV
+  and the mean gain matches the published benchmark, carried by the seventh of
+  the corpus whose tables mix items running in opposite directions. Part IV
   takes apart a small gap between the torch 2PL and the `mirt` 2PL: the
   estimator explains it, and fixing the scale of the person parameters does
   not.
@@ -86,9 +86,9 @@ that result to a harder test, applying a selection rule to the whole warehouse
 rather than a judgment to 24 tables, and fitting the 2PL against a
 two-dimensional MIRT on all 242 tables that qualify. The median table gains
 nothing; the mean gain, +0.0025, matches the published benchmark and is carried
-almost entirely by a seventh of the corpus. Those tables turn out to have
-something specific in common, and it is reverse-keyed items rather than a
-second trait. All of
+almost entirely by a seventh of the corpus. Those tables have something in
+common: each mixes items that run in opposite directions, which the 2PL fits by
+giving some of them a negative slope. All of
 this holds at the sizes we fit here: tables are capped at 5,000 respondents and
 116 items, and scale is the one advantage a wider network is supposed to have,
 so the null is a null at this scale.
@@ -824,64 +824,33 @@ come from, but it makes the 24 useless for saying *how common* they are. Of the
 24, 22 clear the rule; the two that do not are the developmental screeners,
 which are age-adaptive and so fail the density threshold.
 
-## The exceptions have something in common
+## The tables that gain are the ones with items running both ways
 
 Fourteen per cent of tables gain more than 0.005, and they are not a random
-fourteen per cent. IRW does not harmonise the direction of responses, so some
-tables contain reverse-worded items that were never recoded, and the 2PL fits
-such an item by giving it a negative slope. Counting those slopes sorts the
-sweep more sharply than anything else we tried.
+fourteen per cent. IRW does not harmonise the direction of responses, and the
+2PL fits an item that runs against the rest of its test by giving it a negative
+slope. Counting those slopes sorts the sweep more sharply than anything else we
+tried, and it sorts it as a step rather than a gradient. The 155 tables with no
+negatively-sloped item gain nothing (mean $-0.0004$), and neither do the 45
+where under a tenth of the slopes are negative (mean $+0.0003$, with 3 of 45
+clearing 0.005). The whole of the sweep's average gain comes from the remaining
+42, where more than a tenth do: mean $+0.0158$, median $+0.0033$, and 19 of 42
+above 0.005.
 
-```{python}
-#| label: tbl-keying
-#| code-summary: "The gain by keying, 242 tables"
-from scipy import stats as _st
-mix = ex[ex.frac_neg > 0].copy()
-mix["keyshape"] = mix.orth_sign_r.abs()
-m = mix[mix.frac_neg > 0.10]
-hi, lo = m[m.keyshape > 0.5], m[m.keyshape <= 0.5]
-rows = [("over 10% negative, keying-shaped", hi), ("over 10% negative, not keying-shaped", lo),
-        ("1–10% negative", mix[mix.frac_neg <= 0.10]), ("no negative slope", ex[ex.frac_neg == 0])]
-print(f"within the {len(m)} tables with over 10% negative slopes, correlation with IMV:"
-      f"\n  keying shape of the second dimension  {_st.pearsonr(m.keyshape, m.imv)[0]:+.2f}"
-      f"\n  fraction of slopes negative           {_st.pearsonr(m.frac_neg, m.imv)[0]:+.2f}"
-      f"\n  size of the second dimension          {_st.pearsonr(m.orth_share, m.imv)[0]:+.2f}")
-tab = pd.DataFrame([{"tables": len(s), "mean": round(s.imv.mean(), 4),
-                     "median": round(s.imv.median(), 4),
-                     "% above 0.005": f"{100 * (s.imv > 0.005).mean():.0f}%"} for _, s in rows],
-                   index=[r[0] for r in rows])
-tab.index.name = "items with a negative 2PL slope"
-tab
-```
-
-Tables with no negatively-sloped item gain nothing at all. Among the 42 where
-more than a tenth of the slopes are negative, what matters is not how many
-there are but whether the second dimension is *organised around* them: orient
-the loading matrix so its first column lies along the 2PL slope vector, and the
-eleven tables whose residual loadings flip sign with the sign of the slope gain
-a mean of +0.0366, against +0.0084 for the other thirty-one. That is why the
-keying shape correlates twice as strongly with the gain as the mere proportion
-of reversed items does, and four times as strongly as the size of the second
-dimension --- the statistic one would compute when simply asking whether a
-table is multidimensional.
-
-An unrecoded reversal costs the 2PL nothing by itself, since direction is
-absorbed in $a_i$ and the likelihood never notices. So a gain tied to keying
-has to be heterogeneity *across people* in how the reversal is handled, which
-is a factor over persons that a unidimensional model has nowhere to put.
-Whether that heterogeneity is careless responding, acquiescence, or a genuine
-asymmetry between an item and its negation is not something held-out prediction
-can settle, and we never read a line of item wording. The counterexamples, the
-cautions and the checks that would settle it are set out in
+Why those items oppose the rest is a separate question, and not one held-out
+prediction can answer. Some are reverse-worded items that were never recoded,
+some are bipolar by design, one is a test whose respondents differ in age
+cohort, and in the option-level tables a negative slope is simply a distractor.
+We never read a line of item wording. The statistics, the instruments and the
+checks that would settle it are set out in
 [issue #3197](https://github.com/ben-domingue/irw/issues/3197); they do not
 belong on this page.
 
-What does belong here is the consequence for [Part II](#part-ii), which is
-qualified rather than overturned. That a two-dimensional 2PL finds whatever a
-deeper network finds is a claim about depth, and nothing in the sweep touches
-it. What changes is the interpretation of the gains: a reader tempted to read a
-high IMV as evidence of a second trait should check the sign of the slopes
-first.
+The consequence for [Part II](#part-ii) is a qualification rather than a
+reversal. That a two-dimensional 2PL finds whatever a deeper network finds is a
+claim about depth, and nothing in the sweep touches it. What changes is the
+reading of the gains: a reader tempted to take a high IMV as evidence of a
+second trait should check the sign of the slopes first.
 
 # Part IV. Which estimator closes the gap to mirt? {#part-iv}
 
@@ -1134,15 +1103,15 @@ what keeps them honest.
   for that, so the tail is less varied than a count of 242 suggests, and any
   standard error computed as though those tables were independent would be too
   small. We report no such standard error for that reason.
-- **Keying is measured, not established, and the mechanism is not identified.**
-  The fraction of items with a negative fitted 2PL slope is a symptom of
-  reverse-keyed items that were not recoded, not a direct observation of the
-  wording; a negative slope can also mean a mis-scored key or a badly behaved
-  item. We did not read the items. Nor can we separate careless responding,
-  acquiescence and genuine construct asymmetry, which all produce the loading
-  pattern reported at the close of [Part III](#part-iii), where the headline
-  contrast rests on eleven tables. The cautions, the counterexamples and the
-  checks that would settle it are in `ben-domingue/irw` issue #3197.
+- **A negative slope is a symptom, and we never read the items.** The split at
+  the close of [Part III](#part-iii) counts items whose fitted 2PL slope is
+  negative. That is not an observation of the wording: a slope goes negative
+  for an item that was reverse-worded and never recoded, but also for a
+  mis-scored key, a badly behaved item, a distractor in an option-level table,
+  or an item that genuinely measures something else. We make no claim about
+  which, and the sorting in Part III does not depend on one. What would settle
+  it --- the instruments, the item text and the checks --- is in
+  `ben-domingue/irw` issue #3197.
 
 ## Of the estimator comparison
 
