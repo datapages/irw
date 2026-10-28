@@ -55,12 +55,12 @@ Every IRW table is in **long format**: one row per response. What a row *is* dep
 
 | Family | One row is | Key columns | `source =` | Standard |
 |---|---|---|---|---|
-| Core | one response by one person to one item | `id`, `item`, `resp` | `"core"` | [The IRW data standard](/standard.qmd) |
+| Core | one response by one person to one item | `id`, `item`, `resp` | `"core"` | [Core](/standard.qmd) |
 | Nominal | the same, with the response kept as its category rather than scored | `id`, `item`, `text` | `"nom"` | [Nominal](/nominal_standard.qmd) |
 | Competitions | one contest between two entities, and its outcome | `agent_a`, `agent_b`, `winner`, `score_a`, `score_b` | `"comp"` | [Competitions](/comps_standard.qmd) |
 | Rankings | one position marked on one ballot | `id`, `task`, `item`, `resp` (a position) | `"rank"` | [Rankings](/rankings_standard.qmd) |
 | Conjoint | one profile shown in one task to one respondent | `id`, `task`, `profile`, `attr_<name>`, `choice` or `rating` | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
-| Simulated and synthetic | whatever the core standard says — this family is defined by where the data come from, not by their shape | `id`, `item`, `resp` | `"sim"` | [Simulated and synthetic](/simsyn.qmd) |
+| Simulated and synthetic | whatever the core standard says — this family is defined by where the data come from, not by their shape | `id`, `item`, `resp` | `"sim"` | [Simsyn](/simsyn.qmd) |
 
 Extra information travels in consistently named columns: `rt` for response time, `cov_<name>` for covariates such as age, `trial_<name>` for details of a trial. The [overview of the standards](/overview.qmd) sets out how the families relate and which one a given dataset belongs in.
 
@@ -72,12 +72,12 @@ Every IRW table is in **long format**: one row per response. What a row *is* dep
 
 | Family | `source =` | Standard |
 |---|---|---|
-| Core | `"core"` | [The IRW data standard](/standard.qmd) |
+| Core | `"core"` | [Core](/standard.qmd) |
 | Nominal | `"nom"` | [Nominal](/nominal_standard.qmd) |
 | Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
 | Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
 | Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
-| Simulated and synthetic | `"sim"` | [Simulated and synthetic](/simsyn.qmd) |
+| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
 
 Simsyn is not on the chart: it is defined by where the data come from, not by their shape, so a simulated table can have any of these shapes. The [overview of the standards](/overview.qmd) has the columns for each family.
 
