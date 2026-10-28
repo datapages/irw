@@ -62,7 +62,7 @@ Every IRW dataset is reshaped into **long format**: one row per response. At min
 
 When a dataset includes extra information — response time, rater identity, covariates such as age — that information is stored in additional, consistently named columns. This one simple structure covers a huge range of measurement situations, which is what makes it possible to write analysis code once and apply it across the entire warehouse.
 
-The full technical specification of the standard is available at [itemresponsewarehouse.org/standard.html](/standard.qmd). Related, more specialized standards also exist for item text, pairwise-competition data, and nominal (unordered category) responses.
+The full technical specification of the standard is available at [itemresponsewarehouse.org/standard.html](/standard.qmd). What is described above is the core family; the warehouse also holds competition, nominal, rankings and conjoint tables, each with its own standard and its own columns, and the [overview of the standards](/overview.qmd) sets out how the families relate and which one a given dataset belongs in.
 
 ## How to use it
 
