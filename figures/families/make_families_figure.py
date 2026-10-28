@@ -165,8 +165,11 @@ def nom_panel():
 def comp_panel():
     out = header("comp", "Competitions", "comp",
                  "no items: the entities meet each other, two at a time")
-    games = [("♠", "♥", "a"), ("♦", "♣", "b"), ("♥", "♦", "a"), ("♠", "♣", "d"),
-             ("♣", "♥", "b"), ("♠", "♦", "a"), ("♥", "♠", "a"), ("♦", "♣", "a")]
+    # One game per pair, so every cell holds at most one mark, and one pair
+    # (hearts-clubs) never meets, so its two cells stay empty: real competition
+    # data is sparse, and that is the point of the matrix.
+    games = [("♠", "♥", "a"), ("♠", "♦", "a"), ("♠", "♣", "d"),
+             ("♥", "♦", "a"), ("♦", "♣", "b")]
     # matrix: rows and columns are the same agents
     gx, gy, c = 34, 62, 27
     out.append(t(gx + 2 * c, gy - 22, "agent", 10, HEAD))
@@ -174,18 +177,25 @@ def comp_panel():
     for j, s in enumerate(SUITS):
         out.append(g(gx + j * c + c / 2, gy - 6, s, 15))
         out.append(g(16, gy + j * c + c / 2 + 5, s, 15))
+    met = set()
+    for a, b, _ in games:
+        met.add((SUITS.index(a), SUITS.index(b)))
+        met.add((SUITS.index(b), SUITS.index(a)))
     for i in range(4):
         for j in range(4):
             x, y = gx + j * c, gy + i * c
-            out.append(r(x, y, c, c, "#e9ecef" if i == j else "#fff4ee", "#ffffff", 2))
+            if i == j:
+                fill = "#e9ecef"          # an agent cannot meet itself
+            elif (i, j) in met:
+                fill = "#fff4ee"          # these two met
+            else:
+                fill = "#ffffff"          # they never met: no row in the table
+            out.append(r(x, y, c, c, fill, "#e9ecef", 1))
     # marks: for each game put a mark in the cell (agent_a row, agent_b col) and its mirror
-    slots = {}
     for a, b, w in games:
         for rowa, cola, res in ((a, b, w), (b, a, {"a": "b", "b": "a", "d": "d"}[w])):
             i, j = SUITS.index(rowa), SUITS.index(cola)
-            k = slots.get((i, j), 0)
-            slots[(i, j)] = k + 1
-            cx, cy = gx + j * c + 8 + k * 11, gy + i * c + c / 2
+            cx, cy = gx + j * c + c / 2, gy + i * c + c / 2
             col = ACCENT["comp"]
             if res == "a":
                 out.append(f'<circle cx="{cx}" cy="{cy}" r="4" fill="{col}"/>')
@@ -203,6 +213,8 @@ def comp_panel():
     out.append(f'<circle cx="{lx+84}" cy="{ly}" r="3" fill="#fff" stroke="{ACCENT["comp"]}" stroke-width="1.3"/>')
     out.append(f'<path d="M{lx+84},{ly-3} A3,3 0 0,0 {lx+84},{ly+3} Z" fill="{ACCENT["comp"]}"/>')
     out.append(t(lx + 90, ly + 3, "draw", 7.5, MUTED, "start"))
+    out.append(r(lx + 118, ly - 4, 8, 8, "#ffffff", "#e9ecef", 1))
+    out.append(t(lx + 130, ly + 3, "never met", 7.5, MUTED, "start"))
     out += arrow(gx + 4 * c + 12, gy + 1.5 * c)
     lab = {"a": "agent_a", "b": "agent_b", "d": "draw"}
     rows = [[suit(a), suit(b), mono(lab[w])] for a, b, w in games]

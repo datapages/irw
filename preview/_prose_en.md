@@ -43,29 +43,6 @@ Datasets vary widely in size (from a few hundred responses to many millions) and
 
 ## The data standard
 
-::: {.callout-warning appearance="simple"}
-**Temporary.** Three candidate replacements for this section are shown side by side below. Only one will stay; the tabset goes with the other two.
-:::
-
-::: {.panel-tabset}
-
-### Option A
-
-Every IRW table is in **long format**: one row per response. What a row *is* depends on the family the table belongs to, and so do the columns that carry it.
-
-| Family | One row is | Key columns | `source =` | Standard |
-|---|---|---|---|---|
-| Core | one response by one person to one item | `id`, `item`, `resp` | `"core"` | [Core](/standard.qmd) |
-| Nominal | the same, with the response kept as its category rather than scored | `id`, `item`, `text` | `"nom"` | [Nominal](/nominal_standard.qmd) |
-| Competitions | one contest between two entities, and its outcome | `agent_a`, `agent_b`, `winner`, `score_a`, `score_b` | `"comp"` | [Competitions](/comps_standard.qmd) |
-| Rankings | one position marked on one ballot | `id`, `task`, `item`, `resp` (a position) | `"rank"` | [Rankings](/rankings_standard.qmd) |
-| Conjoint | one profile shown in one task to one respondent | `id`, `task`, `profile`, `attr_<name>`, `choice` or `rating` | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
-| Simulated and synthetic | whatever the core standard says — this family is defined by where the data come from, not by their shape | `id`, `item`, `resp` | `"sim"` | [Simsyn](/simsyn.qmd) |
-
-Extra information travels in consistently named columns: `rt` for response time, `cov_<name>` for covariates such as age, `trial_<name>` for details of a trial. The [overview of the standards](/overview.qmd) sets out how the families relate and which one a given dataset belongs in.
-
-### Option B
-
 Every IRW table is in **long format**: one row per response. What a row *is* depends on the family the table belongs to, and so do the columns that carry it.
 
 <img src="figures/families/families-tree.svg" alt="Two questions that sort a dataset into an IRW family." class="standard-tree">
@@ -80,16 +57,6 @@ Every IRW table is in **long format**: one row per response. What a row *is* dep
 | Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
 
 Simsyn is not on the chart: it is defined by where the data come from, not by their shape, so a simulated table can have any of these shapes. The [overview of the standards](/overview.qmd) has the columns for each family.
-
-### Option C
-
-Every IRW table is in **long format**: one row per response. What a row *is* depends on the family the table belongs to, and so do the columns that carry it.
-
-<a href="/overview.qmd"><img src="figures/families/families-all.svg" alt="The IRW data families compared: core, nominal, competitions, rankings and conjoint, each shown as what a respondent meets and the long table it becomes, plus a two-question guide to which family a dataset belongs in." class="standard-all"></a>
-
-Simulated and synthetic data are not shown: that family is defined by where the data come from, not by their shape. The [overview of the standards](/overview.qmd) gives each family's columns and links its standard.
-
-:::
 
 ## How to use it
 
