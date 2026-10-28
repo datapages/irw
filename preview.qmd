@@ -98,7 +98,15 @@ count = (v) => (typeof v === "number" && isFinite(v) && v > 0) ? v : null
 FAMILIES = [
   { key: "core",         name: "Core",         count: count(totals.n_tables),
     href: "standard.html",
-    desc: "A person answers an item; the response is ordered." },
+    desc: "A person answers an item; the response is ordered.",
+    // Simsyn is nested under core rather than given a tile of its own: the
+    // page talks about five families, and simsyn is the one family defined by
+    // where the data come from rather than by its shape. No count -- 
+    // landing/hero_stats.R writes no n_tables_sim (agent_guide_stamp.R counts
+    // it for llms.txt, which is where the figure 17 comes from), and that
+    // script is not this branch's to change. See datapages/irw#386.
+    sub: { name: "Simulated and synthetic", href: "simsyn.html",
+           desc: "Responses no real person produced." } },
   { key: "nominal",      name: "Nominal",      count: count(totals.n_tables_nom),
     href: "nominal_standard.html",
     desc: "Categories with no order, like kept distractors." },
@@ -162,12 +170,23 @@ homeRoot = {
   // the figures, and hero_stats.json has no warehouse-wide people or response
   // total to put next to them (its n_participants and n_responses are sums
   // over the CORE metadata table alone).
-  const tiles = FAMILIES.map(f => `
+  // A family with a `sub` is wrapped so the sub-entry sits indented beneath it
+  // in the same grid cell; an <a> cannot be nested inside another <a>.
+  const tile = (f) => `
     <a class="tile" href="${esc(f.href)}">
       ${f.count != null ? `<span class="tile-count">${fmtInt(f.count)}</span>` : ""}
       <span class="tile-name">${esc(f.name)}</span>
       <span class="tile-desc">${esc(f.desc)}</span>
-    </a>`).join("") + `
+    </a>`;
+
+  const tiles = FAMILIES.map(f => f.sub ? `
+    <div class="tile-group">
+      ${tile(f)}
+      <a class="tile-sub" href="${esc(f.sub.href)}">
+        <span class="tile-sub-name">${esc(f.sub.name)}</span>
+        <span class="tile-sub-desc">${esc(f.sub.desc)}</span>
+      </a>
+    </div>` : tile(f)).join("") + `
     <a class="tile next" href="contact.html">
       <span class="tile-count">+</span>
       <span class="tile-name">Next family</span>
