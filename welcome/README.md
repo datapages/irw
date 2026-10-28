@@ -30,7 +30,7 @@ its own.
 `welcome_<lang>.md` are whole files, each carrying its own translated copy of
 the same prose. They are **not** split, and an edit to `_prose_en.md` does not
 reach them. Carrying English changes across is a deliberate pass; see
-`TRANSLATION_CHANGES.md` when it exists.
+`_TRANSLATION_CHANGES.md`.
 
 All 25 files share one structure — five `##` sections and the same
 language-switcher block — and the switcher is identical verbatim in every one.
@@ -58,3 +58,15 @@ changes.
 
 The widget contains no translatable text; the language names in the fallback
 links are each written in their own language and are the same in every file.
+
+## Why the notes files start with `_`
+
+Quarto's `render:` list in `_quarto.yml` includes `"*.md"`, and that glob
+reaches into subdirectories. `TRANSLATION_CHANGES.md` was therefore being
+built into `_site/welcome/TRANSLATION_CHANGES.html` and would have been
+published and indexed — a maintainer's working note on the public site.
+
+The leading underscore is what keeps it out; Quarto skips those files, and no
+`_quarto.yml` change is needed. `README.md` is safe without one because Quarto
+ignores README files by default. Any new note in this directory should get the
+underscore.
