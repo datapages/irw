@@ -40,3 +40,21 @@ the page URL.
 The translator note at the top of `welcome_en.md` lists what must never be
 translated: column names in backticks, the contents of code blocks including
 their comments, paper titles, URLs and DOIs, and the switcher block.
+
+## The language switcher is shared too
+
+`_lang_switch.md` holds the switcher widget — the trigger button, the
+`<noscript>` plain-link fallback and the script that computes the current
+language from the page URL. All 25 `welcome_<lang>.md` include it:
+
+```
+{{< include /welcome/_lang_switch.md >}}
+```
+
+It used to be 137 lines copied verbatim into each of the 25 files. They were
+byte-identical, and the translator note said never to hand-edit one — but
+nothing enforced that. Now one file does. Edit it once and every welcome page
+changes.
+
+The widget contains no translatable text; the language names in the fallback
+links are each written in their own language and are the same in every file.
