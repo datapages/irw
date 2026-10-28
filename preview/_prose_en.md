@@ -36,7 +36,7 @@ Every dataset in the IRW is designed to be:
 - **Interoperable.** Each dataset is reshaped into the same simple long-format structure (described below), so the same analysis code can run across many datasets with little or no modification.
 - **Reusable.** Each dataset is openly licensed, its origin is documented, and the code used to convert it into the IRW format is public.
 
-Datasets vary widely in size (from a few hundred responses to many millions) and in response type (yes/no items, multi-category ratings, partial-credit scores, and more). Each dataset also comes with pre-computed metadata — number of participants, number of items, response density, subject area, and other descriptive tags — so that researchers can find relevant datasets without first downloading and processing all of them.
+Datasets vary widely in size (from a few hundred responses to many millions) and in response type (yes/no items, multi-category ratings, partial-credit scores, and more).
 
 ## The data standard
 
