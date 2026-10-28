@@ -18,11 +18,11 @@ Researchers who study measurement — in education, psychology, and related fiel
 
 This is a well-known problem. The research community has articulated a shared standard for solving it: data should be **FAIR** — Findable, Accessible, Interoperable, and Reusable (Wilkinson et al., 2016). Other fields put these principles into practice by building shared, standardized data resources. In computer science, the ImageNet collection of labeled images gave researchers a common benchmark and helped drive rapid progress in AI. Genetics and neuroscience built similar shared resources for their own data.
 
-The Item Response Warehouse (IRW) applies the same FAIR principles to item response data. It brings together hundreds of existing datasets and reshapes them into one common format — so that a method tested on one dataset can easily be tested on hundreds of others.
+The Item Response Warehouse (IRW) applies the same FAIR principles to item response data. It brings together thousands of existing datasets and reshapes them into one common format — so that a method tested on one dataset can easily be tested on thousands of others.
 
 ## What is in the IRW
 
-The IRW contains **hundreds of datasets** ("tables"), each one a collection of individual responses. A response is generated whenever some person (or other unit) responds to some item (or other probe). Examples include:
+The IRW contains **thousands of datasets** ("tables"), each one a collection of individual responses. A response is generated whenever some person (or other unit) responds to some item (or other probe). Examples include:
 
 - Student answers on education and ability tests
 - Survey items measuring personality or attitudes
