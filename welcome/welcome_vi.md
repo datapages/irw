@@ -28,51 +28,47 @@ Các nhà nghiên cứu về đo lường — trong giáo dục, tâm lý học 
 
 Đây là một vấn đề đã được biết đến rộng rãi. Cộng đồng nghiên cứu đã đề ra một chuẩn mực chung để giải quyết vấn đề này: dữ liệu cần phải **FAIR** — có thể tìm thấy (Findable), có thể truy cập (Accessible), có thể tương tác (Interoperable), và có thể tái sử dụng (Reusable) (Wilkinson et al., 2016). Các lĩnh vực khác đã áp dụng các nguyên tắc này vào thực tế bằng cách xây dựng các nguồn dữ liệu dùng chung, được chuẩn hóa. Trong khoa học máy tính, bộ sưu tập hình ảnh có gán nhãn ImageNet đã mang lại cho các nhà nghiên cứu một chuẩn so sánh (benchmark) chung và góp phần thúc đẩy sự tiến bộ nhanh chóng của trí tuệ nhân tạo. Di truyền học và khoa học thần kinh cũng đã xây dựng những nguồn tài nguyên dùng chung tương tự cho dữ liệu của riêng mình.
 
-Item Response Warehouse (IRW) áp dụng cùng các nguyên tắc FAIR đó cho dữ liệu phản hồi câu hỏi. Nó tập hợp hàng trăm bộ dữ liệu đã có và định dạng lại chúng thành một định dạng chung duy nhất — nhờ đó một phương pháp đã được kiểm nghiệm trên một bộ dữ liệu có thể dễ dàng được kiểm nghiệm trên hàng trăm bộ dữ liệu khác.
+Item Response Warehouse (IRW) áp dụng cùng các nguyên tắc FAIR đó cho dữ liệu phản hồi câu hỏi. Nó tập hợp hàng nghìn bộ dữ liệu đã có và định dạng lại chúng thành một định dạng chung duy nhất — nhờ đó một phương pháp đã được kiểm nghiệm trên một bộ dữ liệu có thể dễ dàng được kiểm nghiệm trên hàng nghìn bộ dữ liệu khác.
 
 ## IRW chứa những gì
 
-IRW chứa **hàng trăm bộ dữ liệu** (gọi là "bảng"), mỗi bộ là một tập hợp các phản hồi riêng lẻ. Một phản hồi được tạo ra bất cứ khi nào một người (hoặc đơn vị khác) trả lời một câu hỏi (hoặc một dạng đầu dò đo lường khác). Ví dụ bao gồm:
+IRW chứa **hàng nghìn bộ dữ liệu** (gọi là "bảng"), mỗi bộ là một tập hợp các phản hồi riêng lẻ. Một phản hồi được tạo ra mỗi khi một người (hoặc đơn vị khác) gặp một đầu dò đo lường và kết quả được ghi lại. Điều gì được coi là đầu dò tùy thuộc vào [họ dữ liệu](/overview.qmd): một câu hỏi được trả lời riêng lẻ, một thực thể khác gặp trong một cuộc đọi đầu, toàn bộ một tập lựa chọn cần được xếp thứ tự, hoặc một hồ sơ được ghép từ các thuộc tính gán ngẫu nhiên. Ví dụ bao gồm:
 
 - Câu trả lời của học sinh trong các bài kiểm tra giáo dục và năng lực
 - Các mục khảo sát đo tính cách hoặc thái độ
 - Điểm số do người chấm đưa ra
+- Các trận đấu, ván đấu và so sánh trực tiếp, nơi hai thực thể đối đầu và một bên thắng
+- Lá phiếu bầu ưu tiên, bảng xếp hạng của ban giám khảo và câu hỏi xếp hạng trong khảo sát
+- Thí nghiệm conjoint, nơi người trả lời chọn giữa các hồ sơ được tạo ngẫu nhiên
 - Bất kỳ tình huống nào khác liên quan đến các phản hồi lặp lại đối với một tập hợp đầu dò đo lường
 
 Mỗi bộ dữ liệu trong IRW được thiết kế để:
 
 - **Có thể tìm thấy (Findable).** Mỗi bộ dữ liệu đi kèm với siêu dữ liệu đã được tính toán sẵn — số lượng người tham gia, số lượng câu hỏi, mật độ phản hồi, lĩnh vực chủ đề và các thẻ mô tả khác — để có thể tìm và lọc bộ dữ liệu mà không cần tải xuống trước.
 - **Có thể truy cập (Accessible).** Mỗi bộ dữ liệu có thể được lấy qua trình duyệt web hoặc gói `irw`, chỉ cần một tài khoản miễn phí.
-- **Có thể tương tác (Interoperable).** Mỗi bộ dữ liệu được định dạng lại theo cùng một cấu trúc đơn giản (mô tả bên dưới), để cùng một đoạn mã phân tích có thể chạy trên nhiều bộ dữ liệu mà chỉ cần chỉnh sửa rất ít hoặc không cần chỉnh sửa.
+- **Có thể tương tác (Interoperable).** Mỗi bộ dữ liệu được định dạng lại theo định dạng dài, một dòng cho mỗi phản hồi, theo chuẩn của họ dữ liệu của nó (mô tả bên dưới), để cùng một đoạn mã phân tích có thể chạy trên nhiều bộ dữ liệu mà chỉ cần chỉnh sửa rất ít hoặc không cần chỉnh sửa.
 - **Có thể tái sử dụng (Reusable).** Mỗi bộ dữ liệu có giấy phép mở, nguồn gốc của nó được ghi chép đầy đủ, và mã nguồn dùng để chuyển đổi nó sang định dạng IRW được công khai.
 
-Các bộ dữ liệu có sự khác biệt lớn về quy mô (từ vài trăm phản hồi đến hàng triệu) và về loại phản hồi (mục có/không, đánh giá nhiều hạng mục, điểm số theo phần, và nhiều hơn nữa). Mỗi bộ dữ liệu cũng đi kèm với siêu dữ liệu (metadata) đã được tính toán sẵn — số lượng người tham gia, số lượng câu hỏi, mật độ phản hồi, lĩnh vực chủ đề và các thẻ mô tả khác — để các nhà nghiên cứu có thể tìm bộ dữ liệu phù hợp mà không cần tải xuống và xử lý tất cả trước.
+Các bộ dữ liệu có sự khác biệt lớn về quy mô (từ vài trăm phản hồi đến hàng triệu) và về loại phản hồi (mục có/không, đánh giá nhiều hạng mục, điểm số theo phần, hạng mục không có thứ tự, kết quả đọi đầu, vị trí xếp hạng, và nhiều hơn nữa).
 
 ## Chuẩn dữ liệu
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Sơ đồ cho thấy một lưới màu gồm các ô id-item được chuyển đổi, thông qua một mũi tên, thành một bảng ở định dạng dài gồm các cột id, item và resp, trong đó màu của mỗi ô resp khớp với màu của ô nguồn tương ứng trong lưới." class="welcome-figure">
+Mọi bảng IRW đều ở **định dạng dài**: một dòng cho mỗi phản hồi. Một dòng *là gì* tùy thuộc vào họ mà bảng đó thuộc về, và các cột mang nó cũng vậy.
 
+<img src="/figures/families/families-tree.svg" alt="Hai câu hỏi để xếp một bộ dữ liệu vào một họ của IRW."
+     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
 
-Mọi bộ dữ liệu IRW đều được định dạng lại thành **định dạng dài (long format)**: mỗi dòng ứng với một phản hồi. Mỗi dòng tối thiểu chứa ba thông tin:
+| Họ | `source =` | Chuẩn |
+|---|---|---|
+| Core | `"core"` | [Core](/standard.qmd) |
+| Nominal | `"nom"` | [Nominal](/nominal_standard.qmd) |
+| Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
+| Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
+| Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
+| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
 
-| Cột | Ý nghĩa |
-|---|---|
-| `id` | Ai (hoặc cái gì) đã tạo ra phản hồi — thường là một người |
-| `item` | Đầu dò đo lường nào đã tạo ra phản hồi — thường là một câu hỏi hoặc nhiệm vụ |
-| `resp` | Bản thân phản hồi, được lưu trữ dưới dạng điểm số thứ bậc (ordinal) |
+Simsyn không có trong sơ đồ: họ này được xác định bởi nguồn gốc của dữ liệu chứ không phải hình dạng, nên một bảng mô phỏng có thể mang bất kỳ hình dạng nào trong số này. Các cột của từng họ được liệt kê trong [tổng quan về các chuẩn](/overview.qmd).
 
-**Ví dụ:**
-
-| `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
-|----|------|------|-----|-----|-------|
-| 1  | Q1   | 1    | 2.3 | 26  | a     |
-| 1  | Q2   | 0    | 1.8 | 26  | a     |
-| 2  | Q1   | 1    | 2.1 | 31  | b     |
-| 2  | Q2   | 1    | 2.5 | 31  | b     |
-
-Khi một bộ dữ liệu bao gồm thông tin bổ sung — thời gian phản hồi, danh tính người chấm, các biến hiệp phương sai (covariate) như tuổi tác — thông tin đó được lưu trong các cột bổ sung, được đặt tên nhất quán. Cấu trúc đơn giản duy nhất này bao quát một phạm vi rất rộng các tình huống đo lường, và đó chính là điều giúp cho việc viết mã phân tích một lần rồi áp dụng cho toàn bộ kho dữ liệu trở nên khả thi.
-
-Đặc tả kỹ thuật đầy đủ của chuẩn này có tại [itemresponsewarehouse.org/standard.html](/standard.qmd). Ngoài ra còn có các chuẩn chuyên biệt hơn, liên quan, dành cho văn bản câu hỏi, dữ liệu thi đấu theo cặp (pairwise), và phản hồi danh nghĩa (nominal, không có thứ tự hạng mục).
 
 ## Cách sử dụng
 
@@ -82,7 +78,7 @@ Có ba cách để lấy dữ liệu IRW, tùy thuộc vào mức độ tự đ�
 Khám phá các bộ dữ liệu và siêu dữ liệu của chúng trực tiếp trên [trình duyệt dữ liệu IRW](/data.qmd) — không cần tài khoản. Việc tải xuống toàn bộ một bộ dữ liệu yêu cầu tài khoản [Redivis](https://redivis.com) miễn phí, vì đó là nền tảng lưu trữ dữ liệu gốc.
 
 **2. Sử dụng gói `irw` (khuyến nghị)**
-Gói `irw`, có sẵn cho cả **R** và **Python**, cung cấp các hàm đơn giản để tìm kiếm, lọc và tải xuống dữ liệu.
+Gói `irw` có sẵn cho cả **R** và **Python**.
 
 ```r
 # R
@@ -112,7 +108,7 @@ df = irw.fetch("4thgrade_math_sirt")
 g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
-Lần đầu tiên sử dụng gói này, bạn sẽ được yêu cầu đăng nhập bằng tài khoản Redivis miễn phí. Sau đó, chỉ cần một dòng mã là có thể tải bất kỳ bộ dữ liệu nào trực tiếp vào R hoặc Python. Từ đó, dữ liệu đã sẵn sàng để phân tích bằng phần mềm tiêu chuẩn — ví dụ như các gói lý thuyết phản hồi câu hỏi (item response theory) hoặc phân tích nhân tố.
+Lần đầu tiên sử dụng gói này, bạn sẽ được yêu cầu đăng nhập bằng tài khoản Redivis miễn phí.
 
 **3. Sử dụng trực tiếp các thư viện client của Redivis**
 Đối với các quy trình làm việc cấp thấp hơn hoặc không dùng R/Python, dữ liệu cũng có thể được truy cập thông qua các thư viện client R và Python riêng của Redivis. Xem [Hướng dẫn Bắt đầu](/getstarted.qmd) để biết chi tiết.

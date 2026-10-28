@@ -48,6 +48,46 @@ def section(lang_heading, p1, alt, col_family, col_standard, p2):
 """ % (lang_heading, p1, alt, col_family, col_standard, ROWS, p2)
 
 
+# ---------------------------------------------------------------------------
+# Anchored edits.
+#
+# Retyping a whole foreign-language paragraph as the `old` side of a
+# replacement is how you introduce typos you cannot see: two of mine in the
+# zh-hant strings were a wrong codepoint and a wrong word, and the exact-match
+# assert is the only reason they surfaced. So from here the `old` side is a
+# short, distinctive ANCHOR and the tool slices the real text out of the file.
+#
+#   para(anchor, new)  replace the blank-line-delimited block containing anchor
+#   line(anchor, new)  replace the single line containing anchor
+#
+# The anchor must still occur exactly once, so an ambiguous one fails loudly.
+
+def para(anchor, new):
+    return ("para", anchor, new)
+
+
+def line(anchor, new):
+    return ("line", anchor, new)
+
+
+def _resolve(s, spec):
+    """Turn an anchored spec into the literal (old, new) pair."""
+    if not (isinstance(spec, tuple) and len(spec) == 3):
+        return spec                                  # already literal
+    kind, anchor, new = spec
+    if s.count(anchor) != 1:
+        raise LookupError("anchor %r matched %d times" % (anchor[:40], s.count(anchor)))
+    i = s.index(anchor)
+    if kind == "line":
+        a = s.rfind("\n", 0, i) + 1
+        b = s.find("\n", i)
+        return s[a:b if b != -1 else len(s)], new
+    a = s.rfind("\n\n", 0, i)
+    a = 0 if a == -1 else a + 2
+    b = s.find("\n\n", i)
+    return s[a:b if b != -1 else len(s)], new
+
+
 EDITS = {}
 
 # --------------------------------------------------------------------- fr ---
@@ -295,6 +335,153 @@ EDITS["zh-hant"] = {
 }
 
 
+# --------------------------------------------------------------------- ru ---
+EDITS["ru"] = {
+ "1": para("Он объединяет сотни",
+     "Item Response Warehouse (IRW) применяет те же принципы FAIR к данным об ответах на задания. Он объединяет тысячи существующих наборов данных и преобразует их в единый общий формат — так что метод, проверенный на одном наборе данных, можно легко проверить на тысячах других."),
+ "2": para("IRW содержит **сотни",
+     "IRW содержит **тысячи наборов данных** («таблиц»), каждый из которых представляет собой коллекцию отдельных ответов. Ответ создаётся всякий раз, когда какой-либо человек (или иная единица) сталкивается с измерительным стимулом и результат фиксируется. Что именно считается стимулом, зависит от [семейства данных](/overview.qmd): задание, на которое отвечают по отдельности; другой участник, с которым сводит состязание; целый набор вариантов, которые нужно упорядочить; или профиль, собранный из случайно назначенных признаков. Примеры включают:"),
+ "3": line("Любые другие ситуации",
+     "- Игры, матчи и прямые сравнения, где два участника встречаются и один побеждает\n- Бюллетени рейтингового голосования, ранжирования жюри и вопросы на упорядочивание в опросах\n- Конджойнт-эксперименты, где респонденты выбирают между случайно собранными профилями\n- Любые другие ситуации, где присутствуют повторяющиеся ответы на набор измерительных стимулов"),
+ "4": line("**Совместимым (Interoperable).**",
+     "- **Совместимым (Interoperable).** Каждый набор данных преобразован в длинный формат, по одной строке на ответ, в соответствии со стандартом своего семейства (описан ниже), поэтому один и тот же код анализа можно применять к множеству наборов данных с минимальными изменениями или вовсе без них."),
+ "5": para("Наборы данных сильно различаются по объёму",
+     "Наборы данных сильно различаются по объёму (от нескольких сотен ответов до нескольких миллионов) и по типу ответа (задания «да/нет», многокатегориальные оценки, баллы за частичное выполнение, неупорядоченные категории, исходы состязаний, места в ранжировке и другое)."),
+ "7": line("Пакет `irw`, доступный как для",
+     "Пакет `irw` доступен как для **R**, так и для **Python**."),
+ "10": para("При первом использовании пакета",
+     "При первом использовании пакета вам будет предложено войти с помощью бесплатной учётной записи Redivis."),
+ "6": section(
+     "## Стандарт данных",
+     "Каждая таблица IRW имеет **длинный формат**: по одной строке на ответ. Что *именно* представляет собой строка, зависит от семейства, к которому относится таблица, и то же самое касается столбцов, которые её несут.",
+     "Два вопроса, которые относят набор данных к семейству IRW.",
+     "Семейство", "Стандарт",
+     "Simsyn нет на схеме: это семейство определяется происхождением данных, а не их формой, поэтому смоделированная таблица может иметь любую из этих форм. Столбцы каждого семейства приведены в [обзоре стандартов](/overview.qmd)."),
+}
+
+
+# --------------------------------------------------------------------- pl ---
+EDITS["pl"] = {
+ "1": para("Gromadzi setki istniejących",
+     "Item Response Warehouse (IRW) stosuje te same zasady FAIR do danych o odpowiedziach na zadania. Gromadzi tysiące istniejących zbiorów danych i przekształca je w jeden wspólny format — dzięki czemu metoda przetestowana na jednym zbiorze danych może łatwo zostać przetestowana na tysiącach innych."),
+ "2": para("IRW zawiera **setki zbiorów danych**",
+     'IRW zawiera **tysiące zbiorów danych** ("tabel"), z których każdy jest zbiorem indywidualnych odpowiedzi. Odpowiedź powstaje za każdym razem, gdy jakaś osoba (lub inna jednostka) styka się z bodźcem pomiarowym i wynik zostaje zapisany. To, co jest bodźcem, zależy od [rodziny danych](/overview.qmd): zadanie, na które odpowiada się osobno; inny podmiot napotkany w starciu; cały zestaw opcji, który należy uporządkować; albo profil złożony z losowo przypisanych cech. Przykłady obejmują:'),
+ "3": line("Każdą inną sytuację",
+     "- Mecze, partie i bezpośrednie porównania, w których dwa podmioty mierzą się ze sobą i jeden wygrywa\n- Karty do głosowania preferencyjnego, rankingi jury oraz pytania rankingowe w ankietach\n- Eksperymenty conjoint, w których respondenci wybierają spośród losowo zbudowanych profili\n- Każdą inną sytuację obejmującą powtarzane odpowiedzi na zestaw narzędzi pomiarowych"),
+ "4": line("**Interoperacyjny (Interoperable).**",
+     "- **Interoperacyjny (Interoperable).** Każdy zbiór danych jest przekształcany do formatu długiego, jeden wiersz na odpowiedź, zgodnie ze standardem swojej rodziny (opisanym poniżej), dzięki czemu ten sam kod analityczny może działać na wielu zbiorach danych przy niewielkiej modyfikacji lub bez żadnej."),
+ "5": para("Zbiory danych różnią się znacznie",
+     "Zbiory danych różnią się znacznie pod względem wielkości (od kilkuset odpowiedzi do wielu milionów) oraz rodzaju odpowiedzi (zadania tak/nie, oceny wielokategorialne, wyniki częściowe, kategorie nieuporządkowane, wyniki starć, pozycje w rankingu i inne)."),
+ "7": line("Pakiet `irw`, dostępny zarówno dla",
+     "Pakiet `irw` jest dostępny zarówno dla **R**, jak i **Pythona**."),
+ "10": para("Przy pierwszym użyciu pakietu",
+     "Przy pierwszym użyciu pakietu zostaniesz poproszony o zalogowanie się za pomocą bezpłatnego konta Redivis."),
+ "6": section(
+     "## Standard danych",
+     "Każda tabela IRW jest w **formacie długim**: jeden wiersz na odpowiedź. To, czym *jest* wiersz, zależy od rodziny, do której należy tabela, podobnie jak kolumny, które go niosą.",
+     "Dwa pytania, które przypisują zbiór danych do rodziny IRW.",
+     "Rodzina", "Standard",
+     "Simsyn nie występuje na schemacie: ta rodzina jest określona przez pochodzenie danych, a nie przez ich kształt, więc tabela symulowana może mieć dowolny z tych kształtów. Kolumny każdej rodziny podaje [przegląd standardów](/overview.qmd)."),
+}
+
+# --------------------------------------------------------------------- tr ---
+EDITS["tr"] = {
+ "1": para("Yüzlerce mevcut veri kümesini",
+     "Item Response Warehouse (IRW), aynı FAIR ilkelerini madde tepki verilerine uygular. Binlerce mevcut veri kümesini bir araya getirir ve bunları tek bir ortak biçime dönüştürür — böylece bir veri kümesi üzerinde test edilen bir yöntem, binlerce başka veri kümesi üzerinde de kolayca test edilebilir."),
+ "2": para("**yüzlerce veri kümesi**",
+     'IRW, her biri bireysel tepkilerden oluşan bir koleksiyon olan **binlerce veri kümesi** ("tablo") içerir. Bir kişi (veya başka bir birim) bir ölçme aracıyla karşılaştığında ve sonuç kaydedildiğinde bir tepki oluşur. Neyin ölçme aracı sayıldığı [veri ailesine](/overview.qmd) göre değişir: tek başına yanıtlanan bir madde, bir karşılaşmada karşısına çıkılan başka bir varlık, sıraya konması gereken seçeneklerin tamamı ya da rastgele atanmış özelliklerden oluşturulmuş bir profil. Örnekler şunları içerir:'),
+ "3": line("tekrarlanan tepkilerin verildiği diğer her türlü durum",
+     "- İki varlığın karşı karşıya geldiği ve birinin kazandığı maçlar, oyunlar ve doğrudan karşılaştırmalar\n- Tercihli oy pusulaları, jüri sıralamaları ve anketlerdeki sıralama soruları\n- Katılımcıların rastgele oluşturulmuş profiller arasında seçim yaptığı conjoint deneyleri\n- Bir dizi ölçme aracına tekrarlanan tepkilerin verildiği diğer her türlü durum"),
+ "4": line("**Birlikte çalışabilir (Interoperable).**",
+     "- **Birlikte çalışabilir (Interoperable).** Her veri kümesi, tepki başına bir satır olacak şekilde uzun biçime ve ait olduğu ailenin standardına (aşağıda açıklanmıştır) göre dönüştürülür, böylece aynı analiz kodu birçok veri kümesinde çok az değişiklikle veya hiç değişiklik yapılmadan çalıştırılabilir."),
+ "5": para("Veri kümeleri boyut açısından",
+     "Veri kümeleri boyut açısından (birkaç yüz tepkiden milyonlarcasına kadar) ve tepki türü açısından (evet/hayır maddeleri, çok kategorili puanlamalar, kısmi puanlar, sırasız kategoriler, karşılaşma sonuçları, sıralama konumları ve daha fazlası) büyük farklılıklar gösterir."),
+ "7": line("Hem **R** hem de **Python** için mevcut olan `irw` paketi",
+     "`irw` paketi hem **R** hem de **Python** için mevcuttur."),
+ "10": para("Paketi ilk kullandığınızda",
+     "Paketi ilk kullandığınızda, ücretsiz bir Redivis hesabıyla giriş yapmanız istenir."),
+ "6": section(
+     "## Veri standardı",
+     "Her IRW tablosu **uzun biçimdedir**: tepki başına bir satır. Bir satırın *ne olduğu* tablonun ait olduğu aileye bağlıdır; onu taşıyan sütunlar da öyle.",
+     "Bir veri kümesini bir IRW ailesine yerleştiren iki soru.",
+     "Aile", "Standart",
+     "Simsyn şemada yer almaz: bu aile verinin biçimiyle değil nereden geldiğiyle tanımlanır, dolayısıyla simülasyon tablosu bu biçimlerden herhangi birine sahip olabilir. Her ailenin sütunları için [standartlara genel bakış](/overview.qmd) sayfasına bakın."),
+}
+
+# --------------------------------------------------------------------- vi ---
+EDITS["vi"] = {
+ "1": para("Nó tập hợp hàng trăm",
+     "Item Response Warehouse (IRW) áp dụng cùng các nguyên tắc FAIR đó cho dữ liệu phản hồi câu hỏi. Nó tập hợp hàng nghìn bộ dữ liệu đã có và định dạng lại chúng thành một định dạng chung duy nhất — nhờ đó một phương pháp đã được kiểm nghiệm trên một bộ dữ liệu có thể dễ dàng được kiểm nghiệm trên hàng nghìn bộ dữ liệu khác."),
+ "2": para("IRW chứa **hàng trăm bộ dữ liệu**",
+     'IRW chứa **hàng nghìn bộ dữ liệu** (gọi là "bảng"), mỗi bộ là một tập hợp các phản hồi riêng lẻ. Một phản hồi được tạo ra mỗi khi một người (hoặc đơn vị khác) gặp một đầu dò đo lường và kết quả được ghi lại. Điều gì được coi là đầu dò tùy thuộc vào [họ dữ liệu](/overview.qmd): một câu hỏi được trả lời riêng lẻ, một thực thể khác gặp trong một cuộc đọi đầu, toàn bộ một tập lựa chọn cần được xếp thứ tự, hoặc một hồ sơ được ghép từ các thuộc tính gán ngẫu nhiên. Ví dụ bao gồm:'),
+ "3": line("Bất kỳ tình huống nào khác",
+     "- Các trận đấu, ván đấu và so sánh trực tiếp, nơi hai thực thể đối đầu và một bên thắng\n- Lá phiếu bầu ưu tiên, bảng xếp hạng của ban giám khảo và câu hỏi xếp hạng trong khảo sát\n- Thí nghiệm conjoint, nơi người trả lời chọn giữa các hồ sơ được tạo ngẫu nhiên\n- Bất kỳ tình huống nào khác liên quan đến các phản hồi lặp lại đối với một tập hợp đầu dò đo lường"),
+ "4": line("**Có thể tương tác (Interoperable).**",
+     "- **Có thể tương tác (Interoperable).** Mỗi bộ dữ liệu được định dạng lại theo định dạng dài, một dòng cho mỗi phản hồi, theo chuẩn của họ dữ liệu của nó (mô tả bên dưới), để cùng một đoạn mã phân tích có thể chạy trên nhiều bộ dữ liệu mà chỉ cần chỉnh sửa rất ít hoặc không cần chỉnh sửa."),
+ "5": para("Các bộ dữ liệu có sự khác biệt lớn",
+     "Các bộ dữ liệu có sự khác biệt lớn về quy mô (từ vài trăm phản hồi đến hàng triệu) và về loại phản hồi (mục có/không, đánh giá nhiều hạng mục, điểm số theo phần, hạng mục không có thứ tự, kết quả đọi đầu, vị trí xếp hạng, và nhiều hơn nữa)."),
+ "7": line("Gói `irw`, có sẵn cho cả",
+     "Gói `irw` có sẵn cho cả **R** và **Python**."),
+ "10": para("Lần đầu tiên sử dụng gói này",
+     "Lần đầu tiên sử dụng gói này, bạn sẽ được yêu cầu đăng nhập bằng tài khoản Redivis miễn phí."),
+ "6": section(
+     "## Chuẩn dữ liệu",
+     "Mọi bảng IRW đều ở **định dạng dài**: một dòng cho mỗi phản hồi. Một dòng *là gì* tùy thuộc vào họ mà bảng đó thuộc về, và các cột mang nó cũng vậy.",
+     "Hai câu hỏi để xếp một bộ dữ liệu vào một họ của IRW.",
+     "Họ", "Chuẩn",
+     "Simsyn không có trong sơ đồ: họ này được xác định bởi nguồn gốc của dữ liệu chứ không phải hình dạng, nên một bảng mô phỏng có thể mang bất kỳ hình dạng nào trong số này. Các cột của từng họ được liệt kê trong [tổng quan về các chuẩn](/overview.qmd)."),
+}
+
+
+# --------------------------------------------------------------------- th ---
+EDITS["th"] = {
+ "1": para("โดยรวบรวมชุดข้อมูลที่มีอยู่แล้วหลายร้อยชุด",
+     "Item Response Warehouse (IRW) นำหลักการ FAIR เดียวกันนี้มาใช้กับข้อมูลการตอบสนองต่อข้อสอบ โดยรวบรวมชุดข้อมูลที่มีอยู่แล้วหลายพันชุดและปรับให้อยู่ในรูปแบบเดียวกัน — เพื่อให้วิธีการที่ทดสอบกับชุดข้อมูลหนึ่งสามารถนำไปทดสอบกับชุดข้อมูลอื่นอีกหลายพันชุดได้อย่างง่ายดาย"),
+ "2": para("**ชุดข้อมูลหลายร้อยชุด**",
+     'IRW ประกอบด้วย **ชุดข้อมูลหลายพันชุด** ("ตาราง") แต่ละชุดเป็นการรวบรวมคำตอบของแต่ละบุคคล คำตอบหนึ่งจะเกิดขึ้นทุกครั้งที่บุคคล (หรือหน่วยอื่น) พบกับแบบวัดหนึ่งและมีการบันทึกผลลัพธ์ สิ่งที่นับเป็นแบบวัดนั้นแตกต่างกันไปตาม[ตระกูลข้อมูล](/overview.qmd) ได้แก่ ข้อสอบที่ตอบทีละข้อ อีกหน่วยหนึ่งที่พบในการแข่งขัน ชุดของตัวเลือกทั้งหมดที่ต้องเรียงลำดับ หรือโปรไฟล์ที่ประกอบขึ้นจากคุณลักษณะที่กำหนดแบบสุ่ม ตัวอย่างเช่น'),
+ "3": line("สถานการณ์อื่นใดที่เกี่ยวข้อง",
+     "- การแข่งขัน การประลอง และการเปรียบเทียบโดยตรง ซึ่งสองฝ่ายพบกันและมีผู้ชนะหนึ่งฝ่าย\n- บัตรลงคะแนนแบบจัดลำดับ การจัดอันดับโดยคณะกรรมการ และคำถามแบบจัดอันดับในแบบสำรวจ\n- การทดลองแบบ conjoint ที่ผู้ตอบเลือกระหว่างโปรไฟล์ที่สร้างขึ้นแบบสุ่ม\n- สถานการณ์อื่นใดที่เกี่ยวข้องกับการตอบสนองซ้ำ ๆ ต่อชุดเครื่องมือวัดผล"),
+ "4": line("**ทำงานร่วมกันได้ (Interoperable)**",
+     "- **ทำงานร่วมกันได้ (Interoperable)** ชุดข้อมูลแต่ละชุดถูกปรับให้อยู่ในรูปแบบยาว หนึ่งแถวต่อหนึ่งคำตอบ ตามมาตรฐานของตระกูลนั้น (อธิบายไว้ด้านล่าง) เพื่อให้โค้ดวิเคราะห์ชุดเดียวกันสามารถใช้ได้กับหลายชุดข้อมูลโดยแทบไม่ต้องแก้ไข หรือไม่ต้องแก้ไขเลย"),
+ "5": para("ชุดข้อมูลมีความหลากหลายอย่างมาก",
+     "ชุดข้อมูลมีความหลากหลายอย่างมากทั้งในด้านขนาด (ตั้งแต่ไม่กี่ร้อยคำตอบไปจนถึงหลายล้านคำตอบ) และประเภทของคำตอบ (ข้อสอบแบบใช่/ไม่ใช่ การให้คะแนนแบบหลายหมวดหมู่ คะแนนบางส่วน หมวดหมู่ที่ไม่มีลำดับ ผลการแข่งขัน อันดับที่จัดไว้ และอื่น ๆ)"),
+ "7": line("แพ็กเกจ `irw` ซึ่งมีให้ใช้งานทั้งใน",
+     "แพ็กเกจ `irw` มีให้ใช้งานทั้งใน **R** และ **Python**"),
+ "10": para("ครั้งแรกที่คุณใช้แพ็กเกจนี้",
+     "ครั้งแรกที่คุณใช้แพ็กเกจนี้ ระบบจะขอให้คุณเข้าสู่ระบบด้วยบัญชี Redivis ที่ไม่มีค่าใช้จ่าย"),
+ "6": section(
+     "## มาตรฐานข้อมูล",
+     "ตาราง IRW ทุกตารางอยู่ใน**รูปแบบยาว** คือหนึ่งแถวต่อหนึ่งคำตอบ สิ่งที่หนึ่งแถว*เป็น*ขึ้นอยู่กับตระกูลที่ตารางนั้นสังกัดอยู่ และคอลัมน์ที่รองรับก็เช่นกัน",
+     "สองคำถามที่จัดชุดข้อมูลเข้าตระกูลของ IRW",
+     "ตระกูล", "มาตรฐาน",
+     "Simsyn ไม่ปรากฏในแผนภูมิ เพราะตระกูลนี้ถูกกำหนดด้วยที่มาของข้อมูล ไม่ใช่รูปร่าง ตารางจำลองจึงมีรูปร่างแบบใดก็ได้ในกลุ่มนี้ คอลัมน์ของแต่ละตระกูลดูได้ที่[ภาพรวมมาตรฐาน](/overview.qmd)"),
+}
+
+# --------------------------------------------------------------------- hi ---
+EDITS["hi"] = {
+ "1": para("यह सैकड़ों मौजूदा डेटासेट",
+     "Item Response Warehouse (IRW) आइटम-प्रतिक्रिया डेटा पर यही FAIR सिद्धांत लागू करता है। यह हज़ारों मौजूदा डेटासेट को एक साथ लाता है और उन्हें एक साझा प्रारूप में ढालता है — ताकि किसी एक डेटासेट पर परखी गई विधि को हज़ारों अन्य डेटासेट पर भी आसानी से परखा जा सके।"),
+ "2": para("IRW में **सैकड़ों डेटासेट**",
+     'IRW में **हज़ारों डेटासेट** ("टेबल") हैं, जिनमें से प्रत्येक व्यक्तिगत प्रतिक्रियाओं का एक संग्रह है। जब भी कोई व्यक्ति (या कोई अन्य इकाई) किसी मापन-प्रोब से सामना करता है और परिणाम दर्ज होता है, तो एक प्रतिक्रिया उत्पन्न होती है। प्रोब क्या है, यह [डेटा परिवार](/overview.qmd) पर निर्भर करता है: अकेले उत्तर दिया गया कोई आइटम, किसी मुकाबले में मिली कोई दूसरी इकाई, विकल्पों का पूरा समूह जिसे क्रम में रखना हो, या यादृच्छिक रूप से निर्धारित विशेषताओं से बना कोई प्रोफ़ाइल। उदाहरणों में शामिल हैं:'),
+ "3": line("कोई भी अन्य स्थिति जिसमें मापन-प्रोब",
+     "- खेल, मुकाबले और आमने-सामने की तुलनाएँ, जहाँ दो इकाइयाँ भिड़ती हैं और एक जीतती है\n- वरीयता-क्रम वाले मतपत्र, निर्णायक मंडल की वरीयताएँ और सर्वेक्षण के क्रम-निर्धारण प्रश्न\n- कॉन्जॉइंट प्रयोग, जिनमें उत्तरदाता यादृच्छिक रूप से बनी प्रोफ़ाइलों में से चुनते हैं\n- कोई भी अन्य स्थिति जिसमें मापन-प्रोब के एक समूह पर बार-बार प्रतिक्रियाएं दी जाती हों"),
+ "4": line("**अंतरसंचालनीय (Interoperable) हो।**",
+     "- **अंतरसंचालनीय (Interoperable) हो।** प्रत्येक डेटासेट को लॉन्ग प्रारूप में, प्रति प्रतिक्रिया एक पंक्ति, उसके परिवार के मानक (नीचे वर्णित) के अनुसार ढाला गया है, जिससे एक ही विश्लेषण कोड को कई डेटासेट पर बिना या न्यूनतम बदलाव के चलाया जा सकता है।"),
+ "5": para("डेटासेट आकार में",
+     "डेटासेट आकार में (कुछ सौ प्रतिक्रियाओं से लेकर कई लाख तक) और प्रतिक्रिया के प्रकार में (हाँ/नहीं आइटम, बहु-श्रेणी रेटिंग, आंशिक-अंक स्कोर, क्रमरहित श्रेणियाँ, मुकाबलों के परिणाम, वरीयता-स्थान, और अन्य) व्यापक रूप से भिन्न होते हैं।"),
+ "7": line("`irw` पैकेज, जो **R** और **Python** दोनों",
+     "`irw` पैकेज **R** और **Python** दोनों के लिए उपलब्ध है।"),
+ "10": para("पैकेज का पहली बार उपयोग",
+     "पैकेज का पहली बार उपयोग करने पर, आपसे एक निःशुल्क Redivis खाते से लॉग इन करने के लिए कहा जाएगा।"),
+ "6": section(
+     "## डेटा मानक",
+     "हर IRW टेबल **लॉन्ग प्रारूप** में है: प्रति प्रतिक्रिया एक पंक्ति। एक पंक्ति *क्या है*, यह इस पर निर्भर करता है कि टेबल किस परिवार की है, और उसे ढोने वाले कॉलम भी उसी पर।",
+     "दो प्रश्न जो किसी डेटासेट को IRW के किसी परिवार में रखते हैं।",
+     "परिवार", "मानक",
+     "Simsyn चार्ट में नहीं है: यह परिवार डेटा के आकार से नहीं, बल्कि उसके स्रोत से परिभाषित होता है, इसलिए कोई सिमुलेटेड टेबल इनमें से किसी भी आकार की हो सकती है। हर परिवार के कॉलम [मानकों के अवलोकन](/overview.qmd) में दिए गए हैं।"),
+}
+
+
 def apply(lang):
     path = os.path.join(HERE, "welcome_%s.md" % lang)
     s = io.open(path, encoding="utf-8", newline="").read()
@@ -312,7 +499,10 @@ def apply(lang):
     s = s[:i] + body + "\n\n" + s[j:]
 
     for key in sorted(k for k in spec if k != "6"):
-        old, new = spec[key]
+        try:
+            old, new = _resolve(s, spec[key])
+        except LookupError as exc:
+            return "change %s: %s" % (key, exc)
         n = s.count(old)
         if n != 1:
             return "change %s matched %d times" % (key, n)
