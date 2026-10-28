@@ -123,8 +123,15 @@ dims_for <- function(meta_row, source) {
     if (is.null(meta_row) || !col %in% names(meta_row)) return(NA_real_)
     suppressWarnings(as.numeric(meta_row[[col]][1]))
   }
-  fmt <- function(x) format(round(x), big.mark = ",", trim = TRUE)
-  part <- function(x, unit) if (is.na(x)) NA_character_ else paste(fmt(x), unit)
+  # scientific = FALSE is load-bearing: format(1e6) is "1e+06", so ENEM's
+  # 1,000,000 people rendered as "1e+06 people" without it.
+  fmt <- function(x) format(round(x), big.mark = ",", trim = TRUE, scientific = FALSE)
+  # "1 tasks" reads as a bug on the card, so a count of one drops the plural.
+  part <- function(x, unit) {
+    if (is.na(x)) return(NA_character_)
+    if (x == 1) unit <- sub("s$", "", unit)
+    paste(fmt(x), unit)
+  }
   parts <- switch(
     source,
     core = c(part(g("n_participants"), "people"), part(g("n_items"), "items"),
@@ -165,7 +172,37 @@ meta_for <- function(source, table) {
   hit[1, , drop = FALSE]
 }
 
+# Redivis download connections fail intermittently, and the client's own retry
+# can come back with a 400 ("Unable to parse table reference
+# `character(0).<table>`") rather than the rows -- a transient fault, not a
+# missing table. Retry the whole fetch a few times before giving up on a
+# specimen.
+FETCH_TRIES <- 3L
+
+fetch_one <- function(tbl, src) {
+  for (attempt in seq_len(FETCH_TRIES)) {
+    got <- tryCatch(
+      {
+        df <- if (identical(src, "core")) irw_fetch(tbl, max_rows = SAMPLE_ROWS)
+              else irw_fetch(tbl, source = src, max_rows = SAMPLE_ROWS)
+        df <- as.data.frame(df)
+        if (!nrow(df)) stop("fetched 0 rows", call. = FALSE)
+        df
+      },
+      error = function(e) e
+    )
+    if (!inherits(got, "error")) return(got)
+    if (attempt < FETCH_TRIES) {
+      message("  attempt ", attempt, " failed (", conditionMessage(got), "); retrying ...")
+      Sys.sleep(5 * attempt)
+    } else {
+      return(got)
+    }
+  }
+}
+
 entries <- vector("list", nrow(spec_list))
+failures <- character(0)
 
 for (k in seq_len(nrow(spec_list))) {
   row <- spec_list[k, ]
@@ -173,10 +210,15 @@ for (k in seq_len(nrow(spec_list))) {
   src <- trimws(row$source)
   message("fetching ", tbl, " (source = ", src, ", max_rows = ", SAMPLE_ROWS, ") ...")
 
-  df <- if (identical(src, "core")) irw_fetch(tbl, max_rows = SAMPLE_ROWS)
-        else irw_fetch(tbl, source = src, max_rows = SAMPLE_ROWS)
-  df <- as.data.frame(df)
-  if (!nrow(df)) stop(tbl, " fetched 0 rows")
+  df <- fetch_one(tbl, src)
+  # Carry on through a failure rather than halting, so one run reports every
+  # broken specimen instead of only the first. Nothing is written unless all of
+  # them succeed; see the all-or-nothing check below.
+  if (inherits(df, "error")) {
+    failures <- c(failures, sprintf("%s (%s): %s", tbl, src, conditionMessage(df)))
+    message("  GIVING UP on ", tbl)
+    next
+  }
 
   cols <- cols_for(df, src)
   if (!length(cols)) stop(tbl, ": none of the ", src, " standard columns are present")
@@ -216,6 +258,15 @@ for (k in seq_len(nrow(spec_list))) {
     page_url = sprintf("tables/%s/", tolower(tbl)),
     placeholder = FALSE
   )
+}
+
+# All or nothing: a partial file would quietly drop specimens, and in the worst
+# case a whole family, from the homepage card. Leave the committed JSON alone
+# and report every failure at once.
+if (length(failures)) {
+  stop("could not fetch ", length(failures), " of ", nrow(spec_list), " specimens:\n  ",
+       paste(failures, collapse = "\n  "),
+       "\n", OUT_PATH, " left unchanged.", call. = FALSE)
 }
 
 dir.create(dirname(OUT_PATH), showWarnings = FALSE, recursive = TRUE)
