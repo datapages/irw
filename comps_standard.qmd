@@ -18,6 +18,16 @@ These tables form the competitions [data family](overview.qmd#families) (`source
 
 Additional information that may be predictive of the outcome can be included as additional columns. 
 
+### Which agent is listed first
+
+In some tables the two agents are listed in outcome order: `agent_a` is the winner by construction, so `winner` is `agent_a` in every row and the outcome is carried by the ordering rather than by the column. This is the native form of the source for dominance observations, where an interaction is recorded as a winner and a loser, and for comparative judgement, where it is recorded as the option chosen and the option passed over. As of October 2026 it is how 36 of the family's 119 tables are built, among them every animal dominance table.
+
+Elo and Bradley-Terry fits are unaffected, since a winner-loser dyad is what they take. Two other things do follow. Code that symmetrises or shuffles the pair before fitting will destroy the outcome, and `winner` is a constant column in these tables, so it cannot be used to split, filter or weight them. Most of them also carry no `score_a`/`score_b`, which leaves the ordering as the only record of who won; the Elo recipe below, keyed on `score(score_a, score_b)`, does not apply to those tables.
+
+Where an agent is never beaten, or never wins, its Bradley-Terry strength has no finite maximum-likelihood estimate. This is a property of the dominance structure rather than of the ordering convention, and `BTm(..., br = TRUE)` handles it; see the worked example below.
+
+Before looping a model across the family, `length(unique(df$winner)) == 1` identifies the tables that use this convention.
+
 ## Accessing the competition data
 
 The competitions data can be accessed from both the R and Python `irw` packages:
