@@ -57,6 +57,34 @@ searched_txt <- if (is.na(n_searched)) "the tables" else
   glue("the **{fmt(n_searched)} of {fmt(n_total)}** tables")
 n_part <- sum(reg$coverage == "tagged-subset-only")
 
+## The hand-curated lists carry a date now, for the same reason the tagged ones
+## carry a denominator: `curated-only` says a human chose the members and says
+## nothing about WHEN, so a list frozen in September reads exactly like one
+## checked this morning (review R-28, ben-domingue/irw#3225). Parsed out of the
+## definition rather than hardcoded, and the prose drops the dates rather than
+## showing stale ones if that shape ever changes -- the same discipline the
+## denominator above is under. The registry grows the clause on its next
+## pipeline run, so this has to read sensibly before it is there.
+cur_rev <- str_match(reg$definition,
+                     "member list last revised ([0-9]{4}-[0-9]{2}-[0-9]{2})")[, 2]
+n_cur  <- sum(reg$coverage == "curated-only")
+n_meta <- sum(reg$coverage == "metadata-complete")
+## Agreement, because these counts are read off a registry that can hold one.
+plural <- function(n, one, many) if (n == 1) one else many
+cur_n <- glue("{n_cur} hand-curated collection{plural(n_cur, '', 's')}")
+cur_txt <- if (all(is.na(cur_rev))) {
+  glue("The {cur_n} {plural(n_cur, 'was', 'were')} assembled table by table, ",
+       "and a curated list is not re-checked when tables are added. ")
+} else {
+  d <- sort(cur_rev[!is.na(cur_rev)])
+  when <- if (d[1] == d[length(d)]) glue("on **{d[1]}**") else
+    glue("between **{d[1]}** and **{d[length(d)]}**")
+  glue("The {cur_n} {plural(n_cur, 'was', 'were')} last revised {when}, and a ",
+       "curated list is not re-checked when tables are added --- it is a ",
+       "snapshot of a growing corpus, and each card below carries its own ",
+       "date. ")
+}
+
 ## Where the construct-name gap actually is, measured rather than asserted.
 ##
 ## This paragraph used to say the field is "much sparser in the newer
@@ -126,8 +154,11 @@ cat(glue(
   '{nrow(reg)} collections below are marked `tagged-subset-only` for that reason: they are ',
   'useful starting points, but they are not exhaustive. ',
   '{shard_gap}',
-  'Treat them as "the ones we know of", not "all of them". The rest searched every ',
-  'documented table.\n\n',
+  'Treat them as "the ones we know of", not "all of them".\n\n',
+  '**And a hand-curated collection is a snapshot.** {cur_txt}',
+  'The {n_meta} collection{plural(n_meta, "", "s")} assigned from the published metadata ',
+  '{plural(n_meta, "is", "are")} the only one{plural(n_meta, "", "s")} that searched every ',
+  'documented table, and did it at render time.\n\n',
   '{rendered_against}\n\n',
   'Corrections are welcome --- open an issue on ',
   '[ben-domingue/irw](https://github.com/ben-domingue/irw/issues).\n',
@@ -254,6 +285,9 @@ exact_instruments <- function() {
     '- <span class="ex-sw ex-supplied"></span> **supplied**: IRW identified the instrument and supplied its canonical wording, so a ',
     'wording match only confirms that identification. Identity is asserted.\n',
     '- <span class="ex-sw ex-name"></span> **name**: there is no usable English item text; only the table\'s metadata names the instrument.\n\n',
+    '{if (all(is.na(cur_rev))) "A list is not re-checked when new tables arrive" else ',
+    '"Each list names when it was last gone through, and it is not re-checked when new tables arrive"}',
+    ' --- so a table that would qualify may have entered the corpus since. ',
     'A note after the basis marks a partial table (`partial: 18/20 items`) or a single subscale ',
     '(`subscale: anxiety (7/21)`). For the strictly verified set, keep members whose basis starts ',
     'with `wording`. The method is written up in the ',
@@ -268,6 +302,10 @@ exact_instruments <- function() {
       '<span class="ex-{b}" style="width:{round(100 * cnt[[b]] / n, 2)}%" title="{b}: {cnt[[b]]}"></span>') else "", ""),
       collapse = "")
     what <- str_match(r$definition, "^Tables that administered (.*?): ")[, 2]
+    ##When this list was last gone through. A frozen list and a current one
+    ##look identical without it (R-28, ben-domingue/irw#3225).
+    rev_i <- cur_rev[match(r$collection, reg$collection)]
+    rev_txt <- if (is.na(rev_i)) "" else glue(" &middot; revised {rev_i}")
     trs <- paste0(glue_data(mm,
       '<tr data-b="{b}" data-t="{tolower(table)}"><td><a href="tables/{table}/"><code>{table}</code></a></td>',
       '<td><span class="ex-pill"><span class="ex-sw ex-{b}"></span>{b}</span></td>',
@@ -276,7 +314,7 @@ exact_instruments <- function() {
     glue('<details class="ex-coll" data-slug="{r$collection}">',
       '<summary><span class="ex-title"><span class="ex-label">{htmlEscape(r$label)}</span>',
       '<code>{r$collection}</code></span>',
-      '<span class="ex-count"><b>{n}</b> tables &middot; {cnt[["wording"]]} wording</span>',
+      '<span class="ex-count"><b>{n}</b> tables &middot; {cnt[["wording"]]} wording{rev_txt}</span>',
       '<span class="ex-bar" aria-hidden="true">{bar}</span></summary>',
       '<div class="ex-body">{if (!is.na(what)) paste0("<p class=\\"ex-what\\">", htmlEscape(what), "</p>") else ""}',
       '<div class="ex-tbl"><table><thead><tr><th>Table</th><th>Basis</th><th>Note</th></tr></thead>',
@@ -325,12 +363,16 @@ for (k in KIND_META$kind) {
   for (i in seq_len(nrow(rows))) {
     r <- rows[i, ]
     partial <- r$coverage == "tagged-subset-only"
-    ##Strip the denominator clause the pipeline appends -- it is shown as a
-    ##chip below instead, and reads as clutter inside the prose.
+    ##Strip the clause the pipeline appends -- the denominator for a tagged
+    ##search, the revision date for a curated list. Both are shown as a chip
+    ##below instead, and read as clutter inside the prose.
     desc <- str_squish(str_remove(r$definition, "\\s*\\(searched the.*?\\)\\s*$"))
+    desc <- str_squish(str_remove(desc, "\\s*\\(hand-curated;.*?\\)\\s*$"))
     cov_txt <- dplyr::case_when(
       r$coverage == "tagged-subset-only" & !is.na(n_searched) ~ glue("of {fmt(n_searched)} searched"),
       r$coverage == "tagged-subset-only" ~ "partial search",
+      r$coverage == "curated-only" & !is.na(cur_rev[reg$collection == r$collection][1]) ~
+        glue("hand-curated {cur_rev[reg$collection == r$collection][1]}"),
       r$coverage == "curated-only"       ~ "hand-curated",
       !is.na(n_total)                    ~ glue("of all {fmt(n_total)}"),
       TRUE                               ~ "of all documented"
