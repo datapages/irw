@@ -146,6 +146,45 @@ cat(glue(
 ))
 ```
 
+```{r}
+#| label: case-join
+#| echo: false
+#| results: asis
+## Every number on this page is computed through `key()`, which lowercases both
+## sides. A reader who downloads the two tables and joins them on `table` does
+## not, and loses several hundred tables silently -- a plausible smaller
+## coverage figure, not an error (review R-31, ben-domingue/irw#3225). The page
+## knew this in a code comment and never told anyone, which was the defect.
+## Measured here rather than asserted, so it cannot go stale, and the callout
+## drops itself if the two conventions ever converge.
+n_mixed <- sum(metadata$table != str_to_lower(metadata$table))
+n_exact <- sum(metadata$table %in% tag_table$table)
+n_ci    <- sum(key(metadata$table) %in% key(tag_table$table))
+if (n_ci > n_exact) cat(glue(
+  '::: {{.callout-warning appearance="simple"}}\n',
+  '## Joining the tag table yourself? Lowercase both sides\n\n',
+  'IRW table names keep the capitalisation they arrived with, and **{comma(n_mixed)} ',
+  'of the {comma(n_tables)}** are not all-lowercase. Every row of the tag table is ',
+  'lowercase. So a case-sensitive join matches **{comma(n_exact)} tables ({pct(n_exact)})** ',
+  'where a case-insensitive one matches **{comma(n_ci)} ({pct(n_ci)})** --- the ',
+  '{comma(n_ci - n_exact)} tables in between are tagged, and a plain ',
+  '`merge(metadata, tags, by = "table")` drops them without complaining.\n\n',
+  '```r\n',
+  'tags <- transform(tags, table = tolower(table))\n',
+  'meta <- transform(meta, table = tolower(table))\n',
+  'joined <- merge(meta, tags, by = "table", all.x = TRUE)\n',
+  '```\n\n',
+  '```python\n',
+  'joined = meta.assign(table=meta.table.str.lower()).merge(\n',
+  '    tags.assign(table=tags.table.str.lower()), on="table", how="left")\n',
+  '```\n\n',
+  'Every figure on this page is computed that way, and both client packages ',
+  'match case-insensitively already --- `irw_filter()` in R, `filter()` in ',
+  'Python. This applies to the direct-download route only.\n',
+  ':::\n\n'
+))
+```
+
 Two columns sit far below the rest, and they are not backlog --- see
 [what is published and what is withheld](#what-is-published-and-what-is-withheld).
 `construct name` is also not a coverage target in the way the others are: it is

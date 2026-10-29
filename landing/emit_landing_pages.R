@@ -1088,9 +1088,54 @@ build_page <- function(x) {
     about <- paste0(about, "<p class=\"note\">", note, "</p>\n")
   }
 
+  # The Classification section showed tags as bare facts, with nothing saying
+  # where a value came from and no sign of which collections the table is in
+  # (review R-33, ben-domingue/irw#3225). The Codebook block on this same page
+  # had modelled the right pattern for two years -- open by saying what the
+  # thing is -- so this follows it rather than inventing a second voice.
+  #
+  # The provenance sentence is deliberately general. Nothing published per row
+  # records WHICH values a human wrote and which the tagger did: the tags table
+  # is eight value columns and a table name. So the note says what the mixture
+  # is and sends a reader who needs the per-column answer to the page that has
+  # it, instead of implying a precision the data cannot support.
   tagbody <- ""
   if (length(x$tags)) {
-    tagbody <- kv_rows(lapply(names(x$tags), function(k) list(k, x$tags[[k]])))
+    tagbody <- paste0(
+      kv_rows(lapply(names(x$tags), function(k) list(k, x$tags[[k]]))),
+      "<p class=\"note\">These are classifications the IRW records, not the ",
+      "study&rsquo;s own words. Some were annotated by hand and some written by ",
+      "an automated tagger whose output is published only where it clears a ",
+      "measured accuracy bar; which values came from which is not recorded per ",
+      "table. Coverage and accuracy per column, and what is held back, are on ",
+      "<a href=\"", SITE_URL, "/tags_quality.html\">Tag quality</a>.</p>\n")
+  }
+  if (!is.null(x$collections) && nrow(x$collections)) {
+    cl <- x$collections
+    cl <- cl[order(tolower(ifelse(is.na(cl$label) | !nzchar(cl$label),
+                                  cl$collection, cl$label))), , drop = FALSE]
+    items <- vapply(seq_len(nrow(cl)), function(i) {
+      lab <- if (!blank(cl$label[i])) chr(cl$label[i]) else ""
+      # `basis` is the record of HOW this table got in: a rule, or a human
+      # decision with the evidence named. It travels with the membership
+      # precisely so a reader can weigh it, so it belongs on the page.
+      how <- trimws(sub("^rule:.*", "by rule", chr(cl$basis[i])))
+      paste0("<li>", if (nzchar(lab)) paste0(esc(lab), " ") else "",
+             "<code>", esc(cl$collection[i]), "</code>",
+             if (nzchar(how)) paste0(" &mdash; <span class=\"note\">",
+                                     esc(how), "</span>") else "", "</li>")
+    }, character(1))
+    tagbody <- paste0(
+      tagbody,
+      "<p>This table is in ", nrow(cl),
+      if (nrow(cl) == 1) " collection" else " collections",
+      ". Each membership records how it was decided:</p>\n",
+      "<ul>\n", paste0(items, collapse = "\n"), "\n</ul>\n",
+      "<p class=\"note\">Membership is the IRW&rsquo;s judgment and is worth ",
+      "checking before you use a collection as a sample. A hand-curated list is ",
+      "a snapshot: it is not re-checked when tables are added, so a table that ",
+      "would qualify may be missing. See <a href=\"", SITE_URL,
+      "/collections.html\">Collections</a>.</p>\n")
   }
 
   itext <- ""
@@ -1426,9 +1471,30 @@ main <- function() {
     message("[landing] read ", pf, "_metadata: ", nrow(m2), " rows")
   }
 
+  # Collection membership, so a table page can say which collections it is in
+  # (review R-33, ben-domingue/irw#3225). The page carried tags and no
+  # membership, which left discovery entirely to the collections page: a reader
+  # on a table page could not see that it was one of the 20 DASS-21 tables.
+  # Both tables are optional for the same reason the non-core families are -- a
+  # render against an irw_meta that predates them should lose the block, not
+  # the publish.
+  cmem <- data.frame(table = character(0), collection = character(0),
+                     basis = character(0), stringsAsFactors = FALSE)
+  coll <- data.frame(collection = character(0), label = character(0),
+                     coverage = character(0), stringsAsFactors = FALSE)
+  if (all(c("collection_members", "collections") %in% meta_tabs)) {
+    cmem <- as_df(meta_ds$table("collection_members"))
+    coll <- as_df(meta_ds$table("collections"))
+    message("[landing] read collection_members: ", nrow(cmem), " memberships over ",
+            nrow(coll), " collections")
+  } else {
+    message("[landing] collections not in irw_meta yet; table pages omit membership")
+  }
+
   key <- function(df) tolower(trimws(as.character(df[[1]])))
   md$.k <- key(md); bib$.k <- key(bib); tg$.k <- key(tg); itm$.k <- key(itm)
   outc$.k <- key(outc)
+  cmem$.k <- key(cmem)
 
   # One listing per shard, not one request per table: at ~4,000 tables the
   # per-table call was the whole runtime. Each listed table carries Redivis' own
@@ -1629,6 +1695,13 @@ main <- function() {
                           rank = "ranked-choice ballots", NULL)),
       src = src, twin = unname(twin_of[k]), family = family_of[[k]],
       outcomes = outc[outc$.k == k, , drop = FALSE],
+      collections = {
+        cm <- cmem[cmem$.k == k, , drop = FALSE]
+        if (nrow(cm)) merge(cm, coll[, intersect(c("collection", "label", "coverage"),
+                                                 names(coll))],
+                            by = "collection", all.x = TRUE)
+        else cm
+      },
       truth_cols = grep("^cov_true_", vars, value = TRUE),
       page_url = page_url,
       croissant_url = paste0(SITE_URL, "/tables/", slug, "/croissant.jsonld"),
