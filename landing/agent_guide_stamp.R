@@ -67,7 +67,7 @@ FAMILIES <- list(
 # Datasets that hold no response data, so they are not a family and must not be
 # reported as an undeclared one. ARCHITECTURE.md section 2: "Auxiliary means
 # only these."
-AUXILIARY <- c("irw_meta", "irw_text", "irw_text_2", "irw_text_3")
+AUXILIARY <- c("irw_meta", "irw_text", "irw_text_2", "irw_text_3", "irw_text_4")
 
 fail <- function(msg) {
   if (nzchar(Sys.getenv("CI"))) stop("landing/agent_guide_stamp.R: ", msg, call. = FALSE)
