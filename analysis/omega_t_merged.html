@@ -1,0 +1,732 @@
+<title>Merged Batteries and ω_t</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a single 72ch column of report prose; figures and tables break out to
+   the full 64rem measure. Hairline rules, no cards, no shadows. Numbers in mono
+   everywhere so columns and axis ticks line up. */
+:root{
+  --paper:#fbfbf9; --panel:#f3f3f0; --ink:#17181c; --ink-2:#55575f; --ink-3:#8a8c94;
+  --line:#dededa; --line-strong:#b9b9b4;
+  --pos:#4038c9; --neg:#b0522a;
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#14161a; --panel:#1b1e23; --ink:#e9e9e6; --ink-2:#a6a8b0; --ink-3:#7a7d85;
+  --line:#2a2e35; --line-strong:#3d424b; --pos:#7f78ea; --neg:#cf7138; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --paper:#14161a; --panel:#1b1e23; --ink:#e9e9e6; --ink-2:#a6a8b0; --ink-3:#7a7d85;
+  --line:#2a2e35; --line-strong:#3d424b; --pos:#7f78ea; --neg:#cf7138; color-scheme:dark;}
+
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-weight:400;
+  font-size:16px;line-height:1.62;margin:0;-webkit-font-smoothing:antialiased}
+.wrap{max-width:64rem;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:56px 80px;
+  display:flex;flex-direction:column;gap:44px}
+h1,h2,h3{font-family:var(--sans);text-wrap:balance;margin:0;letter-spacing:-0.012em}
+h1{font-size:clamp(28px,4.2vw,40px);line-height:1.14;font-weight:600;max-width:30ch}
+h2{font-size:21px;font-weight:600;line-height:1.3;padding-bottom:10px;
+  border-bottom:1px solid var(--line-strong)}
+h3{font-size:15px;font-weight:600;letter-spacing:0}
+p{margin:0;max-width:72ch;color:var(--ink)}
+.eyebrow{font-family:var(--mono);font-size:11.5px;font-weight:500;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--ink-3)}
+.lede{font-size:17.5px;line-height:1.6;color:var(--ink-2)}
+.lede b{color:var(--ink);font-weight:600}
+section{display:flex;flex-direction:column;gap:16px}
+
+/* stat row: figures separated by hairlines, no boxes */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0;
+  border-top:1px solid var(--line-strong);border-bottom:1px solid var(--line-strong)}
+.stat{padding:16px 20px 15px;display:flex;flex-direction:column;gap:3px;min-width:0;
+  border-left:1px solid var(--line)}
+.stat:first-child{border-left:none;padding-left:0}
+.stat b{font-family:var(--mono);font-size:26px;font-weight:500;line-height:1.1;
+  font-variant-numeric:tabular-nums;letter-spacing:-0.02em}
+.stat span{font-family:var(--mono);font-size:10.5px;font-weight:400;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--ink-3)}
+
+.pill{display:inline-flex;align-self:flex-start;font-family:var(--mono);font-size:11px;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--ink-2);border:1px solid var(--line-strong);
+  border-radius:3px;padding:3px 9px;background:none}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:20px 22px;
+  display:flex;flex-direction:column;gap:12px;min-width:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+
+.swatch{width:11px;height:11px;border-radius:2px;display:inline-block}
+.legend{display:flex;flex-wrap:wrap;gap:18px;font-family:var(--mono);font-size:11.5px;
+  color:var(--ink-2);align-items:center}
+.legend i{display:inline-flex;align-items:center;gap:7px;font-style:normal}
+figure{margin:0;display:flex;flex-direction:column;gap:14px;min-width:0}
+figcaption{font-size:14px;line-height:1.55;color:var(--ink-2);max-width:78ch}
+figcaption b{color:var(--ink);font-weight:600}
+.chartbox{overflow-x:auto}
+#strip{min-width:720px}
+#fams{min-width:720px}
+svg{display:block;max-width:100%;height:auto}
+
+.tablebox{overflow-x:auto;max-height:430px;overflow-y:auto;border-top:1px solid var(--line-strong);
+  border-bottom:1px solid var(--line-strong)}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:13px;
+  font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:6px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{position:sticky;top:0;background:var(--paper);font-size:10.5px;letter-spacing:.07em;
+  text-transform:uppercase;font-weight:500;color:var(--ink-3);
+  border-bottom:1px solid var(--line-strong)}
+tbody tr:last-child td{border-bottom:none}
+.num-pos{color:var(--pos)}.num-neg{color:var(--neg)}
+
+ul,ol{margin:0;padding-left:1.3em;max-width:72ch;display:flex;flex-direction:column;gap:9px}
+li{padding-left:2px}
+li::marker{color:var(--ink-3);font-family:var(--mono);font-size:.85em}
+code{font-family:var(--mono);font-size:.87em;color:var(--ink);background:none;padding:0}
+.card code,li code{color:var(--ink)}
+.foot{font-size:13.5px;color:var(--ink-3);max-width:72ch}
+
+/* chart marks */
+#strip text,#fams text{font-family:var(--mono)}
+.t-mu{fill:var(--ink-3)}.t-ink{fill:var(--ink)}
+#strip line,#fams line{stroke:var(--line-strong)}
+.pos{fill:var(--pos)}.neg{fill:var(--neg)}
+#strip circle{stroke:var(--paper)}
+#fams .dot{stroke:var(--paper)}#fams .ring{fill:none;stroke:var(--ink-3)}
+
+.tip{position:fixed;pointer-events:none;opacity:0;transition:opacity .1s;background:var(--ink);
+  color:var(--paper);font-family:var(--mono);font-size:11.5px;padding:5px 8px;border-radius:4px;
+  z-index:20;white-space:nowrap}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header style="display:flex;flex-direction:column;gap:16px">
+  <span class="eyebrow">IRW · one-off analysis · 23–28 October 2026</span>
+  <h1>Does the 1d→2d gain grow when we merge instruments?</h1>
+  <p class="lede">Usually, sometimes by a lot, and not because the battery got longer. Across <b>eight DOI
+  families</b> — instruments one cohort actually answered, stacked into a single calibration — the held-out
+  <b>IMV(2PL, 2F-2PL)</b> on the merged battery runs from <b>−0.014 to +0.049</b>, median +0.014. Five of the
+  eight clear the Psychometrika paper's 60-dataset mean of 0.0031 and two clear its maximum of 0.029. In seven
+  of eight the merged battery beats the median of its own member instruments fitted alone. But two families
+  refuse: one is negative merged, and one gains in every instrument separately and nothing at all pooled. And
+  the gain runs <em>against</em> battery size — corr(IMV, n items) = −0.21, where the paper found +0.31 within
+  single tables.</p>
+  <span class="pill">eight families · 1d vs 2d only · no ladder</span>
+</header>
+
+<div class="stats">
+  <div class="stat"><b>+0.049</b><span>best merged battery</span></div>
+  <div class="stat"><b>+0.014</b><span>median of 8 families</span></div>
+  <div class="stat"><b>0.0031</b><span>paper mean, 60 tables</span></div>
+  <div class="stat"><b>−0.21</b><span>corr with n items</span></div>
+</div>
+
+<section>
+  <h2>Eight families</h2>
+  <p>Each family is a set of IRW tables sharing a citation key, answered by the same cohort, with no item
+  overlap — one battery a respondent really sat. The merged battery is calibrated on all its items at once;
+  each member instrument is also calibrated alone on its own items, same folds, as the control for test
+  length. Both numbers are the paper's estimand: all held-out responses pooled, one IMV per fold, four folds.</p>
+  <figure>
+    <div class="legend">
+      <i><span class="swatch" style="background:var(--pos)"></span>merged battery, 2d better</i>
+      <i><span class="swatch" style="background:var(--neg)"></span>merged battery, 2d worse</i>
+      <i><span class="swatch" style="background:none;border:2px solid var(--ink-3);border-radius:50%"></span>members fitted alone, median</i>
+      <i><span class="swatch" style="background:none;border-left:2px dashed var(--ink-3);width:2px;border-radius:0"></span>single unmerged tables, Domingue et al. 2024</i>
+      <i>bar spans the two</i>
+    </div>
+    <div class="chartbox"><svg id="fams" viewBox="0 0 840 408" role="img"
+      aria-label="Dot plot of pooled IMV for eight merged batteries against the median of their member instruments fitted alone. Values range from minus 0.055 to plus 0.049."></svg></div>
+    <figcaption>Filled dot is the merged battery, ring is the median of that family's members fitted alone, and
+    the bar between them is what merging bought. The two dashed lines are the published benchmark for this same
+    quantity on <em>single, unmerged</em> IRW tables — Domingue et al. (2024), <i>Psychometrika</i> 89(3):
+    mean 0.0031 and maximum 0.029 across the 60 datasets where both models fit — so a dot to the right of a
+    dashed line is a merged battery beating the single tables.
+    <b><code>chakraborty2026</code> is the one family where the ring sits to the right of the
+    dot</b> — six of its seven instruments gain alone and the 140-item merged battery is at zero.
+    <code>shu_2025_translation</code> is the only negative merged battery.</figcaption>
+  </figure>
+  <div class="tablebox" style="max-height:none">
+    <table>
+      <thead><tr><th>Family</th><th>k</th><th>Items</th><th>N</th><th>Merged IMV</th><th>sd</th><th>Members alone, median</th><th>best</th><th>Graded log score</th></tr></thead>
+      <tbody id="famtab"></tbody>
+    </table>
+  </div>
+  <p class="foot">k is member tables in the battery; "members alone" summarises only the members with ≥8 items,
+  which is how many were fitted separately. Graded log score is the held-out mean log score per response,
+  2d minus 1d, in nats, over the merged battery. <code>colombia</code> is capped at 3,000 of its 46,392
+  respondents and is 64/73 binary items, so it is the closest of the eight to the published setting.</p>
+  <h3 style="margin-top:8px">The two that refuse</h3>
+  <div class="grid2">
+    <div class="card">
+      <h3><code>chakraborty2026_*</code> — merging destroys the gain</h3>
+      <p>Seven instruments, 140 items, N = 634. Fitted alone, six of seven gain from a second factor:
+      <code>BIDR</code> +0.034, <code>BES</code> +0.023, <code>BSPWBA</code> +0.018, <code>PTM</code> +0.015,
+      <code>IRI</code> +0.013. Merged, the battery is <b>+0.0002</b>. Whatever second dimension each
+      instrument has on its own does not survive being pooled with the others — the 2d solution on 140 items
+      finds something else, and inside it only <code>BES</code> (+0.019 nats) and <code>BIDR</code> (+0.012)
+      improve while the anchor <code>IWAH</code> loses 0.022.</p>
+    </div>
+    <div class="card">
+      <h3><code>shu_2025_translation_*</code> — actively worse</h3>
+      <p>Six instruments, 45 items, N = 1,054. Merged IMV <b>−0.0135</b>, and the merged graded fit loses
+      <b>0.15 nats per response</b> — <code>eib</code> −0.354, <code>pcd</code> −0.206, with only
+      <code>pgv</code> (5 items) gaining. All four folds converged, so this is not a fitting failure. A second
+      factor can be straightforwardly harmful out of sample even on six pooled instruments.</p>
+    </div>
+  </div>
+  <h3 style="margin-top:8px">Where the second factor moves fit: <code>jablonska</code></h3>
+  <p>The redistribution seen in <code>singh</code> replicates, and this is the cleanest instance. Held-out
+  graded log score per response, 2d minus 1d, by member inside the merged fit:</p>
+  <div class="tablebox" style="max-height:none">
+    <table>
+      <thead><tr><th>Member</th><th>Items</th><th>Log-score gain</th><th>Same instrument alone</th></tr></thead>
+      <tbody id="jabtab"></tbody>
+    </table>
+  </div>
+  <p>The second factor is the social-comparison and Instagram block separating from a general wellbeing
+  factor: <code>swls</code>, <code>rses</code> and <code>hads</code> are predicted 0.09–0.14 nats better, paid
+  for by <code>upward_comparison</code> and <code>downward_comparison</code> at −0.09 each. Note
+  <code>rses</code> is −0.006 fitted alone and +0.124 nats inside the family — the gain belongs to the
+  battery, not to the instrument.</p>
+</section>
+
+<section>
+  <h2>The worked example: <code>singh_2025_identity</code></h2>
+  <p>The first family was taken apart in detail before the other seven were run, and the rest of this page is
+  that dissection. Its merged IMV of +0.0212 is the median of the eight, so it is a fair representative — but
+  the mechanism it shows is not the only one available, as <code>chakraborty</code> above makes clear.</p>
+  <div class="grid2">
+    <div class="card">
+      <h3>The battery</h3>
+      <ul>
+        <li><code>irw_merge("singh_2025_identity_gi")</code> found the family by DOI, confirmed all nine
+        tables share N = 1470, and returned 111,720 rows with a <code>source_table</code> column.</li>
+        <li>76 items, complete matrix, 5 categories everywhere except <code>_pds</code> at 6.</li>
+        <li>Parallel analysis on this battery suggests 13 factors; the first factor carries 21% of
+        item-correlation variance, against 60%+ for a typical single IRW table.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>The protocol</h3>
+      <ul>
+        <li>4-fold split over person–item <em>cells</em>, as in the Psychometrika paper's
+        <code>03_mirt.R</code>. Both models see only in-sample cells, and in the family fit both are
+        calibrated on <em>all 76 items at once</em> — 8 fits in all. A per-item ω<sub>t</sub> is an
+        evaluation split of those battery-wide fits, never a per-item calibration.</li>
+        <li><code>mirt</code> graded, 1 factor vs 2 factors; held-out category probabilities from
+        <code>probtrace()</code> on in-sample <code>fscores()</code>, taken <em>unrotated</em> — the default
+        oblimin rotation would pair scores with the wrong slopes.</li>
+        <li>ω<sub>t</sub> per item, exactly the <code>collapse.qmd</code> definition: binary IMV at each
+        threshold on cumulative probabilities, averaged with category-prevalence weights. ω<sub>c</sub>
+        computed alongside and agrees.</li>
+        <li>A category needs ≥2% and ≥20 responses or it folds into its neighbour. 33 of 76 items lost one.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Alone, then inside the family</h2>
+  <figure>
+    <div class="legend">
+      <i><span class="swatch" style="background:var(--pos)"></span>2d predicts better</i>
+      <i><span class="swatch" style="background:var(--neg)"></span>2d predicts worse</i>
+      <i><span class="swatch" style="background:var(--ink);width:3px;height:15px"></span>instrument mean</i>
+      <i>one dot = one item, mean over 4 folds</i>
+    </div>
+    <div class="chartbox"><svg id="strip" viewBox="0 0 840 452" role="img"
+      aria-label="Two panels of item-level thresholded IMV. Left: each instrument calibrated alone. Right: all 76 items calibrated together. Nine instrument rows, shared scale from minus 0.09 to plus 0.21."></svg></div>
+    <figcaption><b>Left:</b> each instrument calibrated on its own items only — two fits per fold, that
+    instrument's items in and out. <code>gi</code>, <code>pia</code> and <code>pit</code> have 4 items each and
+    were skipped. <b>Right:</b> both models calibrated on all 76 items at once; the per-item value is only the
+    evaluation split, so a row here is not that instrument's own result but what a battery-wide second factor
+    buys its items. Rows ordered by the right panel's mean, shared x scale. <code>pss3</code> goes from −0.031
+    alone to +0.204 in the family; <code>pba</code> is negative in both. <code>cse</code>, the longest single
+    instrument at 16 items, averages +0.004 alone — so test length is not what produces the right-hand
+    gains.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>The paper-comparable number</h2>
+  <p>Two estimands were in play here and they are not interchangeable. Domingue et al. (2024) compute
+  <em>one</em> IMV per dataset, over all held-out responses pooled. Everything above averages
+  <em>per-item</em> values. Because IMV's coin transform is nonlinear, averaging it over items weights the
+  items that gain more heavily than the items that lose — so a battery can show a positive per-item average
+  while its total held-out likelihood barely moves. Both numbers are below, computed on the same folds.</p>
+  <div class="tablebox" style="max-height:none">
+    <table>
+      <thead><tr><th>Set</th><th>Pooled IMV</th><th>sd</th><th>Binary log score</th><th>Graded log score</th><th>Responses</th></tr></thead>
+      <tbody>
+        <tr><td><b>merged battery</b></td><td class="num-pos">+0.0212</td><td>0.0025</td><td class="num-pos">+0.0224</td><td class="num-neg">−0.0024</td><td>110,016</td></tr>
+        <tr><td>grit alone</td><td class="num-pos">+0.0020</td><td>0.0058</td><td class="num-pos">+0.0023</td><td class="num-neg">−0.0100</td><td>11,760</td></tr>
+        <tr><td>irs alone</td><td class="num-pos">+0.0014</td><td>0.0148</td><td class="num-pos">+0.0033</td><td class="num-pos">+0.0066</td><td>12,996</td></tr>
+        <tr><td>cse alone</td><td class="num-neg">−0.0062</td><td>0.0037</td><td class="num-neg">−0.0085</td><td class="num-neg">−0.0056</td><td>23,520</td></tr>
+        <tr><td>pss alone</td><td class="num-neg">−0.0091</td><td>0.0024</td><td class="num-neg">−0.0122</td><td class="num-neg">−0.0552</td><td>14,700</td></tr>
+        <tr><td>pba alone</td><td class="num-neg">−0.0294</td><td>0.0089</td><td class="num-neg">−0.0874</td><td class="num-neg">−0.3320</td><td>16,170</td></tr>
+        <tr><td>pds alone</td><td class="num-neg">−0.0374</td><td>0.0097</td><td class="num-neg">−0.0502</td><td class="num-neg">−0.1497</td><td>13,230</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="foot">Pooled IMV is binary IMV(2PL, 2F-2PL) on median-dichotomized items, per fold over every
+  response in the set, averaged over four folds — the paper's protocol. Log-score columns are held-out mean
+  log score per response, 2d minus 1d, in nats.</p>
+  <h3 style="margin-top:8px">What the second factor actually does</h3>
+  <p>It redistributes fit rather than adding it. Inside the merged graded fit, held-out log score per response
+  moves like this:</p>
+  <div class="tablebox" style="max-height:none">
+    <table>
+      <thead><tr><th>Instrument</th><th>Items</th><th>Log-score gain</th><th>On the likelihood scale</th><th>Binary IMV, mean per item</th></tr></thead>
+      <tbody>
+        <tr><td>pss</td><td>10</td><td class="num-pos">+0.149</td><td class="num-pos">+16.1%</td><td class="num-pos">+0.173</td></tr>
+        <tr><td>grit</td><td>8</td><td class="num-pos">+0.076</td><td class="num-pos">+7.9%</td><td class="num-pos">+0.078</td></tr>
+        <tr><td>gi</td><td>4</td><td class="num-pos">+0.068</td><td class="num-pos">+7.0%</td><td class="num-pos">+0.132</td></tr>
+        <tr><td>pds</td><td>9</td><td class="num-pos">+0.055</td><td class="num-pos">+5.7%</td><td class="num-pos">+0.086</td></tr>
+        <tr><td>cse</td><td>16</td><td class="num-pos">+0.024</td><td class="num-pos">+2.4%</td><td class="num-pos">+0.022</td></tr>
+        <tr><td>pit</td><td>4</td><td class="num-neg">−0.009</td><td class="num-neg">−0.9%</td><td class="num-neg">−0.001</td></tr>
+        <tr><td>irs</td><td>10</td><td class="num-neg">−0.011</td><td class="num-neg">−1.1%</td><td class="num-neg">−0.012</td></tr>
+        <tr><td>pia</td><td>4</td><td class="num-neg">−0.081</td><td class="num-neg">−7.8%</td><td class="num-neg">−0.002</td></tr>
+        <tr><td>pba</td><td>11</td><td class="num-neg">−0.269</td><td class="num-neg">−23.6%</td><td class="num-neg">−0.027</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p><code>pss</code> responses are predicted 16% better on the likelihood scale and <code>pba</code>'s 24%
+  worse, and across the whole battery the graded models net to −0.002 nats. The gain is real and large for the
+  items aligned with the general factor; it is paid for by the items that define the second factor. One
+  consequence worth carrying: the <em>dichotomized</em> 2-factor model gains +0.022 nats per response pooled
+  while the graded one loses 0.002 — the median split discards precisely the information where the graded 2d
+  model mispredicts <code>pba</code>'s categories, whose graded loss falls from −0.269 to −0.087 once
+  dichotomized. ω<sub>t</sub> and the binary IMV are not interchangeable summaries of the same thing.</p>
+</section>
+
+<section>
+  <h2>The second factor is one instrument</h2>
+  <p>Refitting 2 factors on the full matrix and rotating (oblimin, factor correlation 0.15): F2 is essentially
+  <code>pba</code> — mean loading 0.93, with <code>pia</code> at 0.72 and <code>pit</code> at −0.59 — while F1
+  collects <code>pss</code>, <code>pds</code>, <code>gi</code> and <code>grit</code>. Across items, ω<sub>t</sub>
+  correlates <b>+0.86</b> with |F1| loading and <b>−0.71</b> with |F2|.</p>
+  <p>So the items that benefit are the ones <em>outside</em> the second cluster. The reading that fits: letting
+  <code>pba</code>'s variance leave the general factor sharpens θ for everything else, while <code>pba</code>'s
+  own items get worse because their factor is now estimated from 11 items instead of 76. That is a hypothesis,
+  not a result — the 2d→3d step tests it directly.</p>
+</section>
+
+<section>
+  <h2>Every item</h2>
+  <div class="tablebox">
+    <table id="tbl">
+      <thead><tr><th>Item</th><th>Instrument</th><th>K</th><th>ω_t</th><th>ω_c</th><th>F1</th><th>F2</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="foot">Median across-fold SD for a single item is 0.022, so individual rows are noisy; the
+  battery mean is not — the four folds gave 0.022, 0.021, 0.025, 0.028.</p>
+</section>
+
+<section>
+  <h2>What this does and doesn't establish</h2>
+  <div class="card">
+    <ul>
+      <li><b>ω<sub>t</sub>'s weights are the <code>collapse.qmd</code> ones.</b> Thresholds are weighted by raw
+      category prevalence renormalised over the first K−1. With K ranging 4–6 across items here (after
+      collapsing), that weighting does uneven work. A version exchangeable across K would change these numbers;
+      swapping it is one line and a 20-minute rerun.</li>
+      <li><b>Per-item averages are not the paper's estimand.</b> The +0.024 above is a mean of per-item
+      ω<sub>t</sub>; the paper's number is one pooled IMV per dataset. Report the pooled value as the
+      headline and the per-item distribution as the mechanism, never the average of per-item IMVs against a
+      published pooled mean.</li>
+      <li><b>Eight families, one pair of models.</b> 2d is far short of the 13 factors parallel analysis
+      suggests for <code>singh</code>, and the ladder was not run — so nothing here says where the gain
+      saturates, only that the first extra dimension is worth between −0.014 and +0.049.</li>
+      <li><b>The gain does not track size,</b> which is the opposite of what a "more items, more dimensions"
+      story predicts: corr(merged IMV, n items) = −0.21, with N = −0.12, with k instruments = +0.29, against
+      the paper's +0.31 with item count within single tables. Eight families is too few to lean on those
+      numbers, but they do not support the simple reading.</li>
+      <li><b>Two of the eight contradict the headline.</b> The median is a summary of a set that includes a
+      zero and a negative; this is not a monotone effect of merging.</li>
+      <li><b>The binary arm required a median split,</b> with base rates from 0.10 to 0.50. In 13 of 304
+      item-folds one or both models scored below −log(2) and <code>imv.binary</code> floored the coin at
+      0.5; those item-folds contribute a 0 rather than a negative value.</li>
+      <li><b>The second factor is a single instrument,</b> so this is as between-item as multidimensionality
+      gets — the easiest case for a 2-factor model, exactly the case the paper's SI predicted would pay most.</li>
+      <li><b>33 of 76 items had a category collapsed.</b> Not a defect, but the graded structure is thinner than
+      a nominal 5-point scale suggests.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2>What went wrong building the batteries</h2>
+  <p>Three traps cost real time, and the first two change results silently rather than erroring.</p>
+  <div class="card">
+    <ul>
+      <li><b><code>irw_merge()</code> drops members whose column set differs from the first table's</b>, with a
+      <code>message()</code> as the only signal and a plausible-looking result returned. It builds the battery
+      by incremental <code>rbind</code>, so IRW tables carrying different <code>cov_*</code> columns fail to
+      bind and are skipped; which members survive depends on fetch order. <code>act_kay_2025</code> came back
+      with 5 of 12 members and 20 of 88 items; <code>chakraborty2026_IWAH_IRW</code> lost all six non-anchor
+      tables and returned <code>NULL</code>. Filed as
+      <code>itemresponsewarehouse/Rpkg#224</code>. The batteries here were assembled instead by fetching each
+      member directly and keeping only <code>id</code>/<code>item</code>/<code>resp</code>, with item names
+      prefixed by table so two members cannot collide.</li>
+      <li><b>A median split can leave a constant column and kill the 2PL fit outright.</b> On a skewed or
+      binary item the median sits at a category boundary, every response falls on one side, and <code>mirt</code>
+      stops with "only one response category". 7 of 140 items in <code>chakraborty</code> and 51 of 73 in
+      <code>colombia</code> — which is 64/73 binary — so both families failed every fold on the first pass.
+      The dichotomiser now falls back to the most even available cut; no item in <code>singh</code> or the
+      first batch was degenerate, so those numbers are unchanged.</li>
+      <li><b>The scout cache rots.</b> The vetted group list is from 26 August 2026. All nine
+      <code>uruguay_2022_technology_*</code> tables now return "table does not exist in IRW", and
+      <code>act_kay_2025</code>'s tables turned out to carry two rows per person–item cell — repeated
+      measures, out of scope here. Both were dropped and replaced. Any larger sweep should re-run the scout
+      first.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2>How many more families like this</h2>
+  <p>A family here is tables sharing a citation key (DOI, else BibTex) <em>and</em> an identical N, computed over
+  all 6,529 IRW tables that carry a key.</p>
+  <div class="grid2">
+    <div class="card">
+      <h3>Counts</h3>
+      <div class="tablebox" style="max-height:none">
+        <table>
+          <thead><tr><th>Filter</th><th>Families</th></tr></thead>
+          <tbody>
+            <tr><td>≥ 2 tables</td><td>1,081</td></tr>
+            <tr><td>≥ 3 tables</td><td>696</td></tr>
+            <tr><td>≥ 3 and ≥ 20 items</td><td>633</td></tr>
+            <tr><td>… and N ≥ 500</td><td>274</td></tr>
+            <tr><td>… and N ≥ 1,000</td><td>129</td></tr>
+            <tr><td>… all polytomous, N ≥ 500</td><td>216</td></tr>
+            <tr><td>… all polytomous, N ≥ 1,000</td><td><b>91</b></td></tr>
+            <tr><td>≥ 5 instruments, ≥ 40 items, N ≥ 1,000, polytomous</td><td><b>27</b></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="foot">Identical N is a same-cohort proxy. The scout that verified respondent-id overlap and item
+      disjointness passed 107 of 144 candidates, so discount by about a quarter.</p>
+    </div>
+    <div class="card">
+      <h3>The 27, largest first</h3>
+      <div class="tablebox" style="max-height:none">
+        <table>
+          <thead><tr><th>First member table</th><th>k</th><th>Items</th><th>N</th></tr></thead>
+          <tbody id="fam"></tbody>
+        </table>
+      </div>
+      <p class="foot">Four of these 27 are among the eight run above (<code>singh_2025_identity_cse</code>,
+      <code>suicide_reinbergs_2025_dssm</code>, <code>merlo2025_eet</code>,
+      <code>shu_2025_translation_add</code>). Some are one inventory split by subscale
+      (<code>hexaco_ashton_2014_a</code>, <code>bfi_goldberg_1992_*</code>, <code>ffm_AGR</code>) rather than
+      distinct constructs — a different and arguably more interesting case.</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Where this stands</h2>
+  <p>Ben's call, 28 October: stop with the eight families rather than climb the dimension ladder, and hold the
+  write-up rather than place it. So this is the result, not a staging post.</p>
+  <ol>
+    <li><b>Open: is ω<sub>t</sub> exchangeable across K?</b> The <code>collapse.qmd</code> definition weights
+    thresholds by raw category prevalence renormalised over the first K−1, and K ranges 3–6 across these
+    families after collapsing. Ben's read is that it <em>is</em> exchangeable; worth confirming with Klint
+    before any of these per-item numbers becomes a figure. The pooled IMV headline does not depend on
+    it.</li>
+    <li><b>Not done: the item-count-matched control.</b> 1d-vs-2d on a random subset of the merged matrix the
+    size of one member instrument. The alone-fits already argue against a length effect, and the −0.21
+    correlation argues against it harder, but this would close it properly.</li>
+    <li><b>Not done: the dimension ladder.</b> The interesting target is <code>chakraborty</code> rather than
+    <code>singh</code> — if a second factor helps each instrument separately but not the pool, 7d (one factor
+    per instrument) is the direct test. Deferred.</li>
+    <li><b>Not done: a binary arm.</b> About 35 binary families pass a comparable metadata filter, which would
+    put merged batteries on the exact scale of the published benchmark. <code>colombia</code> is accidentally
+    most of the way there at 64/73 binary items and lands at +0.0016.</li>
+    <li><b>Held: where it lands.</b> <code>#merged-batteries</code> in <code>dimensionality.qmd</code> is the
+    natural home, but it is not being written up yet.</li>
+    <li><b>Carried forward: both estimands, always.</b> Pooled IMV as the headline for comparability, the
+    per-item distribution for mechanism, and the aggregate log score as the check that a positive average is
+    not hiding a zero-sum redistribution. All three disagree somewhere in these eight families.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>Reproducing it</h2>
+  <div class="card">
+    <p><code>/home/ben/Dropbox/projects/irw/oneoff/omega-t-dimensionality/</code></p>
+    <ul>
+      <li><code>run_family.R</code> — fetch, collapse, fold, fit, ω_t. <code>Rscript run_family.R --members</code>
+      for the single-instrument controls.</li>
+      <li><code>omegat_helpers.R</code> — <code>imv_t</code> / <code>imv_c</code> verbatim from
+      <code>collapse.qmd</code>, with degenerate thresholds returning NA instead of erroring.</li>
+      <li><code>diag_loadings.R</code> — fold spread and the 2-factor loadings.</li>
+      <li><code>scale_check.R</code> — the binary arm and the per-item held-out log scores, after Ben asked
+      whether these values were out of scale with the dichotomous literature.</li>
+      <li><code>pooled_imv.R</code> — the paper's estimand on <code>singh</code>: all held-out responses
+      pooled, one IMV per fold, merged battery and each instrument alone.</li>
+      <li><code>fetch_direct.R</code> — assembles a battery from the scout's member list, bypassing
+      <code>irw_merge</code>'s silent skip. Caches one long frame per family under <code>cache/</code>.</li>
+      <li><code>run_families.R</code> — the same protocol over a list of families, graded and binary arms in
+      one pass, members with ≥8 items fitted alone. <code>FAMFILE</code> and <code>SUF</code> select the
+      family list and output suffix.</li>
+      <li><code>summarise_families.R</code> — combines the batches and prints the four tables on this page.</li>
+      <li><code>families_pooled_batch1.rds</code>, <code>families2_pooled.rds</code>,
+      <code>families_summary.rds</code> — results; <code>omega_t_results.csv</code> is <code>singh</code>
+      per item × fold.</li>
+    </ul>
+    <p class="foot">imv 0.3.1 installed from <code>~/Dropbox/projects/imv/imv_pkg</code> (the uniroot coin
+    solver), mirt graded, seeds 20261023 / 20261024. 8 of 157 fits hit the 2,000-cycle EM cap; two were merged
+    fits, both in <code>suicide_reinbergs</code> where the across-fold sd is 0.0024.</p>
+  </div>
+</section>
+
+<section>
+  <h2>A note: ENEM would be the clean test</h2>
+  <span class="pill">not run · noted 28 October 2026</span>
+  <p>Every number on this page went through a median split to reach the paper's binary scale, and that step is
+  the one methodological wart in the whole exercise — it is what flipped the aggregate verdict on
+  <code>singh</code> (+0.022 nats dichotomized against −0.002 graded), and it is what broke
+  <code>chakraborty</code> and <code>colombia</code> on the first pass. The 52 <code>enem_*</code> tables remove
+  it: INEP scores the items 0/1 itself, so a merged ENEM battery gives a pooled IMV directly comparable to
+  0.0031 and 0.029 with nothing in between.</p>
+  <p>The structure is also right <em>by construction</em> rather than by the identical-N proxy used everywhere
+  above. <code>src/data/enem_2019.R</code> draws one 1M sample of candidates per year —
+  <code>set.seed(5150)</code>, from candidates INEP records as present in <em>all four</em> areas — and only
+  then splits that same sample into the four area tables, with <code>id</code> being the candidate's own
+  <code>NU_INSCRICAO</code>. So the four tables for a year are the same million people with disjoint items and
+  density 1.0. Nothing needs verifying; the sampling sits upstream of the split.</p>
+  <div class="grid2">
+    <div class="card">
+      <h3>A year's battery</h3>
+      <ul>
+        <li><b>185 binary items</b> — 45 each for humanities (<code>ch</code>), natural sciences
+        (<code>cn</code>) and maths (<code>mt</code>), 50 for languages (<code>lc</code>).</li>
+        <li><b>N ≈ 1,000,000</b>, four instruments, 13 years (2013–2025) — thirteen replications of one
+        design rather than a grab-bag of heterogeneous families.</li>
+        <li>Four curricular areas <em>should</em> be multidimensional, so this is close to a positive control:
+        a null here would say something about the method, not about ENEM.</li>
+        <li>At N = 1M the sample size can be varied freely, which none of the eight families could support —
+        so the gain's dependence on N becomes estimable without confounding.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Three things to handle first</h3>
+      <ul>
+        <li><b><code>irw_merge</code> cannot assemble 9 of the 13 years.</b> Only 2013, 2016, 2018 and 2019
+        have identical N across all four areas; elsewhere <code>cn</code> and <code>mt</code> lose a few
+        hundred candidates to the off-length <code>TX_RESPOSTAS</code> filter, so the identical-N gate fails.
+        <code>fetch_direct.R</code> already handles it.</li>
+        <li><b>Scale is the one real design choice.</b> 185 items × 1M people is 185M responses a year,
+        against 47k–178k for everything above. A few thousand candidates per year is the obvious start.</li>
+        <li><b><code>lc</code> carries missingness by design.</b> Its 50 items include both alternate language
+        blocks, 5 items each, and every candidate sat only one — hence density 0.9. Fine for <code>mirt</code>
+        as NA, and arguably a feature: a built-in between-item multidimensionality, the case the paper's SI
+        predicts should pay most.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="foot">One limit on <code>id</code>: 2024 and 2025 take it from <code>NU_SEQUENCIAL</code>, which
+  the build script's own comment flags as a within-year surrogate carrying no meaning across years. That does
+  not touch merging the four areas <em>within</em> a year, but it rules out stacking years into one
+  person-level battery.</p>
+</section>
+
+</div>
+<div class="tip" id="tip" role="status"></div>
+
+<script>
+const ITEMS=[{"item":"pss3","src":"pss","K":5,"w":0.2043,"c":0.1898,"F1":0.72,"F2":-0.16},{"item":"pss10","src":"pss","K":5,"w":0.1543,"c":0.2066,"F1":0.76,"F2":-0.05},{"item":"pss8","src":"pss","K":5,"w":0.136,"c":0.1504,"F1":-0.68,"F2":0.01},{"item":"pss6","src":"pss","K":5,"w":0.1333,"c":0.1758,"F1":0.76,"F2":-0.05},{"item":"pss4","src":"pss","K":5,"w":0.1236,"c":0.1527,"F1":-0.65,"F2":0},{"item":"gi3","src":"gi","K":5,"w":0.1192,"c":0.0907,"F1":-0.47,"F2":0.22},{"item":"grit6","src":"grit","K":5,"w":0.1087,"c":0.1215,"F1":0.6,"F2":-0.05},{"item":"pss2","src":"pss","K":5,"w":0.1074,"c":0.1669,"F1":0.76,"F2":-0.08},{"item":"pss7","src":"pss","K":5,"w":0.0955,"c":0.1033,"F1":-0.57,"F2":-0.06},{"item":"gi1","src":"gi","K":5,"w":0.0945,"c":0.0779,"F1":-0.43,"F2":0.23},{"item":"pss5","src":"pss","K":5,"w":0.0945,"c":0.1103,"F1":-0.65,"F2":0.01},{"item":"grit7","src":"grit","K":5,"w":0.0868,"c":0.0808,"F1":-0.53,"F2":0.02},{"item":"grit3","src":"grit","K":5,"w":0.0854,"c":0.1354,"F1":0.56,"F2":-0.14},{"item":"grit1","src":"grit","K":5,"w":0.0854,"c":0.1323,"F1":0.58,"F2":-0.19},{"item":"gi2","src":"gi","K":5,"w":0.0763,"c":0.06,"F1":-0.46,"F2":0.15},{"item":"pds4","src":"pds","K":6,"w":0.0759,"c":0.1023,"F1":0.59,"F2":0.07},{"item":"pds2","src":"pds","K":6,"w":0.0702,"c":0.0853,"F1":0.59,"F2":0.09},{"item":"grit5","src":"grit","K":5,"w":0.0637,"c":0.0667,"F1":0.55,"F2":0},{"item":"pss9","src":"pss","K":5,"w":0.061,"c":0.0744,"F1":0.59,"F2":0.07},{"item":"pss1","src":"pss","K":5,"w":0.0592,"c":0.0976,"F1":0.66,"F2":-0.08},{"item":"gi4","src":"gi","K":5,"w":0.0583,"c":0.0506,"F1":-0.44,"F2":0.11},{"item":"pds8","src":"pds","K":5,"w":0.0578,"c":0.0376,"F1":0.52,"F2":0.1},{"item":"pds9","src":"pds","K":4,"w":0.0556,"c":0.0243,"F1":0.47,"F2":0.1},{"item":"cse13","src":"cse","K":4,"w":0.0552,"c":0.0636,"F1":0.63,"F2":0.09},{"item":"pds1","src":"pds","K":5,"w":0.0549,"c":0.0737,"F1":0.55,"F2":0.09},{"item":"cse5","src":"cse","K":5,"w":0.0529,"c":0.052,"F1":0.56,"F2":0.06},{"item":"pds7","src":"pds","K":6,"w":0.0468,"c":0.0677,"F1":0.56,"F2":0.08},{"item":"pds6","src":"pds","K":5,"w":0.0418,"c":0.0247,"F1":0.52,"F2":0.2},{"item":"grit4","src":"grit","K":4,"w":0.0293,"c":0.0107,"F1":-0.37,"F2":-0.06},{"item":"grit2","src":"grit","K":5,"w":0.027,"c":0.0891,"F1":-0.49,"F2":0.03},{"item":"cse14","src":"cse","K":4,"w":0.0214,"c":0.034,"F1":-0.54,"F2":-0.07},{"item":"cse2","src":"cse","K":4,"w":0.0136,"c":0.0117,"F1":0.46,"F2":0.19},{"item":"cse9","src":"cse","K":4,"w":0.0133,"c":0.0205,"F1":-0.45,"F2":-0.09},{"item":"cse8","src":"cse","K":5,"w":0.0122,"c":0.0194,"F1":-0.27,"F2":0.05},{"item":"cse1","src":"cse","K":4,"w":0.011,"c":0.0314,"F1":-0.48,"F2":-0.12},{"item":"cse10","src":"cse","K":4,"w":0.0104,"c":0.0207,"F1":0.49,"F2":0.18},{"item":"pds3","src":"pds","K":5,"w":0.0102,"c":0.0187,"F1":0.45,"F2":0.2},{"item":"cse6","src":"cse","K":4,"w":0.0085,"c":0.0184,"F1":-0.46,"F2":-0.1},{"item":"cse16","src":"cse","K":5,"w":0.0073,"c":0.0203,"F1":-0.15,"F2":0.11},{"item":"grit8","src":"grit","K":4,"w":0.006,"c":0.0531,"F1":-0.45,"F2":-0.05},{"item":"pba4","src":"pba","K":5,"w":0.0055,"c":-0.0093,"F1":-0.14,"F2":0.71},{"item":"cse12","src":"cse","K":5,"w":0.003,"c":0.0006,"F1":0.16,"F2":0.04},{"item":"cse15","src":"cse","K":5,"w":0,"c":0.013,"F1":0.41,"F2":0.23},{"item":"irs_r4","src":"irs","K":5,"w":-0.0016,"c":-0.015,"F1":0,"F2":-0.37},{"item":"irs_r2","src":"irs","K":5,"w":-0.0047,"c":0.0005,"F1":0.02,"F2":-0.36},{"item":"cse3","src":"cse","K":5,"w":-0.0052,"c":0.0023,"F1":-0.32,"F2":-0.2},{"item":"cse11","src":"cse","K":5,"w":-0.0079,"c":0.0103,"F1":-0.36,"F2":-0.2},{"item":"irs_d4","src":"irs","K":5,"w":-0.0083,"c":-0.0068,"F1":0.25,"F2":0.4},{"item":"cse4","src":"cse","K":5,"w":-0.0086,"c":0.0126,"F1":-0.08,"F2":0},{"item":"irs_r1","src":"irs","K":5,"w":-0.0112,"c":-0.0145,"F1":0.04,"F2":-0.38},{"item":"irs_r5","src":"irs","K":5,"w":-0.0117,"c":-0.0033,"F1":-0.1,"F2":-0.12},{"item":"irs_d1","src":"irs","K":5,"w":-0.0126,"c":-0.0184,"F1":0.13,"F2":0.48},{"item":"irs_d2","src":"irs","K":5,"w":-0.0143,"c":-0.0139,"F1":0.15,"F2":0.48},{"item":"pds5","src":"pds","K":5,"w":-0.0149,"c":0.0014,"F1":0.3,"F2":0.28},{"item":"pit2","src":"pit","K":4,"w":-0.0156,"c":-0.0203,"F1":0.01,"F2":-0.64},{"item":"irs_r3","src":"irs","K":5,"w":-0.0162,"c":-0.0071,"F1":-0.04,"F2":-0.35},{"item":"irs_d5","src":"irs","K":4,"w":-0.0169,"c":-0.0042,"F1":0.21,"F2":0.37},{"item":"irs_d3","src":"irs","K":5,"w":-0.0176,"c":-0.0124,"F1":0.12,"F2":0.53},{"item":"pit4","src":"pit","K":5,"w":-0.0176,"c":-0.0433,"F1":-0.05,"F2":-0.44},{"item":"pit3","src":"pit","K":4,"w":-0.018,"c":-0.0188,"F1":0.01,"F2":-0.65},{"item":"pia1","src":"pia","K":4,"w":-0.0205,"c":-0.0193,"F1":0.23,"F2":0.66},{"item":"pia2","src":"pia","K":4,"w":-0.0224,"c":-0.0222,"F1":0.19,"F2":0.71},{"item":"pit1","src":"pit","K":4,"w":-0.0252,"c":-0.0316,"F1":-0.01,"F2":-0.62},{"item":"pia3","src":"pia","K":4,"w":-0.0274,"c":-0.0321,"F1":0.21,"F2":0.72},{"item":"cse7","src":"cse","K":5,"w":-0.0275,"c":-0.0096,"F1":0.31,"F2":0.27},{"item":"pia4","src":"pia","K":4,"w":-0.0291,"c":-0.0322,"F1":0.16,"F2":0.78},{"item":"pba1","src":"pba","K":4,"w":-0.0385,"c":-0.0438,"F1":0.04,"F2":0.91},{"item":"pba3","src":"pba","K":4,"w":-0.0401,"c":-0.0585,"F1":-0.02,"F2":0.94},{"item":"pba2","src":"pba","K":4,"w":-0.0435,"c":-0.0597,"F1":-0.01,"F2":0.94},{"item":"pba9","src":"pba","K":4,"w":-0.0448,"c":-0.058,"F1":-0.03,"F2":0.95},{"item":"pba5","src":"pba","K":3,"w":-0.0448,"c":-0.0701,"F1":-0.04,"F2":0.95},{"item":"pba10","src":"pba","K":4,"w":-0.0463,"c":-0.0694,"F1":-0.07,"F2":0.96},{"item":"pba11","src":"pba","K":4,"w":-0.0468,"c":-0.0757,"F1":-0.04,"F2":0.96},{"item":"pba8","src":"pba","K":3,"w":-0.0522,"c":-0.0555,"F1":-0.05,"F2":0.97},{"item":"pba7","src":"pba","K":3,"w":-0.0556,"c":-0.0702,"F1":-0.06,"F2":0.98},{"item":"pba6","src":"pba","K":3,"w":-0.0574,"c":-0.0736,"F1":-0.04,"F2":0.97}];
+const ALONE=[{"item":"cse4","src":"cse","w":0.0512},{"item":"cse16","src":"cse","w":0.0469},{"item":"cse15","src":"cse","w":0.0329},{"item":"cse12","src":"cse","w":0.0224},{"item":"cse8","src":"cse","w":0.0223},{"item":"cse11","src":"cse","w":0.0196},{"item":"cse3","src":"cse","w":0.0158},{"item":"cse7","src":"cse","w":0.0058},{"item":"cse9","src":"cse","w":-0.0152},{"item":"cse13","src":"cse","w":-0.0168},{"item":"cse5","src":"cse","w":-0.0169},{"item":"cse1","src":"cse","w":-0.0183},{"item":"cse2","src":"cse","w":-0.0185},{"item":"cse6","src":"cse","w":-0.0206},{"item":"cse14","src":"cse","w":-0.021},{"item":"cse10","src":"cse","w":-0.0233},{"item":"grit4","src":"grit","w":0.0472},{"item":"grit7","src":"grit","w":0.0081},{"item":"grit1","src":"grit","w":-0.0002},{"item":"grit3","src":"grit","w":-0.0081},{"item":"grit6","src":"grit","w":-0.0094},{"item":"grit2","src":"grit","w":-0.0102},{"item":"grit5","src":"grit","w":-0.0122},{"item":"grit8","src":"grit","w":-0.0263},{"item":"irs_d5","src":"irs","w":0.1235},{"item":"irs_d4","src":"irs","w":0.0579},{"item":"irs_d2","src":"irs","w":0.0497},{"item":"irs_d3","src":"irs","w":0.048},{"item":"irs_d1","src":"irs","w":0.0166},{"item":"irs_r5","src":"irs","w":0.0137},{"item":"irs_r1","src":"irs","w":-0.0112},{"item":"irs_r2","src":"irs","w":-0.0169},{"item":"irs_r3","src":"irs","w":-0.0196},{"item":"irs_r4","src":"irs","w":-0.0197},{"item":"pba4","src":"pba","w":-0.0343},{"item":"pba1","src":"pba","w":-0.0456},{"item":"pba5","src":"pba","w":-0.0471},{"item":"pba11","src":"pba","w":-0.0508},{"item":"pba3","src":"pba","w":-0.0513},{"item":"pba9","src":"pba","w":-0.0513},{"item":"pba10","src":"pba","w":-0.054},{"item":"pba6","src":"pba","w":-0.0542},{"item":"pba8","src":"pba","w":-0.0573},{"item":"pba7","src":"pba","w":-0.0601},{"item":"pba2","src":"pba","w":-0.086},{"item":"pds9","src":"pds","w":0.0026},{"item":"pds6","src":"pds","w":-0.0258},{"item":"pds7","src":"pds","w":-0.0275},{"item":"pds8","src":"pds","w":-0.0284},{"item":"pds4","src":"pds","w":-0.0292},{"item":"pds3","src":"pds","w":-0.0318},{"item":"pds5","src":"pds","w":-0.0407},{"item":"pds1","src":"pds","w":-0.0441},{"item":"pds2","src":"pds","w":-0.0487},{"item":"pss7","src":"pss","w":0.0214},{"item":"pss4","src":"pss","w":0.0158},{"item":"pss5","src":"pss","w":0.0111},{"item":"pss8","src":"pss","w":0.0096},{"item":"pss1","src":"pss","w":-0.0155},{"item":"pss9","src":"pss","w":-0.0187},{"item":"pss6","src":"pss","w":-0.0222},{"item":"pss2","src":"pss","w":-0.0277},{"item":"pss10","src":"pss","w":-0.0277},{"item":"pss3","src":"pss","w":-0.0313}];
+const FAM=[["anunciacao_2025_personality_achievement",13,100,"272,845"],["pezzuti_2025_coolpeople_adventurous",11,52,"5,656"],["degirolamo_2022_brs",10,72,"10,013"],["mutuyimana_2026_cahtq",10,181,"1,208"],["tang_2024_caregiver_child_attachment",9,69,"1,682"],["singh_2025_identity_cse",9,76,"1,470"],["suicide_reinbergs_2025_dssm",9,68,"1,258"],["henderson_2023_lapanel_comfort",8,73,"2,862"],["audit_BrummerHoffman_2021",8,193,"1,828"],["amatus_cipora_2024_amas",8,48,"1,106"],["c19prc_uk_mcbride_2021_comfort",7,49,"1,166"],["vila_lopez_2023_awareness",7,45,"1,922"],["mexico_2023_quality_confidence",7,76,"78,896"],["scattolin_2022_bcq",7,84,"1,232"],["hexaco_ashton_2014_a",6,240,"22,786"],["kotsou_2016_bdi",6,83,"1,554"],["shu_2025_translation_add",6,45,"1,054"],["islam_2021_bai",5,49,"1,899"],["ginting_2026_ai_literacy",5,45,"1,000"],["matuz_2024_bdi9",5,89,"1,426"],["c19prc_uk_mcbride_2021_bfi10",5,45,"4,949"],["merlo2025_eet",5,72,"1,065"],["liu_2026_competitive_goals",5,86,"1,883"],["COACH_Chen_2022_ADL",5,78,"2,364"],["bfi_goldberg_1992_agreeableness",5,50,"19,719"],["ffm_AGR",5,50,"1,015,341"],["ren_2024_adl",5,40,"1,587"]];
+
+const FAMS=[{"fam":"suicide_reinbergs_2025_stosa","k":9,"items":74,"N":"1,258","merged":0.049,"sd":0.0024,"ls":0.022,"kfit":7,"med":-0.0199,"best":0.0025},
+{"fam":"jablonska_2020_upward_comparison","k":7,"items":54,"N":"974","merged":0.0466,"sd":0.0049,"ls":0.0333,"kfit":3,"med":0.0001,"best":0.0283},
+{"fam":"singh_2025_identity","k":9,"items":76,"N":"1,470","merged":0.0212,"sd":0.0025,"ls":-0.0024,"kfit":6,"med":-0.0076,"best":0.002},
+{"fam":"merlo2025_eng_emotional","k":5,"items":72,"N":"1,065","merged":0.0206,"sd":0.0041,"ls":-0.0041,"kfit":5,"med":-0.0058,"best":0.005},
+{"fam":"BSCS_fadplus_goto2021","k":5,"items":91,"N":"802","merged":0.0073,"sd":0.0064,"ls":0.0184,"kfit":3,"med":-0.0165,"best":0.0183},
+{"fam":"colombia_2023_politics_media","k":8,"items":73,"N":"3,000","merged":0.0016,"sd":0.0007,"ls":0.0105,"kfit":5,"med":-0.0109,"best":0.003},
+{"fam":"chakraborty2026_IWAH_IRW","k":7,"items":140,"N":"634","merged":0.0002,"sd":0.0028,"ls":-0.0047,"kfit":7,"med":0.0148,"best":0.0343},
+{"fam":"shu_2025_translation_mcpis","k":6,"items":45,"N":"1,054","merged":-0.0135,"sd":0.0017,"ls":-0.1506,"kfit":2,"med":-0.0549,"best":-0.0147}];
+const JAB=[["swls",5,0.1356,null],["rses",10,0.1235,-0.0062],["hads",14,0.0879,0.0283],["profile_grooming",3,-0.008,null],["instagram_addiction",10,-0.0183,0.0001],["upward_comparison",6,-0.0899,null],["downward_comparison",6,-0.0986,null]];
+const SVGNS="http://www.w3.org/2000/svg";
+const el=(n,a={})=>{const e=document.createElementNS(SVGNS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const fmt=v=>(v>=0?"+":"−")+Math.abs(v).toFixed(3);
+const tip=document.getElementById("tip");
+function hover(node,text){
+  node.addEventListener("pointerenter",e=>{tip.textContent=text;tip.style.opacity="1";
+    tip.style.left=Math.min(window.innerWidth-tip.offsetWidth-8,e.clientX+12)+"px";
+    tip.style.top=(e.clientY-34)+"px";});
+  node.addEventListener("pointerleave",()=>{tip.style.opacity="0";});
+}
+
+/* ---- eight families: merged battery (filled dot) against the median of its own
+       members fitted alone (ring), bar spanning the two. Every mark also gets its
+       value in a right-hand column, so nothing depends on hover. ---------- */
+(function(){
+  const svg=document.getElementById("fams");
+  const W=840,H=408,T=66,B=60,GUT=238;
+  const lo=-0.062,hi=0.056,x0=GUT+18,x1=664,cMerged=742,cAlone=828;
+  const x=v=>x0+(v-lo)/(hi-lo)*(x1-x0);
+  const rowH=(H-T-B)/FAMS.length, y=i=>T+rowH*(i+0.5);
+
+  [[cMerged,"MERGED"],[cAlone,"ALONE, MED"]].forEach(([cx,lab])=>{
+    const t=el("text",{x:cx,y:T-14,"text-anchor":"end","font-size":9.5,class:"t-mu",
+      "font-weight":700,"letter-spacing":"0.07em"});
+    t.textContent=lab;svg.appendChild(t);
+  });
+
+  /* Benchmarks are single-table values from Domingue et al. (2024): a dot right of
+     a dashed line is a merged battery beating unmerged ones. Staggered in y
+     because the two lines sit only ~110px apart. */
+  [[0.0031,"60 single tables, mean",-40],[0.029,"their max",-22]].forEach(([v,lab,dy])=>{
+    svg.appendChild(el("line",{x1:x(v),x2:x(v),y1:T+dy+5,y2:H-B+4,
+      "stroke-opacity":0.5,"stroke-width":1.5,"stroke-dasharray":"2 5"}));
+    const t=el("text",{x:x(v),y:T+dy,"text-anchor":"middle","font-size":10,class:"t-mu","font-weight":700});
+    t.textContent=lab;svg.appendChild(t);
+  });
+  [-0.05,-0.025,0,0.025,0.05].forEach(v=>{
+    svg.appendChild(el("line",{x1:x(v),x2:x(v),y1:T-8,y2:H-B+4,
+      "stroke-opacity":v===0?0.8:0.13,"stroke-width":v===0?2:1,"stroke-dasharray":v===0?"":"3 4"}));
+    const t=el("text",{x:x(v),y:H-B+22,"text-anchor":"middle","font-size":11,class:"t-mu","font-weight":700});
+    t.textContent=v===0?"0":(v>0?"+":"\u2212")+Math.abs(v).toFixed(3);svg.appendChild(t);
+  });
+
+  FAMS.forEach((d,i)=>{
+    const lab=el("text",{x:GUT,y:y(i)+1,"text-anchor":"end","font-size":11.5,class:"t-ink","font-weight":800});
+    lab.textContent=d.fam.length>29?d.fam.slice(0,28)+"\u2026":d.fam;svg.appendChild(lab);
+    const sub=el("text",{x:GUT,y:y(i)+14,"text-anchor":"end","font-size":9.5,class:"t-mu","font-weight":700});
+    sub.textContent=`${d.k} instruments \u00b7 ${d.items} items \u00b7 N ${d.N}`;svg.appendChild(sub);
+
+    svg.appendChild(el("line",{x1:x(d.med),x2:x(d.merged),y1:y(i),y2:y(i),
+      "stroke-width":2,"stroke-opacity":0.38}));
+    const ring=el("circle",{cx:x(d.med),cy:y(i),r:5,class:"ring","stroke-width":2});
+    hover(ring,`${d.fam} \u00b7 members fitted alone: median ${fmt(d.med)}, best ${fmt(d.best)} (${d.kfit} fitted)`);
+    svg.appendChild(ring);
+    const dot=el("circle",{cx:x(d.merged),cy:y(i),r:6.5,class:(d.merged>=0?"pos":"neg")+" dot","stroke-width":2});
+    hover(dot,`${d.fam} \u00b7 merged battery ${fmt(d.merged)} (sd ${d.sd.toFixed(4)}) \u00b7 graded log score ${fmt(d.ls)} nats`);
+    svg.appendChild(dot);
+
+    const vm=el("text",{x:cMerged,y:y(i)+4,"text-anchor":"end","font-size":12,
+      class:d.merged>=0?"pos":"neg","font-weight":800});
+    vm.textContent=fmt(d.merged);svg.appendChild(vm);
+    const va=el("text",{x:cAlone,y:y(i)+4,"text-anchor":"end","font-size":12,class:"t-mu","font-weight":700});
+    va.textContent=fmt(d.med);svg.appendChild(va);
+  });
+  const ax=el("text",{x:(x0+x1)/2,y:H-10,"text-anchor":"middle","font-size":11,class:"t-mu",
+    "font-weight":800,"letter-spacing":"0.05em"});
+  ax.textContent="IMV \u2014 HOW MUCH BETTER 2 FACTORS PREDICT HELD-OUT RESPONSES THAN 1";
+  svg.appendChild(ax);
+})();
+
+/* ---- two panels, shared scale: each instrument fitted alone (left) and the
+       whole 76-item family fitted at once (right). x = omega_t, colour = sign,
+       the ink tick is the instrument mean. ------------------------------- */
+(function(){
+  const svg=document.getElementById("strip");
+  const W=840,H=452,T=66,B=52,GUT=96;
+  const order=[...new Set(ITEMS.map(d=>d.src))];
+  const mean=a=>a.reduce((x,d)=>x+d.w,0)/a.length;
+  const mMerged={};order.forEach(s=>mMerged[s]=mean(ITEMS.filter(d=>d.src===s)));
+  order.sort((a,b)=>mMerged[b]-mMerged[a]);
+  const lo=-0.095,hi=0.215;
+  const rowH=(H-T-B)/order.length, y=i=>T+rowH*(i+0.5);
+  const panels=[
+    {t:"FITTED ALONE",s:"each instrument on its own items",x0:106,x1:406,mx:466,data:ALONE,
+     mark:{item:"irs_d5",lab:"irs_d5  +0.124"}},
+    {t:"FITTED IN THE FAMILY",s:"all 76 items in one calibration",x0:476,x1:776,mx:836,data:ITEMS,
+     mark:{item:"pss3",lab:"pss3  +0.204"}}];
+
+  order.forEach((s,i)=>{
+    const lab=el("text",{x:GUT,y:y(i)+3,"text-anchor":"end","font-size":13,class:"t-ink","font-weight":800});
+    lab.textContent=s;svg.appendChild(lab);
+    const n=el("text",{x:GUT,y:y(i)+18,"text-anchor":"end","font-size":10.5,class:"t-mu","font-weight":700});
+    n.textContent=ITEMS.filter(d=>d.src===s).length+" items";svg.appendChild(n);
+  });
+
+  panels.forEach(p=>{
+    const x=v=>p.x0+(v-lo)/(hi-lo)*(p.x1-p.x0);
+    const ph=el("text",{x:p.x0,y:T-34,"font-size":12.5,class:"t-ink","font-weight":800,"letter-spacing":"0.06em"});
+    ph.textContent=p.t;svg.appendChild(ph);
+    const ps=el("text",{x:p.x0,y:T-19,"font-size":11.5,class:"t-mu","font-weight":700});
+    ps.textContent=p.s;svg.appendChild(ps);
+    [-0.05,0,0.05,0.10,0.15,0.20].forEach(t=>{
+      const major=(t===0||t===0.10||t===0.20);
+      svg.appendChild(el("line",{x1:x(t),x2:x(t),y1:T-10,y2:H-B+4,
+        "stroke-opacity":t===0?0.75:0.12,"stroke-width":t===0?2:1,"stroke-dasharray":t===0?"":"3 4"}));
+      if(major){
+        const tx=el("text",{x:x(t),y:H-B+22,"text-anchor":"middle","font-size":11.5,class:"t-mu","font-weight":700});
+        tx.textContent=t===0?"0":t.toFixed(2);svg.appendChild(tx);
+      }
+    });
+    order.forEach((s,i)=>{
+      svg.appendChild(el("line",{x1:p.x0,x2:p.x1,y1:y(i),y2:y(i),"stroke-opacity":0.1,"stroke-width":1}));
+      const rows=p.data.filter(d=>d.src===s);
+      if(!rows.length){
+        const na=el("text",{x:x(0)+10,y:y(i)+4,"font-size":11,class:"t-mu","font-weight":700});
+        na.textContent="not fitted — 4 items";svg.appendChild(na);
+        return;
+      }
+      const m=mean(rows);
+      const tick=el("line",{x1:x(m),x2:x(m),y1:y(i)-12,y2:y(i)+12,"stroke-width":3.5,"stroke-opacity":0.9});
+      hover(tick,`${s} mean ωt ${fmt(m)} · ${rows.length} items`);svg.appendChild(tick);
+      rows.forEach(d=>{
+        const c=el("circle",{cx:x(d.w),cy:y(i),r:5,class:d.w>=0?"pos":"neg","stroke-width":2});
+        const extra=d.K?` · K=${d.K} · F1 ${d.F1} / F2 ${d.F2}`:"";
+        hover(c,`${d.item} · ωt ${fmt(d.w)}${extra}`);svg.appendChild(c);
+      });
+      const mv=el("text",{x:p.mx,y:y(i)+4,"text-anchor":"end","font-size":12,class:"t-ink","font-weight":800});
+      mv.textContent=fmt(m);svg.appendChild(mv);
+      const hit=rows.find(d=>d.item===p.mark.item);
+      if(hit){
+        const tl=el("text",{x:x(hit.w),y:y(i)-18,"text-anchor":"middle","font-size":11.5,class:"t-ink","font-weight":800});
+        tl.textContent=p.mark.lab;svg.appendChild(tl);
+      }
+    });
+  });
+  const ax=el("text",{x:W/2,y:H-8,"text-anchor":"middle","font-size":12,class:"t-mu",
+    "font-weight":800,"letter-spacing":"0.06em"});
+  ax.textContent="ωt ( 1d → 2d ), HELD OUT — SHARED SCALE";svg.appendChild(ax);
+})();
+
+/* ---- tables ---- */
+(function(){
+  const tb=document.querySelector("#tbl tbody");
+  ITEMS.forEach(d=>{
+    const tr=document.createElement("tr");
+    const cls=v=>v>=0?"num-pos":"num-neg";
+    tr.innerHTML=`<td>${d.item}</td><td>${d.src}</td><td>${d.K}</td>`+
+      `<td class="${cls(d.w)}">${fmt(d.w)}</td><td class="${cls(d.c)}">${fmt(d.c)}</td>`+
+      `<td>${d.F1.toFixed(2)}</td><td>${d.F2.toFixed(2)}</td>`;
+    tb.appendChild(tr);
+  });
+  const ft=document.getElementById("famtab");
+  FAMS.forEach(d=>{
+    const cls=v=>v>=0?"num-pos":"num-neg";
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${d.fam}</td><td>${d.k}</td><td>${d.items}</td><td>${d.N}</td>`+
+      `<td class="${cls(d.merged)}"><b>${fmt(d.merged)}</b></td><td>${d.sd.toFixed(4)}</td>`+
+      `<td class="${cls(d.med)}">${fmt(d.med)}</td><td class="${cls(d.best)}">${fmt(d.best)}</td>`+
+      `<td class="${cls(d.ls)}">${fmt(d.ls)}</td>`;
+    ft.appendChild(tr);
+  });
+  const jt=document.getElementById("jabtab");
+  JAB.forEach(r=>{
+    const cls=v=>v>=0?"num-pos":"num-neg";
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td class="${cls(r[2])}">${fmt(r[2])}</td>`+
+      `<td${r[3]===null?"":` class="${cls(r[3])}"`}>${r[3]===null?"not fitted — &lt;8 items":fmt(r[3])}</td>`;
+    jt.appendChild(tr);
+  });
+  const fb=document.getElementById("fam");
+  FAM.forEach(r=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td>`;
+    fb.appendChild(tr);
+  });
+})();
+</script>
