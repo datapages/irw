@@ -10,7 +10,7 @@ Draft artifact (private): <https://claude.ai/artifact/K8GGhagA2QZkUoNYXDiAR6>
 
 ## The question
 
-Two numbers per ranking table, from `irw_rank` v1.5 (437 tables, 36,837,920 rows):
+Two numbers per ranking table, from both shards of the family, `irw_rank` v2.1 (950 tables) and `irw_rank_2` v2.1 (68 tables), 1,018 tables and 99,224,348 rows:
 
 - **consensus gain** — fit one Plackett–Luce order on four-fifths of the ballots, predict each
   mark of the held-out fifth, and compare with a uniform pick among the candidates not yet
@@ -18,7 +18,7 @@ Two numbers per ranking table, from `irw_rank` v1.5 (437 tables, 36,837,920 rows
 - **camps gain** — the same quantity for a two-class Plackett–Luce mixture, scored against the
   single-order fit, where there are at least 150 ballots.
 
-417 tables fitted, 20 skipped (fewer than 3 candidates), 0 failed.
+793 tables fitted, 225 skipped (fewer than 3 candidates), 0 failed. First run 2026-10-22 over 437 tables; rerun 2026-11-02 over 1,018.
 
 ## Layout
 
@@ -40,7 +40,7 @@ OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
   nice -n 19 ionice -c3 python3 compute_a.py
 ```
 
-`DRAFT_RUN.md` is the run report for 2026-10-22: what was staged, what was verified, findings.
+`DRAFT_RUN.md` is the run report: 2026-10-22 (437 tables) and the 2026-11-02 rerun (1,018 tables, both shards).
 
 ## Open before this becomes a page
 

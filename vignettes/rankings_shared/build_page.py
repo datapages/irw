@@ -143,22 +143,31 @@ def main():
     widget = (B / "widget.html").read_text()
     e, d, j, s = fam["election"], fam["debian"], fam["jury"], fam["survey"]
 
+    G = S["by_group"]
+    eb = S["elec_by_items"]
+    nn = S["elec_nonnsw"]
+    nsw, ak, nyc, sf, oak, mpls, cam, ev, bd = (G["nsw"], G["alaska"], G["nyc"], G["sf"], G["oakland"],
+                                                G["mpls"], G["cambridge"], G["eurovision"], G["ballondor"])
+    skipped = S["skipped"]
     body = f"""
 <div class="wrap">
 <div class="col">
-<p class="eyebrow">IRW vignette · draft</p>
+<p class="eyebrow">IRW vignette · draft, second run</p>
 <h1>How much of a ranking is shared?</h1>
 <p class="lede">Two numbers per table, computed the same way for a six-candidate mayoral
 election and for five jurors ranking twenty-six songs: how much a single consensus order
 buys you over knowing nothing, and how much more two orders buy you over one.</p>
 
-<div class="flag"><strong>Draft.</strong> A working artifact for Ben to read, not the
-posted vignette. It reads the whole of <code>irw_rank:93f5</code> v1.5 (437 tables,
-36,837,920 rows, released 2026-10-22): <span class="num">{S['n_fitted']}</span> tables fitted,
-20 skipped because only two candidates stood — nineteen Minneapolis contests and Takoma Park
-ward 4 — and nothing failed. Tables over 20,000 ballots are fitted on a seeded 20,000-ballot
-sample ({S['n_capped']} of them). The open choice is in <em>One problem with the statistic</em>
-below; the limitations section is yours.</div>
+<div class="flag"><strong>Draft, rerun 2026-11-02.</strong> A working artifact for Ben to read, not the
+posted vignette. It reads both shards of the family, <code>irw_rank</code> v2.1 (950 tables) and
+<code>irw_rank_2</code> v2.1 (68 tables): {S['n_results']:,} tables and 99,224,348 rows, released
+2026-11-02. <span class="num">{S['n_fitted']}</span> tables fitted, {S['n_skipped']} skipped because
+only two candidates stood (there is nothing to rank; {skipped['alaska']} of them are Alaska legislative
+seats, {skipped['nyc']} New York council primaries, {skipped['oakland']} Oakland contests), and nothing
+failed. Tables over 20,000 ballots are fitted on a seeded 20,000-ballot sample ({S['n_capped']} of them).
+The October draft covered 437 tables; the 581 new ones are almost all FairVote ballot files from
+US cities, plus three Ballon d'Or juries. The open choice is in <em>One problem with the statistic</em>
+below, and the new data make it more pressing, not less; the limitations section is yours.</div>
 </div>
 
 {widget}
@@ -169,7 +178,7 @@ below; the limitations section is yours.</div>
 candidates, five positions on the ballot. The city certified a final round of 4,761 votes to
 3,986; a count written against the IRW table reproduces it (4,761 to 3,985, the one vote a
 documented discrepancy in the city's own file). That count is a good check on the table and a
-poor summary of it. It uses the ballots to answer one question — who wins — and then discards
+poor summary of it. It uses the ballots to answer one question, who wins, and then discards
 9,784 orderings. Burlington is also the standing example of what the discarded part can hold:
 the Condorcet winner, the candidate who beat each rival head to head, lost the runoff.</p>
 <p>So ask something the count cannot. Fix a single order of the candidates and use it to
@@ -179,72 +188,89 @@ of one, let the ballots sort themselves between them, and ask how much the secon
 Call that the <em>camps gain</em>. Every ranking in IRW, however short, yields both.</p>
 
 <h3>The two numbers</h3>
-<p>Both are held-out likelihood ratios, the arithmetic of the widget above. We fit Plackett–Luce — one worth per candidate, each
-mark a choice among those still available — on four-fifths of the ballots and score the
+<p>Both are held-out likelihood ratios, the arithmetic of the widget above. We fit Plackett–Luce, one worth per candidate, each
+mark a choice among those still available, on four-fifths of the ballots and score the
 remaining fifth, mark by mark, against a uniform choice among the unmarked candidates. The
 statistic is <code>exp(mean log-likelihood difference per choice) − 1</code>: a consensus gain
 of 0.20 means the fitted order makes each observed mark 20% more likely than ignorance does.
 The camps gain is the same quantity for a two-class Plackett–Luce mixture, scored against the
 single-order fit and reported only where there are at least 150 ballots to split.</p>
 
-<h2>What 437 tables look like</h2>
-<p>The families separate, and not in the direction we expected.</p>
+<h2>What {S['n_fitted']} tables look like</h2>
+<p>The families still separate, but the widest spread is now <em>within</em> elections, and it
+tracks the length of the ballot.</p>
 </div>
 
 {cloud}
 
 <div class="col">
-<p>Elections are the agreeable case: median consensus gain
-<span class="num">{e['cons_med']:.2f}</span> across <span class="num">{e['n']}</span> contests,
-with the Minneapolis mayoral races at the top of the whole corpus. Debian's developers, voting
-on project resolutions, sit just above them at <span class="num">{d['cons_med']:.2f}</span> —
-a Condorcet ballot on a technical question looks much like a municipal election. Eurovision
-juries are the <em>least</em> consensual bodies in the family, median
-<span class="num">{j['cons_med']:.2f}</span> and a range of only
-{j['cons_min']:.2f}–{j['cons_max']:.2f} across eighteen shows. Five professional jurors per
-country, ranking the same twenty-six performances they have all just watched, agree less about
-what they saw than a city's voters agree about who should run it. The survey rankings post the
-highest median of all ({s['cons_med']:.2f} across {s['n']} tables), and that number is an
-artifact rather than a finding; the next section says why.</p>
-<p>The camps gain is where the corpus pays for its breadth. A second order beats a single one
-in <span class="num">{S['camps_beat']}</span> of {S['n_with_camps']} tables, and they are not
-spread evenly: <span class="num">124</span> of the 279 New South Wales districts, against 7 of
-69 Minneapolis contests, 6 of 33 Debian votes and none of the six Eurovision finals. New South
-Wales runs optional preferential voting, six candidates to a district and 2.4 marks to a
-ballot, and its voters arrive in party blocs; the median district gets a consensus gain of
-0.149 and a further 0.133 from splitting the electorate in two. One order describes a
-Minneapolis council race. It does not describe a state seat in New South Wales.</p>
-<p>The small cases are legible in the same way. Alaska's House District 10 in 2022 is three
-candidates, two of them Republicans splitting a bloc: consensus 0.04, camps 0.15. Debian's
-2019 vote on init systems and its 2026 vote on LLM usage behave the same way — the project was
-not of one mind, and the mixture says so in a number. The extreme is
-<code>atsusaka_2025_ranking_questions</code>, where the second class is worth ten times the
-first order.</p>
+<p>Elections have a median consensus gain of <span class="num">{e['cons_med']:.2f}</span> across
+<span class="num">{e['n']}</span> contests in New South Wales and {S['n_election_groups'] - 1} US
+jurisdictions, and a range from 0.00 to {e['cons_max']:.1f}. The top of the corpus is no longer
+Minneapolis. It is <code>rcv_easthampton_20211102_mayor</code>, a Massachusetts city whose 2021
+mayoral file codes 63 written-in names as candidates, 67 in all, with 1.7 marks a ballot: once the
+model learns that 65 of them are nobody's choice, every held-out mark looks twenty times more
+likely than a uniform guess. Cambridge's STV council and school races (23 to 45 candidates) and
+Portland, Oregon's first ranked council elections sit just below it for the same reason. At the
+other end, the {eb['3']['n']} three-candidate contests have a median gain of {eb['3']['cons_med']:.3f};
+four or five candidates give {eb['4-5']['cons_med']:.2f}, six to nine {eb['6-9']['cons_med']:.2f},
+ten or more {eb['10+']['cons_med']:.2f}. Debian's developers, voting on project resolutions, sit at
+<span class="num">{d['cons_med']:.2f}</span>, which is what a four-candidate municipal election
+looks like. Eurovision juries remain the least consensual bodies in the corpus, median
+<span class="num">{ev['cons_med']:.2f}</span> across eighteen shows: five professional jurors per
+country, ranking the same twenty-six performances they have all just watched, agree less about what
+they saw than a city's voters agree about who should run it. The three Ballon d'Or juries, new this
+run, score {bd['cons_med']:.2f} and look like the other end of the jury world, but they are top-five
+and top-ten ballots over 25 to 30 names, so the same concentration mechanism is doing most of the
+work. The survey rankings post {s['cons_med']:.2f} across {s['n']} tables and the French
+37-name European Parliament lists are, again, at the top.</p>
+<p>The camps gain is where the corpus pays for its breadth, and the new tables sharpen the
+finding. A second order beats a single one in <span class="num">{S['camps_beat']}</span> of
+{S['n_with_camps']} tables, and they are in two places. <span class="num">{nsw['camps_beat']}</span>
+of the {nsw['n']} New South Wales districts, as before: optional preferential voting, six candidates
+to a district, {nsw['marks_med']} marks to a ballot, voters in party blocs, median consensus
+{nsw['cons_med']:.3f} and a further {nsw['camps_med']:.3f} from splitting the electorate in two.
+And <span class="num">{ak['camps_beat']}</span> of {ak['n']} Alaska legislative seats, which are
+three- and four-candidate top-four general elections where two Republicans split a bloc against one
+Democrat: consensus {ak['cons_med']:.3f}, camps {ak['camps_med']:.3f}, the one family in the corpus
+where the second order is worth more than the first. Everywhere else in the United States the
+mixture finds almost nothing: {nyc['camps_beat']} of {nyc['n_camps']} New York primaries,
+{sf['camps_beat']} of {sf['n_camps']} San Francisco contests, {oak['camps_beat']} of {oak['n_camps']}
+in Oakland, {mpls['camps_beat']} of {mpls['n_camps']} in Minneapolis; outside New South Wales,
+{nn['camps_beat']} of {nn['n_camps']} election tables in all. Debian is {G['debian']['camps_beat']} of
+{G['debian']['n']}, Eurovision finals none of six. One order describes a city council race in a
+one-party city. It does not describe a state seat in New South Wales or a top-four general in
+Alaska, and the difference is the party structure of the field, not the voting rule.</p>
+<p>The small cases are legible in the same way. Alaska's House District 15 in 2022: consensus
+0.006, camps 0.157. Debian's 2019 vote on init systems and its 2026 vote on LLM usage behave the
+same way; the project was not of one mind, and the mixture says so in a number. The extremes are
+survey tables: <code>atsusaka_2024_alaska_rcv_survey</code>, where a single order is worth nothing
+and two orders are worth 1.35, and <code>corstange_2022_syria_factions_2015</code>, where the
+second class is worth thirteen times the first.</p>
 
 <h2>One problem with the statistic</h2>
-<p>Minneapolis 2013 has a consensus gain of 2.75, the largest in the corpus, and it is not
-because Minneapolis voters are unusually like-minded. That ballot carried 35 mayoral
-candidates, most of whom nobody ranked. Against a uniform baseline, learning that 30 of 35
-candidates are near-hopeless is enormously informative, and it has nothing to do with whether
-voters agree on an <em>order</em>. The same mechanism puts the French survey rankings at the
-top of their family: <code>voterautrement_2024_self_top2</code> asks respondents to rank a
-37-name European Parliament list and scores 1.62. Within elections the rank correlation
-between candidate count and consensus gain is +0.17; across the whole corpus it is +0.05,
-because Eurovision's 26-act ballots run the other way.</p>
+<p>In October the within-elections rank correlation between candidate count and consensus gain
+was +0.17 and this section was a caution. With {e['n']} contests it is
+<span class="num">+{S['rho_items_cons_elec']:.2f}</span> (+{S['rho_items_cons_all']:.2f} across the
+whole corpus), and the medians by ballot length above are a staircase. Against a uniform baseline,
+learning that most of a long field is hopeless is enormously informative, and it has nothing to do
+with whether voters agree on an <em>order</em>. Easthampton's 20.5 is the statistic measuring how
+many write-in names a clerk transcribed. The Ballon d'Or's 2.7 is mostly that a hundred journalists
+were handed thirty names and all put the same five at the top.</p>
 </div>
 
 {items}
 
 <div class="col">
-<p>This does not sink the vignette, but it does mean the consensus gain as specified answers
-a compound question — how concentrated is the field, and how much do people agree beyond that.
-Two ways out, both cheap: baseline each next mark against the <em>marginal</em> popularity of
-the unmarked candidates rather than against a uniform draw, which removes the concentration
-term by construction; or split the gain by position, reporting the first mark (concentration)
-separately from the continuations (shared order). The second is the question-B machinery from
-the October pilot, already written. My preference is the first as the headline number and the
-split as the figure beneath it, but this is the one real choice left in the analysis and it is
-yours.</p>
+<p>This does not sink the vignette, but as the family stands the consensus gain answers a compound
+question: how concentrated is the field, and how much do people agree beyond that. The first part
+now dominates. Two ways out, both cheap: baseline each next mark against the <em>marginal</em>
+popularity of the unmarked candidates rather than against a uniform draw, which removes the
+concentration term by construction; or split the gain by position, reporting the first mark
+(concentration) separately from the continuations (shared order). The second is the question-B
+machinery from the October pilot, already written. My preference is the first as the headline
+number and the split as the figure beneath it, and I would now make the change before writing the
+page rather than after. It is still your call; nothing in the statistic was changed for this run.</p>
 
 <h2>The tables at the edges</h2>
 {tables}
@@ -255,34 +281,37 @@ yours.</p>
 <p><strong>The baseline question above.</strong> Everything else is bookkeeping by comparison.</p>
 <p><strong>The camps number carries real noise.</strong> The mixture is fitted by EM from a
 random start, so it finds a different local optimum run to run. Two independent runs of the
-same code on Alaska HD10 gave 0.129 and 0.145 — a 0.016 spread, the same order as the whole
+same code on Alaska HD10 gave 0.129 and 0.145, a 0.016 spread, the same order as the whole
 camps gain on the quieter tables, where the consensus gains agreed to better than 0.01. Either
 fit the mixture from several starts and keep the best training likelihood, or report only its
 sign and rough size. Read nothing into camps differences below roughly 0.02 until that is
-settled.</p>
-<p><strong>New South Wales dominates the cloud.</strong> 279 of 437 tables are NSW districts,
-so any unweighted summary across the family is mostly a summary of one state's 2015–2023
-assembly elections — and since NSW is also where the camps result lives, that is a claim about
-one electoral system as much as about rankings in general. The page should either weight by
-jurisdiction or say plainly that it is showing contests, not places. Worth testing against
-the Australian Senate data when it lands.</p>
+settled. {S['camps_neg']} tables have a negative camps gain, where the mixture lost on held-out
+ballots.</p>
+<p><strong>What a table is.</strong> {nsw['n']} of {S['n_fitted']} fitted tables are NSW districts
+and another {nyc['n'] + ak['n'] + mpls['n'] + sf['n'] + oak['n']} are New York, Alaska, Minneapolis,
+San Francisco and Oakland, so an unweighted summary is a summary of six electoral systems. That is
+better than one, and the camps contrast between New South Wales, Alaska and the US cities is only
+visible because of it, but the page should still say plainly that it is showing contests, not
+places. The {S['n_skipped']} two-candidate contests dropped here are also a fact about ranked-choice
+elections in practice: more than a fifth of the family's tables had nothing to rank.</p>
 <p><strong>Limitations are yours to write.</strong> The mechanical ones are listed here: the
-ballot cap, NSW's weight, the 20 two-candidate contests dropped for having nothing to rank,
-and single-peakedness set aside entirely. The substantive ones — what
+ballot cap, the weight of a few jurisdictions, the {S['n_skipped']} two-candidate contests dropped,
+write-in coding (Easthampton), and single-peakedness set aside entirely. The substantive ones, what
 a Plackett–Luce worth does and does not mean when voters are strategic, and whether a juror's
-ranking of acts is the same kind of object as a voter's ranking of candidates — are the ones a
+ranking of acts is the same kind of object as a voter's ranking of candidates, are the ones a
 reader will want, and they should be in your words.</p>
 
 <footer>
-<p>Computed from <code>irw_rank:93f5</code> v1.5 (437 tables, 36,837,920 rows), staged locally
-and row-count verified table by table against Redivis. Method and code reused unchanged from
-<code>oneoff/rankings-vignette-pilot-2026-10-15/pilot.py</code> (Plackett–Luce, 5-fold
-cross-validation, ridge 0.01 on log-worths, reserved <code>(overvote)</code> and
-<code>(write-in)</code> marks dropped, first mark of a repeated candidate kept, gaps ignored);
-driver, figures and this page in
-<code>oneoff/rankings-vignette-draft-2026-10-22/</code>. Reproduction check: the 20 tables of
-the October pilot refit to within 0.01 on the consensus gain. Candidate names are not stored
-anywhere in IRW; the items are alphabetical codes. Drafted by Claude for Ben, 2026-10-22.</p>
+<p>Computed from <code>irw_rank:93f5</code> v2.1 (950 tables) and <code>irw_rank_2:byyj</code> v2.1
+(68 tables), {S['n_results']:,} tables and 99,224,348 rows, staged locally and row-count verified
+table by table against Redivis. Method and code reused unchanged from the 2026-10-15 pilot
+(Plackett–Luce, 5-fold cross-validation, ridge 0.01 on log-worths, reserved <code>(overvote)</code>
+and <code>(write-in)</code> marks dropped, first mark of a repeated candidate kept, gaps ignored);
+the 437 tables of the October run were not refitted, their results are reused as computed then.
+Driver, figures and this page in <code>vignettes/rankings_shared/</code> on the
+<code>rankings-shared-vignette</code> branch of datapages/irw. Candidate names are not stored
+anywhere in IRW; the items are alphabetical codes. Drafted by Claude for Ben, 2026-10-22; rerun
+2026-11-02.</p>
 </footer>
 </div>
 </div>

@@ -1,6 +1,6 @@
 """Stage every table of the live rankings family into one persistent directory.
 
-Most of the family is already built on this machine, but ~380 of the CSVs live in
+Most of the family is already built on this machine, but most of the CSVs live in
 other agent sessions' /tmp scratchpads and will vanish when those are cleaned.  So:
 salvage by table name, reconcile every row count against the live Redivis listing,
 and fetch from Redivis only what is missing or disagrees.
@@ -10,8 +10,10 @@ Writes ~/.cache/irw_rank_vignette/tables/<table>.csv and staging_report.csv here
 """
 import os, sys, csv, glob, shutil, subprocess, pathlib
 
-VERSION = "v1_5"                      # pinned release this draft reads
-DATASET = "irw_rank:93f5"
+# pinned releases this draft reads: both shards of the family
+SHARDS = {"irw_rank:93f5": "v2.1", "irw_rank_2:byyj": "v2.1"}
+DATASET = " + ".join(SHARDS)
+VERSION = "v2_1"
 CACHE = pathlib.Path.home() / ".cache/irw_rank_vignette/tables"
 HERE = pathlib.Path(__file__).parent
 IRW = pathlib.Path("/home/ben/Dropbox/projects/irw")
@@ -24,6 +26,7 @@ SEARCH = [
     str(IRW / "oneoff/rankings-eurovision-tables-2026-10-15/*.csv"),
     SCRATCH + "/*/scratchpad/*/*.csv",
     SCRATCH + "/*/scratchpad/*/*/*.csv",
+    SCRATCH + "/*/scratchpad/*/*/*/*.csv",
 ]
 
 
@@ -32,8 +35,13 @@ def live_tables():
     os.environ.setdefault(
         "REDIVIS_API_TOKEN",
         open(os.path.expanduser("~/.redivis_api_token")).read().strip())
-    d = redivis.organization("datapages").dataset(DATASET, version=VERSION.replace("_", "."))
-    return {t.name: t.properties["numRows"] for t in d.list_tables()}
+    live = {}
+    for ds, ver in SHARDS.items():
+        d = redivis.organization("datapages").dataset(ds, version=ver)
+        for t in d.list_tables():
+            assert t.name not in live, f"{t.name} in two shards"
+            live[t.name] = t.properties["numRows"]
+    return live
 
 
 def group_of(name):

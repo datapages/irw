@@ -12,10 +12,34 @@ BUILD.mkdir(exist_ok=True)
 
 FAMILY = {"irv": "election", "stv": "election", "sequential": "election",
           "condorcet": "debian", "jury": "jury", "survey": "survey"}
-PANELS = [("election", "Ranked-choice elections", "IRV and STV contests: Minneapolis, New South Wales, six US cities"),
+PANELS = [("election", "Ranked-choice elections", "IRV and STV contests: New South Wales and 38 US jurisdictions"),
           ("debian", "Debian developer votes", "Condorcet ballots on project resolutions"),
-          ("jury", "Eurovision juries", "five jurors per country rank every act"),
+          ("jury", "Juries", "Eurovision: five jurors per country rank every act; Ballon d'Or: one journalist per country"),
           ("survey", "Survey rankings", "ranking questions put to respondents")]
+
+
+def group_of(name):
+    return name.split("_")[1] if name.startswith("rcv_") else name.split("_")[0]
+
+
+def spearman(xs, ys):
+    def ranks(v):
+        order = sorted(range(len(v)), key=lambda i: v[i])
+        rk = [0.0] * len(v)
+        i = 0
+        while i < len(v):
+            j = i
+            while j + 1 < len(v) and v[order[j + 1]] == v[order[i]]:
+                j += 1
+            for k in range(i, j + 1):
+                rk[order[k]] = (i + j) / 2 + 1
+            i = j + 1
+        return rk
+    rx, ry = ranks(xs), ranks(ys)
+    mx, my = sum(rx) / len(rx), sum(ry) / len(ry)
+    num = sum((a - mx) * (b - my) for a, b in zip(rx, ry))
+    den = (sum((a - mx) ** 2 for a in rx) * sum((b - my) ** 2 for b in ry)) ** 0.5
+    return num / den
 
 
 def load():
@@ -25,8 +49,10 @@ def load():
     for name, r in sorted(res.items()):
         if "gain_pl_vs_uniform" not in r:
             continue
+        r = dict(r)
+        r["group"] = group_of(name)
         m = meta.get(name, {})
-        rows.append({"table": name, "fam": FAMILY.get(m.get("method"), "other"),
+        rows.append({"table": name, "fam": FAMILY.get(m.get("method"), "other"), "group": r["group"],
                      "method": m.get("method", "?"), "juris": m.get("jurisdiction", ""),
                      "office": m.get("office", ""), "items": r["n_items"],
                      "ballots": r["n_ballots"], "ballots_all": r.get("n_ballots_total"),
@@ -106,9 +132,10 @@ def scatter(rows, xk, yk, xlab, ylab, xlim, ylim, w=330, h=250, diag=False,
 
 def main():
     rows = load()
+    res = json.load(open(HERE / "results_a.json"))
     with_camps = [r for r in rows if r["camps"] is not None]
-    xlim = (0.003, 3.2)
-    ylim = (0.001, 1.2)
+    xlim = (0.003, 25)
+    ylim = (0.001, 2.0)
 
     # Figure 1: small multiples, consensus against camps, one panel per family
     panels = []
@@ -121,9 +148,10 @@ def main():
         if fam == "election":
             lab = [("rcv_burlington_20060307_mayor", "Burlington 2006", 9, 4),
                    ("rcv_alaska_20221108_hd10", "Alaska HD10", -8, -6),
-                   ("rcv_mpls_20131105_mayor", "Mpls mayor 2013", -8, -12)]
+                   ("rcv_mpls_20131105_mayor", "Mpls mayor 2013", -8, -12),
+                   ("rcv_easthampton_20211102_mayor", "Easthampton 2021", -8, 4)]
         if fam == "jury":
-            lab = [("eurovision_2017_final", "2017 final", 7, -4)]
+            lab = [("eurovision_2017_final", "Eurovision 2017", 7, -4)]
         panels.append(
             f'<figure class="panel"><div class="fig-wrap">'
             + scatter(rs, "cons", "camps", "consensus gain", "camps gain", xlim, ylim,
@@ -137,15 +165,19 @@ def main():
     note = (f'<p class="fig-note">Both axes are logarithmic and clipped at the plotted range. '
             f'The dashed line is where the second order is worth as much as the first. '
             f'{n_floor} tables sit on the bottom rule, meaning a camps gain at or below '
-            f'{ylim[0]:g} (five of them negative: the mixture lost on held-out ballots). '
-            f'One survey table sits on the left rule with a consensus gain of −0.001.</p>')
+            f'{ylim[0]:g} ({sum(1 for r in with_camps if r["camps"] < 0)} of them negative: the mixture lost on held-out ballots). '
+            + (f'{n_left} tables sit on the left rule with a consensus gain at or below {xlim[0]:g}.</p>'
+               if (n_left := sum(1 for r in with_camps if r["cons"] <= xlim[0])) else '</p>'))
     (BUILD / "fig_cloud.html").write_text(
         '<div class="grid-2">' + "".join(panels) + "</div>" + note)
 
     # Figure 2: the field-concentration confound
     f2 = scatter(rows, "items", "cons", "candidates on the ballot", "consensus gain",
-                 (2.5, 70), xlim,
+                 (2.5, 90), xlim,
                  labels=[("rcv_mpls_20131105_mayor", "Minneapolis mayor 2013 (35)", -8, -5),
+                         ("rcv_easthampton_20211102_mayor", "Easthampton 2021 (67, mostly write-ins)", -8, 4),
+                         ("rcv_cambridge_20231107_school", "Cambridge school 2023 (45)", -8, 12),
+                         ("ballondor_2023_jury", "Ballon d'Or 2023 (25)", 8, 4),
                          ("eurovision_2017_final", "Eurovision 2017 (26)", -8, 4),
                          ("rcv_burlington_20060307_mayor", "Burlington 2006 (6)", 8, 4)],
                  w=680, h=300)
@@ -173,8 +205,11 @@ def main():
 
     # Numbers the prose needs
     fams = collections.defaultdict(list)
+    groups = collections.defaultdict(list)
     for r in rows:
         fams[r["fam"]].append(r)
+        groups[r["group"]].append(r)
+    nn = [r for r in fams["election"] if r["group"] != "nsw"]
     stats = {"n_fitted": len(rows), "n_with_camps": len(with_camps),
              "n_capped": sum(1 for r in rows if r["capped"]),
              "camps_beat": sum(1 for r in with_camps if r["camps"] > r["cons"]),
@@ -185,7 +220,31 @@ def main():
                                "camps_med": round(st.median([r["camps"] for r in rs if r["camps"] is not None]), 3)
                                if any(r["camps"] is not None for r in rs) else None}
                            for f, rs in fams.items()},
-             "ballots_total": sum(r["ballots_all"] or r["ballots"] for r in rows)}
+             "ballots_total": sum(r["ballots_all"] or r["ballots"] for r in rows),
+             "n_results": len(res),
+             "skipped": collections.Counter(group_of(n) for n, r in res.items() if "skipped" in r),
+             "n_skipped": sum(1 for r in res.values() if "skipped" in r),
+             "n_failed": sum(1 for r in res.values() if "failed" in r),
+             "camps_neg": sum(1 for r in with_camps if r["camps"] < 0),
+             "n_floor": n_floor,
+             "rho_items_cons_all": round(spearman([r["items"] for r in rows], [r["cons"] for r in rows]), 3),
+             "rho_items_cons_elec": round(spearman([r["items"] for r in fams["election"]],
+                                                   [r["cons"] for r in fams["election"]]), 3),
+             "elec_by_items": {lab: {"n": len(rs), "cons_med": round(st.median(r["cons"] for r in rs), 3)}
+                               for lab, lo, hi in [("3", 3, 3), ("4-5", 4, 5), ("6-9", 6, 9), ("10+", 10, 999)]
+                               for rs in [[r for r in fams["election"] if lo <= r["items"] <= hi]] if rs},
+             "elec_nonnsw": {"n": len(nn), "cons_med": round(st.median(r["cons"] for r in nn), 3),
+                             "n_camps": sum(1 for r in nn if r["camps"] is not None),
+                             "camps_beat": sum(1 for r in nn if r["camps"] is not None and r["camps"] > r["cons"])},
+             "n_election_groups": len({r["group"] for r in fams["election"]}),
+             "by_group": {g: {"n": len(rs), "n_camps": sum(1 for r in rs if r["camps"] is not None),
+                              "camps_beat": sum(1 for r in rs if r["camps"] is not None and r["camps"] > r["cons"]),
+                              "cons_med": round(st.median(r["cons"] for r in rs), 3),
+                              "camps_med": round(st.median([r["camps"] for r in rs if r["camps"] is not None]), 3)
+                              if any(r["camps"] is not None for r in rs) else None,
+                              "items_med": st.median(r["items"] for r in rs),
+                              "marks_med": round(st.median(r["marks"] for r in rs), 2)}
+                          for g, rs in sorted(groups.items(), key=lambda kv: -len(kv[1]))}}
     (BUILD / "stats.json").write_text(json.dumps(stats, indent=1))
     print(json.dumps(stats, indent=1))
 
