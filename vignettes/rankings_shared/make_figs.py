@@ -136,7 +136,11 @@ def scatter(rows, xk, yk, xlab, ylab, xlim, ylim, w=330, h=250, diag=False,
             continue
         else:
             px, py = x(r[xk]), y(r[yk])
-        s.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="3.6" class="pt-mark hi" pointer-events="none"/>')
+        s.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="3.6" class="pt-mark hi" tabindex="0"'
+                 f' data-t="{html.escape(r["table"])}" data-j="{html.escape(r["juris"])}"'
+                 f' data-cons="{r["cons"]:.3f}" data-camps="{"" if r["camps"] is None else f"{r["camps"]:.3f}"}"'
+                 f' data-n="{r["items"]}" data-b="{r["ballots_all"] or r["ballots"]:,}" data-m="{r["marks"]:.2f}"'
+                 f' data-cap="{"1" if r["capped"] else ""}"/>')
         anchor = "end" if dx < 0 else "start"
         s.append(f'<text x="{px+dx:.1f}" y="{py+dy:.1f}" class="lab" text-anchor="{anchor}"'
                  f' pointer-events="none">{html.escape(text)}</text>')
