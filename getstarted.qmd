@@ -4,7 +4,7 @@ title: "Getting Started"
 
 IRW datasets are hosted on [Redivis](https://redivis.com), a platform for academic data sharing and analysis. There are a few different ways you can access IRW data—whether you’re just browsing, downloading tables, or working programmatically in R or Python.
 
-NOTE: You can explore datasets, and download a table under 100 MB as a CSV from its page on this site, without logging in. The Stata package reads that same no-account path, so it needs no Redivis account either, within the same 100 MB limit. A free Redivis account is required for everything else: larger downloads, the R and Python packages, the IRW MCP server, and the Redivis website and notebooks. You can create an account [here](https://redivis.com/?createAccount).
+NOTE: You can explore datasets, and download a table under 100 MB as a CSV from its page on this site, without logging in. The Stata package reads that same no-account path, so it needs no Redivis account either, within the same 100 MB limit. The R package (`irw` 1.4.0 or later, on CRAN) reads every public table with no account at all. A free Redivis account is required for everything else: larger downloads from this site, the Python package, the IRW MCP server, and the Redivis website and notebooks. You can create an account [here](https://redivis.com/?createAccount).
 
 The sections below walk through each access option and include example code to help you get started.
 
@@ -24,7 +24,7 @@ We recommend the `irw` packages if you want a simple, streamlined way to access 
 
 You can find setup instructions and function references for the [R package](https://itemresponsewarehouse.github.io/Rpkg/), the [Python package](https://github.com/itemresponsewarehouse/Python-pkg) and the [Stata package](https://github.com/itemresponsewarehouse/Stata-pkg).
 
-In R and Python, your first call will prompt you to log in with your Redivis account and grant access via OAuth (or use an API token). This authentication step is required once per session to securely connect to Redivis. For details, see the "Redivis Authentication" section in the package documentation. Scripts and CI jobs, which cannot open a browser, need either a cached login from an earlier interactive session or a Redivis API token in the `REDIVIS_API_TOKEN` environment variable.
+The R package reads the warehouse without a Redivis account: `irw_fetch()`, `irw_filter()`, `irw_itemtext()` and the metadata functions all work with no login, as long as you have `irw` 1.4.0 or later and `redivis` 0.12.14 or later (`irw` 1.3.1 asked for a login on every call). The one function that still needs an account is `irw_table_sets()`, which runs a server-side query. In Python, the first call prompts you to log in with your Redivis account and grant access via OAuth (or use an API token); this is required once per session. For details, see the "Redivis Authentication" section of either package's documentation. Scripts and CI jobs, which cannot open a browser, need either a cached login from an earlier interactive session or a Redivis API token in the `REDIVIS_API_TOKEN` environment variable, when a call needs a login at all.
 
 The Stata package works differently, and needs no Redivis account at all: it reads the same public CSV endpoint that the per-table download buttons on this site use. The trade-off is that endpoint's 100 MB limit, which puts roughly 3% of the warehouse — the largest PISA, ENEM and five-factor tables — out of reach anonymously. The Stata package is new. It has been run on Stata 16.0 and StataNow 19.5; it declares Stata 15 as its floor, but 15 is so far unconfirmed. Please [report anything that misbehaves](https://github.com/itemresponsewarehouse/Stata-pkg/issues).
 
@@ -129,7 +129,7 @@ There are two main ways to use the Redivis client libraries:
 2.  Use in Other Environments (e.g., RStudio, Jupyter, Colab, etc.)
 
 -   Requires installing the appropriate client library (see example code above for installation)
--   You will need to authenticate with your Redivis account (First-time use will prompt browser login for OAuth), or you may also use API tokens for authentication for long-running jobs (see [here](https://apidocs.redivis.com/rest-api/authorization) for more information about how to generate and set up your API token).
+-   In Python you will need to authenticate with your Redivis account (first-time use will prompt browser login for OAuth), or you may also use API tokens for authentication for long-running jobs (see [here](https://apidocs.redivis.com/rest-api/authorization) for more information about how to generate and set up your API token). In R, reading needs no login; see [above](#option-2-use-the-irw-packages-for-r-python-or-stata-recommended).
 
 For more detailed setup and usage examples, see the full Redivis R and Python client documentation here:
 
