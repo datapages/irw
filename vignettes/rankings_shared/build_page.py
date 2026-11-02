@@ -147,6 +147,18 @@ th:not(:first-child),td:not(:first-child){text-align:right}
 .w-facts dd{margin:.15rem 0 0}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.figset{margin:1.6rem 0}
+.fignum{font-size:.84rem;color:var(--ink-2);margin:0 0 .4rem;max-width:36rem;margin-inline:auto}
+.pt-mark{cursor:pointer;transition:r .08s}
+.pt-mark:hover,.pt-mark:focus,.pt-mark.on{fill:var(--mark-hi);fill-opacity:1;r:5.5;outline:none}
+.tip{position:fixed;z-index:10;pointer-events:none;background:var(--ink);color:var(--paper);
+  font-family:var(--display);font-size:.76rem;line-height:1.45;padding:.5rem .65rem;border-radius:3px;
+  max-width:18rem;box-shadow:0 2px 10px rgba(0,0,0,.25);display:none}
+.tip b{font-family:var(--mono);font-weight:500;display:block;margin-bottom:.15rem;word-break:break-all}
+.tip .tj{opacity:.75;display:block;margin-bottom:.3rem}
+.tip table{font-size:.76rem;width:auto;color:inherit}
+.tip td{padding:.05rem .6rem .05rem 0;border:0;color:inherit}
+.tip td:first-child{opacity:.75}
 footer{margin-top:3rem;padding-top:1.2rem;border-top:1px solid var(--rule);font-size:.84rem;color:var(--ink-3)}
 footer code{color:var(--ink-2)}
 </style>
@@ -249,8 +261,8 @@ marginal-popularity baseline discussed below, so adopting &rho;&sup2; would sett
 question at the same time. A K-way IMV generalisation remains the other candidate.</p>
 
 <h2>What {S['n_fitted']} tables look like</h2>
-<p>The families still separate, but the widest spread is now <em>within</em> elections, and it
-tracks the length of the ballot.</p>
+<p>The families still separate (Figure 1), but the widest spread is now <em>within</em> elections,
+and it tracks the length of the ballot (Figure 2).</p>
 </div>
 
 {cloud}
@@ -368,7 +380,50 @@ anywhere in IRW; the items are alphabetical codes. Drafted by Claude for Ben, 20
 </div>
 </div>
 """
-    OUT.write_text(HEAD + body)
+    tip = """
+<div class="tip" id="tip" role="tooltip"></div>
+<script>
+(function () {
+  var tip = document.getElementById("tip"), cur = null;
+  function show(el, x, y) {
+    var d = el.dataset, camps = d.camps ? d.camps : "\u2014 (under 150 ballots)";
+    tip.innerHTML = "<b>" + d.t + "</b>" + (d.j ? "<span class='tj'>" + d.j + "</span>" : "") +
+      "<table><tr><td>consensus gain</td><td>" + d.cons + "</td></tr>" +
+      "<tr><td>camps gain</td><td>" + camps + "</td></tr>" +
+      "<tr><td>candidates</td><td>" + d.n + "</td></tr>" +
+      "<tr><td>ballots</td><td>" + d.b + (d.cap ? " (fitted on 20,000)" : "") + "</td></tr>" +
+      "<tr><td>marks per ballot</td><td>" + d.m + "</td></tr></table>";
+    tip.style.display = "block";
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var left = x + 14, top = y + 14;
+    if (left + w > window.innerWidth - 8) left = x - w - 14;
+    if (top + h > window.innerHeight - 8) top = y - h - 14;
+    tip.style.left = Math.max(8, left) + "px"; tip.style.top = Math.max(8, top) + "px";
+  }
+  function hide() { tip.style.display = "none"; if (cur) { cur.classList.remove("on"); cur = null; } }
+  document.querySelectorAll("svg.fig").forEach(function (svg) {
+    svg.addEventListener("pointermove", function (e) {
+      var el = e.target.closest ? e.target.closest(".pt-mark") : null;
+      if (el) { if (cur && cur !== el) cur.classList.remove("on"); cur = el; el.classList.add("on"); show(el, e.clientX, e.clientY); }
+      else hide();
+    });
+    svg.addEventListener("pointerleave", hide);
+    svg.addEventListener("click", function (e) {
+      var el = e.target.closest ? e.target.closest(".pt-mark") : null;
+      if (el) { cur = el; el.classList.add("on"); show(el, e.clientX, e.clientY); e.stopPropagation(); }
+    });
+    svg.addEventListener("focusin", function (e) {
+      var el = e.target.closest ? e.target.closest(".pt-mark") : null;
+      if (el) { var r = el.getBoundingClientRect(); cur = el; show(el, r.left + r.width / 2, r.top + r.height / 2); }
+    });
+    svg.addEventListener("focusout", hide);
+  });
+  document.addEventListener("click", hide);
+  window.addEventListener("scroll", hide, {passive: true});
+})();
+</script>
+"""
+    OUT.write_text(HEAD + body + tip)
     print("wrote", OUT, f"{OUT.stat().st_size/1024:.0f} KB")
 
 

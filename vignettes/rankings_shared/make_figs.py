@@ -111,10 +111,11 @@ def scatter(rows, xk, yk, xlab, ylab, xlim, ylim, w=330, h=250, diag=False,
         xv, yv = r[xk], r[yk]
         if xv is None or yv is None:
             continue
-        tip = (f"{r['table']}  {xlab} {xv:.3f}, {ylab} {yv:.3f}"
-               f"  ({r['items']} candidates, {r['ballots']:,} ballots)")
-        s.append(f'<circle cx="{x(xv):.1f}" cy="{y(yv):.1f}" r="3.6" class="pt-mark">'
-                 f'<title>{html.escape(tip)}</title></circle>')
+        s.append(f'<circle cx="{x(xv):.1f}" cy="{y(yv):.1f}" r="3.6" class="pt-mark" tabindex="0"'
+                 f' data-t="{html.escape(r["table"])}" data-j="{html.escape(r["juris"])}"'
+                 f' data-cons="{r["cons"]:.3f}" data-camps="{"" if r["camps"] is None else f"{r["camps"]:.3f}"}"'
+                 f' data-n="{r["items"]}" data-b="{r["ballots_all"] or r["ballots"]:,}" data-m="{r["marks"]:.2f}"'
+                 f' data-cap="{"1" if r["capped"] else ""}"/>')
     for tbl, text, dx, dy in labels:
         r = next((q for q in rows if q["table"] == tbl), None)
         if not r or r[xk] is None or r[yk] is None:
@@ -169,8 +170,12 @@ def main():
             + (f'{n_left} tables sit on the left rule with a consensus gain at or below {xlim[0]:g}.</p>'
                if (n_left := sum(1 for r in with_camps if r["cons"] <= xlim[0])) else '</p>'))
     (BUILD / "fig_cloud.html").write_text(
-        '<div class="grid-2">' + "".join(panels) + "</div>" + note)
+        '<figure class="figset"><figcaption class="fignum">Figure 1. Consensus gain against camps gain, '
+        f'one point per table, {len(with_camps)} tables with at least 150 ballots. Hover or tap a point '
+        'for its numbers.</figcaption>'
+        '<div class="grid-2">' + "".join(panels) + "</div>" + note + '</figure>')
 
+    fams_rows_elec = [r for r in rows if r["fam"] == "election"]
     # Figure 2: the field-concentration confound
     f2 = scatter(rows, "items", "cons", "candidates on the ballot", "consensus gain",
                  (2.5, 90), xlim,
@@ -181,7 +186,11 @@ def main():
                          ("eurovision_2017_final", "Eurovision 2017 (26)", -8, 4),
                          ("rcv_burlington_20060307_mayor", "Burlington 2006 (6)", 8, 4)],
                  w=680, h=300)
-    (BUILD / "fig_items.html").write_text(f'<div class="fig-wrap wide">{f2}</div>')
+    (BUILD / "fig_items.html").write_text(
+        '<figure class="figset"><figcaption class="fignum">Figure 2. Consensus gain against the number of '
+        f'candidates on the ballot, all {len(rows)} fitted tables. Spearman &rho; = +{spearman([r["items"] for r in rows], [r["cons"] for r in rows]):.2f} '
+        f'over the corpus, +{spearman([r["items"] for r in fams_rows_elec], [r["cons"] for r in fams_rows_elec]):.2f} within elections.</figcaption>'
+        f'<div class="fig-wrap wide">{f2}</div></figure>')
 
     # Extremes table
     def row_html(r):
