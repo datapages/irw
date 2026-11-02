@@ -20,6 +20,51 @@ WORTHS = [("c01", 0.3787), ("c02", 0.3067), ("c03", 0.1810),
           ("c04", 0.0643), ("c05", 0.0611), ("c06", 0.0082)]
 DEFAULT = ["c03", "c01", "c05"]
 
+# Two-class Plackett-Luce mixture fitted to the same ballots (EM, 20 iterations, best of
+# five random starts by training likelihood). Class A is 54% of ballots and ranks c01/c02
+# first; class B is 46% and ranks c03 first. The table-level numbers are the vignette's
+# held-out gains for this table (results_a.json).
+PI = [0.536, 0.464]
+CAMPS = [[("c01", 0.5210), ("c02", 0.3968), ("c03", 0.0304), ("c04", 0.0234), ("c05", 0.0263), ("c06", 0.0022)],
+         [("c01", 0.1930), ("c02", 0.1517), ("c03", 0.5221), ("c04", 0.0682), ("c05", 0.0555), ("c06", 0.0096)]]
+TABLE_CONS = 0.480
+TABLE_CAMPS = 0.040
+
+
+def mix_steps(worths, ballot):
+    """Sequential mixture scoring of one ballot: posterior over camps before each mark,
+    mixture probability of the mark, and the single-order probability it is scored against."""
+    pool = [k for k, _ in worths]
+    w = dict(worths)
+    wc = [dict(c) for c in CAMPS]
+    post = list(PI)
+    out = []
+    for pick in ballot:
+        p_single = w[pick] / sum(w[k] for k in pool)
+        pc = [c[pick] / sum(c[k] for k in pool) for c in wc]
+        p_mix = sum(q * pk for q, pk in zip(post, pc))
+        out.append({"pick": pick, "post_a": post[0], "p_single": p_single, "p_mix": p_mix})
+        post = [q * pk / p_mix for q, pk in zip(post, pc)]
+        pool = [k for k in pool if k != pick]
+    return out
+
+
+def mix_summary(ms):
+    if not ms:
+        return None
+    lr = sum(math.log(m["p_mix"] / m["p_single"]) for m in ms)
+    return {"gain": math.exp(lr / len(ms)) - 1}
+
+
+def render_mix_rows(ms):
+    rows = []
+    for i, m in enumerate(ms, 1):
+        rows.append(
+            f'<tr><td class="step">{i}</td><td class="pick mono">{m["pick"]}</td>'
+            f'<td>{pct(m["post_a"])}</td><td>{pct(m["p_single"])}</td><td>{pct(m["p_mix"])}</td>'
+            f'<td class="rat">&times;{m["p_mix"]/m["p_single"]:.2f}</td></tr>')
+    return "".join(rows)
+
 
 def steps(worths, ballot):
     pool = [k for k, _ in worths]
@@ -129,6 +174,14 @@ FACTS = [
 def main():
     st0 = steps(WORTHS, DEFAULT)
     sm = summary(st0)
+    ms0 = mix_steps(WORTHS, DEFAULT)
+    mm = mix_summary(ms0)
+    camp_bars = "".join(
+        '<div class="w-camp"><h5>Camp ' + ("A" if i == 0 else "B") + f' <span class="n">{pct(PI[i])} of ballots</span></h5>'
+        + "".join(f'<div class="w-row w-row-ro"><span class="mono w-name">{k}</span>'
+                  f'<div class="w-bar"><span style="width:{100*v:.1f}%"></span></div>'
+                  f'<span class="w-val num">{v:.3f}</span></div>' for k, v in CAMPS[i])
+        + '</div>' for i in range(2))
     bars = "".join(
         f'<div class="w-row"><span class="mono w-name">{k}</span>'
         f'<input type="range" id="w-{k}" min="1" max="1000" value="{round(v*1000):d}"'
@@ -143,12 +196,25 @@ def main():
 
     html = f"""
 <section class="widget" id="plw">
-  <h3 class="w-head">The model, in one ballot</h3>
+  <h3 class="w-head">The two numbers, in one ballot</h3>
+  <p class="w-intro">Everything on this page is one of two numbers. The <em>consensus gain</em>
+  asks how much better a single fitted order predicts each mark on a ballot than guessing does.
+  The <em>camps gain</em> asks how much better two orders do than one. Both are computed below
+  for a ballot you build, with the orders fitted to Burlington 2006 &mdash; 9,784 ballots, six
+  candidates, stored as codes because IRW keeps no candidate names.</p>
+  <div class="w-tiles">
+    <div class="w-tile"><div class="w-tile-k">Consensus gain</div>
+      <div class="w-tile-v num" id="t-cons">{sm['gain']:.3f}</div>
+      <div class="w-tile-s">this ballot, under the worths at left</div>
+      <div class="w-tile-s">Burlington 2006, held out: <span class="num">{TABLE_CONS:.3f}</span></div></div>
+    <div class="w-tile"><div class="w-tile-k">Camps gain</div>
+      <div class="w-tile-v num" id="t-camps">{mm['gain']:.3f}</div>
+      <div class="w-tile-s">this ballot, two camps against one order</div>
+      <div class="w-tile-s">Burlington 2006, held out: <span class="num">{TABLE_CAMPS:.3f}</span></div></div>
+  </div>
   <p class="w-intro">Plackett&ndash;Luce gives each candidate one number, a <em>worth</em>. A
   voter picks their first choice in proportion to worth, then picks again from whoever is left,
-  in proportion to the same worths. Nothing else: no position effects, no second thoughts. The
-  worths below are the ones fitted to Burlington 2006 &mdash; 9,784 ballots, six candidates,
-  stored as codes because IRW keeps no candidate names.</p>
+  in proportion to the same worths. Nothing else: no position effects, no second thoughts.</p>
   <div class="w-grid">
     <div class="w-panel">
       <h4>Worths</h4>
@@ -164,8 +230,30 @@ def main():
         <tbody id="w-rows">{render_rows(st0)}</tbody>
       </table></div>
       <p class="w-out" id="w-out">This ballot is <span class="num">{sm['ratio']:.1f}&times;</span>
-      as likely under the fitted worths as under guessing &mdash; a gain of
+      as likely under the fitted worths as under guessing: a <strong>consensus gain</strong> of
       <span class="num">{sm['gain']:.3f}</span> per mark.</p>
+    </div>
+  </div>
+
+  <div class="w-camps">
+    <h4>Two camps instead of one order</h4>
+    <p class="w-hint">The same ballots, fitted as a mixture of two Plackett&ndash;Luce orders. Camp A
+    puts c01 and c02 first; camp B puts c03 first. Before the first mark a ballot is 54% likely to be
+    from camp A; each mark updates that, and the next mark is predicted by the blend. The camps gain
+    scores the blend against the single order at left.</p>
+    <div class="w-grid">
+      <div class="w-panel">{camp_bars}</div>
+      <div class="w-panel">
+        <div class="t-wrap"><table class="w-table">
+          <thead><tr><th>mark</th><th>pick</th><th>Pr(camp A)</th><th>one order</th><th>two camps</th><th>ratio</th></tr></thead>
+          <tbody id="m-rows">{render_mix_rows(ms0)}</tbody>
+        </table></div>
+        <p class="w-out" id="m-out">Two camps make this ballot's marks on average
+        <span class="num">{100*(1+mm['gain']):.0f}%</span> as likely as one order does: a
+        <strong>camps gain</strong> of <span class="num">{mm['gain']:.3f}</span>. On the whole
+        table, held out, two camps add only {TABLE_CAMPS:.3f}: the first mark already says which
+        camp a Burlington voter is in, so the second order has little left to predict.</p>
+      </div>
     </div>
   </div>
 
@@ -204,7 +292,38 @@ def main():
   var FIT = {json.dumps(dict(WORTHS))};
   var KEYS = {json.dumps([k for k, _ in WORTHS])};
   var ballot = {json.dumps(DEFAULT)};
+  var PI = {json.dumps(PI)};
+  var CAMPS = {json.dumps([dict(c) for c in CAMPS])};
   var $ = function (id) {{ return document.getElementById(id); }};
+  function renderCamps(w) {{
+    var pool = KEYS.slice(), post = PI.slice(), rows = "", lr = 0;
+    ballot.forEach(function (pick, i) {{
+      var tot = 0, totc = [0, 0];
+      pool.forEach(function (k) {{ tot += w[k]; totc[0] += CAMPS[0][k]; totc[1] += CAMPS[1][k]; }});
+      var ps = w[pick] / tot;
+      var pc = [CAMPS[0][pick] / totc[0], CAMPS[1][pick] / totc[1]];
+      var pm = post[0] * pc[0] + post[1] * pc[1];
+      lr += Math.log(pm / ps);
+      rows += '<tr><td class="step">' + (i + 1) + '</td><td class="pick mono">' + pick +
+        '</td><td>' + fmt(post[0]) + '</td><td>' + fmt(ps) + '</td><td>' + fmt(pm) +
+        '</td><td class="rat">&times;' + (pm / ps).toFixed(2) + '</td></tr>';
+      post = [post[0] * pc[0] / pm, post[1] * pc[1] / pm];
+      pool = pool.filter(function (k) {{ return k !== pick; }});
+    }});
+    $("m-rows").innerHTML = rows;
+    if (!ballot.length) {{
+      $("m-out").innerHTML = "No marks yet.";
+      $("t-camps").textContent = "\u2014";
+    }} else {{
+      var g = Math.exp(lr / ballot.length) - 1;
+      $("t-camps").textContent = g.toFixed(3);
+      $("m-out").innerHTML = "Two camps make this ballot's marks on average <span class='num'>" +
+        (100 * (1 + g)).toFixed(0) + "%</span> as likely as one order does: a <strong>camps gain</strong> of " +
+        "<span class='num'>" + g.toFixed(3) + "</span>. On the whole table, held out, two camps add only " +
+        {TABLE_CAMPS:.3f}.toFixed(3) + ": the first mark already says which camp a Burlington voter is in, " +
+        "so the second order has little left to predict.";
+    }}
+  }}
   function worths() {{
     var raw = {{}}, tot = 0;
     KEYS.forEach(function (k) {{ var v = +$("w-" + k).value; raw[k] = v; tot += v; }});
@@ -237,14 +356,17 @@ def main():
     if (!ballot.length) {{
       $("w-out").innerHTML = "No marks yet &mdash; click a candidate above.";
       $("w-live").innerHTML = "Click a candidate above and this line fills in.";
+      $("t-cons").textContent = "\u2014";
     }} else {{
+      $("t-cons").textContent = (Math.exp(lr / ballot.length) - 1).toFixed(3);
       $("w-out").innerHTML = "This ballot is <span class='num'>" + Math.exp(lr).toFixed(1) +
-        "&times;</span> as likely under these worths as under guessing &mdash; a gain of " +
+        "&times;</span> as likely under these worths as under guessing: a <strong>consensus gain</strong> of " +
         "<span class='num'>" + (Math.exp(lr / ballot.length) - 1).toFixed(3) + "</span> per mark.";
       $("w-live").innerHTML = "Pr(this ballot) = " + mod.join(" &times; ") +
         " = <span class='num'>" + pm.toFixed(5) + "</span>, against " + base.join(" &times; ") +
         " = <span class='num'>" + pu.toFixed(5) + "</span> under guessing.";
     }}
+    renderCamps(w);
   }}
   KEYS.forEach(function (k) {{
     $("w-" + k).addEventListener("input", render);

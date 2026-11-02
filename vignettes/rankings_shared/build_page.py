@@ -112,6 +112,19 @@ th:not(:first-child),td:not(:first-child){text-align:right}
 .w-table td.rat{color:var(--accent-2);font-weight:500}
 .w-table th:not(:first-child),.w-table td:not(:first-child){text-align:right}
 .w-out{font-size:.9rem;margin:.7rem 0 0;color:var(--ink-2)}
+/* the two numbers */
+.w-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr));gap:.8rem;margin:1rem 0 .6rem}
+.w-tile{background:var(--paper);border:1px solid var(--rule);border-radius:3px;padding:.75rem .9rem .7rem}
+.w-tile-k{font-family:var(--display);font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-2)}
+.w-tile-v{font-size:2rem;line-height:1.1;margin:.15rem 0 .25rem;color:var(--accent-2)}
+.w-tile-s{font-family:var(--display);font-size:.76rem;line-height:1.4;color:var(--ink-3)}
+.w-camps{margin-top:1.4rem;padding-top:1rem;border-top:1px solid var(--rule)}
+.w-camps h4{margin:0 0 .3rem}
+.w-camp h5{font-family:var(--display);font-size:.8rem;font-weight:600;margin:.6rem 0 .3rem;color:var(--ink-2)}
+.w-camp h5 .n{font-weight:500;color:var(--ink-3)}
+.w-row-ro{grid-template-columns:2.6rem 1fr 3rem}
+.w-bar{height:.55rem;background:var(--rule);border-radius:2px;overflow:hidden;min-width:0}
+.w-bar span{display:block;height:100%;background:var(--accent)}
 /* the model written out */
 .w-math{max-width:44rem;margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--rule)}
 .w-math h4{margin-top:0}
@@ -194,6 +207,19 @@ predict each next mark on a held-out ballot. How much better is that than guessi
 candidates not yet marked? We call it the <em>consensus gain</em>. Then we allow two orders instead
 of one, let the ballots sort themselves between them, and ask how much the second order adds.
 We call that the <em>camps gain</em>. Every ranking in IRW, however short, yields both.</p>
+<p>Both are per-mark likelihood ratios against a reference, so they read the same way: 0 means
+the model adds nothing, 0.20 means each mark is on average 20% more likely under it than under
+the reference. The reference differs, and that is the point. The consensus gain is scored
+against ignorance, the camps gain against the consensus order, so the second number is what the
+first one missed. Read together: a high consensus gain with a camps gain near zero is an
+electorate that largely agrees about the order, or a field so lopsided that one order is all
+there is to know (Burlington is the first, the 35-candidate Minneapolis race the second, which
+is why the baseline question below matters). A low consensus gain with a camps gain above it is
+an electorate not of one mind but of two: no single order describes the ballots, two do, and the
+first mark on a ballot tells you which. Alaska's three-way general elections are the clean case.
+Both low is indifference or noise; both high is a split electorate whose camps still rank most
+of the field alike. The ratio of the two, camps over consensus, is the page's one-number summary
+of structure: below one, a consensus with dissent; above one, a contest between blocs.</p>
 
 <h3>The two numbers</h3>
 <p>Both are held-out likelihood ratios, the arithmetic of the widget above. We fit Plackett–Luce, one worth per candidate, each
