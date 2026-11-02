@@ -237,8 +237,8 @@ all there is to know (Burlington is the first, split on one candidate and agreed
 five; the 35-candidate Minneapolis race is the second, which is why the baseline question below
 matters). A low consensus gain with a camps gain above it is an electorate of two minds all the
 way down: the first mark tells you the camp and the camp tells you the rest. Alaska's three-way
-general elections, where a vote for one Republican predicts a second mark for the other, are the
-clean case. Both low is indifference or noise; both high is a split electorate whose camps still
+general elections, where a ballot's first mark predicts a second mark for the minor candidate
+rather than the other bloc's, are the clean case. Both low is indifference or noise; both high is a split electorate whose camps still
 rank most of the field alike. The ratio of the two, camps over consensus, is the page's
 one-number summary of structure: below one, a consensus with dissent; above one, a contest
 between blocs.</p>
@@ -297,9 +297,10 @@ of the {nsw['n']} New South Wales districts, as before: optional preferential vo
 to a district, {nsw['marks_med']} marks to a ballot, voters in party blocs, median consensus
 {nsw['cons_med']:.3f} and a further {nsw['camps_med']:.3f} from splitting the electorate in two.
 And <span class="num">{ak['camps_beat']}</span> of {ak['n']} Alaska legislative seats, which are
-three- and four-candidate top-four general elections where two Republicans split a bloc against one
-Democrat: consensus {ak['cons_med']:.3f}, camps {ak['camps_med']:.3f}, the one family in the corpus
-where the second order is worth more than the first. Everywhere else in the United States the
+three- and four-candidate top-four general elections whose ballots show two large blocs that each
+rank the minor candidate second and the other bloc's candidate almost never: consensus
+{ak['cons_med']:.3f}, camps {ak['camps_med']:.3f}, the one group of elections where the second
+order is worth more than the first. Everywhere else in the United States the
 mixture finds almost nothing: {nyc['camps_beat']} of {nyc['n_camps']} New York primaries,
 {sf['camps_beat']} of {sf['n_camps']} San Francisco contests, {oak['camps_beat']} of {oak['n_camps']}
 in Oakland, {mpls['camps_beat']} of {mpls['n_camps']} in Minneapolis; outside New South Wales,
@@ -307,8 +308,15 @@ in Oakland, {mpls['camps_beat']} of {mpls['n_camps']} in Minneapolis; outside Ne
 {G['debian']['n']}, Eurovision finals none of six. One order describes a city council race in a
 one-party city. It does not describe a state seat in New South Wales or a top-four general in
 Alaska, and the difference is the party structure of the field, not the voting rule.</p>
-<p>The small cases are legible in the same way. Alaska's House District 15 in 2022: consensus
-0.006, camps 0.157. Debian's 2019 vote on init systems and its 2026 vote on LLM usage behave the
+<p>The small cases are legible in the same way. Alaska's House District 10 in 2022 (consensus
+0.041, camps 0.145) is three candidates and 6,797 ballots: c02 takes 52% of first marks, c03 43%,
+c01 5%. The single fitted ranking, c02 then c03 then c01, barely beats a coin toss on first marks
+and is wrong on second ones. It predicts c03 after c02, but of the c02 voters who mark a second
+choice, 77% pick c01, and of the c03 voters who continue, 72% pick c01 too. Two blocs that agree
+only on the candidate neither wants, and nothing about the race is shared beyond that. The
+mixture finds exactly those two camps (55% and 45%, each with its own candidate at 0.93), and
+knowing the first mark is what makes the second predictable. House District 15 is the same
+pattern pushed further: consensus 0.006, camps 0.157. Debian's 2019 vote on init systems and its 2026 vote on LLM usage behave the
 same way; the project was not of one mind, and the mixture says so in a number. The extremes are
 survey tables: <code>atsusaka_2024_alaska_rcv_survey</code>, where a single order is worth nothing
 and two orders are worth 1.35, and <code>corstange_2022_syria_factions_2015</code>, where the
