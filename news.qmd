@@ -14,6 +14,107 @@ This log begins in September 2026, when the page was created. The IRW is older
 than the log, and changes before then are recorded only in the repositories'
 commit history and in the versioned data itself.
 
+## 2026-11-02 — The R package on CRAN catches up with the warehouse
+
+`install.packages("irw")` now gives 1.4.0, and with it everything that had
+landed since the first CRAN release in October: the conjoint and rankings
+sources, `max_rows` and `columns` on `irw_fetch()`, the four psychometric
+filters, `irw_itemtext_licence()`, and the two breaking changes to
+`irw_long2resp()` recorded below on 2026-10-26 — item columns named by the item
+id and returned in natural order, and no more silent averaging across raters or
+trials. It also closes a gap worth knowing about if you installed from CRAN
+before today: 1.3.1's shard list stopped at the sixth core warehouse, so its
+table listings were short by 1,455 tables — 20.4% of the core corpus, counted
+2026-11-02 — with nothing to say that anything was missing. 1.4.0 reads the
+warehouse catalogue once per session, so a dataset published after a release can
+no longer go missing that way.
+
+Reading the warehouse from R also needs no Redivis account again. Redivis has
+opened its dataset-level endpoints and `redivis` 0.12.14 and later send read
+requests anonymously, so under `irw` 1.4.0 `irw_info()`, `irw_list_tables()`,
+`irw_filter()`, `irw_fetch()`, `irw_itemtext()` and the metadata functions all
+work with no login; `irw_table_sets()`, which runs SQL on the server, still
+requires one. [Get Started](getstarted.qmd) and the per-table pages now say so,
+which reverses what this log said on 2026-10-07. The Python package and the MCP
+server still authenticate, and the Python half of the `long2resp` work is still
+unreleased. Refs #3091, #3221.
+
+## 2026-11-02 — Twenty-two tables had ids that stood for two people
+
+In five deposits reached through PLOS, a single participant id was typed onto
+rows whose own covariates describe different people, so the published `id`
+joined two respondents under one key and any pivot to a person-by-item matrix
+averaged them into a respondent who never existed. Seventeen of the
+twenty-two affected tables are corrected in place: the later respondent keeps
+every response and covariate and takes the next unused id number, and no other
+id, response or covariate moves. `darkfactorfrench_pischel_2026_d70` pooled five
+samples without the per-sample prefix its own script applies and was rebuilt
+from that script, so every id in it is renumbered and ids from earlier releases
+do not carry over. In the four `PROMISPME_Forrest_2021` proxy tables the source
+files needed to tell the two parents apart are no longer public, so that one
+id's rows are gone instead. The fixes carry IRW versions 666 to 669, and each
+table's own note is on [Corrections](corrections.qmd). Refs #3245.
+
+## 2026-11-01 — The rankings family outgrew one dataset
+
+FairVote's cast vote records — the ballot-level files US jurisdictions publish
+after a ranked-choice election — took the rankings family past Redivis' cap of
+1,000 tables in a dataset. `irw_rank` is left at about 950 tables and a second
+dataset, `irw_rank_2`, released on 2026-11-01, takes the rest; nothing moves
+between them. Asking for the family is unchanged: `source = "rank"` searches
+both in `irw` 1.4.0 for R, and the Python client carries the same change on
+`main` for its next release. What these tables hold, and what `resp` means when
+it is a position rather than a score, is on the
+[rankings standard](rankings_standard.qmd) page. Refs #3024.
+
+## 2026-10-29 — Three things the site said about itself, corrected
+
+[Collections](collections.qmd) closed by saying that the lists which are not
+exact-instrument searches "searched every documented table". That was not true
+of the 24 curated-only collections, which were last gone through on 2026-09-30
+and are not re-checked as tables arrive; the callout now separates the three
+kinds of coverage, each card carries the revision date the registry generates,
+and [Metadata](metadata.qmd) carries the same caveat. On
+[Tag quality](tags_quality.qmd), the direct-download route the page recommends
+for joining tags to tables was under-joining by 295 tables, because table names
+keep the capitalisation they arrived with while every tag row is lowercase:
+6,202 tables (92.3%) match on a literal join where 6,497 (96.7%) match
+case-insensitively, measured on irw_meta v55.0. The page now states that gap and
+gives the two-line fix in R and in Python. And a table page's Classification
+section now says what a tag is and lists the collections the table belongs to,
+with the basis of each membership. Refs #3225.
+
+## 2026-10-28 — Every table page says how unique its respondents are
+
+A table page's Codebook section listed the demographic covariates the table
+publishes without saying what they add up to: eight demographics on three
+thousand people leaves nearly all of those people unique in their combination.
+Each page now closes that section with the share of the table's respondents who
+are alone in their combination of the published `cov_*` quasi-identifiers, and
+with the IRW's position — that it republishes the demographics its sources
+published and never at finer granularity — one click away in the
+[data standard](https://github.com/ben-domingue/irw/blob/main/datastandard.md).
+Below a thousand respondents the figure is largely arithmetic and the page says so: the median is 41.2% under a hundred
+respondents against 0.3% above ten thousand. Refs #3273.
+
+## 2026-10-28 — In a third of the competition tables, column order carries the winner
+
+In 36 of the 119 competition tables `agent_a` is the winner by construction, so
+the `winner` column is constant and the outcome is carried by which agent sits
+in which column. Nothing said so. Most of those tables have no `score_a` or
+`score_b` either, which leaves the ordering as the only record of who won — and
+means the Elo recipe on the [competitions standard](comps_standard.qmd) page
+does not apply to them. The page now documents the convention and says where the
+recipe stops. Refs #3279.
+
+## 2026-10-28 — A new homepage
+
+The homepage now opens with a card that rotates through real tables, four from
+each of the five data families, then tiles for the families themselves and cards
+for the six things people most often come here to do, with the prose that was
+there before below them. Nothing was renamed or moved off the site; it is a
+different front door to the same pages.
+
 ## 2026-10-28 — The warehouse reads in Stata
 
 There is now a third client, [`irw` for Stata](https://github.com/itemresponsewarehouse/Stata-pkg),
