@@ -15,9 +15,13 @@
 #     across all tables -- plus n_tables_itemtext, the tables with a row in
 #     itemtext_metadata (case-insensitive, as in 11_status.R, so the hero and
 #     the status page agree).
-#   - n_tables_comp, n_tables_nom, n_tables_conj, n_tables_rank: table counts for the
-#     competition, nominal, conjoint and rankings families, for one small line on the
-#     hero. Omitted on a failed read.
+#   - n_tables_comp, n_tables_nom, n_tables_conj, n_tables_rank, n_tables_sim:
+#     table counts for the competition, nominal, conjoint, rankings and
+#     simulated/synthetic families, for the homepage tiles. Omitted on a failed
+#     read, and the omitted field's name is then listed in `unread`, so the page
+#     can say "could not be read" instead of silently dropping the family
+#     (ben-domingue/irw#3229: a missing family was indistinguishable from a
+#     failed read).
 #   - category_breakdown: tables bucketed by their own aggregate n_categories
 #     (2/3/4/5/6/7+, excluding <2 and >=12), with n_items and n_responses summed
 #     within each bucket. A table-level approximation of the paper's item-level
@@ -87,6 +91,14 @@ totals$n_tables_comp <- count_branch("comps_metadata")
 totals$n_tables_nom  <- count_branch("nominal_metadata")
 totals$n_tables_conj <- count_branch("conj_metadata")
 totals$n_tables_rank <- count_branch("rank_metadata")
+totals$n_tables_sim  <- count_branch("simsyn_metadata")
+# Which family counts failed, by field name. Always written (possibly empty), so
+# the page can tell "read failed" from "this file predates the field".
+branch_fields <- c("n_tables_comp", "n_tables_nom", "n_tables_conj",
+                   "n_tables_rank", "n_tables_sim")
+totals$unread <- I(branch_fields[vapply(branch_fields,
+                                        function(k) is.null(totals[[k]]),
+                                        logical(1))])
 
 MIN_CATEGORIES <- 2   # single-category (no-variance) tables excluded
 MAX_CATEGORIES <- 11  # inclusive; >=12 categories excluded, per paper Sec. 2.2
