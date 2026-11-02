@@ -211,15 +211,23 @@ We call that the <em>camps gain</em>. Every ranking in IRW, however short, yield
 the model adds nothing, 0.20 means each mark is on average 20% more likely under it than under
 the reference. The reference differs, and that is the point. The consensus gain is scored
 against ignorance, the camps gain against the consensus order, so the second number is what the
-first one missed. Read together: a high consensus gain with a camps gain near zero is an
-electorate that largely agrees about the order, or a field so lopsided that one order is all
-there is to know (Burlington is the first, the 35-candidate Minneapolis race the second, which
-is why the baseline question below matters). A low consensus gain with a camps gain above it is
-an electorate not of one mind but of two: no single order describes the ballots, two do, and the
-first mark on a ballot tells you which. Alaska's three-way general elections are the clean case.
-Both low is indifference or noise; both high is a split electorate whose camps still rank most
-of the field alike. The ratio of the two, camps over consensus, is the page's one-number summary
-of structure: below one, a consensus with dissent; above one, a contest between blocs.</p>
+first one missed. One caution before reading them together: the camps gain is scored mark by
+mark, and before a ballot's first mark the model cannot tell which camp it is from, so it predicts
+that mark with the blend of the two camps, which is almost exactly the consensus ranking. The
+first mark earns no camps credit. What the camps gain detects is disagreement that <em>persists
+down the ballot</em>: knowing a voter's first choice changes what they will do next. A split that
+lives only in the first choice is invisible to it. Read together, then: a high consensus gain
+with a camps gain near zero is an electorate whose ranking is shared once the first mark is made,
+whether because it agrees about the order or because the field is so lopsided that one order is
+all there is to know (Burlington is the first, split on one candidate and agreed on the other
+five; the 35-candidate Minneapolis race is the second, which is why the baseline question below
+matters). A low consensus gain with a camps gain above it is an electorate of two minds all the
+way down: the first mark tells you the camp and the camp tells you the rest. Alaska's three-way
+general elections, where a vote for one Republican predicts a second mark for the other, are the
+clean case. Both low is indifference or noise; both high is a split electorate whose camps still
+rank most of the field alike. The ratio of the two, camps over consensus, is the page's
+one-number summary of structure: below one, a consensus with dissent; above one, a contest
+between blocs.</p>
 
 <h3>The two numbers</h3>
 <p>Both are held-out likelihood ratios, the arithmetic of the widget above. We fit Plackett–Luce, one worth per candidate, each

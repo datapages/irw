@@ -254,8 +254,10 @@ def main():
         <p class="w-out" id="m-out">Two camps make this ballot's marks on average
         <span class="num">{100*(1+mm['gain']):.0f}%</span> as likely as one order does: a
         <strong>camps gain</strong> of <span class="num">{mm['gain']:.3f}</span>. On the whole
-        table, held out, two camps add only {TABLE_CAMPS:.3f}: the first mark already says which
-        camp a Burlington voter is in, so the second order has little left to predict.</p>
+        table, held out, two camps add only {TABLE_CAMPS:.3f}. The camps disagree about one
+        candidate, c03, and agree about the other five, so once the first mark has revealed the
+        camp there is little left for the second ranking to predict; and the first mark itself earns
+        no credit, because before it the model can only use the blend of the two camps.</p>
       </div>
     </div>
   </div>
@@ -323,8 +325,9 @@ def main():
       $("m-out").innerHTML = "Two camps make this ballot's marks on average <span class='num'>" +
         (100 * (1 + g)).toFixed(0) + "%</span> as likely as one order does: a <strong>camps gain</strong> of " +
         "<span class='num'>" + g.toFixed(3) + "</span>. On the whole table, held out, two camps add only " +
-        {TABLE_CAMPS:.3f}.toFixed(3) + ": the first mark already says which camp a Burlington voter is in, " +
-        "so the second order has little left to predict.";
+        {TABLE_CAMPS:.3f}.toFixed(3) + ". The camps disagree about one candidate, c03, and agree about the other five, " +
+        "so once the first mark has revealed the camp there is little left for the second ranking to predict; " +
+        "and the first mark itself earns no credit, because before it the model can only use the blend of the two camps.";
     }}
   }}
   function worths() {{
