@@ -171,7 +171,7 @@ def main():
 
   <div class="w-math">
     <h4>The arithmetic, exactly</h4>
-    <p>Write <i>w<sub>j</sub></i> for candidate <i>j</i>'s worth and <i>S<sub>p</sub></i> for the
+    <p>We write <i>w<sub>j</sub></i> for candidate <i>j</i>'s worth and <i>S<sub>p</sub></i> for the
     set of candidates still unmarked when the voter makes their <i>p</i>th mark. The whole model
     is one line, and it is the line in the <em>model</em> column above:</p>
     {EQ1}

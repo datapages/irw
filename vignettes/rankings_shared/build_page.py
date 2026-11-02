@@ -185,11 +185,11 @@ been set aside as exhausted. So the count uses the ballots to answer one questio
 and in doing so collapses 9,784 orderings over six candidates into two numbers. Burlington is
 also the standing example of what the collapsed part can hold: the Condorcet winner, the
 candidate who beat each rival head to head, lost the runoff.</p>
-<p>So ask something the count cannot. Fix a single order of the candidates and use it to
+<p>So we ask something the count cannot. We fix a single order of the candidates and use it to
 predict each next mark on a held-out ballot. How much better is that than guessing among the
-candidates not yet marked? Call it the <em>consensus gain</em>. Then allow two orders instead
+candidates not yet marked? We call it the <em>consensus gain</em>. Then we allow two orders instead
 of one, let the ballots sort themselves between them, and ask how much the second order adds.
-Call that the <em>camps gain</em>. Every ranking in IRW, however short, yields both.</p>
+We call that the <em>camps gain</em>. Every ranking in IRW, however short, yields both.</p>
 
 <h3>The two numbers</h3>
 <p>Both are held-out likelihood ratios, the arithmetic of the widget above. We fit Plackett–Luce, one worth per candidate, each
@@ -298,7 +298,7 @@ random start, so it finds a different local optimum run to run. Two independent 
 same code on Alaska HD10 gave 0.129 and 0.145, a 0.016 spread, the same order as the whole
 camps gain on the quieter tables, where the consensus gains agreed to better than 0.01. Either
 fit the mixture from several starts and keep the best training likelihood, or report only its
-sign and rough size. Read nothing into camps differences below roughly 0.02 until that is
+sign and rough size. Camps differences below roughly 0.02 mean nothing until that is
 settled. {S['camps_neg']} tables have a negative camps gain, where the mixture lost on held-out
 ballots.</p>
 <p><strong>What a table is.</strong> {nsw['n']} of {S['n_fitted']} fitted tables are NSW districts
