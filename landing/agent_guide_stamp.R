@@ -59,7 +59,7 @@ FAMILIES <- list(
            "item_response_warehouse_5", "item_response_warehouse_6",
            "item_response_warehouse_7", "item_response_warehouse_8"),
   conj = c("irw_conjoint", "irw_conjoint_2"),
-  rank = c("irw_rank"),
+  rank = c("irw_rank", "irw_rank_2"),
   nom  = c("irw_nominal"),
   comp = c("irw_competitions"),
   sim  = c("irw_simsyn")

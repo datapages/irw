@@ -152,9 +152,10 @@ urls <- listing |> select(table, url) |> mutate(url = str_remove(url, "\\?.*$"))
 ## The other families (datapages/irw#343). Each keeps its own `<prefix>_biblio`
 ## in irw_meta, with the same columns as `biblio`, and its tables live in their
 ## own Redivis datasets; `source` is the spelling the packages' `source =`
-## argument takes. Conjoint is split across two shards (ben-domingue/irw#2934);
-## a table listed in both gets the newest, as the packages resolve it. Mirrors
-## NONCORE / CONJ_SHARDS in landing/page_rules.R.
+## argument takes. Conjoint (ben-domingue/irw#2934) and rankings (irw#3024,
+## second shard 2026-11-01) are each split across two shards; a table listed in
+## both gets the newest, as the packages resolve it. Mirrors NONCORE /
+## FAMILY_SHARDS in landing/page_rules.R.
 ##
 ## `optional`: a family whose biblio may not be in irw_meta yet. Rankings
 ## (datapages/irw#355) was released on Redivis before its metadata reached
@@ -169,7 +170,8 @@ families <- tribble(
   "irw_simsyn",        "irw_simsyn:0btg",         "simsyn_biblio",  "sim",   FALSE,
   "irw_conjoint",      "irw_conjoint:5wjx",       "conj_biblio",    "conj",  FALSE,
   "irw_conjoint_2",    "irw_conjoint_2:142p",     NA,               "conj",  FALSE,
-  "irw_rank",          "irw_rank:93f5",           "rank_biblio",    "rank",  TRUE
+  "irw_rank",          "irw_rank:93f5",           "rank_biblio",    "rank",  TRUE,
+  "irw_rank_2",        "irw_rank_2:byyj",         NA,               "rank",  TRUE
 )
 irw_meta_names <- map_chr(irw_meta$list_tables(), \(t) t$name)
 family_listing <- map2(families$dataset, families$ref, list_shard) |>

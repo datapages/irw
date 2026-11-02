@@ -312,7 +312,9 @@ bind_fill <- function(a, b) {
 
 # The table's source, as the packages' `source =` argument spells it.
 source_of <- function(dataset) {
-  if (dataset %in% names(CONJ_SHARDS)) return("conj")
+  for (src in names(FAMILY_SHARDS)) {
+    if (dataset %in% names(FAMILY_SHARDS[[src]])) return(src)
+  }
   i <- match(dataset, NONCORE$dataset)
   if (is.na(i)) "core" else NONCORE$source[i]
 }
@@ -1517,7 +1519,7 @@ main <- function() {
     # Core tables' columns come from irw_meta's `variables`; the non-core
     # metadata tables have none, so their columns are read from Redivis, one call
     # per table (about a hundred in all).
-    if (shard %in% c(NONCORE$dataset, names(CONJ_SHARDS))) {
+    if (shard %in% c(NONCORE$dataset, names(FAMILY_SHARD_REFS))) {
       listed[[shard]]$vars <- vapply(tabs, function(t)
         paste(sort(vapply(t$list_variables(), function(v) v$name, character(1))),
               collapse = ","), character(1))
@@ -1526,18 +1528,22 @@ main <- function() {
             length(tabs), " tables listed")
   }
   live_names <- unlist(lapply(listed, `[[`, ".k"), use.names = FALSE)
-  # A conj table belongs to the newest conj shard that lists it (page_rules.R);
-  # conj_metadata says nothing about shards, so every row arrives as irw_conjoint.
+  # A conj or rank table belongs to the newest shard of its family that lists it
+  # (page_rules.R); conj_metadata and rank_metadata say nothing about shards, so
+  # every row arrives as the family's first shard.
   md$dataset <- as.character(md$dataset)
-  todo <- md$dataset %in% names(CONJ_SHARDS)
-  for (shard in rev(names(CONJ_SHARDS))) {
-    hit <- todo & md$.k %in% listed[[shard]]$.k
-    md$dataset[hit] <- shard
-    todo <- todo & !hit
+  for (src in names(FAMILY_SHARDS)) {
+    shards <- FAMILY_SHARDS[[src]]
+    todo <- md$dataset %in% names(shards)
+    for (shard in rev(names(shards))) {
+      hit <- todo & md$.k %in% listed[[shard]]$.k
+      md$dataset[hit] <- shard
+      todo <- todo & !hit
+    }
+    message("[landing] ", src, " tables by shard: ", paste(names(shards), vapply(names(shards),
+            function(sh) sum(md$dataset == sh & md$.k %in% listed[[sh]]$.k), numeric(1)),
+            sep = " ", collapse = ", "))
   }
-  message("[landing] conj tables by shard: ", paste(names(CONJ_SHARDS), vapply(names(CONJ_SHARDS),
-          function(sh) sum(md$dataset == sh & md$.k %in% listed[[sh]]$.k), numeric(1)),
-          sep = " ", collapse = ", "))
 
   tables <- page_tables(md, bib, live = live_names)
   # A tombstone for every withdrawn name that has no page. A name withdrawn in
