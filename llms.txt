@@ -177,8 +177,11 @@ Never `df$cov_gender[!duplicated(df$id)]`.
 
 **(3) Metadata `n_categories` is not the truth about the fitted matrix.**
 Tables have passed `irw_filter(n_categories = 2)` and still died in mirt with
-"Item 1 requires exactly 2 unique categories". `n_categories` also counts NA as
-a level. Recompute from the pivoted matrix, then branch:
+"Item 1 requires exactly 2 unique categories". `n_categories` counts the
+distinct non-missing `resp` values across the WHOLE table, so a table can have
+2 while one of its items has only 1 (rows computed before mid-2025 used a
+server-side distinct count that may also include NA). Recompute from the
+pivoted matrix, then branch:
 
     resp <- resp[, sapply(resp, function(x) length(unique(na.omit(x))) > 1),
                  drop = FALSE]                       # drop zero-variance items
