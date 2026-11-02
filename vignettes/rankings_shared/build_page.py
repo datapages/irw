@@ -178,9 +178,13 @@ below, and the new data make it more pressing, not less; the limitations section
 candidates, five positions on the ballot. The city certified a final round of 4,761 votes to
 3,986; a count written against the IRW table reproduces it (4,761 to 3,985, the one vote a
 documented discrepancy in the city's own file). That count is a good check on the table and a
-poor summary of it. It uses the ballots to answer one question, who wins, and then discards
-9,784 orderings. Burlington is also the standing example of what the discarded part can hold:
-the Condorcet winner, the candidate who beat each rival head to head, lost the runoff.</p>
+poor summary of it. The city received 9,865 ballots; 9,784 of them ranked at least one
+candidate (77 were blank and 4 marked only an overvote), and that is the table. The certified
+final round accounts for 8,746 of those, the other 1,038 having ranked neither finalist and
+been set aside as exhausted. So the count uses the ballots to answer one question, who wins,
+and in doing so collapses 9,784 orderings over six candidates into two numbers. Burlington is
+also the standing example of what the collapsed part can hold: the Condorcet winner, the
+candidate who beat each rival head to head, lost the runoff.</p>
 <p>So ask something the count cannot. Fix a single order of the candidates and use it to
 predict each next mark on a held-out ballot. How much better is that than guessing among the
 candidates not yet marked? Call it the <em>consensus gain</em>. Then allow two orders instead
@@ -195,6 +199,16 @@ statistic is <code>exp(mean log-likelihood difference per choice) − 1</code>: 
 of 0.20 means the fitted order makes each observed mark 20% more likely than ignorance does.
 The camps gain is the same quantity for a two-class Plackett–Luce mixture, scored against the
 single-order fit and reported only where there are at least 150 ballots to split.</p>
+<p class="flag"><strong>On the statistic.</strong> This form, a per-mark geometric-mean likelihood ratio
+against a uniform draw, is held for now and is ours, not a named statistic. The same two
+ingredients appear under three standard labels, any of which the page could report instead or
+alongside: the <em>logarithmic score</em> difference in bits per mark (log<sub>2</sub>(1 + gain), the
+forecast-verification form, with a house precedent in the bits-per-item vignette); the
+<em>perplexity ratio</em>, since gain + 1 is exactly uniform perplexity over model perplexity;
+and McFadden's <em>&rho;&sup2;</em>, 1 &minus; LL(model)/LL(null), the discrete-choice convention,
+whose standard null predicts each alternative at its share. That last null is the
+marginal-popularity baseline discussed below, so adopting &rho;&sup2; would settle the baseline
+question at the same time. A K-way IMV generalisation remains the other candidate.</p>
 
 <h2>What {S['n_fitted']} tables look like</h2>
 <p>The families still separate, but the widest spread is now <em>within</em> elections, and it
