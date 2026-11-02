@@ -97,27 +97,26 @@ count = (v) => (typeof v === "number" && isFinite(v) && v > 0) ? v : null
 // `count` is the field in hero_stats.totals that holds that family's table
 // count -- core's is n_tables, which is the core count and not a grand total.
 FAMILIES = [
-  { key: "core",         name: "Core",         count: count(totals.n_tables),
+  { key: "core",         name: "Core",         count: count(totals.n_tables), field: "n_tables",
     href: "standard.html",
     desc: "A person answers an item; the response is ordered.",
     // Simsyn is nested under core rather than given a tile of its own: the
     // page talks about five families, and simsyn is the one family defined by
-    // where the data come from rather than by its shape. No count -- 
-    // landing/hero_stats.R writes no n_tables_sim (agent_guide_stamp.R counts
-    // it for llms.txt, which is where the figure 17 comes from), and that
-    // script is not this branch's to change. See datapages/irw#386.
+    // where the data come from rather than by its shape (datapages/irw#386).
+    // Its count is landing/hero_stats.R's n_tables_sim (ben-domingue/irw#3229).
     sub: { name: "Simulated and synthetic", href: "simsyn.html",
+           count: count(totals.n_tables_sim), field: "n_tables_sim",
            desc: "Responses no real person produced." } },
-  { key: "nominal",      name: "Nominal",      count: count(totals.n_tables_nom),
+  { key: "nominal",      name: "Nominal",      count: count(totals.n_tables_nom), field: "n_tables_nom",
     href: "nominal_standard.html",
     desc: "Categories with no order, like kept distractors." },
-  { key: "competitions", name: "Competitions", count: count(totals.n_tables_comp),
+  { key: "competitions", name: "Competitions", count: count(totals.n_tables_comp), field: "n_tables_comp",
     href: "comps_standard.html",
     desc: "Two entities meet; one wins, or they draw." },
-  { key: "rankings",     name: "Rankings",     count: count(totals.n_tables_rank),
+  { key: "rankings",     name: "Rankings",     count: count(totals.n_tables_rank), field: "n_tables_rank",
     href: "rankings_standard.html",
     desc: "A person puts a set of options in order." },
-  { key: "conjoint",     name: "Conjoint",     count: count(totals.n_tables_conj),
+  { key: "conjoint",     name: "Conjoint",     count: count(totals.n_tables_conj), field: "n_tables_conj",
     href: "conjoint_standard.html",
     desc: "Choices between profiles built from attributes." }
 ]
@@ -173,9 +172,18 @@ homeRoot = {
   // over the CORE metadata table alone).
   // A family with a `sub` is wrapped so the sub-entry sits indented beneath it
   // in the same grid cell; an <a> cannot be nested inside another <a>.
+  // A count that failed to read at render is shown as a dash with a reason,
+  // not dropped: dropping it made a failed read look like an absent family
+  // (ben-domingue/irw#3229). hero_stats.R lists failed fields in `unread`.
+  const unread = new Set(Array.isArray(totals.unread) ? totals.unread : []);
+  const countHtml = (c, field, cls) => c != null
+    ? `<span class="${cls}">${fmtInt(c)}</span>`
+    : unread.has(field)
+      ? `<span class="${cls} count-unread" title="This count could not be read when the page was built">&mdash;</span>`
+      : "";
   const tile = (f) => `
     <a class="tile" href="${esc(f.href)}">
-      ${f.count != null ? `<span class="tile-count">${fmtInt(f.count)}</span>` : ""}
+      ${countHtml(f.count, f.field, "tile-count")}
       <span class="tile-name">${esc(f.name)}</span>
       <span class="tile-desc">${esc(f.desc)}</span>
     </a>`;
@@ -184,7 +192,7 @@ homeRoot = {
     <div class="tile-group">
       ${tile(f)}
       <a class="tile-sub" href="${esc(f.sub.href)}">
-        <span class="tile-sub-name">${esc(f.sub.name)}</span>
+        <span class="tile-sub-name">${esc(f.sub.name)}${f.sub.count != null || unread.has(f.sub.field) ? " &middot; " : ""}${countHtml(f.sub.count, f.sub.field, "tile-sub-count")}</span>
         <span class="tile-sub-desc">${esc(f.sub.desc)}</span>
       </a>
     </div>` : tile(f)).join("") + `
