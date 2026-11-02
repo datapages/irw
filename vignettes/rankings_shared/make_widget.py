@@ -197,11 +197,14 @@ def main():
     html = f"""
 <section class="widget" id="plw">
   <h3 class="w-head">The two numbers, in one ballot</h3>
-  <p class="w-intro">Everything on this page is one of two numbers. The <em>consensus gain</em>
-  asks how much better a single fitted order predicts each mark on a ballot than guessing does.
-  The <em>camps gain</em> asks how much better two orders do than one. Both are computed below
-  for a ballot you build, with the orders fitted to Burlington 2006 &mdash; 9,784 ballots, six
-  candidates, stored as codes because IRW keeps no candidate names.</p>
+  <p class="w-intro">Everything on this page is one of two numbers. For the <em>consensus
+  gain</em> we fit one ranking of the candidates to all the ballots and ask how much better it
+  predicts each mark on a ballot than guessing at random would. For the <em>camps gain</em> we
+  instead let the voters come from two groups, each with its own fitted ranking, work out from a
+  ballot's earlier marks which group it probably belongs to, and ask how much better that
+  predicts the next mark than the single ranking did. Both are computed below for a ballot you
+  build, with the rankings fitted to Burlington 2006 &mdash; 9,784 ballots, six candidates,
+  stored as codes because IRW keeps no candidate names.</p>
   <div class="w-tiles">
     <div class="w-tile"><div class="w-tile-k">Consensus gain</div>
       <div class="w-tile-v num" id="t-cons">{sm['gain']:.3f}</div>
