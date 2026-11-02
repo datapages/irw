@@ -149,6 +149,8 @@ th:not(:first-child),td:not(:first-child){text-align:right}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 .figset{margin:1.6rem 0}
 .fignum{font-size:.84rem;color:var(--ink-2);margin:0 0 .4rem;max-width:36rem;margin-inline:auto}
+.pt-rug{fill:none;stroke:var(--mark);stroke-width:1.2;cursor:pointer}
+.pt-rug:hover,.pt-rug:focus,.pt-rug.on{stroke:var(--mark-hi);fill:var(--mark-hi);outline:none}
 .pt-mark{cursor:pointer;transition:r .08s}
 .pt-mark:hover,.pt-mark:focus,.pt-mark.on{fill:var(--mark-hi);fill-opacity:1;r:5.5;outline:none}
 .tip{position:fixed;z-index:10;pointer-events:none;background:var(--ink);color:var(--paper);
@@ -403,17 +405,17 @@ anywhere in IRW; the items are alphabetical codes. Drafted by Claude for Ben, 20
   function hide() { tip.style.display = "none"; if (cur) { cur.classList.remove("on"); cur = null; } }
   document.querySelectorAll("svg.fig").forEach(function (svg) {
     svg.addEventListener("pointermove", function (e) {
-      var el = e.target.closest ? e.target.closest(".pt-mark") : null;
+      var el = e.target.closest ? e.target.closest(".pt-mark,.pt-rug") : null;
       if (el) { if (cur && cur !== el) cur.classList.remove("on"); cur = el; el.classList.add("on"); show(el, e.clientX, e.clientY); }
       else hide();
     });
     svg.addEventListener("pointerleave", hide);
     svg.addEventListener("click", function (e) {
-      var el = e.target.closest ? e.target.closest(".pt-mark") : null;
+      var el = e.target.closest ? e.target.closest(".pt-mark,.pt-rug") : null;
       if (el) { cur = el; el.classList.add("on"); show(el, e.clientX, e.clientY); e.stopPropagation(); }
     });
     svg.addEventListener("focusin", function (e) {
-      var el = e.target.closest ? e.target.closest(".pt-mark") : null;
+      var el = e.target.closest ? e.target.closest(".pt-mark,.pt-rug") : null;
       if (el) { var r = el.getBoundingClientRect(); cur = el; show(el, r.left + r.width / 2, r.top + r.height / 2); }
     });
     svg.addEventListener("focusout", hide);

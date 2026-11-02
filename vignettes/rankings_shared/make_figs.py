@@ -86,7 +86,7 @@ def fmt(v):
 
 
 def scatter(rows, xk, yk, xlab, ylab, xlim, ylim, w=330, h=250, diag=False,
-            labels=(), title=""):
+            labels=(), title="", rug=()):
     pad_l, pad_b, pad_t, pad_r = 44, 36, 20 if title else 8, 14
     x = logscale(xlim[0], xlim[1], pad_l, w - pad_r)
     y = logscale(ylim[0], ylim[1], h - pad_b, pad_t)
@@ -116,11 +116,26 @@ def scatter(rows, xk, yk, xlab, ylab, xlim, ylim, w=330, h=250, diag=False,
                  f' data-cons="{r["cons"]:.3f}" data-camps="{"" if r["camps"] is None else f"{r["camps"]:.3f}"}"'
                  f' data-n="{r["items"]}" data-b="{r["ballots_all"] or r["ballots"]:,}" data-m="{r["marks"]:.2f}"'
                  f' data-cap="{"1" if r["capped"] else ""}"/>')
+    for r in rug:
+        xv = r[xk]
+        if xv is None:
+            continue
+        s.append(f'<path d="M{x(xv)-4:.1f},{h-pad_b+1} l4,-7 l4,7 z" class="pt-rug" tabindex="0"'
+                 f' data-t="{html.escape(r["table"])}" data-j="{html.escape(r["juris"])}"'
+                 f' data-cons="{r["cons"]:.3f}" data-camps=""'
+                 f' data-n="{r["items"]}" data-b="{r["ballots_all"] or r["ballots"]:,}" data-m="{r["marks"]:.2f}"'
+                 f' data-cap="{"1" if r["capped"] else ""}"/>')
     for tbl, text, dx, dy in labels:
         r = next((q for q in rows if q["table"] == tbl), None)
-        if not r or r[xk] is None or r[yk] is None:
+        if r is None:
+            r = next((q for q in rug if q["table"] == tbl), None)
+            if r is None or r[xk] is None:
+                continue
+            px, py = x(r[xk]), h - pad_b - 10
+        elif r[xk] is None or r[yk] is None:
             continue
-        px, py = x(r[xk]), y(r[yk])
+        else:
+            px, py = x(r[xk]), y(r[yk])
         s.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="3.6" class="pt-mark hi"/>')
         anchor = "end" if dx < 0 else "start"
         s.append(f'<text x="{px+dx:.1f}" y="{py+dy:.1f}" class="lab" text-anchor="{anchor}">{html.escape(text)}</text>')
@@ -142,8 +157,9 @@ def main():
     panels = []
     for fam, title, sub in PANELS:
         rs = [r for r in with_camps if r["fam"] == fam]
+        no_camps = [r for r in rows if r["fam"] == fam and r["camps"] is None]
         n_fam = sum(1 for r in rows if r["fam"] == fam)
-        if not rs:
+        if not rs and not no_camps:
             continue
         lab = []
         if fam == "election":
@@ -152,26 +168,31 @@ def main():
                    ("rcv_mpls_20131105_mayor", "Mpls mayor 2013", -8, -12),
                    ("rcv_easthampton_20211102_mayor", "Easthampton 2021", -8, 4)]
         if fam == "jury":
-            lab = [("eurovision_2017_final", "Eurovision 2017", 7, -4)]
+            lab = [("eurovision_2017_final", "Eurovision 2017", 7, -4),
+                   ("ballondor_2023_jury", "Ballon d'Or 2023", -6, -4)]
         panels.append(
             f'<figure class="panel"><div class="fig-wrap">'
             + scatter(rs, "cons", "camps", "consensus gain", "camps gain", xlim, ylim,
-                      diag=True, labels=lab)
+                      diag=True, labels=lab, rug=no_camps)
             + f'</div><figcaption><strong>{html.escape(title)}</strong> '
-              f'<span class="n">{len(rs)} of {n_fam} tables</span><br>{html.escape(sub)}'
-              + ('' if len(rs) == n_fam else
-                 f'<br><span class="n">the rest have under 150 ballots, the mixture gate</span>')
+              f'<span class="n">{n_fam} tables</span><br>{html.escape(sub)}'
+              + ('' if not no_camps else
+                 f'<br><span class="n">{len(no_camps)} with under 150 ballots have no camps gain '
+                 f'and sit as triangles on the bottom rule at their consensus gain</span>')
               + '</figcaption></figure>')
     n_floor = sum(1 for r in with_camps if r["camps"] <= ylim[0])
     note = (f'<p class="fig-note">Both axes are logarithmic and clipped at the plotted range. '
             f'The dashed line is where the second order is worth as much as the first. '
+            f'Hollow triangles on the bottom rule are tables under the 150-ballot mixture gate, '
+            f'placed at their consensus gain with no camps gain. '
             f'{n_floor} tables sit on the bottom rule, meaning a camps gain at or below '
             f'{ylim[0]:g} ({sum(1 for r in with_camps if r["camps"] < 0)} of them negative: the mixture lost on held-out ballots). '
             + (f'{n_left} tables sit on the left rule with a consensus gain at or below {xlim[0]:g}.</p>'
                if (n_left := sum(1 for r in with_camps if r["cons"] <= xlim[0])) else '</p>'))
     (BUILD / "fig_cloud.html").write_text(
         '<figure class="figset"><figcaption class="fignum">Figure 1. Consensus gain against camps gain, '
-        f'one point per table, {len(with_camps)} tables with at least 150 ballots. Hover or tap a point '
+        f'one point per table, {len(with_camps)} tables with at least 150 ballots as dots and the '
+        f'{len(rows) - len(with_camps)} smaller ones as triangles on the bottom rule. Hover or tap a mark '
         'for its numbers.</figcaption>'
         '<div class="grid-2">' + "".join(panels) + "</div>" + note + '</figure>')
 
