@@ -176,13 +176,59 @@ computed `r format(date_run, "%B %Y")`).
 
 ## Section 1: The manifest probabilities directly
 
+```{r}
+#| label: s1-concentration
+#| echo: false
+#| eval: true
+
+# Concentration of p(x) under the observed frequencies and the two fitted
+# models, from the cached pattern table. The corpus-wide version of these
+# numbers is vignettes/dutch_identity_gapshare.R with CONCENTRATION=1.
+s1c <- if (!is.null(s1_3$patterns)) {
+  pt <- s1_3$patterns
+  X  <- as.matrix(pt[, s1_3$item_cols])
+  pr <- list(obs = pt$count / sum(pt$count), ind = exp(pt$log_p_ind), rq = exp(pt$log_p_rq))
+  pr <- lapply(pr, function(p) p / sum(p))
+  H  <- vapply(pr, function(p) { p <- p[p > 0]; -sum(p * log2(p)) }, numeric(1))
+  all1 <- rowSums(X) == ncol(X)
+  list(
+    n_cells   = nrow(pt), n_obs = sum(pt$count > 0), min_count = min(pt$count),
+    top1      = vapply(pr, max, numeric(1)),
+    top5      = vapply(pr, function(p) sum(sort(p, decreasing = TRUE)[1:min(5, length(p))]), numeric(1)),
+    top_is_all0 = vapply(pr, function(p) all(X[which.max(p), ] == 0), logical(1)),
+    H = H, eff = 2^H,
+    multi    = H[["ind"]] - H[["obs"]],
+    rq_share = (H[["ind"]] - H[["rq"]]) / (H[["ind"]] - H[["obs"]]),
+    all1_ratio = pr$obs[all1] / pr$ind[all1]
+  )
+} else list(n_cells = NA, n_obs = NA, min_count = NA,
+            top1 = c(obs = NA, ind = NA, rq = NA), top5 = c(obs = NA, ind = NA, rq = NA),
+            top_is_all0 = c(obs = NA, ind = NA, rq = NA),
+            H = c(obs = NA, ind = NA, rq = NA), eff = c(obs = NA, ind = NA, rq = NA),
+            multi = NA, rq_share = NA, all1_ratio = NA)
+pct <- function(x) paste0(round(100 * x, 1), "%")
+s1c$caption <- paste0(
+  "Empirical manifest probabilities of all 2^J response patterns, ranked from most to ",
+  "least common (log scale). ",
+  if (isTRUE(s1c$n_obs == s1c$n_cells))
+    paste0("Every pattern is observed at least once (the rarest ", s1c$min_count,
+           " times), so no point is grey. ")
+  else "Patterns never observed are grey. ",
+  "The most common pattern holds ", pct(s1c$top1[["obs"]]), " of respondents and the five ",
+  "most common hold ", pct(s1c$top5[["obs"]]), ". Hover over a point to see its response pattern.")
+```
+
 For a test of $J$ binary items, a respondent's answers define a response pattern
 $\mathbf{x} \in \{0,1\}^J$. There are $2^J$ possible patterns, each occurring
 with manifest probability $p(\mathbf{x})$. Before modeling, it is worth asking:
-what do these probabilities actually look like? Most patterns are extremely rare;
-a handful dominate. @holland1990dutch motivates the loglinear approach precisely
-because the $p(\mathbf{x})$ are too numerous and sparse to model directly for
-large $J$.
+what do these probabilities actually look like? @holland1990dutch motivates the
+loglinear approach because, for large $J$, the $p(\mathbf{x})$ are too numerous
+and too sparse to estimate one cell at a time. This table is not in that regime.
+With $J = `r s1_3$J`$ there are `r 2^s1_3$J` patterns and
+$N = `r format(s1_3$N, big.mark=",")`$ respondents, and
+`r if (isTRUE(s1c$n_obs == s1c$n_cells)) paste0("every pattern is observed; the rarest appears ", s1c$min_count, " times") else paste0(s1c$n_obs, " of them are observed")`.
+What the table shows instead is concentration: a few patterns carry much of the
+mass.
 
 For $J \leq 10$ items and $N \geq 2{,}000$ respondents the full distribution is
 enumerable. Below we tabulate every $2^J$ pattern and display the empirical
@@ -190,7 +236,7 @@ $p(\mathbf{x})$.
 
 ```{r}
 #| label: fig-manifest-dist
-#| fig-cap: "Distribution of empirical manifest probabilities across all 2^J response patterns (log scale). Most patterns are never observed (grey); a few common patterns carry most of the probability mass. Hover over a point to see its response pattern."
+#| fig-cap: !expr s1c$caption
 
 patterns <- s1_3$patterns |>
   arrange(desc(count)) |>
@@ -253,11 +299,26 @@ patterns |>
   )
 ```
 
-**What to notice.** Probability mass is extremely concentrated: the most common
-pattern can account for a large share of the total. The long tail of near-zero
-patterns means a $2^J$-parameter saturated model is hopeless — most cells have
-zero or one observation. This motivates the loglinear parameterisation in
-Section 2.
+**What to notice.** `r if (isTRUE(s1c$n_obs == s1c$n_cells)) "Every pattern is there, but the" else "The"` mass is far from evenly
+spread. The most common pattern`r if (isTRUE(s1c$top_is_all0[["obs"]])) " — all 0s —" else ""`
+holds `r pct(s1c$top1[["obs"]])` of respondents, and the five most common hold
+`r pct(s1c$top5[["obs"]])`. One summary of the spread is the entropy $H$ of
+$p(\mathbf{x})$ in bits, or $2^H$, the number of equally likely patterns that
+would have the same entropy: here `r round(s1c$eff[["obs"]], 1)` effective
+patterns out of a possible `r s1c$n_cells`. The independence model of Section 2
+is much flatter. Its most likely pattern gets `r pct(s1c$top1[["ind"]])`,
+against `r pct(s1c$top1[["obs"]])` observed; it spreads the mass over `r round(s1c$eff[["ind"]], 1)` effective patterns, and
+it puts `r round(s1c$all1_ratio)` times too little on the all-1s pattern. The
+difference in entropy, $H_\text{ind} - H_\text{obs} =
+`r round(s1c$multi, 2)`$ bits, is the information the items share. The rank-1
+log-quadratic model of Section 3 recovers nearly all of it: top pattern
+`r pct(s1c$top1[["rq"]])`, `r round(s1c$eff[["rq"]], 1)` effective patterns,
+`r pct(s1c$rq_share)` of the entropy gap.
+
+`r if (isTRUE(s1c$n_obs == s1c$n_cells)) "Sparsity, then, is not this table's problem. It becomes one" else "Sparsity is already visible here, and it gets worse"` as $J$ grows —
+$2^J$ doubles with every item and $N$ does not — and that is why a
+$2^J$-parameter saturated model is hopeless in general. The loglinear
+parameterisation in Section 2 is the response.
 
 The [bits-per-item vignette](bits_per_item.qmd#answer-patterns) uses this same
 distribution to count how much a test tells you about a person: the entropy of
@@ -285,7 +346,7 @@ makes those deviations visible.
 
 ```{r}
 #| label: fig-independence-fit
-#| fig-cap: "Observed vs. fitted log p(x) under the independence loglinear model. Points on the diagonal are fully explained by item marginals; points below the line are more probable than independence predicts (positive local dependence)."
+#| fig-cap: "Observed vs. fitted log p(x) under the independence loglinear model. Points on the diagonal are fully explained by item marginals; points above the line are more probable than independence predicts (positive local dependence)."
 #| fig-height: 4.5
 
 plot_dat <- patterns |>

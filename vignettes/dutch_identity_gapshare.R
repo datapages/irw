@@ -31,6 +31,26 @@
 #   gapshare_summary.md      headline numbers
 #   gapshare_hist.png, gapshare_by_J.png, gapshare_by_construct.png
 #   gapshare_run.rds         full per-table results, including the fits' flags
+#   concentration_tables.csv one row per main-stratum table: how concentrated
+#                            the pattern distribution is (CONCENTRATION=1)
+#   concentration_summary.md, concentration_top1_ratio_hist.png
+#
+# Pattern concentration. For each table, under three distributions over the 2^J
+# cells -- observed frequencies, fitted independence, fitted rank-1
+# log-quadratic -- report the top-1 and top-5 pattern shares, the entropy H in
+# bits with its effective number of patterns 2^H, and whether the top pattern is
+# all-0s, all-1s or other. Then the observed / independence top-1 ratio, the
+# multi-information H_ind - H_obs (bits; never negative, because the
+# independence MLE reproduces the observed item margins), the share of that gap
+# the rank-1 model reproduces, (H_ind - H_rq) / (H_ind - H_obs), and, for
+# J >= 8, the fraction of the 2^J patterns observed at all.
+#
+# CONCENTRATION=1 recomputes these for exactly the tables in
+# gapshare_tables.csv: it pins the IRW version that sweep read (v616), applies
+# the same cleaning, refits the in-sample models with the same code and seed,
+# and stops if J, N, the items or the in-sample log-likelihoods differ from the
+# recorded row. It skips cross-validation, which these statistics do not use.
+# A full sweep also stores the same statistics in each per-table result.
 #
 # Does not modify any vignette.
 #
@@ -38,6 +58,7 @@
 #   Rscript vignettes/dutch_identity_gapshare.R        # from project root
 #   BIGJ=1 Rscript vignettes/dutch_identity_gapshare.R # J > 10 stratum only
 #   CACHED_ONLY=1 BIGJ=1 Rscript ...                   # tabulate the cache, fetch nothing
+#   CONCENTRATION=1 Rscript ...                        # concentration statistics only
 
 suppressMessages({
   library(irw)
@@ -64,20 +85,37 @@ BIGJ_DRAWS <- 5      # random 10-item draws per J > 10 table
 # this much per held-out respondent; below it the denominator is noise
 DENOM_MIN  <- 1e-3
 
+# The IRW version the recorded sweep (gapshare_tables.csv, run 2026-10-22) read.
+SWEEP_IRW_VERSION <- 616
+# Top-1 / top-5 shares and the J >= 8 coverage cut for the concentration stats
+CONC_TOP_K   <- 5
+CONC_MIN_J_COVERAGE <- 8
+
 set.seed(SEED)
+
+conc_mode <- Sys.getenv("CONCENTRATION") == "1"
 
 # Record the exact per-dataset versions and pin them for the run. Note that
 # irw_use_version() can only pin datasets the installed package knows about; it
 # warns about any it does not, and those are read at whatever version is live.
+# A full sweep pins the newest version; CONCENTRATION=1 pins the recorded
+# sweep's version so it reads the same data. IRW_PIN=<n> overrides either.
+pin_to <- Sys.getenv("IRW_PIN", if (conc_mode) as.character(SWEEP_IRW_VERSION) else "")
+pin_to <- if (nzchar(pin_to)) as.integer(pin_to) else NULL
 irw_v <- tryCatch({
   v <- as.data.frame(irw_version())
   paste(paste0(v$dataset, "=", v$version), collapse = "; ")
 }, error = function(e) NA_character_)
 pin_warn <- NA_character_
-pinned <- tryCatch(withCallingHandlers({ irw_use_version(); TRUE },
+pinned <- tryCatch(withCallingHandlers({
+    v <- irw_use_version(pin_to, quiet = TRUE)
+    if (!is.null(pin_to))
+      irw_v <- paste(paste0(v$dataset, "=", v$version), collapse = "; ")
+    TRUE },
   warning = function(w) { pin_warn <<- conditionMessage(w); invokeRestart("muffleWarning") }),
   error = function(e) FALSE)
-message("IRW versions pinned (", pinned, "): ", irw_v)
+if (!is.null(pin_to) && !isTRUE(pinned)) stop("could not pin IRW v", pin_to)
+message("IRW versions pinned (", pinned, if (!is.null(pin_to)) paste0(", v", pin_to), "): ", irw_v)
 if (!is.na(pin_warn)) message("pin warning: ", gsub("\n", " ", pin_warn))
 
 # ==============================================================================
@@ -288,6 +326,48 @@ cv_three <- function(mat, n_folds = N_FOLDS, seed = SEED) {
 gap_share <- function(ll) unname((ll[["rq"]] - ll[["ind"]]) / (ll[["soe"]] - ll[["ind"]]))
 
 # ==============================================================================
+# Pattern concentration
+# ==============================================================================
+
+# Entropy in bits of a probability vector, with 0 log 0 = 0.
+entropy_bits <- function(p) { p <- p[p > 0]; -sum(p * log2(p)) }
+
+# One distribution over the 2^J cells (rows of X, in the order of the counts).
+conc_one <- function(p, X, top_k = CONC_TOP_K) {
+  stopifnot(abs(sum(p) - 1) < 1e-8, length(p) == nrow(X))
+  o   <- order(p, decreasing = TRUE)
+  top <- X[o[1], ]
+  H   <- entropy_bits(p)
+  list(top1 = p[o[1]], top5 = sum(p[o[seq_len(min(top_k, length(p)))]]),
+       H = H, eff = 2^H,
+       top_pattern = if (all(top == 0)) "all0" else if (all(top == 1)) "all1" else "other",
+       # ties for the top cell make the identity arbitrary; say so
+       top_tied = sum(abs(p - p[o[1]]) < 1e-12) > 1)
+}
+
+# Statistics under the observed, independence and rank-1 distributions, from
+# the in-sample fit's log_mu (fit_three) and the counts it was fitted to.
+concentration_stats <- function(pats, fit, item_cols) {
+  X <- as.matrix(pats[, item_cols])
+  J <- ncol(X); N <- sum(pats$count)
+  to_p <- function(lm_) { m <- max(lm_); e <- exp(lm_ - m); e / sum(e) }
+  d <- list(obs = pats$count / N, ind = to_p(fit$log_mu$ind), rq = to_p(fit$log_mu$rq))
+  st <- lapply(d, function(p) conc_one(p, X))
+  out <- list()
+  for (nm in names(st)) for (k in names(st[[nm]]))
+    out[[paste0(k, "_", nm)]] <- st[[nm]][[k]]
+  multi <- st$ind$H - st$obs$H
+  out$top1_ratio      <- st$obs$top1 / st$ind$top1
+  out$multi_info_bits <- multi
+  out$rq_share_of_multi <- (st$ind$H - st$rq$H) / multi
+  out$n_patterns      <- 2^J
+  out$n_observed      <- sum(pats$count > 0)
+  out$frac_observed   <- if (J >= CONC_MIN_J_COVERAGE) out$n_observed / 2^J else NA_real_
+  out$min_count       <- min(pats$count)
+  out
+}
+
+# ==============================================================================
 # One table, end to end
 # ==============================================================================
 
@@ -351,6 +431,7 @@ run_table <- function(tab, items_subset = NULL, draw = NA_integer_) {
   df_counts <- c(ind = J + 1, rq = 2 * J + 1, soe = 1 + J + choose(J, 2))
   stopifnot(df_counts[["ind"]] < df_counts[["rq"]], df_counts[["rq"]] < df_counts[["soe"]])
   stopifnot(nrow(pats) == 2^J, sum(pats$count) == N)
+  conc <- concentration_stats(pats, fit, colnames(mat))
 
   cv <- cv_three(mat)
 
@@ -363,6 +444,7 @@ run_table <- function(tab, items_subset = NULL, draw = NA_integer_) {
     df = c(ind = J + 1, rq = 2 * J + 1, soe = 1 + J + choose(J, 2)),
     share_in = gap_share(fit$ll),
     rq_conv = fit$rq_conv, flags = fit$flags,
+    conc = conc,
     cv = cv,
     share_out = if (is.null(cv)) NA_real_ else gap_share(cv$ll),
     share_out_floor = if (is.null(cv)) NA_real_ else gap_share(cv$ll_floor),
@@ -370,6 +452,145 @@ run_table <- function(tab, items_subset = NULL, draw = NA_integer_) {
   )
   saveRDS(res, cf)
   res
+}
+
+# ==============================================================================
+# CONCENTRATION=1: pattern concentration for the recorded main-stratum tables
+# ==============================================================================
+
+if (conc_mode) {
+  rec <- read.csv(file.path(out_dir, "gapshare_tables.csv"), stringsAsFactors = FALSE)
+  if (nzchar(Sys.getenv("ONLY")))
+    rec <- rec[rec$table %in% strsplit(Sys.getenv("ONLY"), ",")[[1]], ]
+  message("Concentration: ", nrow(rec), " recorded tables, IRW v", pin_to)
+
+  conc_rows <- list()
+  for (i in seq_len(nrow(rec))) {
+    r <- rec[i, ]
+    message(i, "/", nrow(rec), "  ", r$table)
+    prep <- prepare_table(r$table)
+    if (!isTRUE(prep$ok)) stop(r$table, ": ", prep$reason)
+    mat <- prep$mat
+    # the same selection as the recorded sweep, or nothing
+    if (ncol(mat) != r$J || nrow(mat) != r$N ||
+        paste(colnames(mat), collapse = "|") != r$items_used)
+      stop(r$table, ": J/N/items differ from gapshare_tables.csv (",
+           ncol(mat), "/", nrow(mat), " vs ", r$J, "/", r$N, ")")
+    pats <- pattern_counts(mat)
+    set.seed(SEED)
+    fit  <- fit_three(pats, colnames(mat))
+    if (is.null(fit)) stop(r$table, ": in-sample fit failed")
+    stopifnot(check_fit(fit, r$J, r$N))
+    # the refit must be the recorded fit; the rank-1 optimum tolerates optimiser noise
+    d_ll <- abs(fit$ll - c(ind = r$ll_ind, rq = r$ll_rq, soe = r$ll_soe))
+    if (any(d_ll > 1e-3 * pmax(1, abs(fit$ll))))
+      stop(r$table, ": refit log-likelihoods differ from the recorded sweep by ",
+           paste(signif(d_ll, 3), collapse = "/"))
+    cs <- concentration_stats(pats, fit, colnames(mat))
+    conc_rows[[i]] <- as_tibble(c(list(table = r$table, J = r$J, N = r$N),
+                                  cs, list(max_abs_ll_diff = max(d_ll),
+                                           flag_any = r$flag_any)))
+  }
+  conc <- bind_rows(conc_rows)
+  write.csv(conc, file.path(out_dir, "concentration_tables.csv"), row.names = FALSE)
+
+  # ---- summary --------------------------------------------------------------
+  stat_cols <- c("top1_obs", "top1_ind", "top1_rq", "top5_obs", "top5_ind", "top5_rq",
+                 "H_obs", "H_ind", "H_rq", "eff_obs", "eff_ind", "eff_rq",
+                 "top1_ratio", "multi_info_bits", "rq_share_of_multi", "frac_observed")
+  f3 <- function(x) formatC(x, digits = 3, format = "fg", flag = "#")
+  miq <- function(x) {
+    x <- x[!is.na(x)]
+    if (!length(x)) return("—")
+    q <- quantile(x, c(.25, .5, .75), names = FALSE)
+    paste0(f3(q[2]), " [", f3(q[1]), ", ", f3(q[3]), "]")
+  }
+  summ_tab <- function(d) {
+    hdr <- c(paste0("| statistic | all (n = ", nrow(d), ") | ",
+                    paste0("J = ", sort(unique(d$J)), " (", table(d$J), ")", collapse = " | "),
+                    " |"),
+             paste0("|", strrep("---|", 2 + length(unique(d$J)))))
+    body <- vapply(stat_cols, function(sc) paste0(
+      "| `", sc, "` | ", miq(d[[sc]]), " | ",
+      paste(vapply(sort(unique(d$J)), function(j) miq(d[[sc]][d$J == j]), ""),
+            collapse = " | "), " |"), "")
+    c(hdr, body)
+  }
+  # family = the table name up to its first underscore (mexico_2024_..., gilbert_meta_...)
+  dominant_family_notes <- function(d) {
+    fam <- sub("_.*$", "", d$table)
+    notes <- unlist(lapply(sort(unique(d$J)), function(j) {
+      f <- table(fam[d$J == j]); top <- names(f)[which.max(f)]
+      if (max(f) >= 0.5 * sum(f) && max(f) > 1)
+        paste0("- J = ", j, ": ", max(f), " of ", sum(f), " tables are `", top, "_*`")
+    }))
+    if (length(notes)) notes else "- none"
+  }
+  ident <- function(col) paste(names(table(conc[[col]])), table(conc[[col]]),
+                               sep = " ", collapse = ", ")
+  wu <- conc[conc$table == "ALSECYPIAMH_WU_2022_NEI", ]
+  big <- conc[conc$J >= CONC_MIN_J_COVERAGE, ]
+
+  p_hist <- ggplot(conc, aes(top1_ratio)) +
+    geom_histogram(bins = 30, fill = "#2166ac", colour = "white", linewidth = 0.3) +
+    geom_vline(xintercept = 1, linetype = "dashed", colour = "grey40") +
+    scale_x_log10() +
+    labs(x = "Top-1 pattern share, observed / independence (log scale)",
+         y = "Tables",
+         subtitle = paste0(nrow(conc), " IRW dichotomous tables, J = ",
+                           min(conc$J), "–", max(conc$J), ".\n",
+                           "Dashed line: a ratio of 1, observed = independence.")) +
+    theme_minimal(base_size = 12)
+  ggsave(file.path(out_dir, "concentration_top1_ratio_hist.png"), p_hist,
+         width = 7, height = 4, dpi = 150, bg = "white")
+
+  md <- c(
+    "# How concentrated are IRW answer patterns?", "",
+    paste0("Run ", Sys.Date(), " over the ", nrow(conc), " usable main-stratum tables of ",
+           "`gapshare_tables.csv`, IRW v", pin_to, " pinned: `", irw_v, "`."),
+    if (!is.na(pin_warn)) paste0("Pin caveat: ", gsub("\n", " ", pin_warn)),
+    paste0("Seed ", SEED, ". In-sample fits from `fit_three()`; every refit matched the ",
+           "recorded log-likelihoods (largest absolute difference ",
+           signif(max(conc$max_abs_ll_diff), 2), ")."), "",
+    "Distributions: `obs` = observed pattern frequencies; `ind` = fitted independence;",
+    "`rq` = fitted rank-1 log-quadratic. Entropy H is in bits over all 2^J patterns;",
+    "`eff` = 2^H, the effective number of patterns. `top1_ratio` = top1_obs / top1_ind.",
+    "`multi_info_bits` = H_ind − H_obs. `rq_share_of_multi` = (H_ind − H_rq)/(H_ind − H_obs).",
+    paste0("`frac_observed` = share of the 2^J patterns seen at least once, J ≥ ",
+           CONC_MIN_J_COVERAGE, " only."), "",
+    "## Median [IQR], overall and by J", "",
+    summ_tab(conc), "",
+    "Per-J columns rest on few tables (counts in the header). Where one source family",
+    "makes up half or more of a J, the column describes that family more than the J:", "",
+    dominant_family_notes(conc), "",
+    "## Identity of the top pattern", "",
+    paste0("- observed: ", ident("top_pattern_obs")),
+    paste0("- independence: ", ident("top_pattern_ind")),
+    paste0("- rank-1: ", ident("top_pattern_rq")),
+    paste0("- tables where the top cell is tied (identity arbitrary): obs ",
+           sum(conc$top_tied_obs), ", ind ", sum(conc$top_tied_ind), ", rq ",
+           sum(conc$top_tied_rq)), "",
+    paste0("## Coverage for J ≥ ", CONC_MIN_J_COVERAGE), "",
+    "| table | J | N | 2^J | observed | fraction |", "|---|---|---|---|---|---|",
+    sprintf("| `%s` | %d | %s | %d | %d | %.3f |", big$table, big$J,
+            format(big$N, big.mark = ","), as.integer(big$n_patterns),
+            as.integer(big$n_observed), big$frac_observed), "",
+    "## Cross-check: ALSECYPIAMH_WU_2022_NEI", "",
+    if (nrow(wu)) c(
+      paste0("- top-1 share obs / ind / rq: ", sprintf("%.3f / %.3f / %.3f",
+             wu$top1_obs, wu$top1_ind, wu$top1_rq), "  (expected 0.317 / 0.110 / 0.307)"),
+      paste0("- effective patterns obs / ind / rq: ", sprintf("%.1f / %.1f / %.1f",
+             wu$eff_obs, wu$eff_ind, wu$eff_rq), "  (expected 14.2 / 22.8 / 14.4)"))
+    else "- not in this run", "",
+    "## Top-1 ratio", "",
+    "![](concentration_top1_ratio_hist.png)"
+  )
+  writeLines(md, file.path(out_dir, "concentration_summary.md"))
+  message("Wrote concentration_tables.csv, concentration_summary.md and the histogram")
+  if (nrow(wu))
+    message(sprintf("WU NEI check: top1 %.3f/%.3f/%.3f  eff %.1f/%.1f/%.1f",
+                    wu$top1_obs, wu$top1_ind, wu$top1_rq, wu$eff_obs, wu$eff_ind, wu$eff_rq))
+  quit(save = "no", status = 0)
 }
 
 # ==============================================================================
