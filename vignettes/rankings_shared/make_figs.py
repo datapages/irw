@@ -136,9 +136,10 @@ def scatter(rows, xk, yk, xlab, ylab, xlim, ylim, w=330, h=250, diag=False,
             continue
         else:
             px, py = x(r[xk]), y(r[yk])
-        s.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="3.6" class="pt-mark hi"/>')
+        s.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="3.6" class="pt-mark hi" pointer-events="none"/>')
         anchor = "end" if dx < 0 else "start"
-        s.append(f'<text x="{px+dx:.1f}" y="{py+dy:.1f}" class="lab" text-anchor="{anchor}">{html.escape(text)}</text>')
+        s.append(f'<text x="{px+dx:.1f}" y="{py+dy:.1f}" class="lab" text-anchor="{anchor}"'
+                 f' pointer-events="none">{html.escape(text)}</text>')
     s.append(f'<text x="{(pad_l+w-pad_r)/2:.0f}" y="{h-4}" class="ax" text-anchor="middle">{html.escape(xlab)}</text>')
     s.append(f'<text x="11" y="{(pad_t+h-pad_b)/2:.0f}" class="ax" text-anchor="middle"'
              f' transform="rotate(-90 11 {(pad_t+h-pad_b)/2:.0f})">{html.escape(ylab)}</text>')
