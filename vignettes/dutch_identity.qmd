@@ -326,6 +326,96 @@ p(**x**), minus the part that is chance rather than differences between
 people. It also shows that the independence model of Section 2 falls short by
 exactly the information that items share.
 
+### Is this table unusually concentrated?
+
+```{r}
+#| label: s1-concentration-corpus
+#| echo: false
+#| eval: true
+
+# The corpus version of the numbers above: one row per table, from
+# vignettes/dutch_identity_gapshare.R with CONCENTRATION=1.
+cc_path <- "dutchdata/concentration_tables.csv"
+cc <- if (file.exists(cc_path)) read.csv(cc_path, stringsAsFactors = FALSE) else NULL
+cq <- function(x, p = c(.25, .5, .75)) quantile(x, p, names = FALSE, na.rm = TRUE)
+cc_sum <- if (!is.null(cc) && s1_3$table_name %in% cc$table) {
+  this <- cc[cc$table == s1_3$table_name, ]
+  big  <- cc$J >= 8
+  list(
+    n = nrow(cc), j_min = min(cc$J), j_max = max(cc$J),
+    mi = cq(cc$multi_info_bits), cut = cq(cc$eff_reduction),
+    rq = cq(cc$rq_share_of_multi), ratio = cq(cc$top1_ratio),
+    this_mi = this$multi_info_bits, this_ratio = this$top1_ratio,
+    this_mi_pctl = mean(cc$multi_info_bits < this$multi_info_bits),
+    this_ratio_pctl = mean(cc$top1_ratio < this$top1_ratio),
+    n_big = sum(big),
+    frac_lo = min(cc$frac_observed[big]), frac_hi = max(cc$frac_observed[big]),
+    mi_mm = median(cc$multi_info_bits_mm), mi_cs = median(cc$multi_info_bits_cs),
+    rq_mm = median(cc$rq_share_of_multi_mm),
+    mi_big = median(cc$multi_info_bits[big]), mi_big_mm = median(cc$multi_info_bits_mm[big]),
+    mi_big_cs = median(cc$multi_info_bits_cs[big]),
+    frac_med = median(cc$frac_observed[big]),
+    cut_mm = median(cc$eff_reduction_mm), cut_cs = median(cc$eff_reduction_cs),
+    rq_cs = median(cc$rq_share_of_multi_cs),
+    rq_big = median(cc$rq_share_of_multi[big]), rq_big_cs = median(cc$rq_share_of_multi_cs[big]),
+    shift_mm = median(cc$multi_info_bits - cc$multi_info_bits_mm),
+    shift_cs = median(cc$multi_info_bits - cc$multi_info_bits_cs),
+    shift_max_mm = max(cc$multi_info_bits - cc$multi_info_bits_mm),
+    shift_max_cs = max(cc$multi_info_bits - cc$multi_info_bits_cs)
+  )
+} else list(n = NA, j_min = NA, j_max = NA, mi = rep(NA, 3), cut = rep(NA, 3),
+            rq = rep(NA, 3), ratio = rep(NA, 3), this_mi = NA, this_ratio = NA,
+            this_mi_pctl = NA, this_ratio_pctl = NA, n_big = NA, frac_lo = NA,
+            frac_hi = NA, frac_med = NA, mi_mm = NA, mi_cs = NA, rq_mm = NA,
+            mi_big = NA, mi_big_mm = NA, mi_big_cs = NA, cut_mm = NA, cut_cs = NA,
+            rq_cs = NA, rq_big = NA, rq_big_cs = NA, shift_mm = NA, shift_cs = NA,
+            shift_max_mm = NA, shift_max_cs = NA)
+p0 <- function(x) sprintf("%.0f%%", 100 * x)
+```
+
+One table could be concentrated for reasons of its own, so we ask the same
+question of the `r cc_sum$n` IRW tables in the corpus sweep of Section 3
+(binary items, $`r cc_sum$j_min` \le J \le `r cc_sum$j_max`$). The quantity is
+the multi-information $M = H_\text{ind} - H_\text{obs}$, and since
+$2^{H_\text{obs}} / 2^{H_\text{ind}} = 2^{-M}$ it reads directly as a cut in the
+effective number of patterns, $1 - 2^{-M}$. In the median table the items share
+$M = `r sprintf("%.3f", cc_sum$mi[2])`$ bits (IQR
+`r sprintf("%.3f", cc_sum$mi[1])`–`r sprintf("%.3f", cc_sum$mi[3])`), which
+cuts the effective number of patterns by about `r p0(cc_sum$cut[2])` relative to
+independence (IQR `r p0(cc_sum$cut[1])`–`r p0(cc_sum$cut[3])`), and the rank-1
+log-quadratic reproduces a median `r p0(cc_sum$rq[2])` of it. The most common
+pattern is `r sprintf("%.2f", cc_sum$ratio[2])` times as frequent as
+independence predicts in the median table; here it is
+`r sprintf("%.1f", cc_sum$this_ratio)`. On both counts this table sits
+`r if (isTRUE(cc_sum$this_mi > cc_sum$mi[2] && cc_sum$this_ratio > cc_sum$ratio[2])) "above the median" else "near the median"`
+— its $M$ of `r sprintf("%.2f", cc_sum$this_mi)` bits exceeds
+`r p0(cc_sum$this_mi_pctl)` of tables, its top-pattern ratio
+`r p0(cc_sum$this_ratio_pctl)` — concentrated, but not an outlier.
+
+One caution about sparse tables. The plug-in entropy of a table with many empty
+or singleton cells is biased downward, which overstates $M$ and understates the
+rank-1 share. That matters most at $J \ge 8$, where a median of only
+`r p0(cc_sum$frac_med)` of the $2^J$ patterns are observed at all (range
+`r p0(cc_sum$frac_lo)`–`r p0(cc_sum$frac_hi)`), and in the tables with the
+fewest respondents. Replacing $H_\text{obs}$ with a bias-corrected estimate —
+Miller–Madow, or Chao–Shen, which also uses the singletons — moves the typical
+table very little: by a median of `r sprintf("%.3f", cc_sum$shift_mm)` and
+`r sprintf("%.3f", cc_sum$shift_cs)` bits respectively, at most
+`r sprintf("%.2f", cc_sum$shift_max_mm)` and
+`r sprintf("%.2f", cc_sum$shift_max_cs)`. The corpus median moves somewhat
+more, from `r sprintf("%.3f", cc_sum$mi[2])` to
+`r sprintf("%.3f", cc_sum$mi_mm)` (Miller–Madow) or
+`r sprintf("%.3f", cc_sum$mi_cs)` bits (an effective-pattern cut of
+`r p0(cc_sum$cut_mm)` or `r p0(cc_sum$cut_cs)` rather than
+`r p0(cc_sum$cut[2])`). That is not because the long tables dominate; it is
+because the tables sitting closest to the median happen to be small-$N$ ones
+whose corrections are among the larger. The rank-1 share moves the other way,
+from `r p0(cc_sum$rq[2])` to `r p0(cc_sum$rq_cs)` (Chao–Shen), and most at
+$J \ge 8$, from `r p0(cc_sum$rq_big)` to `r p0(cc_sum$rq_big_cs)`, so the
+uncorrected figures if anything undersell the rank-1 model on long tables. Both
+corrections, overall and by $J$, are in
+`vignettes/dutchdata/concentration_summary.md`.
+
 ---
 
 ## Section 2: Log-manifest probabilities and the independence baseline
@@ -618,12 +708,51 @@ and 95% of replicates fall in
 [`r sprintf("%.1f%%", 100 * s1_3$gamma_rank1$boot_summary$share_w_lo)`,
 `r sprintf("%.1f%%", 100 * s1_3$gamma_rank1$boot_summary$share_w_hi)`].
 
+```{r}
+#| label: s3-2pl-baseline
+#| echo: false
+#| eval: true
+
+# Second reference: a unidimensional 2PL, from vignettes/dutch_identity_2pl_baseline.R
+b2_path <- "dutchdata/dutch_identity_2pl_baseline.rds"
+b2 <- if (file.exists(b2_path)) readRDS(b2_path) else
+  list(n_sim = NA, n_failed = 0, population_share = NA, observed_share = NA,
+       sim_summary = list(median = NA, lo = NA, hi = NA, min = NA),
+       n_below_observed = NA, sim_share = numeric(),
+       ll_2pl = NA, ll_multinomial = c(ind = NA, rq = NA, soe = NA))
+b2_n <- length(b2$sim_share)
+b2_all_above <- isTRUE(b2$n_below_observed == 0)
+p1 <- function(x) sprintf("%.1f%%", 100 * x)
+p2 <- function(x) sprintf("%.2f%%", 100 * x)
+```
+
+That null is Holland's approximation, though, not a unidimensional IRT model.
+At $J = `r s1_3$J`$ the approximation need not be tight: the posterior of
+$\theta$ given an extreme pattern such as all 0s is skewed, and the
+log-quadratic form is only the leading term. A unidimensional model could, in
+principle, produce a $\boldsymbol{\Gamma}$ that is not exactly rank-1, and then
+falling outside the first null would say something about the approximation
+rather than about dimensionality. So we build a second reference from a
+unidimensional 2PL with normal $\theta$, fitted to this table with mirt. Its
+exact pattern probabilities come from quadrature; we simulate `r b2_n` tables of
+counts at the same $N$, refit the SOE, and recompute the same weighted share.
+(The 2PL is, incidentally, the better-fitting of the two one-dimensional models:
+its log-likelihood is `r sprintf("%.1f", b2$ll_2pl - b2$ll_multinomial[["rq"]])`
+above the log-quadratic's with one parameter fewer, so the approximation does
+cost something at this $J$.) Even so, the 2PL world is very nearly rank-1. With
+no sampling noise at all, the share is `r p2(b2$population_share)`; across
+replicates the median is `r p1(b2$sim_summary$median)`, 95% fall in
+[`r p1(b2$sim_summary$lo)`, `r p1(b2$sim_summary$hi)`], and the lowest is
+`r p1(b2$sim_summary$min)`.
+
 The observed share is
 `r sprintf("%.1f%%", 100 * s1_3$gamma_rank1$rank1_weighted$share)`
 (`r sprintf("%.1f%%", 100 * s1_3$gamma_rank1$rank1_unweighted$share)`
 unweighted), below every one of the
-`r s1_3$gamma_rank1$n_boot` null replicates. So $\boldsymbol{\Gamma}$ here is
-**not** rank-1, and the departure is not a sampling artefact. @fig-gamma-rank1-scatter
+`r s1_3$gamma_rank1$n_boot` log-quadratic replicates and
+`r if (b2_all_above) paste0("every one of the ", b2_n, " 2PL replicates") else paste0(b2_n - b2$n_below_observed, " of the ", b2_n, " 2PL replicates")`.
+`r if (b2_all_above) "So $\\boldsymbol{\\Gamma}$ here is **not** rank-1, the departure is not a sampling artefact, and it is a departure from a unidimensional 2PL, not only from Holland's approximation to one." else "The departure is therefore from Holland's log-quadratic approximation; a unidimensional 2PL at this $J$ and $N$ can produce a share this low, so it is not by itself evidence against unidimensionality."`
+@fig-gamma-rank1-scatter
 shows where it lives:
 `r s1_3$gamma_rank1$n_resid_z_gt_3` of the
 `r s1_3$gamma_rank1$n_offdiag` off-diagonal entries sit more than three standard

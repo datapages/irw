@@ -332,6 +332,24 @@ gap_share <- function(ll) unname((ll[["rq"]] - ll[["ind"]]) / (ll[["soe"]] - ll[
 # Entropy in bits of a probability vector, with 0 log 0 = 0.
 entropy_bits <- function(p) { p <- p[p > 0]; -sum(p * log2(p)) }
 
+# Bias-corrected entropy of the OBSERVED pattern distribution, in bits. The
+# plug-in estimate is biased downward when cells are sparse (at J = 8-10 a third
+# to four-fifths of the 2^J cells are empty), which inflates H_ind - H_obs.
+#   Miller-Madow: H_plugin + (m - 1) / (2N), in nats, m = non-empty cells.
+#   Chao-Shen:    coverage-adjusted Horvitz-Thompson estimator; uses the
+#                 singleton count f1 to estimate the unseen mass.
+entropy_mm_bits <- function(counts) {
+  N <- sum(counts); m <- sum(counts > 0)
+  entropy_bits(counts / N) + (m - 1) / (2 * N * log(2))
+}
+entropy_cs_bits <- function(counts) {
+  n <- counts[counts > 0]; N <- sum(n)
+  f1 <- sum(n == 1); if (f1 == N) f1 <- N - 1
+  C  <- 1 - f1 / N
+  pa <- C * n / N
+  -sum(pa * log2(pa) / (1 - (1 - pa)^N))
+}
+
 # One distribution over the 2^J cells (rows of X, in the order of the counts).
 conc_one <- function(p, X, top_k = CONC_TOP_K) {
   stopifnot(abs(sum(p) - 1) < 1e-8, length(p) == nrow(X))
@@ -359,11 +377,24 @@ concentration_stats <- function(pats, fit, item_cols) {
   multi <- st$ind$H - st$obs$H
   out$top1_ratio      <- st$obs$top1 / st$ind$top1
   out$multi_info_bits <- multi
+  # the same quantity as a cut in effective patterns: eff_obs / eff_ind = 2^-M
+  out$eff_reduction   <- 1 - 2^(-multi)
   out$rq_share_of_multi <- (st$ind$H - st$rq$H) / multi
   out$n_patterns      <- 2^J
   out$n_observed      <- sum(pats$count > 0)
   out$frac_observed   <- if (J >= CONC_MIN_J_COVERAGE) out$n_observed / 2^J else NA_real_
   out$min_count       <- min(pats$count)
+  out$n_singletons    <- sum(pats$count == 1)
+  # bias-corrected versions of everything that uses H_obs. H_ind and H_rq are
+  # entropies of fitted models, not plug-in counts, and are left as they are.
+  for (bc in c("mm", "cs")) {
+    Hc <- if (bc == "mm") entropy_mm_bits(pats$count) else entropy_cs_bits(pats$count)
+    out[[paste0("H_obs_", bc)]]           <- Hc
+    out[[paste0("eff_obs_", bc)]]         <- 2^Hc
+    out[[paste0("multi_info_bits_", bc)]] <- st$ind$H - Hc
+    out[[paste0("eff_reduction_", bc)]]   <- 1 - 2^(-(st$ind$H - Hc))
+    out[[paste0("rq_share_of_multi_", bc)]] <- (st$ind$H - st$rq$H) / (st$ind$H - Hc)
+  }
   out
 }
 
@@ -497,7 +528,10 @@ if (conc_mode) {
   # ---- summary --------------------------------------------------------------
   stat_cols <- c("top1_obs", "top1_ind", "top1_rq", "top5_obs", "top5_ind", "top5_rq",
                  "H_obs", "H_ind", "H_rq", "eff_obs", "eff_ind", "eff_rq",
-                 "top1_ratio", "multi_info_bits", "rq_share_of_multi", "frac_observed")
+                 "top1_ratio", "multi_info_bits", "eff_reduction", "rq_share_of_multi",
+                 "frac_observed",
+                 "H_obs_mm", "multi_info_bits_mm", "eff_reduction_mm", "rq_share_of_multi_mm",
+                 "H_obs_cs", "multi_info_bits_cs", "eff_reduction_cs", "rq_share_of_multi_cs")
   f3 <- function(x) formatC(x, digits = 3, format = "fg", flag = "#")
   miq <- function(x) {
     x <- x[!is.na(x)]
@@ -525,6 +559,28 @@ if (conc_mode) {
         paste0("- J = ", j, ": ", max(f), " of ", sum(f), " tables are `", top, "_*`")
     }))
     if (length(notes)) notes else "- none"
+  }
+  # how far the corrections move the medians, overall and by J band
+  bias_shift_table <- function(d) {
+    bands <- list(all = rep(TRUE, nrow(d)), `J 4–7` = d$J < CONC_MIN_J_COVERAGE,
+                  `J 8–10` = d$J >= CONC_MIN_J_COVERAGE)
+    row <- function(lbl, base) paste0("| ", lbl, " | ", paste(vapply(bands, function(b)
+      paste(vapply(c("", "_mm", "_cs"), function(sfx)
+        f3(median(d[[paste0(base, sfx)]][b])), ""), collapse = " / "), ""),
+      collapse = " | "), " |")
+    c(paste0("| median, plug-in / MM / CS | ", paste(names(bands), " (n = ",
+             vapply(bands, sum, 0), ")", sep = "", collapse = " | "), " |"),
+      "|---|---|---|---|",
+      row("multi-information (bits)", "multi_info_bits"),
+      row("effective-pattern cut", "eff_reduction"),
+      row("rank-1 share of it", "rq_share_of_multi"),
+      "",
+      paste0("Per-table shift in multi-information, plug-in minus corrected: median ",
+             f3(median(d$multi_info_bits - d$multi_info_bits_mm)), " (MM) / ",
+             f3(median(d$multi_info_bits - d$multi_info_bits_cs)), " (CS) bits; largest ",
+             f3(max(d$multi_info_bits - d$multi_info_bits_mm)), " / ",
+             f3(max(d$multi_info_bits - d$multi_info_bits_cs)), ". The overall median moves",
+             " more than most tables do because the tables nearest it are small-N ones."))
   }
   ident <- function(col) paste(names(table(conc[[col]])), table(conc[[col]]),
                                sep = " ", collapse = ", ")
@@ -563,6 +619,16 @@ if (conc_mode) {
     "Per-J columns rest on few tables (counts in the header). Where one source family",
     "makes up half or more of a J, the column describes that family more than the J:", "",
     dominant_family_notes(conc), "",
+    paste0("## Sparse cells: read the J ≥ ", CONC_MIN_J_COVERAGE, " columns with care"), "",
+    paste0("At J ≥ ", CONC_MIN_J_COVERAGE, " a median of ",
+           sprintf("%.0f%% (range %.0f–%.0f%%)", 100 * median(big$frac_observed),
+                   100 * min(big$frac_observed), 100 * max(big$frac_observed)),
+           " of the 2^J patterns are observed. The plug-in H_obs is then biased"),
+    "downward, which inflates `multi_info_bits` and `eff_reduction` and deflates",
+    "`rq_share_of_multi`. The `_mm` (Miller–Madow) and `_cs` (Chao–Shen) rows replace",
+    "H_obs with a bias-corrected estimate; H_ind and H_rq are fitted-model entropies and",
+    "are unchanged. Chao–Shen corrects more than Miller–Madow when singletons are common.", "",
+    bias_shift_table(conc), "",
     "## Identity of the top pattern", "",
     paste0("- observed: ", ident("top_pattern_obs")),
     paste0("- independence: ", ident("top_pattern_ind")),
