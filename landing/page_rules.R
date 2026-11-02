@@ -60,14 +60,19 @@ NONCORE <- data.frame(
   source   = c("sim",             "comp",                  "nom",              "conj",              "rank"),
   optional = c(FALSE,             FALSE,                   FALSE,              FALSE,               TRUE),
   stringsAsFactors = FALSE)
-# Conjoint is split across shards, because Redivis caps a dataset at 1,000
-# tables (ben-domingue/irw#2934; new tables go to the newest shard). irw_meta's
-# conj_metadata has one row per table and no shard column, so the emitter gives
-# each conj table the newest shard that lists it -- the packages resolve a name
-# the same way. NONCORE keeps only the first shard, so conj_metadata is read once.
+# Conjoint and rankings are split across shards, because Redivis caps a dataset
+# at 1,000 tables (ben-domingue/irw#2934 and #3024; new tables go to the newest
+# shard, irw_rank_2 since 2026-11-01). irw_meta's conj_metadata and rank_metadata
+# have one row per table and no shard column, so the emitter gives each such
+# table the newest shard of its family that lists it -- the packages resolve a
+# name the same way. NONCORE keeps only the first shard of each, so each
+# family's metadata is read once. Keyed by the packages' `source` value.
 CONJ_SHARDS <- c(irw_conjoint = "irw_conjoint:5wjx", irw_conjoint_2 = "irw_conjoint_2:142p")
+RANK_SHARDS <- c(irw_rank = "irw_rank:93f5", irw_rank_2 = "irw_rank_2:byyj")
+FAMILY_SHARDS <- list(conj = CONJ_SHARDS, rank = RANK_SHARDS)
+FAMILY_SHARD_REFS <- unlist(unname(FAMILY_SHARDS))
 PAGE_REF <- c(SHARD_REF, setNames(NONCORE$ref, NONCORE$dataset),
-              CONJ_SHARDS[setdiff(names(CONJ_SHARDS), NONCORE$dataset)])
+              FAMILY_SHARD_REFS[setdiff(names(FAMILY_SHARD_REFS), NONCORE$dataset)])
 
 # The dictionary Sheets are hand-edited, so "missing" arrives in several spellings:
 # a real NA, an empty cell, or the literal text "NA" / "N/A" / "NULL". All of them
