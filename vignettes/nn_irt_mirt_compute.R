@@ -1,11 +1,12 @@
 # Offline companion to nn_irt.qmd: fit R mirt models on the same train/test
 # split the page uses and write held-out predictions to nn_irt_data/.
 #
-# Run from vignettes/ after the page has written nn_irt_data/fits/<table>_split.csv.gz
-# (the page writes them on its first render). Then re-render the page; it reads
-# nn_irt_data/fits/<table>_mirt_preds.csv.gz if present.
+# Run after nn_irt_torch_compute.py has written nn_irt_data/fits/<table>_split.csv.gz.
+# Paths are resolved from this script's own location, so it can be run from
+# the project root or from vignettes/. Then re-render the page; it reads
+# nn_irt_data/fits/<table>_mirt_preds.csv.gz.
 #
-#   Rscript nn_irt_mirt_compute.R
+#   Rscript vignettes/nn_irt_mirt_compute.R
 #
 # Models: 2PL (the marginal-likelihood anchor for the PyTorch 2PL), the
 # monotonic-polynomial model (a flexible non-logistic item curve) and the
@@ -19,13 +20,21 @@ suppressPackageStartupMessages({
   library(mirt)
   library(data.table)
 })
-HERE <- tryCatch(dirname(sys.frame(1)$ofile), error = function(e) ".")
+script_dir <- function() {
+  f <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))
+  if (length(f)) return(dirname(normalizePath(f[1])))
+  of <- tryCatch(sys.frame(1)$ofile, error = function(e) NULL)   # source()d
+  if (!is.null(of)) return(dirname(normalizePath(of)))
+  "."
+}
+HERE <- script_dir()
 source(file.path(HERE, "asymmetric_irt_helpers.R"))
 set.seed(20261015)
 
-DATA <- "nn_irt_data"
-FITS <- file.path(DATA, "fits")   # regenerable caches, gitignored
-tables <- sub("_split\\.csv\\.gz$", "", basename(list.files(DATA, "_split\\.csv\\.gz$")))
+DATA <- file.path(HERE, "nn_irt_data")
+FITS <- file.path(DATA, "fits")   # regenerable caches, gitignored; the splits live here
+tables <- sub("_split\\.csv\\.gz$", "", basename(list.files(FITS, "_split\\.csv\\.gz$")))
+if (!length(tables)) stop("no split files in ", FITS, "; run nn_irt_torch_compute.py first")
 
 specs <- list(
   mirt_2pl      = list(itemtype = "2PL"),
@@ -72,7 +81,7 @@ for (tb in tables) {
   if (file.exists(out)) { cat(tb, "already done\n"); next }
   d <- fread(file.path(FITS, paste0(tb, "_split.csv.gz")))
   d[, id := as.character(id)][, item := as.character(item)]
-  train <- d[test == FALSE]
+  train <- d[test == FALSE & val == FALSE]   # validation cells are missing to mirt too
   wide <- dcast(train, id ~ item, value.var = "resp")
   ids <- wide$id; wide <- as.matrix(wide[, -1]); rownames(wide) <- ids
   wide <- wide[order(rownames(wide)), order(colnames(wide))]

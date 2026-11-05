@@ -19,7 +19,8 @@ DATA = HERE / "nn_irt_data"
 # bibliography -- stay in DATA and are committed.
 FITS = DATA / "fits"
 SEED = 20261015
-TEST_FRAC = 0.2
+TEST_FRAC = 0.2   # share of each person's cells held out for scoring
+VAL_FRAC = 0.1    # share held out for choosing the stopping epoch, never scored
 MAX_PERSONS = 5000   # larger tables are subsampled so every fit stays laptop-sized
 MAX_ITEMS = 116
 
@@ -77,7 +78,16 @@ def load_table(name: str) -> pd.DataFrame:
     df = irw.fetch(name, columns=["id", "item", "resp"]).dropna()
     df["id"] = df["id"].astype(str)
     df["item"] = df["item"].astype(str)
-    df["resp"] = df["resp"].astype(int)
+    resp = pd.to_numeric(df["resp"])
+    if not (resp == resp.round()).all():   # check before casting, so 0.5 is not truncated to 0
+        raise ValueError(f"{name} has non-integer resp values")
+    df["resp"] = resp.astype(int)
+    # a person-item pair answered twice keeps its first response; count the
+    # pairs whose repeats disagree so the choice is visible rather than silent
+    dup = df[df.duplicated(["id", "item"], keep=False)]
+    n_conflict = int((dup.groupby(["id", "item"])["resp"].nunique() > 1).sum())
+    if n_conflict:
+        print(f"{name}: {n_conflict} person-item pairs with conflicting repeats; keeping the first")
     df = df.drop_duplicates(["id", "item"]).reset_index(drop=True)
     vals = set(df["resp"].unique())
     if vals == {1, 2}:            # forced-choice binaries coded 1/2 (e.g. the NPI)
@@ -97,21 +107,30 @@ def index_table(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def holdout_mask(df: pd.DataFrame, seed: int = SEED, frac: float = TEST_FRAC) -> np.ndarray:
-    """Boolean mask over rows of df: True = held-out cell.
+def holdout_mask(df: pd.DataFrame, seed: int = SEED, frac: float = TEST_FRAC,
+                 val_frac: float = VAL_FRAC) -> tuple[np.ndarray, np.ndarray]:
+    """Two boolean masks over rows of df: (test, val).
 
-    Cells are sampled at random within each person so that every person keeps
-    at least one training response; items are dense enough that every item
-    keeps hundreds. The same mask is written to disk for R.
+    Within each person, TEST_FRAC of the cells are held out for scoring and a
+    further VAL_FRAC for choosing when to stop training; the rest train. Every
+    person keeps at least one training response; items are dense enough that
+    every item keeps hundreds. Both masks are written to disk for R.
     """
     rng = np.random.default_rng(seed)
     test = np.zeros(len(df), dtype=bool)
+    val = np.zeros(len(df), dtype=bool)
     for _, idx in df.groupby("pid").indices.items():
-        k = int(round(frac * len(idx)))
-        k = min(k, len(idx) - 1)
-        if k > 0:
-            test[rng.choice(idx, size=k, replace=False)] = True
-    return test
+        idx = rng.permutation(idx)
+        k = min(int(round(frac * len(idx))), len(idx) - 1)
+        v = min(int(round(val_frac * len(idx))), len(idx) - 1 - k)
+        test[idx[:k]] = True
+        val[idx[k:k + v]] = True
+    return test, val
+
+
+def train_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """The training cells: neither held out for scoring nor for validation."""
+    return df[~df.test & ~df.val]
 
 
 def subsample(df: pd.DataFrame, seed: int = SEED) -> pd.DataFrame:
@@ -134,19 +153,25 @@ def prepare(name: str) -> pd.DataFrame:
     var = df.groupby("item")["resp"].nunique()
     df = df[df["item"].isin(var.index[var > 1])]
     df = index_table(df)
-    df["test"] = holdout_mask(df)
-    # an item constant within the training cells is unfittable: move one
-    # held-out cell of the minority response back into training
-    tr = df[~df.test]
+    df["test"], df["val"] = holdout_mask(df)
+    # An item constant within the training cells is unfittable, so one held-out
+    # cell of the minority response is moved back into training (validation
+    # cells first). This looks at held-out outcomes, so it is reported rather
+    # than hidden: prepare() records how many cells it moved.
+    tr = train_rows(df)
     nun = tr.groupby("iid")["resp"].nunique()
+    moved = 0
     for iid in nun.index[nun < 2]:
         only = tr.loc[tr.iid == iid, "resp"].iloc[0]
-        cand = df.index[(df.iid == iid) & df.test & (df.resp != only)]
-        if len(cand):
-            df.loc[cand[0], "test"] = False
-    out = FITS / f"{name}_split.csv.gz"
-    if not out.exists():
-        df[["id", "item", "resp", "test"]].to_csv(out, index=False)
+        for col in ("val", "test"):
+            cand = df.index[(df.iid == iid) & df[col] & (df.resp != only)]
+            if len(cand):
+                df.loc[cand[0], col] = False
+                moved += 1
+                break
+    df.attrs["cells_moved_to_train"] = moved
+    # always rewrite, so R can never read a split left over from older code
+    df[["id", "item", "resp", "test", "val"]].to_csv(FITS / f"{name}_split.csv.gz", index=False)
     return df
 
 
@@ -276,19 +301,27 @@ def make_models():
 
 
 def fit(model, df, epochs=80, lr=0.02, batch=4096, person_decay=1.0, seed=SEED,
-        verbose=False):
-    """Fit by minibatch Adam on the training cells.
+        keep_best=True, verbose=False):
+    """Fit by minibatch Adam on the training cells, one optimiser for the whole run.
 
-    person_decay is an L2 penalty on person parameters (a normal prior, so the
-    estimate is MAP rather than joint ML). Returns (model, history) where
-    history has train and test log-loss per epoch.
+    person_decay is an N(0,1) penalty on the person parameters. With free item
+    slopes it does not fix the scale of theta (theta/c with c*a fits as well and
+    pays a smaller penalty), so what keeps the fit finite is early stopping:
+    with keep_best the model is returned at the epoch with the lowest
+    validation loss. The test cells are never used to choose anything; their
+    loss is recorded only so the curves can show it.
+
+    Seed the initialisation by calling torch.manual_seed before building the
+    model; `seed` here controls only the order of the minibatches.
+
+    Returns (model, history) with train, val and test log-loss per epoch.
     """
+    import copy
     import torch
     import torch.nn as nn
 
-    torch.manual_seed(seed)
     g = torch.Generator().manual_seed(seed)
-    tr, te = df[~df.test], df[df.test]
+    tr, va, te = train_rows(df), df[df.val], df[df.test]
     P = torch.tensor(tr.pid.values)
     I = torch.tensor(tr.iid.values)
     Y = torch.tensor(tr.resp.values, dtype=torch.float32)
@@ -297,10 +330,14 @@ def fit(model, df, epochs=80, lr=0.02, batch=4096, person_decay=1.0, seed=SEED,
     Pt = torch.tensor(te.pid.values)
     It = torch.tensor(te.iid.values)
     Yt = torch.tensor(te.resp.values, dtype=torch.float32)
+    Pv = torch.tensor(va.pid.values)
+    Iv = torch.tensor(va.iid.values)
+    Yv = torch.tensor(va.resp.values, dtype=torch.float32)
     loss_fn = nn.BCEWithLogitsLoss()
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     n = len(tr)
     hist = []
+    best = (float("inf"), None)
     for ep in range(epochs):
         model.train()
         perm = torch.randperm(n, generator=g)
@@ -319,10 +356,15 @@ def fit(model, df, epochs=80, lr=0.02, batch=4096, person_decay=1.0, seed=SEED,
         with torch.no_grad():
             hist.append((ep + 1,
                          loss_fn(model(P, I), Y).item(),
+                         loss_fn(model(Pv, Iv), Yv).item(),
                          loss_fn(model(Pt, It), Yt).item()))
+        if keep_best and hist[-1][2] < best[0]:
+            best = (hist[-1][2], copy.deepcopy(model.state_dict()))
         if verbose:
-            print(f"epoch {ep+1:3d}  train {hist[-1][1]:.4f}  test {hist[-1][2]:.4f}")
-    return model, pd.DataFrame(hist, columns=["epoch", "train", "test"])
+            print(f"epoch {ep+1:3d}  train {hist[-1][1]:.4f}  val {hist[-1][2]:.4f}")
+    if keep_best:
+        model.load_state_dict(best[1])
+    return model, pd.DataFrame(hist, columns=["epoch", "train", "val", "test"])
 
 
 def predict(model, df):
@@ -335,20 +377,25 @@ def predict(model, df):
 
 
 def best_epoch_preds(model_fn, d, epochs=30):
-    """Train, keep the held-out predictions from the epoch with lowest held-out loss."""
-    te = d[d.test]
-    best = (np.inf, None)
-    model = model_fn()
-    for ep in range(epochs):
-        model, _ = fit(model, d, epochs=1, seed=SEED + ep)
-        p = predict(model, te)
-        ll = log_loss(te.resp.values, p)
-        if ll < best[0]:
-            best = (ll, p)
-    return best[1]
+    """Train once, stop at the lowest validation loss, predict the test cells."""
+    import torch
+
+    torch.manual_seed(SEED)          # fixes the initialisation, whatever ran before
+    model, _ = fit(model_fn(), d, epochs=epochs)
+    return predict(model, d[d.test])
 
 
 NN_NAMES = ["Rasch", "2PL", "MIRT k=2", "MLP small", "MLP large"]
+
+
+def check_cells(cached: pd.DataFrame, te: pd.DataFrame, path) -> None:
+    """Fail loudly if a prediction cache does not cover exactly the current test cells, in order."""
+    ok = (len(cached) == len(te)
+          and (cached["id"].astype(str).values == te["id"].values).all()
+          and (cached["item"].astype(str).values == te["item"].values).all()
+          and (cached["y"].values == te["resp"].values).all())
+    if not ok:
+        raise ValueError(f"{path} does not match the current split; delete it and refit")
 
 
 def nn_specs(n_p, n_i, constrained):
@@ -366,16 +413,19 @@ def nn_specs(n_p, n_i, constrained):
 def torch_preds(t, d, epochs=30):
     """Held-out predictions for every network, both versions, for one table.
 
-    Keys: "y" (held-out responses), then each model as NN_NAMES, with
-    " (constr.)" appended for the constrained version. Cached as
-    nn_irt_data/<t>_torch_preds.csv.gz; delete the cache to refit.
+    Keys: "id", "item", "y" (the test cells and their responses), then each
+    model as NN_NAMES, with " (constr.)" appended for the constrained version.
+    Cached as nn_irt_data/fits/<t>_torch_preds.csv.gz; delete the cache to
+    refit. A cache whose cells do not match the current split is an error.
     """
     cache = FITS / f"{t}_torch_preds.csv.gz"
+    te = d[d.test]
     if cache.exists():
-        c = pd.read_csv(cache)
+        c = pd.read_csv(cache, dtype={"id": str, "item": str})
+        check_cells(c, te, cache)
         return {k: c[k].values for k in c.columns}
     n_p, n_i = int(d.pid.max() + 1), int(d.iid.max() + 1)
-    out = {"y": d[d.test].resp.values}
+    out = {"id": te.id.values, "item": te.item.values, "y": te.resp.values}
     for constrained in (False, True):
         suffix = " (constr.)" if constrained else ""
         for name, mk in nn_specs(n_p, n_i, constrained).items():

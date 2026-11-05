@@ -30,7 +30,7 @@ A_BOUND = 6.0   # |a| bound, alternating JML only; see _item_newton
 def _cells(d):
     """Persons x items matrices of responses (Y) and training indicators (M)."""
     n_p, n_i = int(d.pid.max() + 1), int(d.iid.max() + 1)
-    tr = d[~d.test]
+    tr = d[~d.test & ~d.val]          # training cells only; validation and test are missing
     p = torch.tensor(tr.pid.values)
     i = torch.tensor(tr.iid.values)
     Y = torch.zeros(n_p, n_i, dtype=DT)
@@ -108,19 +108,20 @@ def _person_newton(theta, a, dd, Y, M, prior, steps=5, cap=2.0, bound=6.0):
 def alt_jml_2pl(d, prior=True, max_sweeps=5000, tol=1e-5, patience=100):
     """Alternating JML (MAP if prior=True, constrained if prior=False).
 
-    Stopping: the sweep with the lowest held-out log-loss is kept, as the torch
-    fits keep their best epoch. The run stops early when the fitted logits stop
-    moving (change < tol), or after `patience` sweeps with no held-out gain.
+    Stopping: the sweep with the lowest validation log-loss is kept, as the torch
+    fits keep their best epoch; the test cells are never consulted. The run stops
+    early when the fitted logits stop moving (change < tol), or after `patience`
+    sweeps with no validation gain.
     Unpenalised JML has no finite optimum when an item separates the persons, so
     on some tables the item slopes diverge past the best sweep; the best sweep is
     what is reported. info records it.
     """
     Y, M = _cells(d)
     n_p, n_i = Y.shape
-    te = d[d.test]
-    tp = torch.tensor(te.pid.values)
-    ti = torch.tensor(te.iid.values)
-    ty = torch.tensor(te.resp.values, dtype=DT)
+    va = d[d.val]
+    tp = torch.tensor(va.pid.values)
+    ti = torch.tensor(va.iid.values)
+    ty = torch.tensor(va.resp.values, dtype=DT)
     pc = ((Y * M).sum(0) / M.sum(0)).clamp(0.02, 0.98)
     dd = torch.log(pc / (1 - pc))
     a = torch.ones(n_i, dtype=DT)
@@ -153,7 +154,7 @@ def alt_jml_2pl(d, prior=True, max_sweeps=5000, tol=1e-5, patience=100):
             break
     _, theta, a, dd, best_sweep = best
     info = {"sweeps": sweep, "best_sweep": best_sweep, "stopped": stopped,
-            "heldout_logloss": best[0], "last_change": delta,
+            "val_logloss": best[0], "last_change": delta,
             "theta_sd": theta.std(unbiased=False).item(), "median_a": a.median().item(),
             "max_a": a.abs().max().item(),
             "items_at_bound": int((a.abs() >= A_BOUND - 1e-9).sum())}

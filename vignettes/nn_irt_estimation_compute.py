@@ -32,7 +32,8 @@ def run(name):
     p_ajc = alt_jml_predict(th, a, dd, d)
     p_em, _, _, info_em = em_mml_2pl(d)
     p_ml, _, _, info_ml = mml_lbfgs_2pl(d)
-    pd.DataFrame({"y": y, "alt JML (prior)": p_ajp, "alt JML (constr.)": p_ajc,
+    te = d[d.test]
+    pd.DataFrame({"id": te.id.values, "item": te.item.values, "y": y, "alt JML (prior)": p_ajp, "alt JML (constr.)": p_ajc,
                   "EM MML": p_em, "MML L-BFGS": p_ml}).to_csv(FITS / f"{name}_estimation_preds.csv.gz", index=False)
     info = pd.DataFrame([{"estimator": k, **v} for k, v in
                          [("alt JML (prior)", info_p), ("alt JML (constr.)", info_c), ("EM MML", info_em),
