@@ -1,5 +1,5 @@
 ---
-title: "The 2PL Is a Tiny Neural Network: Width, Depth, and Held-Out Prediction on 242 Item Response Tables"
+title: "The 2PL Is a Tiny Neural Network: Width, Depth, and Held-Out Prediction"
 description: |
   The Rasch and 2PL models are two-embedding networks with no hidden layer.
   Part I builds them in PyTorch and checks them against `mirt`. Part II widens
@@ -7,13 +7,9 @@ description: |
   Vigorish, whether a neural network predicts held-out item responses any
   better than the 2PL. Mostly it does not: where a network wins, the win is a
   second dimension, and an ordinary two-dimensional MIRT finds it as well as a
-  multilayer perceptron does. Part III applies a selection rule to the whole
-  warehouse and fits both models on 242 tables: the median table gains nothing
-  and the mean gain matches the published benchmark, carried by the seventh of
-  the corpus whose tables mix items running in opposite directions. Part IV
-  takes apart a small gap between the torch 2PL and the `mirt` 2PL: the
-  estimator explains it, and fixing the scale of the person parameters does
-  not.
+  multilayer perceptron does. Part III takes apart a small gap between the
+  torch 2PL and the `mirt` 2PL: the estimator explains it, and fixing the
+  scale of the person parameters does not.
 date: today
 ---
 
@@ -81,25 +77,19 @@ the item curve while keeping a single dimension.
 
 The short version of the answer is that on a test built to measure one thing,
 nothing beats the 2PL; where a network wins, the win is a second dimension, and
-a two-dimensional MIRT finds it as well as a deeper network does. We then put
-that result to a harder test, applying a selection rule to the whole warehouse
-rather than a judgment to 24 tables, and fitting the 2PL against a
-two-dimensional MIRT on all 242 tables that qualify. The median table gains
-nothing; the mean gain, +0.0025, matches the published benchmark and is carried
-almost entirely by a seventh of the corpus. Those tables have something in
-common: each mixes items that run in opposite directions, which the 2PL fits by
-giving some of them a negative slope. All of
+a two-dimensional MIRT finds it as well as a deeper network does. All of
 this holds at the sizes we fit here: tables are capped at 5,000 respondents and
 116 items, and scale is the one advantage a wider network is supposed to have,
-so the null is a null at this scale.
+so the null is a null at this scale. It also holds for these estimators: none
+of the networks puts a prior on the item slopes, and that matters for how often
+a two-dimensional model finds its second dimension, a point we return to in the
+[limitations](#limitations).
 
-The page is in four parts. [Part I](#part-i) builds the
+The page is in three parts. [Part I](#part-i) builds the
 models and checks them against `mirt`. [Part II](#part-ii) widens and deepens
-them on the 24 tables. [Part III](#part-iii) asks how often the one move that
-worked actually works, across 242 tables chosen by rule, and closes by asking
-what the tables that gain have in common. One of the comparisons also turned up
-a small but consistent gap between the same 2PL fit in torch and in `mirt`;
-[Part IV](#part-iv) takes it apart.
+them on the 24 tables. One of the comparisons also turned up a small but
+consistent gap between the same 2PL fit in torch and in `mirt`;
+[Part III](#part-iii) takes it apart.
 
 ## Data and methods
 
@@ -136,9 +126,8 @@ than 5,000 respondents or 116 items are subsampled to those caps with a fixed
 seed, so that every fit on the page stays small enough to run on a laptop. This
 selection is deliberate and it is *not* a sample: these 24 tables were picked
 to span kinds of structure, which makes them good for showing where gains come
-from and bad for estimating how often gains occur. A rule-based sweep over the
-whole warehouse, reported [below](#away-from-the-hand-picked-tables-the-median-table-gains-nothing),
-supplies the second thing.
+from and bad for estimating how often gains occur. That second question needs a
+rule-based selection over the whole warehouse, and this page does not answer it.
 
 ```{python}
 #| label: data
@@ -235,7 +224,7 @@ section that follows builds this up line by line). The prior is the only thing
 identifying the scale of $\theta$ on this page, and it is used that way
 throughout: everything in the body of the page is the MAP fit. The obvious alternative is to
 standardise $\theta$ to mean zero and SD one inside the model, which fixes the
-scale exactly rather than softly; [Part IV](#part-iv) fits every
+scale exactly rather than softly; [Part III](#part-iii) fits every
 model both ways and reports what that costs, which is why the prior is what we
 use here. Each model is trained for
 up to 30 epochs and the epoch with the lowest held-out loss is reported. That
@@ -380,7 +369,9 @@ free fixed effects, exactly as they are here. The network's equivalent is to
 add $\tfrac{1}{2}\sum_p \theta_p^2$ to the loss, scaled by $1/n$ to match
 the mean log-likelihood. That makes the fit a MAP estimate under the same
 normal prior, and it is a single line. Nothing here puts a prior on the item
-slopes, and the networks do not need one for the comparison.
+slopes. That keeps every network on the same footing as the others, but it is
+not free for the multidimensional ones, and the [limitations](#limitations)
+say what it costs.
 
 ```{python}
 #| code-fold: false
@@ -672,12 +663,10 @@ three-attribute Q-matrix, and a model built to find structure still predicts
 no better, because the attributes are too correlated to carry separate
 signal in held-out cells. Structure that is real in the design can be
 invisible in prediction. The one clear exception in this group is the FSIQ
-mental-rotation test, where every wider network gains about 0.03. We first read
-that as the test failing to be unidimensional in practice whatever it was built
-to measure. The sweep below says otherwise: 42% of its items take a negative
-2PL slope, the highest share of any table named on this page, and the second
-dimension lines up with that split almost perfectly. The gain is scoring, not
-spatial ability.
+mental-rotation test, where every wider network gains about 0.03. Whatever
+it was built to measure, in held-out prediction it does not behave as a
+one-dimensional test. What the second dimension is, prediction alone cannot
+say, and we have not read the items.
 
 ## Where the networks win, a two-dimensional 2PL wins too
 
@@ -693,9 +682,9 @@ two-dimensional MIRT, and the large MLP is never reliably better than the
 small one. Once the embeddings are two-dimensional, a nonlinear decoder adds
 nothing on these data. Put differently: the signal a network can find in a
 person-by-item table of this kind is a second dimension, and an ordinary
-two-dimensional 2PL finds it. Depth is not where the signal is. What that second dimension
-*is* turns out to vary, and the close of [Part III](#part-iii) takes that
-question up.
+two-dimensional 2PL finds it. Depth is not where the signal is. What that
+second dimension *is* is a question about the instruments, not about the
+networks, and held-out prediction cannot answer it.
 
 The Rasch row shows the same thing from the other side. Its large losses
 (0.11 on the NPI, 0.08 on the ADQ, 0.07 on the Denver screener) are tables
@@ -752,107 +741,12 @@ point estimates. With a dozen or twenty responses per person those estimates
 are poor, and the item parameters inherit the error, which is the
 incidental-parameter problem; `mirt` integrates the persons out instead. That
 is a story about the estimator rather than the model, and it is worth more than
-a paragraph, so [Part IV](#part-iv) takes it apart. We have left the network as
+a paragraph, so [Part III](#part-iii) takes it apart. We have left the network as
 it is so that the effect stays visible here: it is the price of the simplest
 possible estimator, and readers who build their own networks should know it is
 there.
 
-# Part III. How often does width pay? {#part-iii}
-
-## Away from the hand-picked tables, the median table gains nothing
-
-
-Twenty-four tables chosen to span kinds of structure cannot tell us how often
-a second dimension pays. For that we need a rule rather than a judgment, so we
-applied one to the whole warehouse: dichotomous, at least 500 respondents, at
-least 10 items, and density at least 0.9, which is what the cell-level split
-needs. That gives 262 tables, of which 242 fit without incident. The sweep is
-narrower than Part II's comparison — it is the 2PL against a two-dimensional
-MIRT and nothing else, because the point is to count how often the one move
-that worked above actually works, not to re-run five models 242 times.
-
-```{python}
-#| label: fig-expand
-#| code-summary: "The sweep: 242 tables under a selection rule"
-ex = pd.read_csv(DATA / "expand_summary.csv")
-picked = ex.table.isin(TABLES)
-
-fig, ax = plt.subplots(figsize=(6.4, 3.4))
-bins = np.linspace(-0.025, 0.105, 53)
-ax.hist(ex.imv, bins=bins, color="0.78", edgecolor="white", lw=0.5, label=f"all {len(ex)} tables")
-ax.hist(ex.imv[picked], bins=bins, color="#2a78d6", edgecolor="white", lw=0.5,
-        label=f"{int(picked.sum())} of the 24 hand-picked")
-ax.axvline(0, color="0.3", lw=0.8)
-ax.axvline(ex.imv.mean(), color="#eb6834", lw=1.2, ls="--",
-           label=f"mean {ex.imv.mean():+.4f}")
-ax.set(xlabel="IMV of MIRT k=2 over the 2PL, held-out cells", ylabel="tables", yscale="log")
-ax.legend(frameon=False, fontsize=8)
-ax.grid(color="0.9", lw=0.6); ax.set_axisbelow(True)
-for sp in ("top", "right"): ax.spines[sp].set_visible(False)
-plt.tight_layout(); plt.show()
-
-q = ex.imv.quantile([0.25, 0.5, 0.75])
-print(f"mean {ex.imv.mean():+.4f}   median {q[0.5]:+.4f}   sd {ex.imv.std():.4f}")
-print(f"quartiles {q[0.25]:+.4f} / {q[0.75]:+.4f}   max {ex.imv.max():+.4f}   min {ex.imv.min():+.4f}")
-print(f"at or below zero: {(ex.imv <= 0).mean():.0%}    above 0.005: {(ex.imv > 0.005).mean():.0%}")
-print(f"The 24 hand-picked tables, scored the same way: n={int(picked.sum())}, "
-      f"mean {ex.imv[picked].mean():+.4f}, above 0.005: {(ex.imv[picked] > 0.005).mean():.0%}")
-```
-
-Note the log scale on the count axis: without it the spike at zero flattens
-everything else. The median table gains **nothing at all** (−0.0001), 54% of
-tables are at or below zero, and the quartiles are −0.0012 and +0.0016. The
-mean is +0.0025, and it is positive only because of a thin right tail: 14% of
-tables gain more than 0.005 and a single table gains 0.10. So the honest
-summary of the one move that worked in Part II is that it works on about a
-seventh of the warehouse and does nothing on the rest.
-
-Two checks are worth pausing on. The first is that this mean is almost exactly
-the published one. @domingue2024imv fit an exploratory two-factor model to 60
-IRW datasets under a similar rule and report a mean IMV of +0.0031 against the
-2PL, with a maximum of 0.029; we get +0.0025 from a different implementation,
-a different split design and four times as many tables. Two independent routes
-to the same number is about as much reassurance as this kind of comparison
-affords.
-
-The second is less comfortable. Scored under the same rule and the same split, the 24
-give a mean of +0.0048 with 27% above 0.005 — roughly double the corpus
-rate on both counts. **The hand-picked set is
-enriched for the effect it reports.** That is what picking tables to span kinds
-of structure does, and it was the right choice for showing *where* the gains
-come from, but it makes the 24 useless for saying *how common* they are. Of the
-24, 22 clear the rule; the two that do not are the developmental screeners,
-which are age-adaptive and so fail the density threshold.
-
-## The tables that gain are the ones with items running both ways
-
-Fourteen per cent of tables gain more than 0.005, and they are not a random
-fourteen per cent. IRW does not harmonise the direction of responses, and the
-2PL fits an item that runs against the rest of its test by giving it a negative
-slope. Counting those slopes sorts the sweep more sharply than anything else we
-tried, and it sorts it as a step rather than a gradient. The 155 tables with no
-negatively-sloped item gain nothing (mean $-0.0004$), and neither do the 45
-where under a tenth of the slopes are negative (mean $+0.0003$, with 3 of 45
-clearing 0.005). The whole of the sweep's average gain comes from the remaining
-42, where more than a tenth do: mean $+0.0158$, median $+0.0033$, and 19 of 42
-above 0.005.
-
-Why those items oppose the rest is a separate question, and not one held-out
-prediction can answer. Some are reverse-worded items that were never recoded,
-some are bipolar by design, one is a test whose respondents differ in age
-cohort, and in the option-level tables a negative slope is simply a distractor.
-We never read a line of item wording. The statistics, the instruments and the
-checks that would settle it are set out in
-[issue #3197](https://github.com/ben-domingue/irw/issues/3197); they do not
-belong on this page.
-
-The consequence for [Part II](#part-ii) is a qualification rather than a
-reversal. That a two-dimensional 2PL finds whatever a deeper network finds is a
-claim about depth, and nothing in the sweep touches it. What changes is the
-reading of the gains: a reader tempted to take a high IMV as evidence of a
-second trait should check the sign of the slopes first.
-
-# Part IV. Which estimator closes the gap to mirt? {#part-iv}
+# Part III. Which estimator closes the gap to mirt? {#part-iii}
 
 [Part II](#part-ii) left a promise unkept: the same 2PL, fit in torch and in
 `mirt`, does not give the same held-out loss, and the gap is largest on short
@@ -1054,7 +948,7 @@ what keeps them honest.
   epochs at which to get lucky. A third split would fix this; we judged that
   at 24 tables and five models the bias is small relative to the effects
   reported, and the direction is known: it works against the 2PL, not for
-  it. Note that the same practice tilts Part IV the other way. There the
+  it. Note that the same practice tilts Part III the other way. There the
   networks and the alternating JML fits stop on the held-out cells while
   `mirt` never sees them, so the estimator gap reported there is if anything
   an underestimate. In both parts the thumb is on the networks' side.
@@ -1062,7 +956,7 @@ what keeps them honest.
   and the `mirt` 2PL (marginal maximum likelihood) are the same model and do
   not give the same held-out loss. The comparison that is fair is therefore
   networks against the PyTorch 2PL and flexible curves against the `mirt`
-  2PL, and Parts I to III are written that way. Part IV shows that an
+  2PL, and Parts I and II are written that way. Part III shows that an
   estimator which integrates over the persons closes the gap in torch, and that
   fixing the scale of $\theta$ does not.
 - **Only person and item identities enter the model.** The networks see
@@ -1085,33 +979,20 @@ what keeps them honest.
   kinds of structure, not sampled from the warehouse, and the counts per
   group are small. The qualitative pattern (dimension helps where there is
   one, depth does not) is consistent across the groups; the sizes of the
-  gains are specific to these tables, and the sweep confirms that the set is
-  enriched — roughly double the corpus rate of gains above 0.005.
-- **The sweep is narrower than the comparison it generalises.** The 242-table
-  sweep fits the 2PL against a two-dimensional MIRT and nothing else. It can
-  say how often the one move that worked in Part II pays, and it can say what
-  the paying tables have in common, but it says nothing about depth, about
-  flexible item curves, or about the estimator gap — all of which rest on the
-  24 tables alone. Its selection rule also caps fetched tables at two million
-  responses, which excludes the largest mass administrations (the
-  million-respondent ENEM forms among them), and its density threshold of 0.9
-  excludes adaptive instruments, including two of the 24 hand-picked tables.
-- **The sweep treats tables as independent, and the warehouse does not.** IRW
-  holds several tables from some deposits, and two of them sit among the
-  largest gains in the sweep (`vogel_2024_citizen_attributes_s2` and `_s3`, at
-  +0.094 and +0.091). Nothing in the selection rule or the summaries accounts
-  for that, so the tail is less varied than a count of 242 suggests, and any
-  standard error computed as though those tables were independent would be too
-  small. We report no such standard error for that reason.
-- **A negative slope is a symptom, and we never read the items.** The split at
-  the close of [Part III](#part-iii) counts items whose fitted 2PL slope is
-  negative. That is not an observation of the wording: a slope goes negative
-  for an item that was reverse-worded and never recoded, but also for a
-  mis-scored key, a badly behaved item, a distractor in an option-level table,
-  or an item that genuinely measures something else. We make no claim about
-  which, and the sorting in Part III does not depend on one. What would settle
-  it --- the instruments, the item text and the checks --- is in
-  `ben-domingue/irw` issue #3197.
+  gains are specific to these tables. Because the set was chosen to span
+  kinds of structure, it is likely enriched for gains, and the share of tables
+  that gain here (seven of 24) should not be read as a rate for the warehouse.
+- **No prior on the item slopes.** Every network here, the MIRT k=2 included,
+  leaves its item parameters free (step 5 of Part I). Without some
+  regularisation of the slopes, the second dimension of a two-dimensional
+  model is often not identified, and the fit collapses onto the 2PL. In a
+  separate check on 50 IRW tables, `mirt`'s two-factor model without a slope
+  prior collapsed to the 2PL on 28 of them, and with a lognormal(0,1) slope
+  prior on one. So where the MIRT k=2 gains nothing on this page, that is a
+  statement about this estimator, not evidence that the table has no second
+  dimension, and the gains it does find are, if anything, understated. The
+  comparison between the MIRT and the MLPs is not affected, since none of them
+  has a slope prior.
 
 ## Of the estimator comparison
 
@@ -1138,7 +1019,7 @@ what keeps them honest.
 [`nn_irt_helpers.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_helpers.py),
 [`nn_irt_chart.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_chart.py),
 [`nn_irt_mirt_compute.R`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_mirt_compute.R),
-and, for Part IV,
+and, for Part III,
 [`nn_irt_estimation.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_estimation.py),
 [`nn_irt_estimation_compute.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_estimation_compute.py)
 and [`nn_irt_estimation_drift.py`](https://github.com/datapages/irw/blob/main/vignettes/nn_irt_estimation_drift.py).
@@ -1148,7 +1029,7 @@ and [`nn_irt_estimation_drift.py`](https://github.com/datapages/irw/blob/main/vi
      line are written by hand (see irt_python.qmd). -->
 
 Results were computed on 15 October 2026 (Parts I–II) and 16 October 2026
-(Part IV); the 242-table sweep on 22 October 2026. The tables were fetched on 15 October from `item_response_warehouse`
+(Part III). The tables were fetched on 15 October from `item_response_warehouse`
 v72.0 and `item_response_warehouse_6` v5.11.
 
 This page is rendered with Quarto's `freeze` option: the PyTorch training runs
@@ -1158,9 +1039,7 @@ those outputs — the fetched tables, the splits, and the held-out predictions
 from every model — are regenerable, so they are kept out of the repository in
 `vignettes/nn_irt_data/fits/`, which `.gitignore` excludes. What is committed
 beside the page is the small, slow-to-rebuild material: the `mirt` item
-parameters, the estimator diagnostics, the drift trace, the bibliography, and
-`expand_summary.csv`, the one-row-per-table result of the 242-table sweep,
-which takes hours to rebuild and 26 KB to store.
+parameters, the estimator diagnostics, the drift trace and the bibliography.
 Re-rendering the page from source therefore means regenerating the caches,
 which needs Redivis access and an R installation; building the site from the
 committed freeze needs neither. To regenerate:
@@ -1174,7 +1053,7 @@ pip install irw imvpy scipy matplotlib pandas jupyter
 # 2. The network fits, both versions, all tables
 python vignettes/nn_irt_torch_compute.py
 
-# 3. The 2PL three further ways on all tables, plus the drift trace (Part IV)
+# 3. The 2PL three further ways on all tables, plus the drift trace (Part III)
 python vignettes/nn_irt_estimation_compute.py
 python vignettes/nn_irt_estimation_drift.py
 
@@ -1182,14 +1061,7 @@ python vignettes/nn_irt_estimation_drift.py
 #    delete vignettes/nn_irt_data/fits/*_mirt_preds.csv.gz first if the split changes
 Rscript vignettes/nn_irt_mirt_compute.R
 
-# 5. The 242-table sweep behind the corpus check (slow: hours, and it fetches
-#    most of the warehouse). Each step is resumable and skips finished tables.
-#    IRW_METADATA must point at src/metadata/metadata.csv in the main checkout.
-python vignettes/nn_irt_expand_compute.py    # fits/expand_results.csv
-python vignettes/nn_irt_expand_loadings.py   # fits/expand_loadings.csv
-python vignettes/nn_irt_expand_keying.py     # nn_irt_data/expand_summary.csv
-
-# 6. Re-render this page
+# 5. Re-render this page
 quarto render vignettes/nn_irt.qmd
 ```
 
