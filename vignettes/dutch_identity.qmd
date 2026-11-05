@@ -392,28 +392,17 @@ independence predicts in the median table; here it is
 `r p0(cc_sum$this_mi_pctl)` of tables, its top-pattern ratio
 `r p0(cc_sum$this_ratio_pctl)` — concentrated, but not an outlier.
 
-One caution about sparse tables. The plug-in entropy of a table with many empty
-or singleton cells is biased downward, which overstates $M$ and understates the
-rank-1 share. That matters most at $J \ge 8$, where a median of only
-`r p0(cc_sum$frac_med)` of the $2^J$ patterns are observed at all (range
-`r p0(cc_sum$frac_lo)`–`r p0(cc_sum$frac_hi)`), and in the tables with the
-fewest respondents. Replacing $H_\text{obs}$ with a bias-corrected estimate —
-Miller–Madow, or Chao–Shen, which also uses the singletons — moves the typical
-table very little: by a median of `r sprintf("%.3f", cc_sum$shift_mm)` and
-`r sprintf("%.3f", cc_sum$shift_cs)` bits respectively, at most
-`r sprintf("%.2f", cc_sum$shift_max_mm)` and
-`r sprintf("%.2f", cc_sum$shift_max_cs)`. The corpus median moves somewhat
-more, from `r sprintf("%.3f", cc_sum$mi[2])` to
-`r sprintf("%.3f", cc_sum$mi_mm)` (Miller–Madow) or
-`r sprintf("%.3f", cc_sum$mi_cs)` bits (an effective-pattern cut of
-`r p0(cc_sum$cut_mm)` or `r p0(cc_sum$cut_cs)` rather than
-`r p0(cc_sum$cut[2])`). That is not because the long tables dominate; it is
-because the tables sitting closest to the median happen to be small-$N$ ones
-whose corrections are among the larger. The rank-1 share moves the other way,
-from `r p0(cc_sum$rq[2])` to `r p0(cc_sum$rq_cs)` (Chao–Shen), and most at
-$J \ge 8$, from `r p0(cc_sum$rq_big)` to `r p0(cc_sum$rq_big_cs)`, so the
-uncorrected figures if anything undersell the rank-1 model on long tables. Both
-corrections, overall and by $J$, are in
+One caution: plug-in entropy is biased downward when cells are sparse, most of
+all at $J \ge 8$, where a median of only `r p0(cc_sum$frac_med)` of the $2^J$
+patterns are observed. Bias-corrected estimates (Miller–Madow, Chao–Shen) barely
+move any single table, a median shift of
+`r sprintf("%.3f", min(cc_sum$shift_mm, cc_sum$shift_cs))`–`r sprintf("%.3f", max(cc_sum$shift_mm, cc_sum$shift_cs))`
+bits. The corpus median effective-pattern cut moves a little more, from
+`r p0(cc_sum$cut[2])` to `r p0(min(cc_sum$cut_mm, cc_sum$cut_cs))`–`r p0(max(cc_sum$cut_mm, cc_sum$cut_cs))`,
+because the tables nearest the median have small $N$. The rank-1 share rises
+under correction, most at $J \ge 8$ (`r p0(cc_sum$rq_big)` to
+`r p0(cc_sum$rq_big_cs)` with Chao–Shen), so the uncorrected figures undersell
+the rank-1 model. The full breakdown is in
 `vignettes/dutchdata/concentration_summary.md`.
 
 ---
