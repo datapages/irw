@@ -65,10 +65,10 @@ layers sit between those numbers and the predicted response.
 The question is not new. Variational IRT [@wu2020variational] and the
 recommender-systems literature [@koren2009matrix; @he2017ncf] both treat
 person-by-item data as a matrix to be factorised and have explored exactly
-these widenings. What is missing is a comparison on an honest footing: the
-same held-out cells, the same prior on persons, the same scoring rule, across
-enough real tables of different kinds to see where a wider network helps and
-where it does not. That is the contribution here. We build the classical
+these widenings. What we add is a small comparison on a common footing: the
+same held-out cells, the same penalty on persons and the same scoring rule,
+across real tables of several kinds, to see where a wider network helps and
+where it does not. We build the classical
 models in PyTorch, confirm that they recover what `mirt` [@chalmers2012mirt]
 recovers, widen and deepen them, and score every model on held-out responses
 from 24 IRW tables with the InterModel Vigorish [IMV, @domingue2024imv],
@@ -78,17 +78,12 @@ logistic positive exponent [@samejima2000lpe], join the comparison, because
 they make the opposite move from the networks: they change the *shape* of
 the item curve while keeping a single dimension.
 
-The short version of the answer, for these 24 tables and these fits, is that
-on a test built to measure one thing no network beat the 2PL by much, and
-that where a network did gain, a two-dimensional MIRT usually gained about as
-much as the larger networks, with a couple of exceptions we name. These are
-observations about specific models on hand-picked tables, from a single split,
-not a verdict on neural networks. They hold at the sizes we fit here: tables are capped at 5,000 respondents and
-116 items, and scale is the one advantage a wider network is supposed to have,
-so a null is a null at this scale. They also hold for these estimators: none
-of the networks puts a prior on the item slopes, and that matters for how often
-a two-dimensional model finds its second dimension, a point we return to in the
-[limitations](#limitations).
+The short version: on these 24 tables, no network beat the 2PL by much on a
+test built to measure one thing, and where a network did gain, a
+two-dimensional MIRT usually gained about as much as the larger networks.
+That describes these fits on hand-picked tables capped at 5,000 respondents
+and 116 items, not neural networks in general; the [limitations](#limitations)
+say what it rests on.
 
 The page is in three parts. [Part I](#part-i) builds the
 models and checks them against `mirt`. [Part II](#part-ii) widens and deepens
@@ -129,11 +124,9 @@ corrected upstream); two further candidates, `encceja_2025_em_cn` and
 `mgkt_options`, were dropped because their full exports fail to load, so the
 final 24 is a design choice filtered by what we could read. Tables with more
 than 5,000 respondents or 116 items are subsampled to those caps with a fixed
-seed, so that every fit on the page stays small enough to run on a laptop. This
-selection is deliberate and it is *not* a sample: these 24 tables were picked
-to span kinds of structure, which makes them good for showing where gains come
-from and bad for estimating how often gains occur. That second question needs a
-rule-based selection over the whole warehouse, and this page does not answer it.
+seed, so that every fit on the page stays small enough to run on a laptop.
+The 24 were picked to span kinds of structure, which makes them good for
+showing where gains come from and no use for saying how often they occur.
 
 ```{python}
 #| label: data
@@ -166,16 +159,12 @@ training. The remaining 70% train. Every person and every item stays in the
 training set, and the same three-way mask is used by every model, including
 the `mirt` fits, which see the validation and test cells as missing.
 
-This is the cross-validation design of the IMV paper, and it fixes what is
-being predicted: a response the table already contains, from a person and an
-item the model has seen, with the remaining responses of that person in hand.
-On the two age-adaptive screeners, that means predicting items a child was
-actually given, not items the screener skipped. Predicting the responses of
-new people would be a different target, and would need a different design.
-One step looks at held-out outcomes, and we report it rather than hide it: if
-an item is constant in the training cells, one held-out cell with the other
-response is moved into training so the item can be fit. The table above
-counts how often that happens.
+This is the cross-validation design of the IMV paper. What it predicts is a
+response the table already contains, from a person and an item the model has
+seen; on the age-adaptive screeners, that means items a child was actually
+given. One step peeks at held-out outcomes: an item constant in the training
+cells gets one held-out cell of the other response moved into training, so it
+can be fit. The table above counts these (three cells, all on the screeners).
 
 ### The models, written as networks
 
@@ -241,18 +230,14 @@ from a small decoder to a large one rather than a clean test of depth alone.
 ### Estimation
 
 The PyTorch models are fit by minibatch gradient descent (Adam) on the mean
-negative log-likelihood plus a penalty on the person parameters, the one a
-$N(0,1)$ prior on $\theta_p$ would contribute (the section that follows builds
-this up line by line). It is tempting to call the result a maximum a
-posteriori estimate, but with free item slopes that is not quite right: the
-penalty does not by itself pin down the scale of $\theta$, for a reason step 5
-spells out, and what keeps each fit finite is early stopping. Each model is
-trained once for 30 epochs, with one optimiser, and the parameters from the
-epoch with the lowest validation loss are kept. So the networks on this page
-are early-stopped joint fits with a penalty on the persons. The alternative is
-to standardise $\theta$ to mean zero and SD one inside the model, which does
-fix the scale; [Part III](#part-iii) fits every model both ways and reports
-what that costs. The body of the page uses the penalised version.
+negative log-likelihood plus the penalty a $N(0,1)$ prior on $\theta_p$ would
+contribute. Each is trained once for 30 epochs, and the parameters from the
+epoch with the lowest validation loss are kept. That early stopping matters
+more than it sounds: with free slopes the penalty alone does not fix the scale
+of $\theta$ (step 5 below shows why), so the networks here are best described
+as early-stopped joint fits with a penalty on the persons. Standardising
+$\theta$ inside the model fixes the scale instead; [Part III](#part-iii) tries
+that too.
 
 The `mirt` models are fit offline by marginal maximum likelihood
 [@bock1981marginal] on the same training cells, in
@@ -393,18 +378,15 @@ maximum likelihood [@bock1981marginal]; the item parameters are left as
 free fixed effects, exactly as they are here. The network's equivalent is to
 add $\tfrac{1}{2}\sum_p \theta_p^2$ to the loss, scaled by $1/n$ to match
 the mean log-likelihood. That is a single line, and it stops any one person's
-$\theta_p$ running away. It does not do everything the prior does in `mirt`,
-though. The likelihood only ever sees the product $a_i\theta_p$, so dividing
-every $\theta_p$ by some $c > 1$ and multiplying every slope by $c$ leaves
-every predicted probability where it was and shrinks the penalty by $c^2$.
-With free slopes the penalised loss can therefore always be lowered a little
-further by shrinking the persons and growing the items, and it has no finite
-minimum of its own. What holds the fit in place is that training stops early,
-at the epoch where the loss on the validation cells is lowest, and the drift
-can be watched happening in [Part III](#part-iii) when the stopping is taken
-away. Nothing here puts a prior on the item slopes either. That keeps the
-networks comparable to one another, but it is not free for the
-multidimensional ones, and the [limitations](#limitations) say what it costs.
+$\theta_p$ running away. It does less than the prior does in `mirt`, though.
+The likelihood only sees the product $a_i\theta_p$, so dividing every
+$\theta_p$ by some $c > 1$ and multiplying every slope by $c$ leaves every
+probability unchanged and shrinks the penalty by $c^2$. With free slopes the
+penalised loss can always be lowered by shrinking the persons and growing the
+items, so it has no minimum of its own; what holds the fit in place is
+stopping early, on the validation cells. [Part III](#part-iii) shows the
+drift when the stopping is taken away. Nothing here puts a prior on the item
+slopes either.
 
 ```{python}
 #| code-fold: false
@@ -679,23 +661,18 @@ out
 
 Across the achievement and ability tests, the knowledge tests and two of the
 three exams with a documented multidimensional structure, the wider networks
-sit within about 0.01 IMV of the 2PL, and as often below it as above, with
-one or two exceptions noted below. For
+sit within about 0.01 IMV of the 2PL, and as often below it as above. For
 calibration, the IMV paper puts the gain from 1PL to 2PL on typical
 cognitive data at roughly the value of knowing someone's age when predicting
 chronic disease; the gains here are a fraction of that, and they go both
 ways. The ECPE grammar test is the instructive case. It has a known
 three-attribute Q-matrix, and a two-dimensional model still predicts no
-better. One reading is that the attributes are too correlated to carry
-separate signal in held-out cells, but nothing here tests that, and a
-two-dimensional fit to a three-attribute design that fails to find its
-second dimension (see the [limitations](#limitations)) would look the same.
-What can be said is narrower: structure that is real in the design need not
-show up in prediction. The one clear exception in this group is the FSIQ
-mental-rotation test, where every wider network gains about 0.03. Whatever
-it was built to measure, in held-out prediction it does not behave as a
-one-dimensional test. What the second dimension is, prediction alone cannot
-say, and we have not read the items.
+better. Structure that is real in the design need not show up in
+prediction, whether because the attributes are too correlated to separate or
+because the fit never found its second dimension; nothing here says which.
+The one clear exception in this group is the FSIQ mental-rotation test, where
+every wider network gains about 0.03: whatever it was built to measure, in
+prediction it is not one-dimensional.
 
 ## Where the networks win, a two-dimensional 2PL mostly wins too
 
@@ -703,28 +680,22 @@ The two-dimensional MIRT gains more than 0.005 on seven of the 24 tables:
 about 0.03 on the ADQ anhedonia scale and the mental-rotation test, 0.02 on
 the Eysenck EPI (three scales in one table) and the Denver screener, 0.01 on
 the GMI, and smaller amounts on the Woodworth and the Author Recognition
-Test. On the other seventeen it is within 0.005 of the 2PL, so the positive
-result rests on a minority of these tables. On most of the seven, the MLPs
-match or trail the MIRT, and across all 24 the large MLP is no better than the
-small one on average (the two differ by $-0.0001$, with the table-by-table
-differences running from $-0.02$ to $+0.01$). There are two exceptions worth
-naming. On the Denver screener both MLPs gain about 0.04, twice what the MIRT
-gains, and on the 18-response Onah knowledge test the small MLP gains 0.011
-where the MIRT loses 0.007. Neither is large enough, alone, to say that a
-nonlinear decoder finds something a second dimension misses, and with a single
-split we cannot tell either from noise. So the summary for these data is
-modest: most of what these two decoders found, a two-dimensional 2PL found as
-well, and we see no general advantage for the larger decoder. What a second
-dimension *is* on a given instrument is a question about the instrument, and
-held-out prediction cannot answer it.
+Test. On the other seventeen it is within 0.005 of the 2PL. On most of the
+seven the MLPs match or trail the MIRT, and across all 24 the large MLP does no
+better than the small one on average. Two tables go the other way: on the
+Denver screener both MLPs gain about 0.04, twice the MIRT's gain, and on the
+short Onah knowledge test the small MLP gains 0.011 where the MIRT loses 0.007.
+Two tables from one split are not enough to say a nonlinear decoder finds
+something a second dimension misses. Mostly, what these decoders found, a
+two-dimensional 2PL found as well.
 
 The Rasch row shows the same thing from the other side. Its large losses
 (0.11 on the NPI, 0.09 on the ADQ, 0.07 on the Denver screener) are tables
 where slopes differ sharply across items. In IRW the responses are as
 deposited, not recoded to a common direction, so some of those slopes are
 items keyed against the rest of the test, which a Rasch model cannot fit
-at all; the Rasch row is a baseline on the raw coding. The step from one item parameter to two is
-worth more than every step after it.
+at all; the Rasch row is a baseline on the raw coding. Here the step from
+one item parameter to two is worth more than every step after it.
 
 ## Flexible item curves do not add much
 
@@ -732,16 +703,15 @@ The asymmetric LPE curve tracks the `mirt` 2PL to within 0.002 on every table,
 very slightly above it on average (+0.0004). The monotonic polynomial is a
 little better on several tests (0.014 on the mental-rotation test), and worse
 on several inventories (0.044 below on the NPI, 0.015 on the ADQ, 0.009 on the
-Woodworth), and on five tables it had not converged after 1,000 EM cycles, so
-its row is the least trustworthy on the page. Changing the
-shape of the item curve while keeping one dimension buys a little on some tables
+Woodworth), and on five tables it had not converged after 1,000 EM cycles.
+Changing the shape of the item curve while keeping one dimension buys a little on some tables
 and loses more on others. The [asymmetric IRT vignette](asymmetric_irt.qmd)
 reaches the same verdict from a different direction, taking the three asymmetric
 models of @shimbonifay2026 across dozens of binary IRW tables with the same IMV:
 the plain 2PL wins outright on the largest share, and the best case in that
 batch is worth about what a typical 1PL-to-2PL upgrade is worth. On dichotomous
-tables the 2PL's logistic curve is good enough, and the only thing worth adding
-is a dimension, when the instrument has one to add.
+tables the 2PL's logistic curve is good enough, and on these tables a dimension
+was the more promising thing to add.
 
 ## The mirt 2PL gap goes with the estimator, and it is largest on short tests
 
@@ -751,8 +721,8 @@ ENCCEJA form, the listening test and the 18-item financial literacy test, and
 by 0.001 on the 116-item residency exam. The largest gap, 0.05, is on the
 Denver screener, which has 105 items but is age-adaptive: each child answers
 only the items near their age, about two dozen in training, so it is a short
-test in the sense that matters. (On the Denver and the ASQ `mirt`'s 2PL had not
-converged after 1,000 EM cycles, so their exact values should not be leaned on.) Plotting the gap against the number of training
+test in the sense that matters (though `mirt` had not converged there, so the
+exact value is soft). Plotting the gap against the number of training
 responses each person contributes makes the pattern plain.
 
 ```{python}
@@ -779,18 +749,15 @@ are poor, and the item parameters inherit the error, which is the
 incidental-parameter problem; `mirt` integrates the persons out instead. That
 is a story about the estimator rather than the model, and it is worth more than
 a paragraph, so [Part III](#part-iii) takes it apart. We have left the network as
-it is so that the effect stays visible here: it is the price of the simplest
-possible estimator, and readers who build their own networks should know it is
-there.
+it is: it is the price of the simplest possible estimator, and anyone building
+their own should know it is there.
 
 # Part III. Which estimator closes the gap to mirt? {#part-iii}
 
 [Part II](#part-ii) left a promise unkept: the same 2PL, fit in torch and in
 `mirt`, does not give the same held-out loss, and the gap is largest on short
-tests. This part takes it apart. It is an aside rather than part of the main
-argument, which is why it is short, but anyone who builds the networks above
-will meet the same gap --- and one of our attempts to close it was wrong in an
-instructive way.
+tests. This part is an aside, but anyone who builds the networks above will
+meet the same gap.
 
 Two things differ between the torch 2PL and the `mirt` 2PL. One is how the scale
 of the person parameters is set: the PyTorch 2PL puts an $N(0,1)$ penalty on
@@ -809,11 +776,7 @@ L-BFGS**, the same marginal likelihood maximised directly with autograd. The
 joint and alternating estimators predict with point estimates of $\theta$; EM and
 MML predict with the posterior.
 
-One thing to note before the table: as step 5 of [Part I](#part-i) showed, the
-penalty does not fix the scale at all. In the likelihood $a_i\theta_p$ is all
-that matters, so the same fit can be written with a smaller $\theta$ and a
-larger $a$ at a lower penalty, and the penalised objective keeps rewarding that
-trade. Run alternating JML without early stopping on the residency
+First, the drift promised in step 5 of [Part I](#part-i). Run alternating JML without early stopping on the residency
 exam and over 2,000 sweeps the person SD falls from 0.55 to 0.04 while the median
 slope rises from 1.1 to 14 --- with the held-out log-loss at 0.5538 after 100
 sweeps and 0.5539 after 2,000, because $a\theta$ is what the likelihood sees. The constrained
@@ -873,8 +836,7 @@ and Denver screeners, where several items are nearly perfectly separated by the
 persons, their parameters run to large magnitudes, the likelihood is flat along
 them, and `mirt` itself had not converged after 1,000 EM cycles; there our fits
 and `mirt`'s differ by 0.005 and 0.035. Same model, same objective, and away from
-the screeners the same predictions --- which is what makes the rows below the
-comparison worth reading.
+the screeners the same predictions.
 
 **The gap goes with the marginal-likelihood pipeline.** The figure splits
 roughly in half. The routines that fit by marginal likelihood and predict from
@@ -882,20 +844,17 @@ the posterior sit above zero, by about +0.006 on average; the ones that fit
 persons and items jointly and plug in a point estimate of $\theta$ sit at or
 below zero on average. Neither the optimiser nor the treatment of the scale
 lines up with that split: EM and L-BFGS agree with each other, and the prior and
-constrained versions fall on the same side. The two pipelines differ in two
-things at once, though: how the item parameters are estimated, and whether the
-person is integrated out when a held-out cell is predicted. This comparison does
-not separate those (the [limitations](#limitations) say more), so the honest
-summary is that the marginal-likelihood pipeline, taken whole, closes the gap.
-The +0.006 is also the `mirt 2PL` row of @fig-imv, which is where this question
-came from.
+constrained versions fall on the same side. The two pipelines differ both in
+how the items are estimated and in whether the person is integrated out at
+prediction time, and this comparison does not separate the two; it is the
+marginal-likelihood pipeline, taken whole, that closes the gap. The +0.006 is
+the `mirt 2PL` row of @fig-imv, where this question came from.
 
 **Alternation does not help.** Alternating joint maximum likelihood is the
 textbook way to fit a joint model, and here it is worse than Adam, by 0.002 for
-the prior version and by 0.012 for the constrained one. That is consistent with
-the incidental-parameter problem, though the alternating fits also carry bounds
-on $\theta$ and the slopes that Adam does not, so it is not a clean test of it.
-The best validation sweep falls within the first ten on 13 of 24 tables for the
+the prior version and by 0.012 for the constrained one, which fits the
+incidental-parameter story (with the caveat that the alternating fits are
+bounded and Adam is not). The best validation sweep falls within the first ten on 13 of 24 tables for the
 prior version (median eight) and on 23 of 24 for the constrained one (median
 two), and both stop on patience rather than convergence on most tables. On short
 tests the loss then rises, as some items separate the persons and their slopes
@@ -905,8 +864,7 @@ responses per person, where it trails `mirt` by 0.15.
 ## Constraining the scale does not close it, and it costs a little
 
 Standardising $\theta$ to mean zero and SD one in the sample removes the drift
-above (it fixes the first two moments, not the shape, and with two dimensions it
-does not make them uncorrelated). On the residency exam
+above. On the residency exam
 it recovers `mirt`'s item parameters about as well as the prior version does:
 intercepts agree closely in both, and slopes agree once the scale is handled, the
 constrained ones a median 3% above `mirt`'s and the rescaled prior ones 4%
@@ -947,24 +905,19 @@ print("  " + "   ".join(f"{m} {np.corrcoef(ln, w[m])[0, 1]:+.2f}" for m in model
 The baseline here is not the 2PL. Each panel scores one network's constrained
 fit against **the same network fit with the prior**, so a dot at zero means
 fixing the scale changed nothing for that model on that table, and a dot below
-zero means it cost something. Nothing is compared across panels, which is why
-the Rasch panel can sit at zero while the MLP panels sit below it without that
-being a statement about Rasch versus an MLP.
+zero means it cost something. Nothing is compared across panels.
 
-The Rasch panel is worth pausing on, because in an earlier version of these
-fits it told us something false. With the Rasch model written the usual way ---
-$\theta_p + d_i$, no slope --- the constraint was catastrophic: worse on every
-one of the 24 tables, by 0.03 on average and by 0.19 on the Onah test. That is
-not what it costs to fix the scale. It is what it costs to fix the scale with
-nothing left to absorb it. The penalised version lets the data set the spread of
+The Rasch panel needed one repair. Written the usual way --- $\theta_p + d_i$,
+no slope --- the constrained Rasch was much worse everywhere in an earlier
+version of these fits (by 0.03 on average), and that is not the cost of fixing
+the scale but of fixing it with nothing left to absorb it. The penalised version lets the data set the spread of
 $\theta$, which comes out at 0.56 on the residency exam and 0.17 on the Onah
 test, and a slopeless Rasch has no way to express that the spread should not be
 one. Giving it a single slope $c$ shared by every item --- still a Rasch model,
 since the items continue to differ only in difficulty --- removes most of the
 problem: the constrained Rasch is then $0.002$ behind the penalised version on
-average and ahead of it on 10 of the 24 tables. The
-lesson is about identification, not about the constraint: a model that cannot
-represent the scale should not be asked to fix it.
+average and ahead of it on 10 of the 24 tables. A model that cannot represent
+the scale should not be asked to fix it.
 
 With that repaired, the cost of the constraint is small and consistent across
 the five networks: the panel means run from $-0.002$ for the Rasch model to
@@ -974,101 +927,49 @@ MLP all fan out below zero at the left, where people answer few items, and close
 toward the zero line at the right; the correlations printed under the figure run
 from +0.37 to +0.61 for those four, and the spread of the costs halves or better
 between the short tables and the long ones. The large MLP is the exception and
-worth noting as one: it pays about $-0.006$ whatever the test length, and its
-correlation is the $-0.06$ at the end of that printed line. Whatever it is losing
-to the constraint is not the thing short tests cause. Standardising $\theta$ divides out the spread of estimates
+pays about $-0.006$ whatever the test length (correlation $-0.06$), so whatever
+it loses is not what short tests cause. For the other four, standardising
+$\theta$ divides out the spread of estimates
 that are mostly noise on a short test, stretching poorly determined person
 parameters back to a spread of one instead of shrinking them toward zero. That is
 the incidental-parameter story again, seen from the other side. The constraint
 also does nothing to stop the wide networks overfitting: they reach their best
-validation loss early and climb after it in both versions. Early stopping is still
-what keeps them honest.
+validation loss early and climb after it in both versions.
 
 # Limitations
 
-## Of the model comparison
-
-- **One split, one seed, no uncertainty.** Every number on the page comes
-  from a single draw of the train/validation/test cells and a single
-  initialisation. We report no standard errors, and differences of a few
-  thousandths of an IMV point could change sign under another draw. Where
-  the text calls a difference small or describes models as tied, that is a
-  description of these fits, not an equivalence test. Stopping uses the
-  validation cells and never the test cells, so the reported numbers are not
-  flattered by the choice of epoch.
-- **Two estimators, one model.** The PyTorch 2PL (a penalised, early-stopped
-  joint fit by gradient descent) and the `mirt` 2PL (marginal maximum likelihood) are the same model and do
-  not give the same held-out loss. The comparison that is fair is therefore
-  networks against the PyTorch 2PL and flexible curves against the `mirt`
-  2PL, and Parts I and II are written that way. Part III shows that fitting
-  by marginal likelihood and predicting from the posterior closes the gap in
-  torch, and that fixing the scale of $\theta$ does not.
-- **Only person and item identities enter the model.** The networks see
-  exactly what the classical models see, so this is a comparison of
-  functional forms, not of information. Sequential models of learning
-  [@piech2015dkt] use the order of responses; models with item text as input
-  can predict items never seen in training. These use more than the
-  (person, item, response) triple. Variational IRT, which replaces the
-  per-person point estimates with an encoder network, need not: it can be
-  built on exactly these data, and is the most natural next model for this
-  page. All of them can be scored with the same held-out cells and the same
-  IMV, but none is on this page.
-- **Dichotomous, dense tables only.** The cell-level split and the
-  Bernoulli loss are written for 0/1 responses. Polytomous tables need a
-  different output layer and a different loss; sparse tables raise the
-  question of whether the missingness is informative.
-- **Subsampling.** Tables are capped at 5,000 respondents and 116 items.
-  The gains reported for the inventories are therefore gains at that size;
-  a wider network may do relatively better with more data, which is the
-  usual pattern and is not tested here.
-- **Twenty-four tables, chosen by hand.** The groups were picked to span
-  kinds of structure, not sampled from the warehouse, and the counts per
-  group are small. The sizes of the gains are specific to these tables. Because the set was chosen to span
-  kinds of structure, it is likely enriched for gains, and the share of tables
-  that gain here (seven of 24) should not be read as a rate for the warehouse.
-- **No regularisation of the item side.** Every network here leaves its item
-  parameters free (step 5 of Part I), and that matters most for the
-  two-dimensional models, whose second dimension may fail to emerge and leave
-  a fit that predicts like the 2PL. We have seen this outside the page: on 50
-  other IRW tables, `mirt`'s two-factor model fit without a slope prior
-  predicted exactly as the 2PL did on 28, and with a lognormal prior on the
-  slopes on one. That prior both shrinks the slopes and forces them positive,
-  so the check does not say which of the two does the work, and it is not a
-  test of the networks themselves. What it does say is that a
-  two-dimensional fit that gains nothing is a fact about the fit before it is
-  a fact about the table, and we read the MIRT k=2 results that way. The
-  penalties also do different jobs in different models: the same person
-  penalty on an MLP can be undone by larger weights in its first layer, so
-  "no slope prior" does not put the MIRT and the MLPs under identical
-  regularisation either.
-
-## Of the estimator comparison
-
-- **Two estimators are on a common footing; the networks are not.** The MML fits
-  are the same model as `mirt` and are compared directly. The Adam networks and
-  the alternating JML fits are different estimators of the same model, and their
-  gaps to `mirt` are gaps in estimation, not in the model.
-- **Stopping uses the validation cells.** The Adam networks and both alternating
-  JML fits pick their stopping point on the validation cells; the MML fits do not
-  use them at all, and maximise the training likelihood (EM, then four L-BFGS
-  rounds). None of the estimators sees the test cells.
-- **Bounds on the alternating fits.** Alternating JML bounds each $\theta_p$ at
-  $\pm 6$ and each slope at $\pm 6$, because unpenalised JML has no finite
-  optimum on an item the persons separate. Adam and the MML fits have no such
-  bounds. Part of the alternating fits' ranking may reflect the bounds rather
-  than the estimator, and we have not checked how much.
-- **Estimation and prediction change together.** The joint fits predict by
-  plugging in a point estimate of $\theta_p$; the MML fits integrate over each
-  person's posterior. Part III compares the two pipelines as wholes. It does not
-  separate how much of the MML advantage comes from the item parameters and how
-  much from integrating at prediction time.
-- **Items with extreme parameters.** On the ASQ, Denver and EDSC screeners several
-  items have parameters in the hundreds, and the marginal likelihood is flat along
-  them. Two correct maximisers can stop at different points there, which is why
-  the largest MML disagreements with `mirt` are on those tables.
-- **Dichotomous 2PL only.** The estimators here are for the 2PL on 0/1 responses,
-  and the multidimensional and nonlinear networks are not refit with them.
-
+- **One split, one seed.** Every number comes from a single draw of the
+  train/validation/test cells and a single initialisation, with no standard
+  errors. Differences of a few thousandths could change sign under another
+  draw, so "small" and "tied" on this page describe these fits; they are not
+  equivalence tests. The test cells were used for nothing but scoring.
+- **Twenty-four tables, chosen by hand.** They were picked to span kinds of
+  structure, so they are likely enriched for gains, and seven of 24 is not a
+  rate for the warehouse. Tables were capped at 5,000 respondents and 116
+  items, and a wider network may do relatively better with more data.
+- **No regularisation on the item side.** The networks leave item slopes and
+  decoder weights free, and a two-dimensional fit can then fail to find its
+  second dimension and predict like the 2PL. (On 50 other IRW tables,
+  `mirt`'s two-factor model without a slope prior predicted exactly as the 2PL
+  did on 28; with a lognormal slope prior, which also forces the slopes
+  positive, on one.) So a MIRT that gains nothing here is a fact about the fit
+  before it is a fact about the table.
+- **Two estimators of one model.** The PyTorch 2PL and the `mirt` 2PL do not
+  give the same held-out loss, so networks are compared with the PyTorch 2PL
+  and flexible curves with the `mirt` 2PL.
+- **In Part III, estimation and prediction change together.** The joint fits
+  plug in a point estimate of $\theta_p$ and the MML fits integrate over the
+  posterior, so Part III does not say how much of the MML advantage is the
+  item estimates and how much is the integration. The alternating fits also
+  bound $\theta$ and the slopes at $\pm 6$, which Adam and MML do not. On the
+  two screeners, where some item parameters are extreme and `mirt` had not
+  converged, the MML fits disagree with each other.
+- **What is not here.** Only person and item identities enter the models, so
+  this compares functional forms, not information. Models that use response
+  order [@piech2015dkt] or item text use more; variational IRT, which swaps the
+  per-person estimates for an encoder, could be built on exactly these data and
+  is the natural next model. All of it is dichotomous: polytomous tables need a
+  different output layer and loss.
 
 # Reproducibility
 
