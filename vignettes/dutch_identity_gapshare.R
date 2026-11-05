@@ -52,6 +52,17 @@
 # recorded row. It skips cross-validation, which these statistics do not use.
 # A full sweep also stores the same statistics in each per-table result.
 #
+# RANK1=1 runs Section 3's rank-1 test on every table in gapshare_tables.csv,
+# with the same pin, cleaning and checks as CONCENTRATION=1. Per table: fit the
+# full SOE, take the weighted off-diagonal rank-1 share of Γ (weights 1/SE²);
+# fit a unidimensional 2PL with normal θ (mirt), get its exact pattern
+# probabilities by quadrature, simulate RANK1_NSIM tables of counts at the same
+# N, refit the SOE to each and recompute the share. The observed share's place
+# in that reference distribution is the test. Writes rank1_tables.csv and
+# rank1_summary.md; caches per table under gapshare_cache/rank1__<table>.rds.
+#   RANK1=1 Rscript vignettes/dutch_identity_gapshare.R
+#   RANK1=1 ONLY=ALSECYPIAMH_WU_2022_NEI Rscript ...   # one table
+#
 # Does not modify any vignette.
 #
 # Usage:
@@ -94,13 +105,14 @@ CONC_MIN_J_COVERAGE <- 8
 set.seed(SEED)
 
 conc_mode <- Sys.getenv("CONCENTRATION") == "1"
+rank1_mode <- Sys.getenv("RANK1") == "1"
 
 # Record the exact per-dataset versions and pin them for the run. Note that
 # irw_use_version() can only pin datasets the installed package knows about; it
 # warns about any it does not, and those are read at whatever version is live.
 # A full sweep pins the newest version; CONCENTRATION=1 pins the recorded
 # sweep's version so it reads the same data. IRW_PIN=<n> overrides either.
-pin_to <- Sys.getenv("IRW_PIN", if (conc_mode) as.character(SWEEP_IRW_VERSION) else "")
+pin_to <- Sys.getenv("IRW_PIN", if (conc_mode || rank1_mode) as.character(SWEEP_IRW_VERSION) else "")
 pin_to <- if (nzchar(pin_to)) as.integer(pin_to) else NULL
 irw_v <- tryCatch({
   v <- as.data.frame(irw_version())
@@ -656,6 +668,136 @@ if (conc_mode) {
   if (nrow(wu))
     message(sprintf("WU NEI check: top1 %.3f/%.3f/%.3f  eff %.1f/%.1f/%.1f",
                     wu$top1_obs, wu$top1_ind, wu$top1_rq, wu$eff_obs, wu$eff_ind, wu$eff_rq))
+  quit(save = "no", status = 0)
+}
+
+# ==============================================================================
+# RANK1=1: the Section 3 rank-1 test against a fitted-2PL reference, every table
+# ==============================================================================
+
+if (rank1_mode) {
+  suppressMessages(library(mirt))
+  RANK1_NSIM  <- as.integer(Sys.getenv("RANK1_NSIM", "200"))
+  RANK1_CORES <- as.integer(Sys.getenv("RANK1_CORES", "6"))
+  N_QUAD      <- 61
+  rec_all <- read.csv(file.path(out_dir, "gapshare_tables.csv"), stringsAsFactors = FALSE)
+  rec <- rec_all
+  if (nzchar(Sys.getenv("ONLY")))
+    rec <- rec[rec$table %in% strsplit(Sys.getenv("ONLY"), ",")[[1]], ]
+  message("Rank-1: ", nrow(rec), " recorded tables, IRW v", pin_to,
+          ", ", RANK1_NSIM, " 2PL replicates each")
+
+  w_share <- function(m, item_cols, n_random = 4, resid = FALSE) {
+    G  <- gamma_from_soe(m, item_cols)
+    SE <- gamma_se_from_soe(m, item_cols)
+    W  <- 1 / SE^2; W[!is.finite(W)] <- 0
+    f  <- rank1_offdiag_fit(G, W = W, n_random = n_random)
+    if (!resid) return(f$share)
+    od <- upper.tri(G)
+    z  <- ((G - outer(f$g, f$g)) / SE)[od]
+    list(share = f$share, z = z)
+  }
+
+  rank1_one <- function(r, seed) {
+    cf <- file.path(cache_dir, paste0("rank1__", r$table, ".rds"))
+    if (file.exists(cf)) return(readRDS(cf))
+    t0 <- Sys.time()
+    prep <- prepare_table(r$table)
+    if (!isTRUE(prep$ok)) stop(r$table, ": ", prep$reason)
+    mat <- prep$mat
+    if (ncol(mat) != r$J || nrow(mat) != r$N ||
+        paste(colnames(mat), collapse = "|") != r$items_used)
+      stop(r$table, ": J/N/items differ from gapshare_tables.csv")
+    item_cols <- colnames(mat); J <- r$J; N <- r$N
+    pats <- pattern_counts(mat)
+    X <- as.matrix(pats[, item_cols])
+    soe_f <- as.formula(paste0("count ~ (", paste(item_cols, collapse = " + "), ")^2"))
+    soe <- suppressWarnings(glm(soe_f, data = pats, family = poisson()))
+    # the SOE must be the recorded one
+    ll_soe <- pois_ll(as.numeric(predict(soe, type = "link")), pats$count)
+    if (abs(ll_soe - r$ll_soe) > 1e-3 * max(1, abs(r$ll_soe)))
+      stop(r$table, ": SOE log-likelihood differs from the recorded sweep")
+    set.seed(seed)
+    obs <- w_share(soe, item_cols, n_random = 10, resid = TRUE)
+
+    # the 2PL and its exact marginal pattern probabilities
+    resp <- X[rep(seq_len(nrow(X)), pats$count), , drop = FALSE]
+    colnames(resp) <- item_cols
+    mod <- suppressWarnings(mirt(as.data.frame(resp), 1, itemtype = "2PL",
+                                 verbose = FALSE, quadpts = N_QUAD, TOL = 1e-6,
+                                 technical = list(NCYCLES = 5000)))
+    theta <- seq(-6, 6, length.out = N_QUAD)
+    wq <- dnorm(theta); wq <- wq / sum(wq)
+    P1 <- sapply(seq_len(J), function(j) probtrace(extract.item(mod, j), matrix(theta))[, 2])
+    P1 <- pmin(pmax(P1, 1e-12), 1 - 1e-12)
+    logL <- X %*% t(log(P1)) + (1 - X) %*% t(log(1 - P1))
+    p2pl <- drop(exp(logL) %*% wq)
+    stopifnot(abs(sum(p2pl) - 1) < 1e-8)
+    ll_2pl  <- sum(pats$count * log(p2pl))
+    ll_mirt <- extract.mirt(mod, "logLik")
+    ll_check <- abs(ll_2pl - ll_mirt) / abs(ll_mirt)
+
+    exp_pats <- pats; exp_pats$count <- N * p2pl
+    set.seed(seed)
+    pop <- tryCatch(w_share(suppressWarnings(glm(soe_f, data = exp_pats, family = poisson())),
+                            item_cols, n_random = 10), error = function(e) NA_real_)
+
+    RNGkind("L'Ecuyer-CMRG"); set.seed(seed)
+    # A replicate counts if its SOE refit converges. Warnings (fitted rates
+    # numerically 0 on near-deterministic tables) are counted, not used to drop
+    # replicates: dropping them selects the replicates and biases the reference.
+    sims <- parallel::mclapply(seq_len(RANK1_NSIM), function(i) {
+      sp <- pats
+      sp$count <- as.integer(rmultinom(1, size = N, prob = p2pl))
+      warned <- FALSE
+      m <- withCallingHandlers(
+        tryCatch(glm(soe_f, data = sp, family = poisson()), error = function(e) NULL),
+        warning = function(w) { warned <<- TRUE; invokeRestart("muffleWarning") })
+      if (is.null(m) || !m$converged) return(c(NA_real_, warned))
+      c(tryCatch(w_share(m, item_cols), error = function(e) NA_real_), warned)
+    }, mc.cores = RANK1_CORES, mc.set.seed = TRUE)
+    RNGkind("default")
+    sim <- vapply(sims, `[`, numeric(1), 1)
+    n_warned <- sum(vapply(sims, `[`, numeric(1), 2))
+    ok_sim <- sim[!is.na(sim)]
+
+    res <- list(
+      table = r$table, J = J, N = N,
+      share_obs = obs$share, share_2pl_pop = pop,
+      sim_median = median(ok_sim), sim_lo = unname(quantile(ok_sim, .025)),
+      sim_hi = unname(quantile(ok_sim, .975)), sim_sd = sd(ok_sim),
+      n_sim = length(ok_sim), n_sim_failed = sum(is.na(sim)), n_sim_warned = n_warned,
+      n_below = sum(ok_sim <= obs$share),
+      p_emp = (1 + sum(ok_sim <= obs$share)) / (1 + length(ok_sim)),
+      z_sim = (median(ok_sim) - obs$share) / sd(ok_sim),
+      n_pairs = length(obs$z), n_z3 = sum(abs(obs$z) > 3), max_abs_z = max(abs(obs$z)),
+      ll_2pl = ll_2pl, ll_2pl_vs_mirt = ll_check,
+      mirt_converged = isTRUE(extract.mirt(mod, "converged")),
+      mirt_iter = extract.mirt(mod, "iterations"),
+      # a slope still climbing at the cycle cap means the 2PL MLE is at the
+      # boundary (a near-deterministic item); flagged, not dropped
+      max_slope = max(coef(mod, simplify = TRUE)$items[, "a1"]),
+      secs = as.numeric(difftime(Sys.time(), t0, units = "secs")))
+    saveRDS(res, cf)
+    res
+  }
+
+  rows <- list()
+  for (i in seq_len(nrow(rec))) {
+    r <- rec[i, ]
+    seed <- SEED + match(r$table, rec_all$table)   # stable under ONLY=
+    message(i, "/", nrow(rec), "  ", r$table, "  (J = ", r$J, ", N = ", r$N, ")")
+    rows[[i]] <- as_tibble(c(rank1_one(r, seed), list(
+      share_out_floor = r$share_out_floor, cv_gap_rq_nats = r$cv_gap_rq_nats,
+      cv_gap_soe_nats = r$cv_gap_soe_nats, share_out_usable = r$share_out_usable,
+      ll_ind = r$ll_ind, ll_rq = r$ll_rq, ll_soe = r$ll_soe,
+      construct_type = r$construct_type, flag_any = r$flag_any)))
+  }
+  r1 <- bind_rows(rows)
+  if (!nzchar(Sys.getenv("ONLY")))
+    write.csv(r1, file.path(out_dir, "rank1_tables.csv"), row.names = FALSE)
+  print(as.data.frame(r1[, c("table", "J", "N", "share_obs", "sim_median",
+                             "sim_lo", "p_emp", "n_z3", "n_pairs", "secs")]), digits = 3)
   quit(save = "no", status = 0)
 }
 

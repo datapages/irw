@@ -3,10 +3,10 @@ title: "The Dutch Identity: Manifest Probabilities and IRT Models"
 description: |
   A tour of Holland's (1990) Dutch Identity — the result that log-manifest
   probabilities of dichotomous response patterns are approximately log-quadratic
-  in the item responses. We ground each theoretical claim in IRW data: enumerating
-  manifest probabilities directly, fitting loglinear models, diagnosing the Rasch
-  model via total-score frequencies, assessing dimensionality from second-order
-  interactions, and testing Holland's conservation law for model complexity.
+  in the item responses. We ground the claim in IRW data: enumerating manifest
+  probabilities directly, fitting loglinear models, asking how much of the
+  pairwise association a rank-1 interaction structure captures across the
+  corpus.
 date: today
 bibliography: dutchdata/references.bib
 format:
@@ -43,9 +43,6 @@ cache_ok   <- file.exists(cache_path)
 if (cache_ok) {
   .cache   <- readRDS(cache_path)
   s1_3     <- .cache$s1_3
-  s4       <- .cache$s4
-  s5       <- .cache$s5
-  s6       <- .cache$s6
   date_run <- .cache$date_run
   irw_pkg_version <- .cache$irw_pkg_version %||% "unrecorded"
 } else {
@@ -77,12 +74,6 @@ if (cache_ok) {
                                 boot_summary = list(share_w_median = NA_real_,
                                                     share_w_lo = NA_real_,
                                                     share_w_hi = NA_real_))))
-  s4   <- list(good_rasch = na_dataset, poor_rasch = na_dataset,
-               rasch_meta = tibble(table_name = "—", r2_quad = NA_real_,
-                                   ll_diff_per_resp = NA_real_))
-  s5   <- list(unidim = na_dataset, multidim = na_dataset)
-  s6   <- tibble(table_name = character(), J = integer(),
-                 imv_1v2 = numeric(), imv_2v3 = numeric())
   date_run <- Sys.Date()
   irw_pkg_version <- "unrecorded"
 }
@@ -149,25 +140,32 @@ This vignette is currently in development. Content and results may change.
 
 ## Background
 
-@holland1990dutch introduced the **Dutch Identity** — a result about the
-mathematical structure that any unidimensional IRT model imposes on the joint
-distribution of dichotomous item responses. The key insight is that the
-*manifest* (unconditional) probability of a response pattern $\mathbf{x} =
-(x_1, \ldots, x_J) \in \{0,1\}^J$ can be written as an exponential family
-whose sufficient statistics are functions of the item responses. For large tests
-with smooth item response functions (IRFs), this reduces to a strikingly simple
-approximation:
+@holland1990dutch introduced the **Dutch Identity** — an exact result about
+the joint distribution of dichotomous item responses under a unidimensional IRT
+model. It says that the *manifest* (unconditional) probability of a response
+pattern $\mathbf{x} = (x_1, \ldots, x_J) \in \{0,1\}^J$ can be written as an
+exponential family whose sufficient statistics are functions of the item
+responses. Holland then conjectured that, for long tests with smooth item
+response functions (IRFs), this is well approximated by something strikingly
+simple:
 
 $$\log p(\mathbf{x}) \approx \alpha + \sum_{j=1}^{J} \beta_j x_j + \frac{1}{2}\!\left(\sum_{j=1}^{J} \gamma_j x_j\right)^{\!2}$$
 
 This is log-quadratic in the $x_j$, requires only $2J + 1$ parameters regardless
 of $J$, and makes precise predictions about the structure of second-order
-interactions between items. The sections below work through the implications one
-step at a time, using IRW datasets to make each idea concrete.
+interactions between items. Note that the identity and the approximation are
+different things. The identity holds exactly; the approximation is a conjecture,
+and @zhang1997holland give unidimensional models for which it fails, so it does
+not follow from smoothness and unidimensionality alone, nor is it guaranteed to
+improve as $J$ grows. What follows treats the log-quadratic form as a model to
+be checked against data rather than as a consequence of IRT, and the results are
+evidence about these datasets. Holland's paper also contains a corollary about
+total-score distributions under the Rasch model and a proposed conservation law
+for the number of parameters a long test supports; neither is taken up here.
 
 ::: {.callout-note}
-All figures use pre-computed results from `dutch_identity_compute.R`. The
-dataset used in Sections 1–3 is **`r s1_3$table_name`**
+All figures use pre-computed results; the scripts behind each are listed under
+Reproducibility. The single table used throughout Sections 1–2 is **`r s1_3$table_name`**
 ($J = `r s1_3$J`$ items, $N = `r format(s1_3$N, big.mark=",")`$ respondents,
 computed `r format(date_run, "%B %Y")`).
 :::
@@ -230,7 +228,7 @@ $N = `r format(s1_3$N, big.mark=",")`$ respondents, and
 What the table shows instead is concentration: a few patterns carry much of the
 mass.
 
-For $J \leq 10$ items and $N \geq 2{,}000$ respondents the full distribution is
+For $J \leq 10$ items and $N$ in the thousands the full distribution is
 enumerable. Below we tabulate every $2^J$ pattern and display the empirical
 $p(\mathbf{x})$.
 
@@ -282,36 +280,19 @@ plotly::ggplotly(p, tooltip = "text") |>
   )
 ```
 
-```{r}
-#| label: fig-score-dist
-#| fig-cap: "Total probability mass at each sum score k = Σ xⱼ. Patterns within each score group contribute additively."
-#| fig-height: 4
-
-patterns |>
-  filter(observed) |>
-  ggplot(aes(x = factor(total), y = p_obs, fill = p_obs)) +
-  geom_col(width = 0.7, show.legend = FALSE) +
-  scale_fill_gradient(low = "#d1e5f0", high = irw_blue) +
-  labs(
-    x       = "Total score k",
-    y       = "p(x)",
-    caption = "Each bar is the total probability mass at that score level."
-  )
-```
-
 **What to notice.** `r if (isTRUE(s1c$n_obs == s1c$n_cells)) "Every pattern is there, but the" else "The"` mass is far from evenly
 spread. The most common pattern`r if (isTRUE(s1c$top_is_all0[["obs"]])) " — all 0s —" else ""`
 holds `r pct(s1c$top1[["obs"]])` of respondents, and the five most common hold
 `r pct(s1c$top5[["obs"]])`. One summary of the spread is the entropy $H$ of
 $p(\mathbf{x})$ in bits, or $2^H$, the number of equally likely patterns that
 would have the same entropy: here `r round(s1c$eff[["obs"]], 1)` effective
-patterns out of a possible `r s1c$n_cells`. The independence model of Section 2
-is much flatter. Its most likely pattern gets `r pct(s1c$top1[["ind"]])`,
+patterns out of a possible `r s1c$n_cells`. The independence model of Section 2,
+in which the items share nothing, is much flatter. Its most likely pattern gets `r pct(s1c$top1[["ind"]])`,
 against `r pct(s1c$top1[["obs"]])` observed; it spreads the mass over `r round(s1c$eff[["ind"]], 1)` effective patterns, and
 it puts `r round(s1c$all1_ratio)` times too little on the all-1s pattern. The
 difference in entropy, $H_\text{ind} - H_\text{obs} =
 `r round(s1c$multi, 2)`$ bits, is the information the items share. The rank-1
-log-quadratic model of Section 3 recovers nearly all of it: top pattern
+log-quadratic model of Section 2 recovers nearly all of it: top pattern
 `r pct(s1c$top1[["rq"]])`, `r round(s1c$eff[["rq"]], 1)` effective patterns,
 `r pct(s1c$rq_share)` of the entropy gap.
 
@@ -321,12 +302,9 @@ $2^J$-parameter saturated model is hopeless in general. The loglinear
 parameterisation in Section 2 is the response.
 
 The [bits-per-item vignette](bits_per_item.qmd#answer-patterns) uses this same
-distribution to count how much a test tells you about a person: the entropy of
-p(**x**), minus the part that is chance rather than differences between
-people. It also shows that the independence model of Section 2 falls short by
-exactly the information that items share.
+distribution to count how much a test tells you about a person.
 
-### Is this table unusually concentrated?
+### Concentration across the corpus
 
 ```{r}
 #| label: s1-concentration-corpus
@@ -361,7 +339,13 @@ cc_sum <- if (!is.null(cc) && s1_3$table_name %in% cc$table) {
     shift_mm = median(cc$multi_info_bits - cc$multi_info_bits_mm),
     shift_cs = median(cc$multi_info_bits - cc$multi_info_bits_cs),
     shift_max_mm = max(cc$multi_info_bits - cc$multi_info_bits_mm),
-    shift_max_cs = max(cc$multi_info_bits - cc$multi_info_bits_cs)
+    shift_max_cs = max(cc$multi_info_bits - cc$multi_info_bits_cs),
+    top1_med = median(cc$top1_obs), top5_med = median(cc$top5_obs),
+    effr_obs = median(cc$eff_obs / 2^cc$J), effr_ind = median(cc$eff_ind / 2^cc$J),
+    n_all0 = sum(cc$top_pattern_obs == "all0"), n_all1 = sum(cc$top_pattern_obs == "all1"),
+    n_ext_ind_miss = sum(cc$top_pattern_obs != "other" & cc$top_pattern_ind == "other"),
+    n_ext_rq_miss  = sum(cc$top_pattern_obs != "other" & cc$top_pattern_rq == "other"),
+    rho_j = cor(cc$J, cc$rq_share_of_multi, method = "spearman")
   )
 } else list(n = NA, j_min = NA, j_max = NA, mi = rep(NA, 3), cut = rep(NA, 3),
             rq = rep(NA, 3), ratio = rep(NA, 3), this_mi = NA, this_ratio = NA,
@@ -373,126 +357,127 @@ cc_sum <- if (!is.null(cc) && s1_3$table_name %in% cc$table) {
 p0 <- function(x) sprintf("%.0f%%", 100 * x)
 ```
 
-One table could be concentrated for reasons of its own, so we ask the same
-question of the `r cc_sum$n` IRW tables in the corpus sweep of Section 3
-(binary items, $`r cc_sum$j_min` \le J \le `r cc_sum$j_max`$). The quantity is
-the multi-information $M = H_\text{ind} - H_\text{obs}$, and since
-$2^{H_\text{obs}} / 2^{H_\text{ind}} = 2^{-M}$ it reads directly as a cut in the
-effective number of patterns, $1 - 2^{-M}$. In the median table the items share
-$M = `r sprintf("%.3f", cc_sum$mi[2])`$ bits (IQR
-`r sprintf("%.3f", cc_sum$mi[1])`–`r sprintf("%.3f", cc_sum$mi[3])`), which
-cuts the effective number of patterns by about `r p0(cc_sum$cut[2])` relative to
-independence (IQR `r p0(cc_sum$cut[1])`–`r p0(cc_sum$cut[3])`), and the rank-1
-log-quadratic reproduces a median `r p0(cc_sum$rq[2])` of it. The most common
-pattern is `r sprintf("%.2f", cc_sum$ratio[2])` times as frequent as
-independence predicts in the median table; here it is
-`r sprintf("%.1f", cc_sum$this_ratio)`. On both counts this table sits
-`r if (isTRUE(cc_sum$this_mi > cc_sum$mi[2] && cc_sum$this_ratio > cc_sum$ratio[2])) "above the median" else "near the median"`
-— its $M$ of `r sprintf("%.2f", cc_sum$this_mi)` bits exceeds
-`r p0(cc_sum$this_mi_pctl)` of tables, its top-pattern ratio
-`r p0(cc_sum$this_ratio_pctl)` — concentrated, but not an outlier.
+Is this concentration a quirk of one table? We compute the same summaries for
+the `r cc_sum$n` IRW tables in the corpus sweep described in Section 2 (binary
+items, $`r cc_sum$j_min` \le J \le `r cc_sum$j_max`$). Concentration is the
+rule. In the median table the most common pattern holds
+`r p0(cc_sum$top1_med)` of respondents and the five most common hold
+`r p0(cc_sum$top5_med)`; the effective number of patterns, $2^H$, is
+`r p0(cc_sum$effr_obs)` of the $2^J$ possible, against `r p0(cc_sum$effr_ind)`
+under independence. Independence spreads the mass too thinly in every table
+(@fig-concentration-corpus, left), as it must: the gap is the multi-information
+$M = H_\text{ind} - H_\text{obs}$, which is never negative.
 
-One caution: plug-in entropy is biased downward when cells are sparse, most of
-all at $J \ge 8$, where a median of only `r p0(cc_sum$frac_med)` of the $2^J$
-patterns are observed. Bias-corrected estimates (Miller–Madow, Chao–Shen) barely
-move any single table, a median shift of
-`r sprintf("%.3f", min(cc_sum$shift_mm, cc_sum$shift_cs))`–`r sprintf("%.3f", max(cc_sum$shift_mm, cc_sum$shift_cs))`
-bits. The corpus median effective-pattern cut moves a little more, from
-`r p0(cc_sum$cut[2])` to `r p0(min(cc_sum$cut_mm, cc_sum$cut_cs))`–`r p0(max(cc_sum$cut_mm, cc_sum$cut_cs))`,
-because the tables nearest the median have small $N$. The rank-1 share rises
-under correction, most at $J \ge 8$ (`r p0(cc_sum$rq_big)` to
-`r p0(cc_sum$rq_big_cs)` with Chao–Shen), so the uncorrected figures undersell
-the rank-1 model. The full breakdown is in
-`vignettes/dutchdata/concentration_summary.md`.
-
----
-
-## Section 2: Log-manifest probabilities and the independence baseline
-
-Under item *independence* — no latent variable, no associations — $\log
-p(\mathbf{x})$ is a linear function of the item responses:
-
-$$\log p(\mathbf{x}) = \alpha + \sum_{j=1}^{J} \beta_j x_j$$
-
-This **independence loglinear model** has $J + 1$ parameters. It is equivalent
-to a Poisson regression of pattern counts on the $J$ binary item predictors.
-When it fits, all structure in the data is captured by item marginals alone.
-
-Any IRT model implies that $\log p(\mathbf{x})$ *deviates* from this baseline —
-the latent variable induces positive associations among items that the
-main-effects model misses. Plotting observed versus fitted $\log p(\mathbf{x})$
-makes those deviations visible.
+The extremes carry much of it. The most common pattern is all 0s in
+`r cc_sum$n_all0` tables and all 1s in `r cc_sum$n_all1`. Independence misses
+that in `r cc_sum$n_ext_ind_miss` of those
+`r cc_sum$n_all0 + cc_sum$n_all1` tables, predicting a mixed pattern as the most
+common; the rank-1 log-quadratic misses it in `r cc_sum$n_ext_rq_miss`.
 
 ```{r}
-#| label: fig-independence-fit
-#| fig-cap: "Observed vs. fitted log p(x) under the independence loglinear model. Points on the diagonal are fully explained by item marginals; points above the line are more probable than independence predicts (positive local dependence)."
-#| fig-height: 4.5
+#| label: fig-concentration-corpus
+#| fig-cap: "Pattern concentration across the corpus, one point per IRW table; the circled point is the table analysed in this vignette. Left: effective number of patterns 2^H as a share of the 2^J possible, under independence (horizontal) and observed (vertical); every table falls below the dashed line. Right: the multi-information M, the bits by which the observed distribution is more concentrated than independence predicts, against the part of M the rank-1 log-quadratic model reproduces, on log scales; points on the dashed line are fully reproduced."
+#| fig-height: 4.2
+#| fig-width: 9
 
-plot_dat <- patterns |>
-  filter(observed) |>
-  mutate(
-    residual = log_p_obs - log_p_ind,
-    tooltip  = paste0(
-      "Pattern: ", pattern_str,
-      "<br>Observed log p(x): ",  round(log_p_obs, 3),
-      "<br>Fitted log p(x): ",    round(log_p_ind, 3),
-      "<br>Residual: ",           round(residual,  3)
-    )
-  )
-
-r2_ind <- cor(plot_dat$log_p_obs, plot_dat$log_p_ind, use = "complete.obs")^2
-
-p <- ggplot(plot_dat, aes(x = log_p_ind, y = log_p_obs, text = tooltip)) +
-  geom_abline(slope = 1, intercept = 0, colour = irw_grey, linetype = "dashed") +
-  geom_point(aes(size = p_obs), colour = irw_blue, alpha = 0.6) +
-  scale_size_continuous(range = c(1, 5), name = "p(x)", guide = "none") +
-  labs(
-    x = "Fitted log p(x)  [independence model]",
-    y = "Observed log p(x)"
-  )
-
-plotly::ggplotly(p, tooltip = "text") |>
-  plotly::layout(
-    annotations = list(list(
-      text      = paste0("R² = ", round(r2_ind, 3), ". Hover to see the response pattern for each point."),
-      showarrow = FALSE,
-      xref = "paper", yref = "paper",
-      x = 0, y = -0.12,
-      xanchor = "left", yanchor = "top",
-      font = list(size = 11, color = "grey50")
-    ))
-  )
+cc_plot <- cc |>
+  mutate(rq_bits = rq_share_of_multi * multi_info_bits,
+         effr_obs = eff_obs / 2^J, effr_ind = eff_ind / 2^J,
+         tooltip = paste0(
+           "<b>", table, "</b>",
+           "<br>J = ", J, ", N = ", format(N, big.mark = ","),
+           "<br>Effective patterns: ", round(eff_obs, 1), " observed, ",
+           round(eff_ind, 1), " independence (of ", 2^J, ")",
+           "<br>Top pattern: ", sprintf("%.0f%%", 100 * top1_obs),
+           " of respondents (", top_pattern_obs, ")",
+           "<br>M = ", sprintf("%.3f", multi_info_bits), " bits; rank-1 reproduces ",
+           sprintf("%.0f%%", 100 * rq_share_of_multi)))
+cc_this <- cc_plot[cc_plot$table == s1_3$table_name, ]
+j_col <- scale_colour_gradient(low = "#9ecae1", high = "#08306b", breaks = c(4, 6, 8, 10),
+                               name = "Items (J)")
+pa <- ggplot(cc_plot, aes(x = effr_ind, y = effr_obs, text = tooltip)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_point(aes(colour = J), alpha = 0.75, size = 1.9) +
+  geom_point(data = cc_this, shape = 21, size = 3.6, stroke = 1.1,
+             colour = "grey15", fill = NA) +
+  scale_x_continuous(labels = scales::percent, limits = c(0, 1)) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
+  j_col +
+  labs(x = "Effective patterns, independence", y = "Effective patterns, observed")
+pb <- ggplot(cc_plot, aes(x = multi_info_bits, y = rq_bits, text = tooltip)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = irw_grey) +
+  geom_point(aes(colour = J), alpha = 0.75, size = 1.9) +
+  geom_point(data = cc_this, shape = 21, size = 3.6, stroke = 1.1,
+             colour = "grey15", fill = NA) +
+  scale_x_log10() + scale_y_log10() + j_col +
+  labs(x = "Multi-information M (bits)", y = "Reproduced by rank-1 model (bits)")
+# hover works on both panels; the colour bar is shown once
+pa_ly <- plotly::ggplotly(pa, tooltip = "text")
+pb_ly <- plotly::ggplotly(pb, tooltip = "text") |> plotly::hide_colorbar()
+plotly::subplot(pa_ly, pb_ly, nrows = 1, margin = 0.08, titleX = TRUE, titleY = TRUE) |>
+  plotly::layout(annotations = list(list(
+    text = "Hover over a point to see the table.", showarrow = FALSE,
+    xref = "paper", yref = "paper", x = 0, y = -0.2,
+    xanchor = "left", yanchor = "top", font = list(size = 11, color = "grey50"))))
 ```
 
-**What to notice.** Systematic curvature away from the diagonal — especially
-for extreme total-score patterns — signals that main effects alone are not
-enough. The points that deviate most are those where all or nearly all items are
-answered the same way: item correlation inflates these relative to the
-independence prediction. This is exactly the second-order structure that
-@holland1990dutch formalises.
+In the median table the items share $M = `r sprintf("%.3f", cc_sum$mi[2])`$
+bits (IQR `r sprintf("%.3f", cc_sum$mi[1])`–`r sprintf("%.3f", cc_sum$mi[3])`),
+and since $2^{H_\text{obs}} / 2^{H_\text{ind}} = 2^{-M}$ that is a cut of about
+`r p0(cc_sum$cut[2])` in the effective number of patterns. Across tables $M$
+runs from `r sprintf("%.2f", min(cc$multi_info_bits))` to
+`r sprintf("%.1f", max(cc$multi_info_bits))` bits, and the rank-1 model tracks
+it over that whole range, reproducing a median `r p0(cc_sum$rq[2])` of it
+(@fig-concentration-corpus, right). What it misses grows with the number of
+items (Spearman $\rho = `r sprintf("%.2f", cc_sum$rho_j)`$ between $J$ and the
+reproduced share), a pattern Section 2 returns to. This vignette's table is
+concentrated but not an outlier: its $M$ of
+`r sprintf("%.2f", cc_sum$this_mi)` bits exceeds `r p0(cc_sum$this_mi_pctl)` of
+tables, and its most common pattern is `r sprintf("%.1f", cc_sum$this_ratio)`
+times as frequent as independence predicts, against
+`r sprintf("%.2f", cc_sum$ratio[2])` in the median table.
+
+These are plug-in entropies, which are biased downward when cells are sparse —
+most at $J \ge 8$, where a median of only `r p0(cc_sum$frac_med)` of the $2^J$
+patterns are observed. Bias-corrected estimates (Miller–Madow, Chao–Shen) move
+single tables by a median
+`r sprintf("%.3f", min(cc_sum$shift_mm, cc_sum$shift_cs))`–`r sprintf("%.3f", max(cc_sum$shift_mm, cc_sum$shift_cs))`
+bits and, if anything, raise the rank-1 share (at $J \ge 8$ from
+`r p0(cc_sum$rq_big)` to `r p0(cc_sum$rq_big_cs)` with Chao–Shen). The full
+breakdown is in `vignettes/dutchdata/concentration_summary.md`.
 
 ---
 
-## Section 3: Fitting the second-order exponential model
+## Section 2: Three loglinear models
 
-The full **second-order exponential (SOE) model** augments the independence
-model with all $\binom{J}{2}$ pairwise interaction terms:
+The rest of the page fits three nested models to the $2^J$ pattern counts. Each
+is a Poisson regression of the counts on functions of the item responses; they
+differ only in how much association among items they allow.
 
-$$\log p(\mathbf{x}) = \alpha + \sum_j \beta_j x_j + \sum_{j < k} \gamma_{jk}\, x_j x_k$$
+Under **independence** — no latent variable, no associations — $\log
+p(\mathbf{x})$ is linear in the item responses,
 
-This is still a Poisson GLM, now with $1 + J + \binom{J}{2}$ parameters. The
-$J \times J$ matrix $\boldsymbol{\Gamma}$ (with $\Gamma_{jk} = \gamma_{jk}$ and
-$\Gamma_{jj} = 0$) encodes all pairwise item associations after removing main
-effects.
+$$\log p(\mathbf{x}) = \alpha + \sum_{j=1}^{J} \beta_j x_j ,$$
 
-The Dutch Identity [@holland1990dutch, Theorem 1] predicts that
-$\boldsymbol{\Gamma}$ is *approximately rank-1*: $\Gamma_{jk} \approx \gamma_j
-\gamma_k$. Under this constraint, the interaction structure collapses to:
+with $J + 1$ parameters. Section 1 has already shown what this misses: it
+spreads the mass too thinly and badly underpredicts the patterns where most
+items are answered the same way.
 
-$$\log p(\mathbf{x}) \approx \alpha + \sum_j \beta_j' x_j + \frac{1}{2}\!\left(\sum_j \gamma_j x_j\right)^{\!2}$$
+The **second-order exponential (SOE)** model adds every pairwise interaction,
 
-the **restricted log-quadratic** model ($1 + 2J$ parameters). We fit all three
-models and compare.
+$$\log p(\mathbf{x}) = \alpha + \sum_j \beta_j x_j + \sum_{j < k} \gamma_{jk}\, x_j x_k ,$$
+
+for $1 + J + \binom{J}{2}$ parameters. The $J \times J$ matrix
+$\boldsymbol{\Gamma}$ (with $\Gamma_{jk} = \gamma_{jk}$ and $\Gamma_{jj} = 0$)
+holds all pairwise associations after removing main effects.
+
+Holland's log-quadratic approximation [@holland1990dutch] predicts that
+$\boldsymbol{\Gamma}$ is *approximately rank-1*, $\Gamma_{jk} \approx \gamma_j
+\gamma_k$, so that the interactions collapse to
+
+$$\log p(\mathbf{x}) \approx \alpha + \sum_j \beta_j' x_j + \frac{1}{2}\!\left(\sum_j \gamma_j x_j\right)^{\!2},$$
+
+the **restricted log-quadratic** model, with $1 + 2J$ parameters.
 
 ### Model comparison
 
@@ -509,21 +494,18 @@ s1_3$bic_table |>
   knitr::kable(align = "lrrr")
 ```
 
-All three models are fitted to the same $2^J$ pattern counts — zero cells
-included — by Poisson maximum likelihood, so the log-likelihoods are on one
-scale, and BIC uses $n = N = `r format(s1_3$bic_n, big.mark=",")`$ respondents
-for every row. Each model has a free intercept, so its fitted counts sum to $N$;
-the multinomial log-likelihoods therefore differ from the Poisson ones by a
-constant that is the same for all three
-(`r paste(sprintf("%.1f", s1_3$ll_multinomial), collapse = ", ")` for
-independence, log-quadratic and SOE respectively).
+The models are nested — independence is the log-quadratic with $\gamma = 0$,
+and the log-quadratic is the SOE with $\Gamma_{jk}$ forced to
+$\gamma_j \gamma_k$ — so the log-likelihoods must increase down the table, and
+they do.[^fitting]
 
-The three models are nested: independence is the log-quadratic with $\gamma = 0$,
-and the log-quadratic is the full SOE with $\Gamma_{jk}$ forced to
-$\gamma_j \gamma_k$. The log-likelihoods must therefore increase down the table,
-and they do. The rank-1 fit is by direct Poisson maximum likelihood rather than
-by a GLM, since $\gamma$ enters only through $(\mathbf{x}'\gamma)^2$ and so is
-identified only up to sign; of
+[^fitting]: All three are fitted by Poisson maximum likelihood to the same
+$2^J$ counts, zero cells included, so the log-likelihoods share one scale; each
+has a free intercept, so the multinomial log-likelihoods differ from the Poisson
+ones by the same constant
+(`r paste(sprintf("%.1f", s1_3$ll_multinomial), collapse = ", ")`). The rank-1
+model is fitted directly rather than as a GLM, since $\gamma$ enters only
+through $(\mathbf{x}'\gamma)^2$ and is identified only up to sign; of
 `r s1_3$rq_convergence$n_starts` starting values,
 `r s1_3$rq_convergence$n_at_best` reached the reported optimum.
 
@@ -575,72 +557,23 @@ ggplot(fit_df, aes(x = log_p_obs, y = log_p_fit)) +
   )
 ```
 
-### Structure of the Γ matrix
-
-```{r}
-#| label: fig-gamma-heatmap
-#| fig-cap: "Heatmap of the J×J interaction matrix Γ from the full SOE model. Under the Dutch Identity, off-diagonal entries should follow a rank-1 pattern γⱼγₖ — all rows should look like rescaled versions of each other."
-#| fig-height: 4
-
-gmat      <- s1_3$gamma_matrix
-gmat_long <- as.data.frame(as.table(gmat)) |>
-  rename(item1 = Var1, item2 = Var2, gamma = Freq) |>
-  filter(item1 != item2)
-
-ggplot(gmat_long, aes(x = item2, y = item1, fill = gamma)) +
-  geom_tile(colour = "white") +
-  scale_fill_gradient2(
-    low = irw_red, mid = "white", high = irw_blue,
-    midpoint = 0, name = "γⱼₖ"
-  ) +
-  labs(x = NULL, y = NULL) +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    panel.grid  = element_blank()
-  )
-```
-
-Under a rank-1 $\boldsymbol{\Gamma}$, every row is a scalar multiple of every
-other — the color profile across columns should look identical up to intensity.
-Systematic blocks or rows that deviate from the common pattern signal local
-dependence that a single latent factor cannot absorb.
-
 ### Is Γ rank-1?
 
-The Dutch Identity's prediction about $\boldsymbol{\Gamma}$ concerns the
-**off-diagonal** entries only. Expanding the quadratic term and using
-$x_j^2 = x_j$ for binary items,
+The approximation's prediction about $\boldsymbol{\Gamma}$ concerns the
+off-diagonal entries only. Since $x_j^2 = x_j$ for binary items,
 
 $$\frac{1}{2}\!\left(\sum_j \gamma_j x_j\right)^{\!2}
   = \frac{1}{2}\sum_j \gamma_j^2 x_j \;+\; \sum_{j<k} \gamma_j \gamma_k x_j x_k,$$
 
 so the squared terms are absorbed into the main effects and the prediction is
-$\Gamma_{jk} \approx \gamma_j \gamma_k$ for $j \neq k$. The diagonal is free; in
-the SOE fit $\Gamma_{jj} = 0$ by construction, because there is no $x_j^2$ term
-to estimate.
-
-That construction has a consequence worth stating before any eigenvalues are
-plotted: $\operatorname{trace}(\boldsymbol{\Gamma}) = 0$, so the eigenvalues of
-$\boldsymbol{\Gamma}$ must sum to zero. Large negative eigenvalues are forced by
-the zero diagonal and say nothing about dimensionality. Indeed for *any*
-$\boldsymbol{\gamma}$, the exactly rank-1 structure
-$\boldsymbol{\gamma}\boldsymbol{\gamma}' - \operatorname{diag}(\gamma_j^2)$ has
-at most one positive eigenvalue, from which
-$\lambda_1 / \sum_j |\lambda_j| \le 1/2$ with equality precisely when one
-eigenvalue is positive. A scree plot of $\boldsymbol{\Gamma}$ is therefore not a
-test of the rank-1 prediction, and "the leading eigenvalue explains 50% of the
-absolute eigenvalue mass" is the *ceiling* of that statistic rather than a
-shortfall. An earlier version of this page read it the other way around.
-
-The diagnostic that does test the prediction leaves the diagonal alone: fit the
-best rank-1 structure to the off-diagonal entries, minimising
-$\sum_{j<k} w_{jk}(\Gamma_{jk} - g_j g_k)^2$ with weights
-$w_{jk} = 1/\mathrm{SE}(\Gamma_{jk})^2$ from the SOE fit, and ask what share of
-the off-diagonal (weighted) sum of squares it explains.
+$\Gamma_{jk} \approx \gamma_j \gamma_k$ for $j \neq k$. @fig-gamma-rank1-scatter
+plots one against the other. To summarise it in a number, we fit the best rank-1
+structure to the off-diagonals, weighting each entry by $1/\mathrm{SE}^2$ from
+the SOE fit, and ask what share of the weighted sum of squares it explains.
 
 ```{r}
 #| label: fig-gamma-rank1-scatter
-#| fig-cap: "Off-diagonal entries of Γ from the full SOE fit against γⱼγₖ from the fitted restricted log-quadratic model, with the 45° line. Error bars are ±1 SE of the SOE coefficient. This is the direct check of the Dutch Identity's prediction; the diagonal plays no part in it."
+#| fig-cap: "Off-diagonal entries of Γ from the full SOE fit against γⱼγₖ from the fitted restricted log-quadratic model, with the 45° line. Error bars are ±1 SE of the SOE coefficient."
 #| fig-height: 3.8
 
 sc <- s1_3$gamma_rank1$scatter
@@ -655,54 +588,11 @@ ggplot(sc, aes(x = gamma_pred, y = gamma_soe)) +
 ```
 
 ```{r}
-#| label: fig-gamma-scree
-#| fig-cap: "Eigenvalues of Γ (bars), with the eigenvalues of an exactly rank-1 reference structure γγ′ with its diagonal zeroed (points). Both sets are constrained to sum to zero by the zero diagonal, so the negative eigenvalues are not evidence against rank-1 — the rank-1 ideal has them too."
-#| fig-height: 3.5
-
-eig_df <- tibble(
-  component  = seq_along(s1_3$eigenvalues),
-  eigenvalue = s1_3$eigenvalues,
-  reference  = s1_3$gamma_rank1$reference_eigen
-)
-
-ggplot(eig_df, aes(x = component, y = eigenvalue)) +
-  geom_col(fill = irw_blue, alpha = 0.7, width = 0.6) +
-  geom_hline(yintercept = 0, colour = irw_grey) +
-  geom_point(aes(y = reference), colour = irw_red, size = 2.6) +
-  scale_x_continuous(breaks = seq_len(s1_3$J)) +
-  labs(
-    x       = "Component",
-    y       = "Eigenvalue of Γ",
-    caption = paste0(
-      "Bars: observed Γ. Points: exactly rank-1 reference. Both sum to zero ",
-      "by construction (trace Γ = 0)."
-    )
-  )
-```
-
-**What to notice.** The restricted log-quadratic model ($1 + 2J$ parameters)
-closes `r sprintf("%.1f%%", 100 * s1_3$rq_gap_share)` of the gap between the
-independence model and the full SOE ($1 + J + \binom{J}{2}$ parameters) — the
-Dutch Identity's economy claim, holding up here.
-
-The rank-1 claim about $\boldsymbol{\Gamma}$ itself is a separate question, and
-it needs a reference point: a test this short at this $N$ will never return an
-exactly rank-1 $\boldsymbol{\Gamma}$, so a high share proves nothing on its own.
-We simulate `r s1_3$gamma_rank1$n_boot` sets of pattern counts from the fitted
-restricted log-quadratic model at the same $N$ — a world where the Dutch
-Identity holds exactly — refit the SOE, and recompute the diagnostic. Under that
-null the weighted off-diagonal share has median
-`r sprintf("%.1f%%", 100 * s1_3$gamma_rank1$boot_summary$share_w_median)`
-and 95% of replicates fall in
-[`r sprintf("%.1f%%", 100 * s1_3$gamma_rank1$boot_summary$share_w_lo)`,
-`r sprintf("%.1f%%", 100 * s1_3$gamma_rank1$boot_summary$share_w_hi)`].
-
-```{r}
 #| label: s3-2pl-baseline
 #| echo: false
 #| eval: true
 
-# Second reference: a unidimensional 2PL, from vignettes/dutch_identity_2pl_baseline.R
+# Reference distribution: a unidimensional 2PL, from vignettes/dutch_identity_2pl_baseline.R
 b2_path <- "dutchdata/dutch_identity_2pl_baseline.rds"
 b2 <- if (file.exists(b2_path)) readRDS(b2_path) else
   list(n_sim = NA, n_failed = 0, population_share = NA, observed_share = NA,
@@ -712,105 +602,85 @@ b2 <- if (file.exists(b2_path)) readRDS(b2_path) else
 b2_n <- length(b2$sim_share)
 b2_all_above <- isTRUE(b2$n_below_observed == 0)
 p1 <- function(x) sprintf("%.1f%%", 100 * x)
-p2 <- function(x) sprintf("%.2f%%", 100 * x)
 ```
 
-That null is Holland's approximation, though, not a unidimensional IRT model.
-At $J = `r s1_3$J`$ the approximation need not be tight: the posterior of
-$\theta$ given an extreme pattern such as all 0s is skewed, and the
-log-quadratic form is only the leading term. A unidimensional model could, in
-principle, produce a $\boldsymbol{\Gamma}$ that is not exactly rank-1, and then
-falling outside the first null would say something about the approximation
-rather than about dimensionality. So we build a second reference from a
-unidimensional 2PL with normal $\theta$, fitted to this table with mirt. Its
-exact pattern probabilities come from quadrature; we simulate `r b2_n` tables of
-counts at the same $N$, refit the SOE, and recompute the same weighted share.
-(The 2PL is, incidentally, the better-fitting of the two one-dimensional models:
-its log-likelihood is `r sprintf("%.1f", b2$ll_2pl - b2$ll_multinomial[["rq"]])`
-above the log-quadratic's with one parameter fewer, so the approximation does
-cost something at this $J$.) Even so, the 2PL world is very nearly rank-1. With
-no sampling noise at all, the share is `r p2(b2$population_share)`; across
-replicates the median is `r p1(b2$sim_summary$median)`, 95% fall in
-[`r p1(b2$sim_summary$lo)`, `r p1(b2$sim_summary$hi)`], and the lowest is
-`r p1(b2$sim_summary$min)`.
-
-The observed share is
-`r sprintf("%.1f%%", 100 * s1_3$gamma_rank1$rank1_weighted$share)`
-(`r sprintf("%.1f%%", 100 * s1_3$gamma_rank1$rank1_unweighted$share)`
-unweighted), below every one of the
-`r s1_3$gamma_rank1$n_boot` log-quadratic replicates and
-`r if (b2_all_above) paste0("every one of the ", b2_n, " 2PL replicates") else paste0(b2_n - b2$n_below_observed, " of the ", b2_n, " 2PL replicates")`.
-`r if (b2_all_above) "So $\\boldsymbol{\\Gamma}$ here is **not** rank-1, the departure is not a sampling artefact, and it is a departure from a unidimensional 2PL, not only from Holland's approximation to one." else "The departure is therefore from Holland's log-quadratic approximation; a unidimensional 2PL at this $J$ and $N$ can produce a share this low, so it is not by itself evidence against unidimensionality."`
-@fig-gamma-rank1-scatter
-shows where it lives:
-`r s1_3$gamma_rank1$n_resid_z_gt_3` of the
-`r s1_3$gamma_rank1$n_offdiag` off-diagonal entries sit more than three standard
-errors from $\gamma_j\gamma_k$, the largest being
+A share on its own proves little, since a short test at finite $N$ will never
+return an exactly rank-1 $\boldsymbol{\Gamma}$. So we need a reference: what
+share does a unidimensional model produce at this $J$ and $N$? We fit a 2PL
+with normal $\theta$ to this table, simulate `r b2_n` tables of counts from it,
+refit the SOE to each, and recompute the share. The replicates have median
+`r p1(b2$sim_summary$median)`, with 95% in
+[`r p1(b2$sim_summary$lo)`, `r p1(b2$sim_summary$hi)`]. (Simulating from the
+fitted log-quadratic model instead gives nearly the same band.) The observed
+share is `r p1(s1_3$gamma_rank1$rank1_weighted$share)`, below
+`r if (b2_all_above) paste0("every one of the ", b2_n) else paste0(b2_n - b2$n_below_observed, " of the ", b2_n)`
+replicates.
+`r if (b2_all_above) "So the off-diagonals of $\\boldsymbol{\\Gamma}$ are **not** rank-1, and the departure is not one the fitted 2PL reproduces. That is weaker than saying no unidimensional model could produce it; we have checked one." else "A unidimensional 2PL at this $J$ and $N$ can produce a share this low, so the departure is not by itself evidence against unidimensionality."`
+In the scatter, `r s1_3$gamma_rank1$n_resid_z_gt_3` of the
+`r s1_3$gamma_rank1$n_offdiag` pairs sit more than three standard errors off the
+line, the largest being
 `r s1_3$gamma_rank1$worst_resid$item1`–`r s1_3$gamma_rank1$worst_resid$item2`
-at `r sprintf("%.1f", s1_3$gamma_rank1$worst_resid$z)` SE. That is local
-dependence between particular item pairs — structure a single latent dimension
-cannot absorb.
+at `r sprintf("%.1f", s1_3$gamma_rank1$worst_resid$z)` SE, which looks like
+local dependence between particular item pairs.
 
-Note also that the eigenvalue count has no power to detect this.
-$\boldsymbol{\Gamma}$ has exactly
-`r s1_3$gamma_rank1$eigen_facts$n_positive` positive eigenvalue, which is the
-rank-1 prediction — but so do
-`r sprintf("%.0f%%", 100 * s1_3$gamma_rank1$boot_prop_one_positive)` of the null
-replicates, and so does any rank-1 matrix with a zeroed diagonal. Passing that
-check is not evidence.
-
-The two findings are not in conflict, and the combination is the useful lesson.
-Rank-1 is rejected as a description of $\boldsymbol{\Gamma}$ while remaining an
-excellent *predictive* approximation: the five extra interaction parameters the
-SOE spends on the non-rank-1 structure buy it only
-`r sprintf("%.1f%%", 100 * (1 - s1_3$rq_gap_share))` of the likelihood gap.
-Statistical rejection and practical adequacy are answers to different questions,
+The two findings are not in conflict. Rank-1 is rejected as a description of
+$\boldsymbol{\Gamma}$ while remaining an excellent *predictive* approximation:
+the extra interaction parameters the SOE spends on the non-rank-1 structure buy
+it only `r sprintf("%.1f%%", 100 * (1 - s1_3$rq_gap_share))` of the likelihood
+gap. Statistical rejection and practical adequacy answer different questions,
 and at $N = `r format(s1_3$N, big.mark=",")`$ a real but small departure is
 detectable without being important for prediction.
 
-### Is this table unusual?
+### Is the economy unusual?
 
-Everything above concerns one instrument. The economy claim — that a single
-dimension closes almost all of the gap between independence and the full SOE —
+Everything above concerns one instrument. The economy claim — that the restricted log-quadratic model closes almost all
+of the gap between independence and the full SOE —
 is worth asking of the corpus, because on one table it could be a property of
 these five items rather than of item response data.
 
 So we ask it of every IRW table that admits the same three fits: binary items,
 $`r gs_sum$j_min` \le J \le `r gs_sum$j_max`$, and enough respondents to
-populate $2^J$ cells. That is `r gs_sum$n_tables` tables. For each one we fit
-the same nested triple to its own pattern counts and form the same ratio, but
-out of sample: five-fold cross-validation over respondents, scoring each
-held-out fold under models fitted on the other four. In-sample the ratio is
-bounded in $[0,1]$ and inflated when $J$ is small, which would flatter the
-restricted model exactly where it has least to explain. Out of sample it is
-bounded by neither, so a few tables land slightly above 1.
+populate $2^J$ cells — `r gs_sum$n_tables` tables. We compute the same ratio
+out of sample, by five-fold cross-validation over respondents, because in sample
+it is inflated when $J$ is small. Out of sample it is not bounded by 1, so a few
+tables land slightly above it.
 
 Fitted cell probabilities are floored at $1/(10 N_{\text{train}})$ before
-scoring, because a single held-out respondent landing in a numerically empty
-cell would otherwise dominate its fold — a fact about an empty cell, not about
-overfitting. That choice is immaterial in aggregate (the median moves from
-`r sprintf("%.3f", gs_sum$med_out_raw)` unfloored to
-`r sprintf("%.3f", gs_sum$med_out)` floored) but not for every table: it shifts
-`r gs_sum$n_floor_moves` of the `r gs_sum$n_usable` by more than 0.05, at most
-`r sprintf("%.2f", gs_sum$max_floor_move)`. Both versions are in the CSV.
+scoring, so that one held-out respondent in a numerically empty cell cannot
+dominate a fold. Flooring regularises the predictions; what justifies it is
+that it barely matters in aggregate (the median is
+`r sprintf("%.3f", gs_sum$med_out_raw)` unfloored,
+`r sprintf("%.3f", gs_sum$med_out)` floored), though it moves
+`r gs_sum$n_floor_moves` of the `r gs_sum$n_usable` tables by more than 0.05, at
+most `r sprintf("%.2f", gs_sum$max_floor_move)`. Both versions are in the CSV.
 
 ```{r}
 #| label: fig-gapshare-corpus
-#| fig-cap: "Held-out gap share for every IRW table admitting the three fits, against the number of items. Each blue point is one table. The dashed line is the median over all tables — the 96.3% quoted below. Red segments are per-J medians, which is where the decline with J shows up. The circled point is the table analysed in this vignette. A value of 1 means one latent dimension captures all of the pairwise association the full SOE finds."
+#| fig-cap: "Held-out gap share for every IRW table admitting the three fits, against the number of items. Each blue point is one table. The dashed line is the median over all tables — the 96.3% quoted below. Red segments are per-J medians, which is where the decline with J shows up. The circled point is the table analysed in this vignette. A value of 1 means the restricted log-quadratic model captures all of the held-out predictive gain the full SOE makes over independence."
 #| fig-height: 4.2
 
 gs_u    <- gs[gs$share_out_usable, ]
 gs_this <- gs_u[gs_u$table == s1_3$table_name, ]
 set.seed(1)   # fixed jitter, so the figure is stable across renders
 gs_u$xj <- gs_u$J + runif(nrow(gs_u), -0.14, 0.14)
+gs_u$tooltip <- paste0(
+  "<b>", gs_u$table, "</b>",
+  "<br>J = ", gs_u$J, ", N = ", format(gs_u$N, big.mark = ","),
+  "<br>Held-out gap share: ", sprintf("%.3f", gs_u$share_out_floor),
+  " (in sample ", sprintf("%.3f", gs_u$share_in), ")",
+  "<br>Gain over independence, nats per respondent: ",
+  sprintf("%.3f", gs_u$cv_gap_rq_nats), " rank-1, ",
+  sprintf("%.3f", gs_u$cv_gap_soe_nats), " SOE",
+  ifelse(is.na(gs_u$construct_type) | gs_u$construct_type == "", "",
+         paste0("<br>", gs_u$construct_type)))
 
-ggplot(gs_u, aes(x = xj, y = share_out_floor)) +
+p5 <- ggplot(gs_u, aes(x = xj, y = share_out_floor)) +
   geom_hline(yintercept = gs_sum$med_out, linetype = "dashed",
              colour = irw_grey) +
   annotate("text", x = gs_sum$j_max + 0.42, y = gs_sum$med_out,
            label = sprintf("median %.3f", gs_sum$med_out),
            hjust = 1, vjust = -0.6, size = 3.2, colour = irw_grey) +
-  geom_point(alpha = 0.5, colour = irw_blue, size = 1.9) +
+  geom_point(aes(text = tooltip), alpha = 0.5, colour = irw_blue, size = 1.9) +
   geom_segment(data = gs_sum$by_j,
                aes(x = J - 0.32, xend = J + 0.32,
                    y = share_out_floor, yend = share_out_floor),
@@ -820,17 +690,19 @@ ggplot(gs_u, aes(x = xj, y = share_out_floor)) +
              colour = "grey15", fill = NA) +
   scale_x_continuous(breaks = gs_sum$j_min:gs_sum$j_max,
                      limits = c(gs_sum$j_min - 0.45, gs_sum$j_max + 0.45)) +
-  labs(x = "Number of items (J)", y = "Held-out gap share",
-       caption = paste0(
-         "Dashed: median over all ", gs_sum$n_usable,
-         " tables. Red: per-J medians.\n",
-         "Circled: ", s1_3$table_name, "."
-       )) +
-  theme(plot.caption = element_text(hjust = 0, colour = irw_grey))
+  labs(x = "Number of items (J)", y = "Held-out gap share")
+plotly::ggplotly(p5, tooltip = "text") |>
+  plotly::layout(annotations = list(list(
+    text = paste0("Dashed: median over all ", gs_sum$n_usable,
+                  " tables. Red: per-J medians. Circled: ", s1_3$table_name,
+                  ". Hover over a point to see the table."),
+    showarrow = FALSE, xref = "paper", yref = "paper", x = 0, y = -0.2,
+    xanchor = "left", yanchor = "top", font = list(size = 11, color = "grey50"))))
 ```
 
-**What to notice.** The dashed line is the headline: the median table gives one
-dimension `r sprintf("%.1f%%", 100 * gs_sum$med_out)` of the gap (IQR
+**What to notice.** The dashed line is the headline: in the median table the
+restricted log-quadratic model captures `r sprintf("%.1f%%", 100 * gs_sum$med_out)`
+of the held-out gain the SOE makes over independence (IQR
 [`r sprintf("%.2f", gs_sum$q1_out)`, `r sprintf("%.2f", gs_sum$q3_out)`]). The
 circled point is this vignette's table, at
 `r sprintf("%.1f%%", 100 * gs_sum$this_out)` — above the median but well inside
@@ -842,7 +714,7 @@ independence, the full SOE `r sprintf("%.3f", gs_sum$med_soe_nats)`, and the
 median table's own difference between the two is
 `r sprintf("%.4f", gs_sum$med_beyond_nats)` nats — about
 `r sprintf("%.0f%%", 100 * gs_sum$med_beyond_nats / gs_sum$med_rq_nats)` of what
-the first dimension buys. The economy claim is a property of these data broadly,
+the restricted model buys. The economy claim is a property of these data broadly,
 not of this instrument.
 
 It does decay with $J$, monotonically over most of the range, from
@@ -855,275 +727,163 @@ that *can* depart from rank-1, and it also means instruments that sprawl across
 facets. The low outliers favour the second reading — the worst cases are item
 sets that were never indicators of one trait, such as a battery asking which
 *sources* someone used for COVID information, or a short subscale that mixes
-material deprivation with supervision. They look like separate clusters because
-they are.
+material deprivation with supervision. There the departure from rank-1 says more
+about how the items were assembled than about the model.
 
 Two cautions. The ratio's denominator can be small: for `r gs_sum$n_thin` of the
 `r gs_sum$n_usable` tables the full SOE beats independence by under 0.05 nats
 per respondent, and a low share there means there was little to explain rather
-than that one dimension failed. More importantly, this is a share of
+than that the restricted model failed. More importantly, this is a share of
 *second-order* association. The SOE is itself a restricted model — no three-way
-or higher interactions — so a table at 96% has one dimension capturing 96% of
+or higher interactions — so a table at 96% has the restricted model capturing 96% of
 what the pairwise model captures, which is silent about dependence neither model
 can see. The per-table numbers, the exclusions and the diagnostics are in
 `vignettes/dutchdata/gapshare_summary.md`.
 
----
-
-## Section 4: The γₖ diagnostic for the Rasch model
-
-@holland1990dutch Corollary 2 gives a striking prediction about the Rasch model.
-If ability $\theta \sim N(\mu, \sigma^2)$, the probability of obtaining total
-score $k$ is:
-
-$$\log \pi_k \approx C + \mu(k - \bar{y}_+) + \frac{\sigma^2}{2}(k - \bar{y}_+)^2$$
-
-where $\bar{y}_+ = \sum_j \bar{p}_j$ is the expected total score at the mean
-ability. In other words, $\log \pi_k$ is a *quadratic* function of $k$, centred
-on $\bar{y}_+$. Systematic deviations indicate either non-normality of the
-ability distribution or Rasch misfit.
-
-We compare two IRW datasets, chosen on the quantity these figures actually
-show — the $R^2$ of the quadratic fit to $\log \pi_k$. One where that quadratic
-holds closely (**`r s4$good_rasch$table_name`**, $J = `r s4$good_rasch$J`$,
-$N = `r format(s4$good_rasch$N, big.mark=",")`$,
-$R^2 = `r round(s4$good_rasch$r2_quad, 3)`$) and one where it does not
-(**`r s4$poor_rasch$table_name`**, $J = `r s4$poor_rasch$J`$,
-$N = `r format(s4$poor_rasch$N, big.mark=",")`$,
-$R^2 = `r round(s4$poor_rasch$r2_quad, 3)`$).
-
-Rasch misfit itself is quoted per response, $\Delta\ell / (NJ)$ for the 2PL
-against the Rasch model: `r signif(s4$good_rasch$ll_diff_per_resp, 2)` and
-`r signif(s4$poor_rasch$ll_diff_per_resp, 2)` respectively. Raw $\Delta\ell$ is
-not comparable across datasets — it grows with the number of responses, so a
-larger dataset looks like worse Rasch fit for free, and the raw values here
-(`r round(s4$good_rasch$ll_diff, 1)` and `r round(s4$poor_rasch$ll_diff, 1)`)
-would overstate the contrast by a wide margin.
+### Rejected, but adequate?
 
 ```{r}
-#| label: plot-gk-fn
+#| label: s2-rank1-corpus
 #| echo: false
+#| eval: true
 
-plot_gk <- function(gk_data) {
-  ggplot(gk_data, aes(x = k, y = gamma_k)) +
-    geom_point(colour = irw_blue, size = 2.5) +
-    geom_line(aes(y = gamma_k_fitted), colour = irw_red,
-              linewidth = 0.9) +
-    labs(
-      x       = "Total score k",
-      y       = expression(log~pi[k]),
-      caption = "Red curve: fitted quadratic."
-    )
-}
+# The rank-1 test of "Is Γ rank-1?", run on every table by
+# vignettes/dutch_identity_gapshare.R with RANK1=1.
+r1_path <- "dutchdata/rank1_tables.csv"
+r1 <- if (file.exists(r1_path)) read.csv(r1_path, stringsAsFactors = FALSE) else NULL
+r1_sum <- if (!is.null(r1)) {
+  r1$short <- r1$sim_median - r1$share_obs
+  r1$rej   <- r1$p_emp < 0.05
+  r1$boundary <- r1$max_slope > 10   # a slope still climbing at the cycle cap
+  u <- r1[r1$share_out_usable, ]
+  nq <- cut(r1$N, quantile(r1$N, 0:4 / 4), include.lowest = TRUE)
+  list(
+    n = nrow(r1), n_sim = median(r1$n_sim + r1$n_sim_failed),
+    n_rej = sum(r1$rej), frac_rej = mean(r1$rej),
+    n_all_below = sum(r1$n_below == 0),
+    n_boundary = sum(r1$boundary), n_rej_boundary = sum(r1$rej & r1$boundary),
+    frac_rej_nb = mean(r1$rej[!r1$boundary]),
+    rej_by_j = tapply(r1$rej, r1$J, mean),
+    rej_nq = tapply(r1$rej, nq, mean),
+    short_med = median(r1$short), short_q = quantile(r1$short, c(.25, .75), names = FALSE),
+    rho_short_gap = cor(u$short, u$share_out_floor, method = "spearman"),
+    rho_short_n = cor(r1$short, log(r1$N), method = "spearman"),
+    n_u = nrow(u), n_rej_u = sum(u$rej),
+    n_rej_hi = sum(u$rej & u$share_out_floor >= 0.9),
+    gap_rej = median(u$share_out_floor[u$rej]),
+    gap_acc = median(u$share_out_floor[!u$rej]),
+    n_lo = sum(u$short < 0.1), gap_lo = median(u$share_out_floor[u$short < 0.1]),
+    n_hi = sum(u$short >= 0.1), gap_hi = median(u$share_out_floor[u$short >= 0.1]),
+    gap_hi_p10 = quantile(u$share_out_floor[u$short >= 0.1], 0.1, names = FALSE),
+    this = r1[r1$table == s1_3$table_name, ]
+  )
+} else NULL
 ```
 
-```{r}
-#| label: fig-gamma-k-good
-#| fig-cap: "Total-score log-frequencies for the dataset with the closest quadratic fit. Points follow a smooth quadratic, consistent with Holland's Corollary 2."
-#| fig-height: 4
+The single-table result — rank-1 rejected, but cheap to ignore for prediction —
+might be a feature of this table. So we run the same test on all
+`r r1_sum$n` tables: fit a 2PL with normal $\theta$ to each, simulate
+`r r1_sum$n_sim` tables of counts from it at the observed $N$, refit the SOE to
+each, and ask where the observed weighted rank-1 share falls.
 
-plot_gk(s4$good_rasch$gamma_k_data)
-```
-
-The quadratic $R^2$ is `r round(s4$good_rasch$r2_quad, 3)` for this dataset.
-
-```{r}
-#| label: fig-gamma-k-poor
-#| fig-cap: "Total-score log-frequencies for the dataset with the worst quadratic fit. Deviations from the quadratic suggest a non-normal ability distribution or non-constant discrimination."
-#| fig-height: 4
-
-plot_gk(s4$poor_rasch$gamma_k_data)
-```
-
-The quadratic $R^2$ is `r round(s4$poor_rasch$r2_quad, 3)` for this dataset.
-
-**What to notice.** When Rasch holds, $\log \pi_k$ traces a clean inverted
-parabola. Deviations can take two forms: (1) a sharp peak at the mode with thin
-tails, suggesting a more leptokurtic ability distribution; or (2) asymmetry or a
-kink, consistent with varying item discriminations. The $R^2$ from the quadratic
-regression is a quick, model-free diagnostic, but it is a comparative one rather
-than a test against a fixed cutoff. Across the
-`r nrow(s4$rasch_meta)` datasets screened here it ranges from
-`r sprintf("%.2f", min(s4$rasch_meta$r2_quad))` to
-`r sprintf("%.2f", max(s4$rasch_meta$r2_quad))`; the top of that range is about
-as quadratic as real total-score distributions get, and values below roughly
-0.95 are worth investigating.
-
-The two diagnostics need not agree, and here they do not. Corollary 2 is a joint
-prediction about Rasch fit *and* normality of the ability distribution, so either
-can break it. **`r s4$good_rasch$table_name`** happens to be best on both counts
-— highest quadratic $R^2$ and the smallest per-response 2PL gain in the set. But
-**`r s4$poor_rasch$table_name`**, with much the worst quadratic fit, is only
-middling on Rasch misfit per response
-(`r signif(s4$poor_rasch$ll_diff_per_resp, 2)`, against a worst-in-set
-`r signif(max(s4$rasch_meta$ll_diff_per_resp), 2)` for
-**`r s4$rasch_meta$table_name[which.max(s4$rasch_meta$ll_diff_per_resp)]`**).
-What its $\log \pi_k$ curve is flagging is the shape of the score distribution,
-not non-constant discrimination — which is the caveat in the box at the foot of
-this page, met in the data.
-
----
-
-## Section 5: Dimensionality via second-order interaction matrices
-
-Holland ([-@holland1990dutch], Section 3.3) shows that for a $D$-dimensional IRT
-model, the **off-diagonal** structure of $\boldsymbol{\Gamma}$ is approximately
-of rank $D$ — and, as in Section 3, this is an approximation that sharpens as
-$J$ grows, about the off-diagonals with the diagonal left free. It is tempting
-to read it as "count the non-negligible eigenvalues of
-$\boldsymbol{\Gamma}$", but that reading does not work: the SOE fit forces
-$\Gamma_{jj} = 0$, so the eigenvalues sum to zero and the negative ones are an
-artefact of the constraint rather than a count of dimensions. Section 3 gives the
-diagnostic that does work, and shows that even the $D = 1$ case has to be judged
-against a simulated rank-1 reference rather than by eye. So this section stays
-with the standard approach — eigenvalues of the inter-item correlation matrix,
-whose diagonal is 1 and which is a different, conventional setup — and treats
-$\boldsymbol{\Gamma}$ only through Section 3's machinery.
-
-We use **`r s5$unidim$table_name`** ($J = `r s5$unidim$J`$) as the
-unidimensional candidate and **`r s5$multidim$table_name`**
-($J = `r s5$multidim$J`$) as the more complex one.
+Rank-1 is rejected ($p < 0.05$) for `r r1_sum$n_rej` of the `r r1_sum$n`
+tables, and for `r r1_sum$n_all_below` the observed share is below every
+replicate. That is not simply a matter of sample size. The rejection rate does
+rise with $N$ — from `r p0(r1_sum$rej_nq[1])` in the smallest quarter of tables to
+`r p0(r1_sum$rej_nq[4])` in the largest — and it also rises with $J$,
+from `r p0(r1_sum$rej_by_j[["4"]])` at $J = 4$ to every table from
+$J = `r min(as.integer(names(r1_sum$rej_by_j))[r1_sum$rej_by_j == 1])`$ up. And the
+*size* of the departure, the gap between the 2PL replicates' median share and the
+observed one, is nearly unrelated to $N$ (Spearman $\rho =
+`r sprintf("%.2f", r1_sum$rho_short_n)`$ with $\log N$). The departures are
+real and common.
 
 ```{r}
-#| label: fig-scree-comparison
-#| fig-cap: "Scree plots of inter-item correlation matrix eigenvalues. A sharply dominant first eigenvalue indicates unidimensionality; multiple eigenvalues above 1 indicate multidimensionality."
-#| fig-height: 5.5
+#| label: fig-rank1-corpus
+#| fig-cap: "Departure from rank-1 against predictive economy, one point per IRW table. Horizontal axis: how far the observed weighted rank-1 share of Γ falls below the median of replicates simulated from the table's own fitted 2PL (log scale; tables at or above the 2PL median are drawn at the left edge). Vertical axis: the held-out gap share from the previous figure. Filled points reject rank-1 at p < 0.05. The circled point is the table analysed in this vignette."
+#| fig-height: 4.2
 
-make_scree_df <- function(dim_result, label) {
-  tibble(
-    label      = label,
-    component  = seq_along(dim_result$cor_eigval),
-    eigenvalue = dim_result$cor_eigval,
-    pct_var    = dim_result$cor_eigval / sum(dim_result$cor_eigval)
-  )
-}
-
-scree_df <- bind_rows(
-  make_scree_df(
-    s5$unidim,
-    paste0("Unidimensional: ", s5$unidim$table_name, " (J=", s5$unidim$J, ")")
-  ),
-  make_scree_df(
-    s5$multidim,
-    paste0("Complex: ", s5$multidim$table_name, " (J=", s5$multidim$J, ")")
-  )
-) |> filter(component <= 10)
-
-ggplot(scree_df, aes(x = component, y = eigenvalue)) +
-  geom_col(fill = irw_blue, alpha = 0.7, width = 0.6) +
-  geom_hline(yintercept = 1, linetype = "dashed", colour = irw_grey) +
-  scale_x_continuous(breaks = 1:10) +
-  facet_wrap(~label, ncol = 1, scales = "free_y") +
-  labs(
-    x       = "Component",
-    y       = "Eigenvalue",
-    caption = "Dashed line at 1 (Kaiser criterion)."
-  )
-```
-
-
-**What to notice.** A clearly unidimensional instrument shows one eigenvalue
-well above the rest, with a sharp elbow. A multidimensional instrument shows
-multiple eigenvalues above 1, with a more gradual decline. The threshold is
-conventional rather than principled, which is what makes Holland's result
-attractive in theory: rank is a sharper notion than "above 1".
-
-In practice the attraction does not survive contact with the estimator. The rank
-claim is about $\boldsymbol{\Gamma}$'s off-diagonals with the diagonal free, and
-Section 3 shows what it takes to test even $D = 1$ — a weighted rank-1 fit to the
-off-diagonals plus a simulated reference distribution, because the eigenvalue
-count has no power and the share has no interpretable scale without one. Doing
-that for general $D$ means minimum-rank fitting at each candidate rank with a
-reference distribution for each, on a model that needs all $2^J$ cells. For the
-$J$ at which instruments are actually screened for dimensionality, the SOE cannot
-be fitted at all. The correlation-matrix scree above is the pragmatic tool; the
-$\boldsymbol{\Gamma}$ result is a statement about what dimensionality *means*
-rather than a procedure for measuring it.
-
----
-
-## Section 6: How many parameters does a long test support?
-
-@holland1990dutch establishes a **conservation law**: a $D$-dimensional test of
-$J$ items supports at most $(D+1)J$ parameters as $J \to \infty$. For $D = 1$
-this means at most $2J$ parameters — exactly what the 2PL provides. The 3PL has
-$3J$ parameters, exceeding the limit. Holland's prediction is therefore that
-**the marginal gain from 2PL → 3PL should shrink as $J$ grows**, and may
-become negative (overfitting) for long tests.
-
-We test this using the InterModel Vigorish [IMV; see also @holland1990dutch] — a
-log-score measure of predictive improvement — across IRW datasets spanning a
-range of test lengths.
-
-```{r}
-#| label: fig-conservation
-#| fig-cap: "IMV gain from 1PL → 2PL (blue) and 2PL → 3PL (red) as a function of test length J. Holland's conservation law predicts the 2PL → 3PL gain shrinks toward zero as J grows."
-#| fig-height: 4.5
-
-cons_df <- s6 |>
-  filter(!is.na(imv_1v2)) |>
-  pivot_longer(
-    cols      = c(imv_1v2, imv_2v3),
-    names_to  = "comparison",
-    values_to = "imv"
-  ) |>
-  filter(!is.na(imv)) |>
-  mutate(
-    comparison = recode(
-      comparison,
-      imv_1v2 = "1PL → 2PL  (free discrimination)",
-      imv_2v3 = "2PL → 3PL  (add guessing)"
-    )
-  )
-
-ggplot(cons_df, aes(x = J, y = imv, colour = comparison)) +
-  geom_jitter(width = 0.3, height = 0, alpha = 0.6, size = 2) +
-  geom_smooth(method = "loess", se = TRUE, alpha = 0.15, linewidth = 0.9) +
-  geom_hline(yintercept = 0, linetype = "dashed", colour = irw_grey) +
-  scale_colour_manual(
-    values = c(
-      "1PL → 2PL  (free discrimination)" = irw_blue,
-      "2PL → 3PL  (add guessing)"        = irw_red
-    ),
-    name = NULL
-  ) +
-  labs(
-    x       = "Number of items (J)",
-    y       = "IMV gain",
-    caption = paste0(
-      "Based on ", n_distinct(s6$table_name[!is.na(s6$imv_1v2)]),
-      " IRW datasets. 3PL fitted for J ≤ 20 only."
-    )
-  ) +
+r1_plot <- r1[r1$share_out_usable, ]
+r1_plot$short_plot <- pmax(r1_plot$short, 1e-3)
+r1_plot$tooltip <- paste0(
+  "<b>", r1_plot$table, "</b>",
+  "<br>J = ", r1_plot$J, ", N = ", format(r1_plot$N, big.mark = ","),
+  "<br>Rank-1 share: ", sprintf("%.3f", r1_plot$share_obs), " observed; 2PL replicates ",
+  sprintf("%.3f", r1_plot$sim_median), " [", sprintf("%.3f", r1_plot$sim_lo), ", ",
+  sprintf("%.3f", r1_plot$sim_hi), "]",
+  "<br>p = ", sprintf("%.3f", r1_plot$p_emp),
+  ifelse(r1_plot$rej, " (rank-1 rejected)", " (not rejected)"),
+  "<br>Held-out gap share: ", sprintf("%.3f", r1_plot$share_out_floor),
+  ifelse(r1_plot$boundary, "<br>2PL slope still climbing (boundary fit)", ""))
+p6 <- ggplot(r1_plot, aes(x = short_plot, y = share_out_floor)) +
+  geom_point(aes(shape = rej, text = tooltip), colour = irw_blue, size = 2.1, alpha = 0.8) +
+  geom_point(data = r1_plot[r1_plot$table == s1_3$table_name, ],
+             shape = 21, size = 3.8, stroke = 1.1, colour = "grey15", fill = NA) +
+  scale_shape_manual(values = c(`TRUE` = 16, `FALSE` = 1),
+                     labels = c(`TRUE` = "rank-1 rejected", `FALSE` = "not rejected"),
+                     name = NULL) +
+  scale_x_log10() +
+  labs(x = "Shortfall of rank-1 share below the 2PL reference",
+       y = "Held-out gap share") +
   theme(legend.position = "bottom")
+plotly::ggplotly(p6, tooltip = "text") |>
+  plotly::layout(legend = list(orientation = "h", x = 0, y = -0.25))
 ```
 
-**What to notice.** The 1PL → 2PL gain (blue) is typically positive and stable
-across $J$: freeing discrimination improves fit regardless of test length,
-consistent with real variation in item discriminations. The 2PL → 3PL gain (red)
-should, if Holland is right, trend toward zero as $J$ grows. If it remains
-positive at large $J$, that suggests genuine multidimensionality or pervasive
-guessing. The pattern across the IRW is the empirical verdict.
+The figure puts the two findings side by side. That they move together is no
+surprise — both measure the same non-rank-1 structure in the SOE, once through
+$\boldsymbol{\Gamma}$ and once through likelihood
+(Spearman $\rho = `r sprintf("%.2f", r1_sum$rho_short_gap)`$). What is
+informative is the shape. For the `r r1_sum$n_lo` tables whose shortfall is
+under 0.1, the median gap share is `r p1(r1_sum$gap_lo)`. For the
+`r r1_sum$n_hi` beyond it the median is still `r p1(r1_sum$gap_hi)`, but the
+lower tail is long: a tenth of them fall below `r p0(r1_sum$gap_hi_p10)`. Small
+departures cost almost nothing, and the expensive cases are the large ones. Most rejections are cheap: of the `r r1_sum$n_rej_u` rejected tables,
+`r r1_sum$n_rej_hi` still capture at least 90% of the SOE's
+predictive gain (median `r p0(r1_sum$gap_rej)`, against
+`r p0(r1_sum$gap_acc)` for tables where rank-1 survives). This vignette's table
+is one of that majority.
+
+One caveat about the reference. For `r r1_sum$n_boundary` tables one 2PL
+slope is still climbing when the fit stops (above 10, against at most
+`r sprintf("%.1f", max(r1$max_slope[!r1$boundary]))` everywhere else) — an item
+close to deterministic given the trait — so the reference there is a 2PL at the
+edge of its parameter space. Excluding those tables, rank-1 is rejected for
+`r p0(r1_sum$frac_rej_nb)` of the rest. Per-table results are in
+`vignettes/dutchdata/rank1_tables.csv`.
+
+---
+
+## Where this leaves us
+
+Across the `r gs_sum$n_usable` tables, two things are true. First, Holland's
+log-quadratic form is economical: with $1 + 2J$ parameters, against
+$1 + J + J(J-1)/2$ for the full pairwise model (16 against 56 at $J = 10$), it
+captures a median `r sprintf("%.1f%%", 100 * gs_sum$med_out)` of what the
+pairwise model gains over independence, out of sample. Second, it is usually
+detectably imperfect: in `r r1_sum$n_rej` of the `r r1_sum$n` tables the item
+associations depart from rank-1 by more than the table's own fitted 2PL would
+produce. These do not conflict. Most departures are small and cost little in
+prediction; a few are large and cost a lot. If the goal is predicting response
+patterns, the approximation is good enough for most tables. If the goal is
+finding item pairs that share something beyond the common trait, the departures
+are where to look.
+
+This is not to say that IRT guarantees the economy. The log-quadratic form is a
+conjecture with known counterexamples [@zhang1997holland], so these are
+findings about item response data as collected rather than consequences of the
+theory. Holland also argues that a $D$-dimensional model leaves the
+off-diagonals of $\boldsymbol{\Gamma}$ approximately rank $D$; testing that
+for $D > 1$ would need a minimum-rank fit and a reference distribution at each
+candidate rank, which we do not attempt here.
 
 ---
 
 ::: {.callout-warning}
 ## Limitations
 
-**Pattern sparsity.** Sections 1–3 require $J \leq 10$ for pattern enumeration
+**Pattern sparsity.** Sections 1–2 require $J \leq 10$ for pattern enumeration
 to be feasible. The SOE loglinear approach does not generalise to large $J$.
-
-**Normal ability assumption.** The quadratic $\log \pi_k$ result (Section 4)
-holds asymptotically under normality; skewed or multimodal ability distributions
-can mimic the pattern for the wrong reasons.
-
-**3PL instability.** The 3PL is difficult to estimate for short tests and small
-samples. IMV values for 2PL → 3PL should be interpreted cautiously for $J < 10$.
-
-**Dataset selection.** `irw_filter()` conditions are heuristic. The
-"unidimensional" and "complex" candidates in Section 5 were selected on
-eigenvalue structure alone. Users with substantive knowledge of specific IRW
-tables should override the automatic selection.
 :::
 
 ---
@@ -1147,7 +907,7 @@ quarto::quarto_render("vignettes/dutch_identity.qmd")
 
 The model-fitting and Γ-diagnostic helpers live in
 `vignettes/dutch_identity_helpers.R`, which `dutch_identity_compute.R` sources.
-`vignettes/dutch_identity_gamma_rerun.R` updates only the Section 3 Γ
+`vignettes/dutch_identity_gamma_rerun.R` updates only the Section 2 Γ
 diagnostics in the cached result, refitting the loglinear models from the stored
 pattern counts and asserting that Table 1 is unchanged, so a figure fix does not
 require re-running the corpus-wide sections.
@@ -1161,13 +921,20 @@ IRW table and writes one row per table to
 diagnosed outliers. Both pin the IRW version they ran against and cache per
 table, so the sweep resumes rather than restarting.
 
+The same script with `CONCENTRATION=1` writes the pattern-concentration
+statistics behind @fig-concentration-corpus
+(`vignettes/dutchdata/concentration_tables.csv`), and with `RANK1=1` runs the
+rank-1 test against each table's fitted 2PL behind @fig-rank1-corpus
+(`vignettes/dutchdata/rank1_tables.csv`). Both re-read exactly the tables in
+`gapshare_tables.csv` at the IRW version that sweep used, and stop if the data
+differ. The single-table 2PL reference in "Is Γ rank-1?" comes from
+`vignettes/dutch_identity_2pl_baseline.R`.
+
 ::: {.callout-tip}
 To cite the IRW datasets used, run:
 
 ```r
-for (tbl in unique(c(s1_3$table_name, s4$rasch_meta$table_name,
-                      s5$unidim$table_name, s5$multidim$table_name,
-                      s6$table_name))) {
+for (tbl in unique(s1_3$table_name)) {
   irw_save_bibtex(tbl, output_file = "vignettes/dutchdata/irw_references.bib",
                   append = TRUE)
 }
