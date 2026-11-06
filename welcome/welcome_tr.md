@@ -18,143 +18,7 @@ Translator note: please do NOT translate the following —
 
 [Makaleyi okuyun](https://doi.org/10.3758/s13428-025-02796-y) **(açık erişim)**
 
-<div class="lang-switch"><button type="button" class="lang-switch-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="lang-switch-panel" aria-label="Choose a language"><i class="bi bi-globe2" aria-hidden="true"></i><i class="bi bi-chevron-down" aria-hidden="true"></i></button><div class="lang-switch-panel" id="lang-switch-panel" hidden><label class="visually-hidden" for="lang-switch-search">Search languages</label><div class="lang-switch-search-wrap"><i class="bi bi-search" aria-hidden="true"></i><input type="text" id="lang-switch-search" class="lang-switch-search" autocomplete="off" placeholder="Search languages"></div><ul class="lang-switch-list" role="listbox"></ul></div></div>
-<noscript>
-
-[English](/) · [Français](/welcome/welcome_fr.html) · [Español](/welcome/welcome_es.html) · [中文](/welcome/welcome_zh.html) · [한국어](/welcome/welcome_ko.html) · [العربية](/welcome/welcome_ar.html) · [日本語](/welcome/welcome_ja.html) · [Português](/welcome/welcome_pt.html) · [Deutsch](/welcome/welcome_de.html) · [हिन्दी](/welcome/welcome_hi.html) · [Русский](/welcome/welcome_ru.html) · [繁體中文](/welcome/welcome_zh-hant.html) · [বাংলা](/welcome/welcome_bn.html) · [Türkçe](/welcome/welcome_tr.html) · [Tiếng Việt](/welcome/welcome_vi.html) · [Italiano](/welcome/welcome_it.html) · [Nederlands](/welcome/welcome_nl.html) · [Polski](/welcome/welcome_pl.html) · [ไทย](/welcome/welcome_th.html) · [اردو](/welcome/welcome_ur.html) · [தமிழ்](/welcome/welcome_ta.html) · [فارسی](/welcome/welcome_fa.html) · [Kiswahili](/welcome/welcome_sw.html) · [עברית](/welcome/welcome_he.html) · [Bahasa Melayu](/welcome/welcome_ms.html)
-
-</noscript>
-<script>
-(function () {
-  var LANGS = [
-    { native: "English",      en: "English",                lang: "en" },
-    { native: "Français",     en: "French",                 lang: "fr" },
-    { native: "Español",      en: "Spanish",                lang: "es" },
-    { native: "中文",          en: "Chinese Simplified",     lang: "zh-hans" },
-    { native: "한국어",        en: "Korean",                 lang: "ko" },
-    { native: "العربية",      en: "Arabic",                 lang: "ar" },
-    { native: "日本語",        en: "Japanese",               lang: "ja" },
-    { native: "Português",    en: "Portuguese",             lang: "pt" },
-    { native: "Deutsch",      en: "German",                 lang: "de" },
-    { native: "हिन्दी",        en: "Hindi",                  lang: "hi" },
-    { native: "Русский",      en: "Russian",                lang: "ru" },
-    { native: "繁體中文",       en: "Chinese Traditional",    lang: "zh-hant" },
-    { native: "বাংলা",        en: "Bengali",                lang: "bn" },
-    { native: "Türkçe",       en: "Turkish",                lang: "tr" },
-    { native: "Tiếng Việt",   en: "Vietnamese",             lang: "vi" },
-    { native: "Italiano",     en: "Italian",                lang: "it" },
-    { native: "Nederlands",   en: "Dutch",                  lang: "nl" },
-    { native: "Polski",       en: "Polish",                 lang: "pl" },
-    { native: "ไทย",          en: "Thai",                   lang: "th" },
-    { native: "اردو",         en: "Urdu",                   lang: "ur" },
-    { native: "தமிழ்",        en: "Tamil",                  lang: "ta" },
-    { native: "فارسی",        en: "Persian",                lang: "fa" },
-    { native: "Kiswahili",    en: "Swahili",                lang: "sw" },
-    { native: "עברית",        en: "Hebrew",                 lang: "he" },
-    { native: "Bahasa Melayu",en: "Malay",                  lang: "ms" }
-  ];
-
-  document.querySelectorAll(".lang-switch").forEach(function (root) {
-    var trigger = root.querySelector(".lang-switch-trigger");
-    var panel = root.querySelector(".lang-switch-panel");
-    var search = root.querySelector(".lang-switch-search");
-    var list = root.querySelector(".lang-switch-list");
-
-    // Hrefs are read from the <noscript> fallback rather than hardcoded,
-    // because Quarto resolves that markdown's links to correct relative
-    // paths per page at build time; a literal string in this script would
-    // stay absolute and break under file:// or non-root deployments.
-    var hrefByNative = {};
-    var noscriptEl = root.nextElementSibling;
-    if (noscriptEl && noscriptEl.tagName === "NOSCRIPT") {
-      var tmp = document.createElement("div");
-      tmp.innerHTML = noscriptEl.textContent;
-      Array.prototype.forEach.call(tmp.querySelectorAll("a"), function (a) {
-        hrefByNative[a.textContent.trim()] = a.href;
-      });
-    }
-
-    // Current language is read from <html lang="...">, which Quarto sets
-    // from each page's own frontmatter, rather than guessed from the URL.
-    var currentLang = (document.documentElement.lang || "").toLowerCase();
-
-    function render(filterText) {
-      list.innerHTML = "";
-      var q = (filterText || "").trim().toLowerCase();
-      var matches = LANGS.filter(function (entry) {
-        return !q || entry.native.toLowerCase().indexOf(q) !== -1 || entry.en.toLowerCase().indexOf(q) !== -1;
-      });
-
-      if (matches.length === 0) {
-        var empty = document.createElement("li");
-        empty.className = "lang-switch-empty";
-        empty.textContent = "No matches";
-        list.appendChild(empty);
-        return;
-      }
-
-      matches.forEach(function (entry) {
-        var li = document.createElement("li");
-        li.setAttribute("role", "option");
-        if (entry.lang === currentLang) {
-          li.className = "lang-switch-current";
-          li.setAttribute("aria-current", "true");
-          var check = document.createElement("i");
-          check.className = "bi bi-check2";
-          check.setAttribute("aria-hidden", "true");
-          li.appendChild(check);
-          li.appendChild(document.createTextNode(" " + entry.native));
-        } else {
-          var a = document.createElement("a");
-          a.href = hrefByNative[entry.native] || "#";
-          a.textContent = entry.native;
-          li.appendChild(a);
-        }
-        list.appendChild(li);
-      });
-    }
-
-    function openPanel() {
-      panel.hidden = false;
-      trigger.setAttribute("aria-expanded", "true");
-      search.value = "";
-      render("");
-      search.focus();
-    }
-
-    function closePanel() {
-      panel.hidden = true;
-      trigger.setAttribute("aria-expanded", "false");
-    }
-
-    trigger.addEventListener("click", function (e) {
-      e.stopPropagation();
-      if (panel.hidden) { openPanel(); } else { closePanel(); }
-    });
-
-    search.addEventListener("input", function () {
-      render(search.value);
-    });
-
-    panel.addEventListener("click", function (e) {
-      e.stopPropagation();
-    });
-
-    document.addEventListener("click", function () {
-      if (!panel.hidden) closePanel();
-    });
-
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && !panel.hidden) {
-        closePanel();
-        trigger.focus();
-      }
-    });
-
-    render("");
-  });
-})();
-</script>
+{{< include /welcome/_lang_switch.md >}}
 
 ---
 
@@ -164,51 +28,47 @@ Translator note: please do NOT translate the following —
 
 Bu iyi bilinen bir sorundur. Araştırma topluluğu bu sorunu çözmek için ortak bir standart ortaya koymuştur: veriler **FAIR** olmalıdır — bulunabilir (Findable), erişilebilir (Accessible), birlikte çalışabilir (Interoperable) ve yeniden kullanılabilir (Reusable) (Wilkinson et al., 2016). Diğer alanlar, bu ilkeleri paylaşılan ve standartlaştırılmış veri kaynakları oluşturarak uygulamaya koymuştur. Bilgisayar biliminde, etiketlenmiş görüntülerden oluşan ImageNet koleksiyonu araştırmacılara ortak bir kıyaslama noktası (benchmark) sağlamış ve yapay zekada hızlı ilerlemeyi desteklemiştir. Genetik ve nörobilim de kendi verileri için benzer paylaşılan kaynaklar oluşturmuştur.
 
-Item Response Warehouse (IRW), aynı FAIR ilkelerini madde tepki verilerine uygular. Yüzlerce mevcut veri kümesini bir araya getirir ve bunları tek bir ortak biçime dönüştürür — böylece bir veri kümesi üzerinde test edilen bir yöntem, yüzlerce başka veri kümesi üzerinde de kolayca test edilebilir.
+Item Response Warehouse (IRW), aynı FAIR ilkelerini madde tepki verilerine uygular. Binlerce mevcut veri kümesini bir araya getirir ve bunları tek bir ortak biçime dönüştürür — böylece bir veri kümesi üzerinde test edilen bir yöntem, binlerce başka veri kümesi üzerinde de kolayca test edilebilir.
 
 ## IRW'de neler var
 
-IRW, her biri bireysel tepkilerden oluşan bir koleksiyon olan **yüzlerce veri kümesi** ("tablo") içerir. Bir kişi (veya başka bir birim) bir maddeye (veya başka bir ölçme aracına) tepki verdiğinde bir tepki (response) oluşur. Örnekler şunları içerir:
+IRW, her biri bireysel tepkilerden oluşan bir koleksiyon olan **binlerce veri kümesi** ("tablo") içerir. Bir kişi (veya başka bir birim) bir ölçme aracıyla karşılaştığında ve sonuç kaydedildiğinde bir tepki oluşur. Neyin ölçme aracı sayıldığı [veri ailesine](/overview.qmd) göre değişir: tek başına yanıtlanan bir madde, bir karşılaşmada karşısına çıkılan başka bir varlık, sıraya konması gereken seçeneklerin tamamı ya da rastgele atanmış özelliklerden oluşturulmuş bir profil. Örnekler şunları içerir:
 
 - Öğrencilerin eğitim ve yetenek testlerindeki cevapları
 - Kişiliği veya tutumları ölçen anket maddeleri
 - İnsan değerlendiriciler tarafından verilen puanlar
+- İki varlığın karşı karşıya geldiği ve birinin kazandığı maçlar, oyunlar ve doğrudan karşılaştırmalar
+- Tercihli oy pusulaları, jüri sıralamaları ve anketlerdeki sıralama soruları
+- Katılımcıların rastgele oluşturulmuş profiller arasında seçim yaptığı conjoint deneyleri
 - Bir dizi ölçme aracına tekrarlanan tepkilerin verildiği diğer her türlü durum
 
 IRW'deki her veri kümesi şu şekilde tasarlanmıştır:
 
 - **Bulunabilir (Findable).** Her veri kümesi, önceden hesaplanmış meta verilerle birlikte gelir — katılımcı sayısı, madde sayısı, tepki yoğunluğu, konu alanı ve diğer açıklayıcı etiketler — böylece veri kümeleri önce indirilmeden bulunabilir ve filtrelenebilir.
 - **Erişilebilir (Accessible).** Her veri kümesine, ücretsiz bir hesapla, web tarayıcısı veya `irw` paketi üzerinden erişilebilir.
-- **Birlikte çalışabilir (Interoperable).** Her veri kümesi aynı basit yapıya (aşağıda açıklanmıştır) dönüştürülür, böylece aynı analiz kodu birçok veri kümesinde çok az değişiklikle veya hiç değişiklik yapılmadan çalıştırılabilir.
+- **Birlikte çalışabilir (Interoperable).** Her veri kümesi, tepki başına bir satır olacak şekilde uzun biçime ve ait olduğu ailenin standardına (aşağıda açıklanmıştır) göre dönüştürülür, böylece aynı analiz kodu birçok veri kümesinde çok az değişiklikle veya hiç değişiklik yapılmadan çalıştırılabilir.
 - **Yeniden kullanılabilir (Reusable).** Her veri kümesi açık lisanslıdır, kökeni belgelenmiştir ve onu IRW biçimine dönüştürmek için kullanılan kod herkese açıktır.
 
-Veri kümeleri boyut açısından (birkaç yüz tepkiden milyonlarcasına kadar) ve tepki türü açısından (evet/hayır maddeleri, çok kategorili puanlamalar, kısmi puanlar ve daha fazlası) büyük farklılıklar gösterir. Her veri kümesi ayrıca önceden hesaplanmış meta verilerle birlikte gelir — katılımcı sayısı, madde sayısı, tepki yoğunluğu, konu alanı ve diğer açıklayıcı etiketler — böylece araştırmacılar önce hepsini indirip işlemeden ilgili veri kümelerini bulabilir.
+Veri kümeleri boyut açısından (birkaç yüz tepkiden milyonlarcasına kadar) ve tepki türü açısından (evet/hayır maddeleri, çok kategorili puanlamalar, kısmi puanlar, sırasız kategoriler, karşılaşma sonuçları, sıralama konumları ve daha fazlası) büyük farklılıklar gösterir.
 
 ## Veri standardı
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="id-item hücrelerinden oluşan renkli bir ızgaranın, bir okla id, item ve resp sütunlarına sahip uzun format bir tabloya dönüştürüldüğünü gösteren şema; her resp hücresinin rengi, ızgaradaki kaynak hücresinin rengiyle eşleşir." class="welcome-figure">
+Her IRW tablosu **uzun biçimdedir**: tepki başına bir satır. Bir satırın *ne olduğu* tablonun ait olduğu aileye bağlıdır; onu taşıyan sütunlar da öyle.
 
+<img src="/figures/families/families-tree.svg" alt="Bir veri kümesini bir IRW ailesine yerleştiren iki soru."
+     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
 
-Her IRW veri kümesi **uzun format (long format)**'a dönüştürülür: her tepki için bir satır. Her satır en az üç bilgi parçası içerir:
+| Aile | `source =` | Standart |
+|---|---|---|
+| Core | `"core"` | [Core](/standard.qmd) |
+| Nominal | `"nom"` | [Nominal](/nominal_standard.qmd) |
+| Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
+| Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
+| Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
+| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
 
-| Sütun | Anlamı |
-|---|---|
-| `id` | Tepkiyi kim (veya ne) ürettiği — genellikle bir kişi |
-| `item` | Tepkiyi hangi ölçme aracının ürettiği — genellikle bir soru veya görev |
-| `resp` | Tepkinin kendisi, sıralı (ordinal) bir puan olarak saklanır |
+Simsyn şemada yer almaz: bu aile verinin biçimiyle değil nereden geldiğiyle tanımlanır, dolayısıyla simülasyon tablosu bu biçimlerden herhangi birine sahip olabilir. Her ailenin sütunları için [standartlara genel bakış](/overview.qmd) sayfasına bakın.
 
-**Örnek:**
-
-| `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
-|----|------|------|-----|-----|-------|
-| 1  | Q1   | 1    | 2.3 | 26  | a     |
-| 1  | Q2   | 0    | 1.8 | 26  | a     |
-| 2  | Q1   | 1    | 2.1 | 31  | b     |
-| 2  | Q2   | 1    | 2.5 | 31  | b     |
-
-Bir veri kümesi ek bilgiler içerdiğinde — tepki süresi, değerlendirici kimliği, yaş gibi kovaryatlar — bu bilgiler tutarlı biçimde adlandırılmış ek sütunlarda saklanır. Bu tek basit yapı, çok geniş bir ölçme durumları yelpazesini kapsar; bu da analiz kodunu bir kez yazıp tüm depoya uygulayabilmeyi mümkün kılan şeydir.
-
-Standardın tam teknik özellikleri [itemresponsewarehouse.org/standard.html](/standard.qmd) adresinde mevcuttur. Madde metni, ikili karşılaştırma (pairwise) verileri ve nominal (sırasız kategori) tepkiler için de ilgili, daha uzmanlaşmış standartlar bulunmaktadır.
 
 ## Nasıl kullanılır
 
@@ -218,17 +78,20 @@ Ne kadar otomatikleştirmek istediğinize bağlı olarak IRW verisini almanın �
 [IRW veri tarayıcısı](/data.qmd) üzerinde veri kümelerini ve meta verilerini doğrudan keşfedin — hesap gerekmez. Tam bir veri kümesini indirmek için ücretsiz bir [Redivis](https://redivis.com) hesabı gerekir, çünkü temel verileri barındıran platform budur.
 
 **2. `irw` paketini kullanın (önerilir)**
-Hem **R** hem de **Python** için mevcut olan `irw` paketi, veri bulma, filtreleme ve indirme için basit fonksiyonlar sunar.
+`irw` paketi hem **R** hem de **Python** için mevcuttur.
 
 ```r
 # R
-devtools::install_github("itemresponsewarehouse/Rpkg")
+install.packages("irw")
 library(irw)
 
 irw_info()                     # overview of the IRW
 irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
 ```python
@@ -240,9 +103,12 @@ irw.info()
 irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
-Paketi ilk kullandığınızda, ücretsiz bir Redivis hesabıyla giriş yapmanız istenir. Bundan sonra, tek bir kod satırı herhangi bir veri kümesini doğrudan R veya Python'a indirir. Bu noktadan itibaren veri, standart yazılımlarla — örneğin madde tepki kuramı veya faktör analizi paketleriyle — analiz edilmeye hazırdır.
+Paketi ilk kullandığınızda, ücretsiz bir Redivis hesabıyla giriş yapmanız istenir.
 
 **3. Redivis istemci kütüphanelerini doğrudan kullanın**
 Daha düşük seviyeli veya R/Python dışı iş akışları için veriye, Redivis'in kendi R ve Python istemci kütüphaneleri aracılığıyla da erişilebilir. Ayrıntılar için [Başlangıç Kılavuzu](/getstarted.qmd)'na bakın.

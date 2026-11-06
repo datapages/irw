@@ -129,10 +129,15 @@ VIGNETTE_DIR <- "vignettes"
 # reflects the last run that fed it.
 CACHES <- list(
   "2pl_across_datasets"    = "2pldata/2pl_across_datasets_results.rds",
+  "bits_per_item"          = c("bits_per_item_data/bits_per_item_results.rds",
+                               "bits_per_item_data/sufficiency_results.rds",
+                               "bits_per_item_data/poly_results.rds",
+                               "bits_per_item_data/poly_extra_results.rds"),
   "asymmetric_irt"         = c("asymmetric_irt_data/asymmetric_irt_results.rds",
                                "asymmetric_irt_data/convergence_sim.rds",
                                "asymmetric_irt_data/example_itemfit.rds",
                                "asymmetric_irt_data/validation_gate_log.rds"),
+  "conjoint"               = "conjoint_data/conjoint_results.rds",
   "dimensionality"         = c("dimensionality_data/dimensionality_results.rds",
                                "dimensionality_data/dimensionality_merge_results.rds"),
   "dutch_identity"         = "dutchdata/dutch_identity_results.rds",
@@ -145,6 +150,8 @@ CACHES <- list(
                                "guessingdata/guessing_m_check.rds",
                                "guessingdata/guessing_imv_benchmark.rds"),
   "hf_reliability_paradox" = "hf_reliability/hf_reliability_results.rds",
+  "home_advantage"         = "home_advantage_data/home_advantage_results.rds",
+  "intransitivity"         = "intransitivity_data/results.rds",
   "il_hte"                 = "ilhtedata/il_hte_results.rds",
   "item_text_difficulty"   = "itemtextdata/item_text_difficulty_results.rds",
   "local_dependence"       = c("local_dependence_data/local_dependence_results.rds",
@@ -155,7 +162,8 @@ CACHES <- list(
   "network_psych"          = c("network_psych_data/network_psych_results.rds",
                                "network_psych_data/network_psych_prior_sensitivity_results.rds",
                                "network_psych_data/network_psych_sbm_results.rds"),
-  "rt_imv"                 = "rtimvdata/rt_imv_results.rds"
+  "rt_imv"                 = "rtimvdata/rt_imv_results.rds",
+  "sports_trials"          = "sports_trials_data/results.rds"
 )
 
 # Vignettes whose caches predate the date_run convention, dated from git instead.

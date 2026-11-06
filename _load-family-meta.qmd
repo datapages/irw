@@ -1,0 +1,139 @@
+```{r}
+#| label: load-family-meta
+#| include: false
+
+## Shared by the competitions, nominal and conjoint standards pages: each reads
+## its family's metadata table from the published irw_meta and summarises it in
+## a "What the family holds" section. Read from Redivis directly, by NAME (ids
+## rotate on every release, see _load-data-explore.qmd) and not through the irw
+## package, so the pages do not depend on the package version renv.lock pins.
+##
+## Failure: in CI a failed read stops the render, as landing/hero_stats.R does,
+## so a broken token cannot publish a page with empty descriptives. Locally it
+## errors too -- these sections have no fallback numbers to go stale.
+library(redivis)
+
+irw_meta_table <- function(name) {
+  tbl <- redivis$user("datapages")$dataset("irw_meta:bdxt")$table(name)
+  as.data.frame(tbl$to_tibble())
+}
+
+## Plain-language counts for the prose: "15.6 million", "1,747,349", "806".
+fmt_n <- function(x) format(round(x), big.mark = ",", scientific = FALSE, trim = TRUE)
+fmt_big <- function(x) {
+  if (x >= 1e9) return(paste0(format(round(x / 1e9, 1), nsmall = 1), " billion"))
+  if (x >= 1e6) return(paste0(format(round(x / 1e6, 1), nsmall = 1), " million"))
+  fmt_n(x)
+}
+
+## One muted fill for every bar on these pages: each chart shows one series, so
+## colour carries no identity and the number labels do the talking.
+family_fill <- "#5b6b86"
+family_bar <- function(counts, xlab, main = NULL) {
+  op <- par(mar = c(4, 4, if (is.null(main)) 1 else 2.5, 1), mgp = c(2.4, 0.7, 0))
+  on.exit(par(op))
+  b <- barplot(counts, col = family_fill, border = NA, ylim = c(0, max(counts) * 1.15),
+               xlab = xlab, ylab = "Tables", main = main, las = 1, cex.names = 0.75)
+  text(b, counts, labels = counts, pos = 3, cex = 0.8, xpd = TRUE)
+  invisible(b)
+}
+```
+
+```{r}
+#| label: family-table-list
+#| include: false
+
+## A browsable list of every table in a family (datapages/irw#343, item 2):
+## name (linked to its /tables/ page where one exists), the family's own size
+## columns from <prefix>_metadata, licence and source link from <prefix>_biblio.
+## Emitted as one raw HTML block -- pandoc must not parse a thousand-row table
+## (docs.qmd learned that the hard way, datapages/irw#310) -- with a filter box
+## that hides rows whose text does not match. Which tables have a landing page
+## follows the one rule in landing/page_rules.R, the same reader data.qmd uses.
+source(file.path("landing", "page_rules.R"))
+
+esc_html <- function(x) {
+  x <- as.character(x); x[is.na(x)] <- ""
+  x <- gsub("&", "&amp;", x, fixed = TRUE); x <- gsub("<", "&lt;", x, fixed = TRUE)
+  x <- gsub(">", "&gt;", x, fixed = TRUE); gsub("\"", "&quot;", x, fixed = TRUE)
+}
+
+## `cols` names the metadata columns to show, in order, with their headings:
+## c(n_respondents = "Respondents", ...). Numeric columns are formatted with
+## thousands separators; anything else is shown as text.
+family_table_list <- function(prefix, dataset, source, cols) {
+  md  <- irw_meta_table(paste0(prefix, "_metadata"))
+  bib <- irw_meta_table(paste0(prefix, "_biblio"))
+  md$table <- trimws(as.character(md$table))
+  md$dataset <- dataset
+  md <- md[order(tolower(md$table)), , drop = FALSE]
+  paged <- tolower(page_tables(md, bib))
+  k <- match(tolower(md$table), tolower(trimws(as.character(bib$table))))
+  lic <- as.character(bib$Derived_License)[k]
+  url <- trimws(as.character(bib$URL__for_data_)[k])
+  lic[vapply(lic, blank, logical(1))] <- ""
+  url[is.na(url)] <- ""
+
+  ## A column is numeric when every non-blank value parses as a number; its
+  ## header and cells then share the right-aligned `num` class, so the two
+  ## stay in step (a text column under a `num` header drifted on the live page).
+  is_num <- function(v) {
+    v <- v[!is.na(v) & nzchar(trimws(as.character(v)))]
+    length(v) > 0 && !any(is.na(suppressWarnings(as.numeric(v))))
+  }
+  numeric_col <- vapply(names(cols), function(cn) is_num(md[[cn]]), logical(1))
+  cell <- function(cn) {
+    v <- md[[cn]]
+    if (numeric_col[[cn]]) {
+      n <- suppressWarnings(as.numeric(v))
+      out <- ifelse(is.na(n), "", format(n, big.mark = ",", scientific = FALSE, trim = TRUE))
+      paste0("<td class=\"num\">", out, "</td>")
+    } else paste0("<td>", esc_html(v), "</td>")
+  }
+  name_cell <- ifelse(tolower(md$table) %in% paged,
+    paste0("<a href=\"/tables/", slug_of(md$table), "/\"><code>", esc_html(md$table), "</code></a>"),
+    paste0("<code>", esc_html(md$table), "</code>"))
+  src_cell <- ifelse(grepl("^https?://", url),
+    paste0("<a href=\"", esc_html(url), "\" target=\"_blank\" rel=\"noopener\">link</a>"),
+    esc_html(url))
+  body <- paste0("<tr><td class=\"name\">", name_cell, "</td>",
+                 do.call(paste0, lapply(names(cols), cell)),
+                 "<td>", esc_html(lic), "</td><td>", src_cell, "</td></tr>", collapse = "\n")
+  head <- paste0("<th class=\"name\">Table</th>",
+                 paste0("<th", ifelse(numeric_col, " class=\"num\"", ""), ">",
+                        esc_html(unname(cols)), "</th>", collapse = ""),
+                 "<th>Licence</th><th>Source</th>")
+  n <- nrow(md)
+  cat("\n```{=html}\n")
+  cat(paste0(
+    "<div class=\"family-list\" id=\"family-list-", prefix, "\">\n",
+    "<input type=\"search\" class=\"family-list-filter\" placeholder=\"Filter the ", n,
+    " tables by name, licence or source…\" aria-label=\"Filter tables\">\n",
+    "<div class=\"family-list-scroll\"><table class=\"family-table\"><thead><tr>", head,
+    "</tr></thead>\n<tbody>\n", body, "\n</tbody></table></div>\n",
+    "<p class=\"family-list-count\">Showing <span class=\"family-list-shown\">", n, "</span> of ", n,
+    " tables. Fetch any of them with <code>irw_fetch(\"&lt;table&gt;\", source = \"", source,
+    "\")</code> or <code>irw.fetch(\"&lt;table&gt;\", source=\"", source, "\")</code>.</p>\n",
+    "</div>\n",
+    "<script>(function(){var box=document.getElementById('family-list-", prefix, "');",
+    "var inp=box.querySelector('.family-list-filter'),rows=box.querySelectorAll('tbody tr'),",
+    "shown=box.querySelector('.family-list-shown');",
+    "inp.addEventListener('input',function(){var q=inp.value.toLowerCase().trim(),n=0;",
+    "for(var i=0;i<rows.length;i++){var hit=!q||rows[i].textContent.toLowerCase().indexOf(q)>-1;",
+    "rows[i].style.display=hit?'':'none';if(hit)n++;}shown.textContent=n;});})();</script>\n",
+    "<style>.family-list-filter{width:100%;padding:8px 10px;margin-bottom:10px;font-size:15px;",
+    "border:1px solid #ccc;border-radius:4px;box-sizing:border-box}",
+    ".family-list-scroll{max-height:480px;overflow:auto;border:1px solid #e2e2e2;border-radius:4px}",
+    ".family-table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px;margin:0}",
+    ".family-table th,.family-table td{padding:6px 10px;border-bottom:1px solid #eee;text-align:left;vertical-align:top}",
+    ".family-table th{position:sticky;top:0;z-index:1;background:#fff;border-bottom:2px solid #ccc;font-weight:600}",
+    ".family-table th.num,.family-table td.num{text-align:right;white-space:nowrap}",
+    ".family-table td{overflow-wrap:anywhere}",
+    ".family-table .name{white-space:nowrap}",
+    ".family-table .name code{white-space:nowrap;word-break:normal;overflow-wrap:normal;background:none;padding:0}",
+    ".family-table tr:hover td{background:#f7f7f7}",
+    ".family-list-count{color:#666;font-size:14px;margin-top:8px}</style>\n"))
+  cat("\n```\n")
+  invisible(n)
+}
+```

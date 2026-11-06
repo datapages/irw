@@ -18,143 +18,7 @@ Translator note: please do NOT translate the following —
 
 [Baca kertas kerja](https://doi.org/10.3758/s13428-025-02796-y) **(akses terbuka)**
 
-<div class="lang-switch"><button type="button" class="lang-switch-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="lang-switch-panel" aria-label="Choose a language"><i class="bi bi-globe2" aria-hidden="true"></i><i class="bi bi-chevron-down" aria-hidden="true"></i></button><div class="lang-switch-panel" id="lang-switch-panel" hidden><label class="visually-hidden" for="lang-switch-search">Search languages</label><div class="lang-switch-search-wrap"><i class="bi bi-search" aria-hidden="true"></i><input type="text" id="lang-switch-search" class="lang-switch-search" autocomplete="off" placeholder="Search languages"></div><ul class="lang-switch-list" role="listbox"></ul></div></div>
-<noscript>
-
-[English](/) · [Français](/welcome/welcome_fr.html) · [Español](/welcome/welcome_es.html) · [中文](/welcome/welcome_zh.html) · [한국어](/welcome/welcome_ko.html) · [العربية](/welcome/welcome_ar.html) · [日本語](/welcome/welcome_ja.html) · [Português](/welcome/welcome_pt.html) · [Deutsch](/welcome/welcome_de.html) · [हिन्दी](/welcome/welcome_hi.html) · [Русский](/welcome/welcome_ru.html) · [繁體中文](/welcome/welcome_zh-hant.html) · [বাংলা](/welcome/welcome_bn.html) · [Türkçe](/welcome/welcome_tr.html) · [Tiếng Việt](/welcome/welcome_vi.html) · [Italiano](/welcome/welcome_it.html) · [Nederlands](/welcome/welcome_nl.html) · [Polski](/welcome/welcome_pl.html) · [ไทย](/welcome/welcome_th.html) · [اردو](/welcome/welcome_ur.html) · [தமிழ்](/welcome/welcome_ta.html) · [فارسی](/welcome/welcome_fa.html) · [Kiswahili](/welcome/welcome_sw.html) · [עברית](/welcome/welcome_he.html) · [Bahasa Melayu](/welcome/welcome_ms.html)
-
-</noscript>
-<script>
-(function () {
-  var LANGS = [
-    { native: "English",      en: "English",                lang: "en" },
-    { native: "Français",     en: "French",                 lang: "fr" },
-    { native: "Español",      en: "Spanish",                lang: "es" },
-    { native: "中文",          en: "Chinese Simplified",     lang: "zh-hans" },
-    { native: "한국어",        en: "Korean",                 lang: "ko" },
-    { native: "العربية",      en: "Arabic",                 lang: "ar" },
-    { native: "日本語",        en: "Japanese",               lang: "ja" },
-    { native: "Português",    en: "Portuguese",             lang: "pt" },
-    { native: "Deutsch",      en: "German",                 lang: "de" },
-    { native: "हिन्दी",        en: "Hindi",                  lang: "hi" },
-    { native: "Русский",      en: "Russian",                lang: "ru" },
-    { native: "繁體中文",       en: "Chinese Traditional",    lang: "zh-hant" },
-    { native: "বাংলা",        en: "Bengali",                lang: "bn" },
-    { native: "Türkçe",       en: "Turkish",                lang: "tr" },
-    { native: "Tiếng Việt",   en: "Vietnamese",             lang: "vi" },
-    { native: "Italiano",     en: "Italian",                lang: "it" },
-    { native: "Nederlands",   en: "Dutch",                  lang: "nl" },
-    { native: "Polski",       en: "Polish",                 lang: "pl" },
-    { native: "ไทย",          en: "Thai",                   lang: "th" },
-    { native: "اردو",         en: "Urdu",                   lang: "ur" },
-    { native: "தமிழ்",        en: "Tamil",                  lang: "ta" },
-    { native: "فارسی",        en: "Persian",                lang: "fa" },
-    { native: "Kiswahili",    en: "Swahili",                lang: "sw" },
-    { native: "עברית",        en: "Hebrew",                 lang: "he" },
-    { native: "Bahasa Melayu",en: "Malay",                  lang: "ms" }
-  ];
-
-  document.querySelectorAll(".lang-switch").forEach(function (root) {
-    var trigger = root.querySelector(".lang-switch-trigger");
-    var panel = root.querySelector(".lang-switch-panel");
-    var search = root.querySelector(".lang-switch-search");
-    var list = root.querySelector(".lang-switch-list");
-
-    // Hrefs are read from the <noscript> fallback rather than hardcoded,
-    // because Quarto resolves that markdown's links to correct relative
-    // paths per page at build time; a literal string in this script would
-    // stay absolute and break under file:// or non-root deployments.
-    var hrefByNative = {};
-    var noscriptEl = root.nextElementSibling;
-    if (noscriptEl && noscriptEl.tagName === "NOSCRIPT") {
-      var tmp = document.createElement("div");
-      tmp.innerHTML = noscriptEl.textContent;
-      Array.prototype.forEach.call(tmp.querySelectorAll("a"), function (a) {
-        hrefByNative[a.textContent.trim()] = a.href;
-      });
-    }
-
-    // Current language is read from <html lang="...">, which Quarto sets
-    // from each page's own frontmatter, rather than guessed from the URL.
-    var currentLang = (document.documentElement.lang || "").toLowerCase();
-
-    function render(filterText) {
-      list.innerHTML = "";
-      var q = (filterText || "").trim().toLowerCase();
-      var matches = LANGS.filter(function (entry) {
-        return !q || entry.native.toLowerCase().indexOf(q) !== -1 || entry.en.toLowerCase().indexOf(q) !== -1;
-      });
-
-      if (matches.length === 0) {
-        var empty = document.createElement("li");
-        empty.className = "lang-switch-empty";
-        empty.textContent = "No matches";
-        list.appendChild(empty);
-        return;
-      }
-
-      matches.forEach(function (entry) {
-        var li = document.createElement("li");
-        li.setAttribute("role", "option");
-        if (entry.lang === currentLang) {
-          li.className = "lang-switch-current";
-          li.setAttribute("aria-current", "true");
-          var check = document.createElement("i");
-          check.className = "bi bi-check2";
-          check.setAttribute("aria-hidden", "true");
-          li.appendChild(check);
-          li.appendChild(document.createTextNode(" " + entry.native));
-        } else {
-          var a = document.createElement("a");
-          a.href = hrefByNative[entry.native] || "#";
-          a.textContent = entry.native;
-          li.appendChild(a);
-        }
-        list.appendChild(li);
-      });
-    }
-
-    function openPanel() {
-      panel.hidden = false;
-      trigger.setAttribute("aria-expanded", "true");
-      search.value = "";
-      render("");
-      search.focus();
-    }
-
-    function closePanel() {
-      panel.hidden = true;
-      trigger.setAttribute("aria-expanded", "false");
-    }
-
-    trigger.addEventListener("click", function (e) {
-      e.stopPropagation();
-      if (panel.hidden) { openPanel(); } else { closePanel(); }
-    });
-
-    search.addEventListener("input", function () {
-      render(search.value);
-    });
-
-    panel.addEventListener("click", function (e) {
-      e.stopPropagation();
-    });
-
-    document.addEventListener("click", function () {
-      if (!panel.hidden) closePanel();
-    });
-
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && !panel.hidden) {
-        closePanel();
-        trigger.focus();
-      }
-    });
-
-    render("");
-  });
-})();
-</script>
+{{< include /welcome/_lang_switch.md >}}
 
 ---
 
@@ -164,51 +28,47 @@ Penyelidik yang mengkaji pengukuran — dalam bidang pendidikan, psikologi, dan 
 
 Ini adalah masalah yang sudah lama diketahui. Komuniti penyelidikan telah menggariskan piawaian bersama untuk menyelesaikannya: data perlu **FAIR** — mudah dijumpai (Findable), boleh diakses (Accessible), boleh berinteroperasi (Interoperable), dan boleh digunakan semula (Reusable) (Wilkinson et al., 2016). Bidang-bidang lain telah melaksanakan prinsip-prinsip ini dengan membina sumber data yang dikongsi dan diseragamkan. Dalam sains komputer, koleksi imej berlabel ImageNet memberikan penyelidik satu penanda aras (benchmark) yang sama dan membantu mempercepatkan kemajuan dalam AI. Genetik dan sains saraf turut membina sumber terkongsi yang serupa untuk data masing-masing.
 
-Item Response Warehouse (IRW) menerapkan prinsip FAIR yang sama untuk data respons item. Ia menghimpunkan ratusan set data sedia ada dan membentuk semula ke dalam satu format yang sama — supaya sesuatu kaedah yang diuji ke atas satu set data boleh diuji dengan mudah ke atas ratusan set data yang lain.
+Item Response Warehouse (IRW) menerapkan prinsip FAIR yang sama untuk data respons item. Ia menghimpunkan ribuan set data sedia ada dan membentuk semula ke dalam satu format yang sama — supaya sesuatu kaedah yang diuji ke atas satu set data boleh diuji dengan mudah ke atas ribuan set data yang lain.
 
 ## Apa yang terdapat dalam IRW
 
-IRW mengandungi **ratusan set data** ("jadual"), setiap satunya adalah koleksi respons individu. Satu respons dihasilkan setiap kali seseorang (atau unit lain) memberikan respons kepada sesuatu item (atau ujian lain). Contohnya termasuk:
+IRW mengandungi **ribuan set data** ("jadual"), setiap satunya adalah koleksi respons individu. Satu respons dihasilkan setiap kali seseorang (atau unit lain) berdepan dengan sesuatu alat pengukuran dan hasilnya direkodkan. Apa yang dikira sebagai alat pengukuran berbeza mengikut [keluarga data](/overview.qmd): sesuatu item yang dijawab secara berasingan, entiti lain yang ditemui dalam sesuatu pertandingan, keseluruhan set pilihan yang perlu disusun mengikut urutan, atau profil yang dibentuk daripada ciri-ciri yang diberikan secara rawak. Contohnya termasuk:
 
 - Jawapan pelajar dalam ujian pendidikan dan kebolehan
 - Item soal selidik yang mengukur personaliti atau sikap
 - Pemarkahan yang diberikan oleh penilai manusia
+- Perlawanan, permainan dan perbandingan secara langsung, di mana dua entiti bertemu dan satu menang
+- Kertas undi keutamaan, susunan kedudukan oleh panel juri, dan soalan menyusun kedudukan dalam tinjauan
+- Eksperimen conjoint, di mana responden memilih antara profil yang dibina secara rawak
 - Mana-mana situasi lain yang melibatkan respons berulang kepada satu set alat pengukuran
 
 Setiap set data dalam IRW direka untuk:
 
 - **Mudah dijumpai (Findable).** Setiap set data disertakan dengan metadata yang telah dikira terlebih dahulu — bilangan peserta, bilangan item, kepadatan respons, bidang subjek, dan label deskriptif lain — supaya set data dapat dicari dan ditapis tanpa perlu memuat turunnya terlebih dahulu.
 - **Boleh diakses (Accessible).** Setiap set data boleh diperoleh melalui pelayar web atau pakej `irw`, dengan akaun percuma.
-- **Boleh berinteroperasi (Interoperable).** Setiap set data dibentuk semula ke dalam struktur mudah yang sama (diterangkan di bawah), supaya kod analisis yang sama boleh dijalankan ke atas banyak set data dengan sedikit atau tiada pengubahsuaian.
+- **Boleh berinteroperasi (Interoperable).** Setiap set data dibentuk semula ke dalam format panjang, satu baris bagi setiap respons, mengikut standard keluarganya (diterangkan di bawah), supaya kod analisis yang sama boleh dijalankan ke atas banyak set data dengan sedikit atau tiada pengubahsuaian.
 - **Boleh digunakan semula (Reusable).** Setiap set data mempunyai lesen terbuka, asal-usulnya didokumentasikan, dan kod yang digunakan untuk menukarkannya ke format IRW adalah terbuka kepada umum.
 
-Set data berbeza dengan ketara dari segi saiz (daripada beberapa ratus respons kepada berjuta-juta) dan jenis respons (item ya/tidak, penilaian pelbagai kategori, skor separa, dan banyak lagi). Setiap set data juga disertakan dengan metadata yang telah dikira terlebih dahulu — bilangan peserta, bilangan item, kepadatan respons, bidang subjek, dan label deskriptif lain — supaya penyelidik dapat mencari set data yang berkaitan tanpa perlu memuat turun dan memproses kesemuanya terlebih dahulu.
+Set data berbeza dengan ketara dari segi saiz (daripada beberapa ratus respons kepada berjuta-juta) dan jenis respons (item ya/tidak, penilaian pelbagai kategori, skor separa, kategori tanpa urutan, keputusan pertandingan, kedudukan dalam susunan, dan banyak lagi).
 
 ## Standard data
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="Rajah menunjukkan grid berwarna bagi sel id-item, yang diubah melalui anak panah menjadi jadual format panjang dengan lajur id, item dan resp, dengan warna setiap sel resp sepadan dengan warna sel sumbernya dalam grid." class="welcome-figure">
+Setiap jadual IRW berada dalam **format panjang**: satu baris bagi setiap respons. Apa yang sesuatu baris itu *wakili* bergantung pada keluarga jadual tersebut, begitu juga lajur-lajur yang membawanya.
 
+<img src="/figures/families/families-tree.svg" alt="Dua soalan yang meletakkan sesuatu set data dalam keluarga IRW."
+     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
 
-Setiap set data IRW dibentuk semula ke dalam **format panjang (long format)**: satu baris bagi setiap respons. Sekurang-kurangnya, setiap baris mengandungi tiga maklumat:
+| Keluarga | `source =` | Standard |
+|---|---|---|
+| Core | `"core"` | [Core](/standard.qmd) |
+| Nominal | `"nom"` | [Nominal](/nominal_standard.qmd) |
+| Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
+| Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
+| Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
+| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
 
-| Lajur | Makna |
-|---|---|
-| `id` | Siapa (atau apa) yang menghasilkan respons — biasanya seseorang individu |
-| `item` | Alat pengukuran mana yang menghasilkan respons — biasanya satu soalan atau tugasan |
-| `resp` | Respons itu sendiri, disimpan sebagai skor ordinal |
+Simsyn tiada dalam carta: keluarga ini ditakrifkan oleh asal usul data, bukan bentuknya, jadi jadual simulasi boleh mempunyai mana-mana daripada bentuk ini. Lajur bagi setiap keluarga ada dalam [gambaran keseluruhan standard](/overview.qmd).
 
-**Contoh:**
-
-| `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
-|----|------|------|-----|-----|-------|
-| 1  | Q1   | 1    | 2.3 | 26  | a     |
-| 1  | Q2   | 0    | 1.8 | 26  | a     |
-| 2  | Q1   | 1    | 2.1 | 31  | b     |
-| 2  | Q2   | 1    | 2.5 | 31  | b     |
-
-Apabila sesuatu set data mengandungi maklumat tambahan — masa tindak balas, identiti penilai, kovariat seperti umur — maklumat tersebut disimpan dalam lajur tambahan yang dinamakan secara konsisten. Satu struktur mudah ini merangkumi pelbagai situasi pengukuran yang sangat luas, dan inilah yang membolehkan kod analisis ditulis sekali sahaja dan digunakan merentasi keseluruhan gudang data.
-
-Spesifikasi teknikal penuh bagi standard ini boleh didapati di [itemresponsewarehouse.org/standard.html](/standard.qmd). Standard berkaitan yang lebih khusus turut wujud untuk teks item, data perbandingan berpasangan (pairwise), dan respons nominal (kategori tidak tersusun).
 
 ## Cara menggunakannya
 
@@ -218,17 +78,20 @@ Terdapat tiga cara untuk mendapatkan data IRW, bergantung kepada tahap automasi 
 Terokai set data dan metadatanya terus dalam [pelayar data IRW](/data.qmd) — tiada akaun diperlukan. Memuat turun set data lengkap memerlukan akaun percuma [Redivis](https://redivis.com), kerana itulah platform yang menyimpan data asas.
 
 **2. Gunakan pakej `irw` (disyorkan)**
-Pakej `irw`, yang tersedia untuk kedua-dua **R** dan **Python**, menyediakan fungsi mudah untuk mencari, menapis, dan memuat turun data.
+Pakej `irw` tersedia untuk kedua-dua **R** dan **Python**.
 
 ```r
 # R
-devtools::install_github("itemresponsewarehouse/Rpkg")
+install.packages("irw")
 library(irw)
 
 irw_info()                     # overview of the IRW
 irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
 ```python
@@ -240,9 +103,12 @@ irw.info()
 irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
-Pada kali pertama anda menggunakan pakej ini, anda akan diminta untuk log masuk dengan akaun Redivis percuma. Selepas itu, satu baris kod sahaja memuat turun mana-mana set data terus ke dalam R atau Python. Dari situ, data sudah sedia untuk dianalisis menggunakan perisian standard — contohnya pakej teori respons item atau analisis faktor.
+Pada kali pertama anda menggunakan pakej ini, anda akan diminta untuk log masuk dengan akaun Redivis percuma.
 
 **3. Gunakan pustaka klien Redivis secara terus**
 Bagi aliran kerja peringkat rendah atau bukan R/Python, data juga boleh diakses melalui pustaka klien R dan Python milik Redivis sendiri. Rujuk [Panduan Memulakan](/getstarted.qmd) untuk maklumat lanjut.

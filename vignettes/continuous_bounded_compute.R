@@ -40,7 +40,7 @@
 # compositional allocation task, which violates the conditional-independence
 # assumption every one of these 4 models makes).
 #
-# A second real table (ai_fear_dong_2026_ai, Doctor_* facet subset) and 7
+# A second real table (ai_fear_dong_2026_ai, 8 AI-potential trait items) and 7
 # more (see "C. Additional real-data tables" below) were added after two
 # rounds of vetting the other scout-flagged "bounded" tables -- see
 # continuous_bounded_data/vet_candidates.R and vet_candidates2.R. The FIRST
@@ -121,32 +121,33 @@ if (!file.exists(out_rds)) {
   real_out <- fit_score_all(Y_real01, label = real_table, seed = 2)
 
   # ============================================================================
-  # B2. Real data #2: ai_fear_dong_2026_ai, "Doctor_*" facet subset
+  # B2. Real data #2: ai_fear_dong_2026_ai, 8 trait items
   # ============================================================================
-  # ai_fear_dong_2026_ai is a 48-item x 6-target x 8-trait factorial design
-  # (Care/Doctor/Journalist/Judge/Manager/Religious x competent/warm/etc.),
-  # NOT a single construct as a whole table -- vetted (see
+  # ai_fear_dong_2026_ai asks "to what extent do you think AI, at its full
+  # potential, can be [trait]?" for 8 traits (competent, warm, etc.), one
+  # answer per trait, 0-100. Until IRW's 2026-10-15 fix (irw#2906) each
+  # answer was stored on all 6 occupation codes of the authors' long file
+  # (item = occupation_trait, 48 codes); this script then kept the "Doctor_*"
+  # codes, which were exactly the 8 trait answers. The table now holds the 8
+  # items directly, so no subsetting is needed. Vetted (see
   # continuous_bounded_data/vet_candidates.R / vet_results.csv) alongside 19
   # other scout-flagged "bounded" tables, all 19 of which had a disqualifying
   # structural issue (repeated-measures/multi-stimulus row duplication,
   # item-varying ranges, mixed 0-100/1-7 formats within one table, too few
-  # items, or too small N). This one table survives as usable ONLY after
-  # subsetting to one target's 8 trait items, treated as a coherent "overall
-  # impression of Doctor" battery (stereotype-content-model trait ratings
-  # reliably load on a single warmth/competence "halo" factor in practice).
+  # items, or too small N). Treated as a coherent "overall impression of AI"
+  # battery (stereotype-content-model trait ratings reliably load on a single
+  # warmth/competence "halo" factor in practice).
   # A useful contrast to the primary real-data table: large N, but 100%
   # integer-valued (unlike lsbq's ~40% fractional values) -- weaker evidence
   # of genuine continuity, included anyway as a large-N structural check
   # rather than a fractional-response demonstration.
-  message("=== Real data #2: ai_fear_dong_2026_ai (Doctor_* subset) ===")
+  message("=== Real data #2: ai_fear_dong_2026_ai ===")
   real2_table <- "ai_fear_dong_2026_ai"
   real2_low <- 0; real2_high <- 100
-  real2_facet <- "Doctor"
+  real2_facet <- "AI potential, 8 traits"
 
   df_real2 <- irw_fetch(real2_table)
-  doctor_items <- grep(paste0("^", real2_facet, "_"), unique(df_real2$item), value = TRUE)
   wide_real2 <- df_real2 |>
-    filter(item %in% doctor_items) |>
     select(id, item, resp) |>
     distinct(id, item, .keep_all = TRUE) |>
     pivot_wider(names_from = item, values_from = resp) |>
@@ -164,7 +165,7 @@ if (!file.exists(out_rds)) {
   Y_real2_01 <- rescale01(Y_real2_raw, real2_low, real2_high)
   colnames(Y_real2_01) <- paste0("item", seq_len(ncol(Y_real2_01)))
 
-  real2_out <- fit_score_all(Y_real2_01, label = paste0(real2_table, "_", real2_facet), seed = 4)
+  real2_out <- fit_score_all(Y_real2_01, label = real2_table, seed = 4)
 
   # ============================================================================
   # C. Additional real-data tables (batch): 7 tables that the FIRST vetting

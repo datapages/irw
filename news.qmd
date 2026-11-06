@@ -14,6 +14,661 @@ This log begins in September 2026, when the page was created. The IRW is older
 than the log, and changes before then are recorded only in the repositories'
 commit history and in the versioned data itself.
 
+## 2026-11-02 — The R package on CRAN catches up with the warehouse
+
+`install.packages("irw")` now gives 1.4.0, and with it everything that had
+landed since the first CRAN release in October: the conjoint and rankings
+sources, `max_rows` and `columns` on `irw_fetch()`, the four psychometric
+filters, `irw_itemtext_licence()`, and the two breaking changes to
+`irw_long2resp()` recorded below on 2026-10-26 — item columns named by the item
+id and returned in natural order, and no more silent averaging across raters or
+trials. It also closes a gap worth knowing about if you installed from CRAN
+before today: 1.3.1's shard list stopped at the sixth core warehouse, so its
+table listings were short by 1,455 tables — 20.4% of the core corpus, counted
+2026-11-02 — with nothing to say that anything was missing. 1.4.0 reads the
+warehouse catalogue once per session, so a dataset published after a release can
+no longer go missing that way.
+
+Reading the warehouse from R also needs no Redivis account again. Redivis has
+opened its dataset-level endpoints and `redivis` 0.12.14 and later send read
+requests anonymously, so under `irw` 1.4.0 `irw_info()`, `irw_list_tables()`,
+`irw_filter()`, `irw_fetch()`, `irw_itemtext()` and the metadata functions all
+work with no login; `irw_table_sets()`, which runs SQL on the server, still
+requires one. [Get Started](getstarted.qmd) and the per-table pages now say so,
+which reverses what this log said on 2026-10-07. The Python package and the MCP
+server still authenticate, and the Python half of the `long2resp` work is still
+unreleased. Refs #3091, #3221.
+
+## 2026-11-02 — Twenty-two tables had ids that stood for two people
+
+In five deposits reached through PLOS, a single participant id was typed onto
+rows whose own covariates describe different people, so the published `id`
+joined two respondents under one key and any pivot to a person-by-item matrix
+averaged them into a respondent who never existed. Seventeen of the
+twenty-two affected tables are corrected in place: the later respondent keeps
+every response and covariate and takes the next unused id number, and no other
+id, response or covariate moves. `darkfactorfrench_pischel_2026_d70` pooled five
+samples without the per-sample prefix its own script applies and was rebuilt
+from that script, so every id in it is renumbered and ids from earlier releases
+do not carry over. In the four `PROMISPME_Forrest_2021` proxy tables the source
+files needed to tell the two parents apart are no longer public, so that one
+id's rows are gone instead. The fixes carry IRW versions 666 to 669, and each
+table's own note is on [Corrections](corrections.qmd). Refs #3245.
+
+## 2026-11-01 — The rankings family outgrew one dataset
+
+FairVote's cast vote records — the ballot-level files US jurisdictions publish
+after a ranked-choice election — took the rankings family past Redivis' cap of
+1,000 tables in a dataset. `irw_rank` is left at about 950 tables and a second
+dataset, `irw_rank_2`, released on 2026-11-01, takes the rest; nothing moves
+between them. Asking for the family is unchanged: `source = "rank"` searches
+both in `irw` 1.4.0 for R, and the Python client carries the same change on
+`main` for its next release. What these tables hold, and what `resp` means when
+it is a position rather than a score, is on the
+[rankings standard](rankings_standard.qmd) page. Refs #3024.
+
+## 2026-10-29 — Three things the site said about itself, corrected
+
+[Collections](collections.qmd) closed by saying that the lists which are not
+exact-instrument searches "searched every documented table". That was not true
+of the 24 curated-only collections, which were last gone through on 2026-09-30
+and are not re-checked as tables arrive; the callout now separates the three
+kinds of coverage, each card carries the revision date the registry generates,
+and [Metadata](metadata.qmd) carries the same caveat. On
+[Tag quality](tags_quality.qmd), the direct-download route the page recommends
+for joining tags to tables was under-joining by 295 tables, because table names
+keep the capitalisation they arrived with while every tag row is lowercase:
+6,202 tables (92.3%) match on a literal join where 6,497 (96.7%) match
+case-insensitively, measured on irw_meta v55.0. The page now states that gap and
+gives the two-line fix in R and in Python. And a table page's Classification
+section now says what a tag is and lists the collections the table belongs to,
+with the basis of each membership. Refs #3225.
+
+## 2026-10-28 — Every table page says how unique its respondents are
+
+A table page's Codebook section listed the demographic covariates the table
+publishes without saying what they add up to: eight demographics on three
+thousand people leaves nearly all of those people unique in their combination.
+Each page now closes that section with the share of the table's respondents who
+are alone in their combination of the published `cov_*` quasi-identifiers, and
+with the IRW's position — that it republishes the demographics its sources
+published and never at finer granularity — one click away in the
+[data standard](https://github.com/ben-domingue/irw/blob/main/datastandard.md).
+Below a thousand respondents the figure is largely arithmetic and the page says so: the median is 41.2% under a hundred
+respondents against 0.3% above ten thousand. Refs #3273.
+
+## 2026-10-28 — In a third of the competition tables, column order carries the winner
+
+In 36 of the 119 competition tables `agent_a` is the winner by construction, so
+the `winner` column is constant and the outcome is carried by which agent sits
+in which column. Nothing said so. Most of those tables have no `score_a` or
+`score_b` either, which leaves the ordering as the only record of who won — and
+means the Elo recipe on the [competitions standard](comps_standard.qmd) page
+does not apply to them. The page now documents the convention and says where the
+recipe stops. Refs #3279.
+
+## 2026-10-28 — A new homepage
+
+The homepage now opens with a card that rotates through real tables, four from
+each of the five data families, then tiles for the families themselves and cards
+for the six things people most often come here to do, with the prose that was
+there before below them. Nothing was renamed or moved off the site; it is a
+different front door to the same pages.
+
+## 2026-10-28 — The warehouse reads in Stata
+
+There is now a third client, [`irw` for Stata](https://github.com/itemresponsewarehouse/Stata-pkg),
+alongside the R and Python packages, and it needs no Redivis account. Redivis has no
+Stata library, which had been taken to rule a Stata package out; it turns out not to
+matter. Every public IRW table is served as CSV over plain unauthenticated HTTPS — the
+same path behind the "Download CSV" button on each table's page — and Stata's `copy`
+and `import delimited` are enough to read it. The cost is that endpoint's 100 MB limit.
+Roughly 3% of the warehouse, the largest PISA, ENEM and five-factor tables among them,
+cannot be read this way, and for those the R and Python packages, which authenticate,
+remain the way in. The endpoint also cannot be paged, so `maxrows()` returns whichever
+rows Redivis sends first; row order in the warehouse is arbitrary, and a 200,000-row
+slice of a large table in one test held 146,840 respondents across 32 items. That is a
+preview of a table, not a sample of one, and the help says so wherever the option appears.
+
+The part that is not a port of the R package is `irw_wide`. IRW tables are long and
+`irt` and `gsem` want one row per respondent, so the reshape is the bridge, and it is
+where the sharp edges are. Stata allows 32 characters in a variable name and warehouse
+item ids are frequently longer, so items are numbered and their ids kept as variable
+labels and in a crosswalk the command writes out. Duplicate id–item pairs stop the
+command rather than being quietly collapsed, given that in the warehouse they are often
+real data — repeated administrations, trial-level tables. And the item count is checked
+against `c(maxvar)`, the limit that actually binds, before anything is reshaped.
+
+The package is new, and we have no Stata licence here, so what it does is only as
+established as someone else's logs. An outside tester has now run it on Stata 16.0 and
+on StataNow 19.5: the example above works end to end on both — fetch, reshape, a
+converged two-parameter model — and the package's offline test suite passes all 29 of
+its checks on each. Four real bugs surfaced in the course of that, two in the package
+and two in its tests, and all are fixed. Stata 15 is a different matter: the package
+declares 15.0 as its floor, one command was using a Stata 16 option until a 15 user
+hit it, and 15 remains unconfirmed. If you work in 15, or on Windows or Linux, where
+nothing has been run at all, please
+[report anything that misbehaves](https://github.com/itemresponsewarehouse/Stata-pkg/issues).
+
+## 2026-10-26 — A wide response matrix comes back with the item ids
+
+In R, `irw_long2resp()` named each column of the wide matrix `item_` plus the
+item id; it now names the column by the item id itself, which is what the Python
+client has always returned. The item id is the key that joins a wide matrix back
+to item text, or to anything else keyed by item, so every such merge previously
+needed a strip step in R and none in Python — and on a table whose items are
+already called `item10` the column came back as `item_item10`. Both clients also
+return the item columns in one natural order, `item1`, `item2`, `item10`, with
+digit runs compared as numbers; R used the order the rows happened to arrive in,
+which Redivis does not guarantee, and Python sorted lexicographically. One
+consequence worth knowing: a numeric item id now yields a column named by that
+number, which needs backticks in an R formula and an outright rename for
+`lavaan`.
+
+The same reshape also stopped averaging across occasions without being told to.
+The standard defines nine ways a response can repeat and only `wave` had a
+selector, so a table scored by several raters came back with cells holding the
+mean of raters who disagreed — a value no rater gave — and no argument could
+prevent it. A new `occasion` argument chooses one for any of those columns
+(`occasion = c(rater = "2")` in R, `occasion={"rater": "2"}` in Python), and
+where such a column keys a repeated person-item pair and you have named neither
+it nor an aggregation method, the call now stops and names both ways forward.
+All of this is merged in both packages and released in neither — R is CRAN 1.3.1
+and Python is 0.7.7 — so it reaches users with the next release of each. Refs
+#3221, #3223.
+
+## 2026-10-25 — The published recipe for merging item text was dropping responses
+
+[Merging item text](itemtext_merge.qmd) showed `merge(items, df)` with no `by=`,
+which joins on every column the two frames share — here `item` and `resp` — so
+the response data was being keyed against an option code. Run on
+`gilbert_meta_40`, that recipe silently discards 36.4% of the responses, and
+where an item has several option rows it goes the other way and multiplies each
+response once per option, attaching a distractor the respondent may never have
+chosen. The example the page used was the one shape in which the bug is
+invisible, a table whose responses and option codes are both 0/1. The page now
+does two left joins — item wording keyed on `item`, option wording on `item`
+together with the response code as the source recorded it — asserts the row
+count after each, rejects an ambiguous mapping outright, and reports how many
+responses have no item wording rather than deleting them.
+
+The file the site hands to an AI assistant was stale in the same spirit, and its
+facts are now generated at render time and stamped with a date: it had claimed
+about 4,200 tables against 6,720 live, and named five data families, omitting
+rankings and its 452 tables entirely. An assistant reading that file cannot look
+anything up, so whatever it says is the whole of what the assistant knows. See
+[Using an AI Assistant](agents.qmd).
+
+## 2026-10-25 — `density` is responses per cell, and is not bounded by 1
+
+The catalogue's `density` column is `n_responses / (n_participants * n_items)`,
+the average number of responses per person-item cell — not, as the name invites
+you to read it, the proportion of cells that are filled. So it has no upper
+bound: 768 of 6,720 core tables are above 1 because they measure a person-item
+pair more than once, 700 of those carrying an occasion column such as `wave` or
+`rater`, and the largest is a go/no-go task at 3,624.6. A value above 1 is a
+fact about the design rather than a defect. The [metadata
+documentation](metadata.qmd) now says all of this, and says that the proportion
+of distinct cells filled is a different quantity, which the IRW does not
+publish.
+
+The part that changes behaviour is the filter default. Both clients defaulted
+`density` to `c(0.5, 1)`, which dropped every one of those 768 tables, so no
+unfiltered `irw_filter()` or `irw.filter()` call could return a repeated-measures
+table at all. The default is now a lower bound only, `c(0.5, Inf)`, which is what
+"exclude sparse matrices" was ever meant to do; pass the old range for the old
+behaviour. It is merged in both packages and in neither release. Refs #3222.
+
+## 2026-10-25 — Every correction names the release that carries it
+
+[Corrections](corrections.qmd) lists each fix to a published table beside the
+IRW version that first carries it, and that cell was blank for 92 of the 715
+entries, because those rows had been appended at upload time rather than once
+the release was live. All 715 now name a version. The versions were not inferred
+from the dates, which cannot answer the question — several shard releases can
+land on one day — but observed: Redivis serves a dataset listing at any released
+version, so the release carrying a fix is the first version in which that
+table's content hash stops being what it was before. Checked against the entries
+that already had a version, 24 of a 25-row sample reproduced exactly and the
+25th was reported unresolved rather than guessed.
+
+The catalogue's own numbers got the same treatment. Fifty-nine metadata rows
+contradicted the tables they describe — one publishing 255 items against a true
+25,499, and 58 publishing more responses than their table has rows, which is
+impossible in long format — and 88 more carried a stale column list. All were
+refreshed from the live tables, and a release gate now fails when a published
+record disagrees with the data, rather than leaving a known-false row in place
+until the rolling refresh comes round some five weeks later. Refs #3213, #3214,
+#3216, #3218.
+
+## 2026-10-23 — Ranked-choice ballots from Minneapolis
+
+The rankings family now holds the individual ballots from Minneapolis municipal
+elections, 2009 through 2023, from the city's released cast vote records: one
+row per candidate placed at a position by one ballot, positions kept exactly as
+marked. The counting rules are part of the record rather than left for a reader
+to assume — Minneapolis changed how it treats an overvote, a skipped position
+and a candidate marked twice between election years, and the rules in force for
+each era are recorded beside the build scripts with the ordinance sections
+cited. The tables are in the `irw_rank` dataset and the layout is on [the
+rankings standard](rankings_standard.qmd). Refs #3024.
+
+## 2026-10-21 — An eighth core warehouse, and what an installed client can reach
+
+Core response data is split across Redivis datasets because Redivis caps one
+dataset at 1000 tables, and `item_response_warehouse_8` joined the list on
+2026-10-21, when the seventh came within a day of that cap. A shard list baked
+into a release is its own problem: the seventh warehouse was released on
+2026-10-15 with 761 tables that no released client could see, and could not see
+*silently*, because a shard missing from the list produces no loop iteration, so
+no warning fires and listings simply come back short. Both clients now read the
+Redivis organization catalogue once per session and adopt any shard that extends
+a family they already know — never a new family — and a daily check compares
+what the CRAN and PyPI releases know about against what is live. Both releases
+are currently behind: CRAN `irw` 1.3.1 was cut before the seventh warehouse and
+Python 0.7.7 before the eighth, so an installed copy of either lists fewer core
+tables than the warehouse holds until the next release. Refs #3091, #3126,
+#3136.
+
+Reading the warehouse from R will also stop needing a Redivis account.
+`redivis` 0.12.14 and later send read requests anonymously, now that Redivis has
+opened its dataset-level endpoints, and on the R package's main branch every
+function that reads the warehouse works with no login; only `irw_table_sets()`,
+which runs server-side SQL, still requires one. The CRAN release still requires
+a login throughout, so this too arrives with the next release, and it is R only
+— the Python package and the MCP server always authenticate.
+
+## 2026-10-21 — The catalogue can be filtered by psychometric property
+
+Until now the catalogue could be filtered only by shape: how many responses,
+items and participants a table has. So "tables whose items hang together, span
+the scale, and have no floor effects" was not an askable question. `irw_meta`
+now publishes `item_classical`, one row per table and item giving that item's n,
+mean, sd, number of levels, item-rest correlation and observed range. The
+statistics are classical, with no model fitted anywhere, so they are defined for
+every core table rather than for the dichotomous sixth of the corpus that an IRT
+model would cover. Four per-table summaries reduced from them —
+`difficulty_spread`, `mean_item_rest_r`, `mean_abs_item_rest_r` and
+`prop_items_extreme` — are columns of the `metadata` table, and are filter
+arguments on both packages' main branches, so filtering by them arrives with the
+next release of each.
+
+Two cautions travel with the columns. Response direction is not harmonised
+across the IRW, so a signed mean item-rest correlation near zero can mean a
+reverse-keyed scale rather than an incoherent one; the gap between it and the
+absolute version is the tell. And a rest score says less about a sparse item
+bank, where respondents see almost disjoint sets of items, than about a 20-item
+questionnaire. Refs #1710.
+
+## 2026-10-20 — The intake floor names an item count, and personal data is tiered
+
+Two rulings, both now in the processing repository's data standard. A table needs
+at least three distinct `item` values to be accepted: three is thin but
+shippable, two is not, and the count is of the table as shipped, so a two-item
+block does not qualify by being merged with an unrelated one. And personal
+information in a source file is no longer one undifferentiated stop — a real
+name or an email address disqualifies the whole candidate, with no
+scrub-and-ship option, while a postal code, ZIP or similar geographic code means
+dropping that column and processing the rest of the file.
+
+The [intake policy on this site](standard.qmd#intake) still lists only the
+licence rules, the 100-respondent floor, one file per scale and the naming
+convention; the data standard in the processing repository is authoritative for
+intake and carries both of these. Refs #3077, #3103.
+
+## 2026-10-18 — The R package is on CRAN
+
+`irw` 1.3.1 was accepted on CRAN on 2026-10-18, so `install.packages("irw")`
+is now all it takes; the GitHub install is for the features that the CRAN
+release does not yet carry, among them the rankings source. The `redivis`
+client, which does the downloading, is still not on CRAN and still comes from
+r-universe. Three things in this version will be felt by anyone upgrading from
+1.3.0, all asked for in CRAN's review: `irw_download()` and
+`irw_save_bibtex()` no longer have a default output path, so name the file;
+the table cache moved to `tools::R_user_dir("irw", "cache")`, so tables cached
+by 1.3.0 are fetched once more; and reading the warehouse needs a cached
+Redivis login, which the new `irw_has_credentials()` reports, rather than
+starting a browser login that never finishes in a script. The installation
+snippets across the site, [Get Started](getstarted.qmd) included, now say
+CRAN.
+
+Python 0.7.7 went out the same day and is the first release to carry several
+things that had only ever been on main: the rankings source, the conjoint shard
+list, the conjoint topic-tag filters, and the item-text licence function below.
+It therefore closes the gap noted on 2026-10-11 — a released Python package can
+now see both conjoint datasets, so installing from GitHub is no longer needed
+to reach the whole family.
+
+## 2026-10-17 — Two new analysis pages
+
+[Conjoint Experiments as Paired Comparisons](./vignettes/conjoint.qmd) reads
+each choice in a conjoint experiment as a paired comparison between two
+profiles and asks one measurement question of every conjoint table in the IRW:
+how much of a choice is explained by the profile's attributes, and how much by
+which respondent is doing the choosing. The page lets you take one of four of
+the experiments yourself — immigrant admission, terms for the Colombian peace
+agreement, packs of barley flour, candidates for state office — and sets your
+own attribute effects against the reference estimates for that experiment.
+
+[Bits per Item](./vignettes/bits_per_item.qmd) asks how much a test tells you
+about a person, counted in Shannon's bits: what one answer narrows down, how
+much the whole test delivers, where in the trait range it lands, and whether
+the sum score is enough to carry it. It opens with a sandbox for cut points on
+the trait and works up to a reliability comparison stated in bits.
+
+## 2026-10-15 — A rankings family
+
+The IRW has a sixth data family, **rankings** (`source = "rank"`): tables in
+which each respondent puts a fixed set of named options in order. The first
+tables are ranked-choice ballots from US elections (FairVote's cast vote
+records, CC0) and the individual juror rankings of every Eurovision Song
+Contest show since 2016. The layout keeps the core column names, but `resp`
+is a position, kept exactly as recorded: a skipped position is a gap and a
+candidate marked twice is two rows, because the rules that resolve those
+differ by jurisdiction. `irw_rank_compress()` and `irw.rank_compress()` apply
+the common rule on request. Candidate names are never stored; candidates are
+coded `c01`, `c02`, … in alphabetical order of the public source file. The
+tables are in the Redivis dataset `irw_rank`, the design record of each
+contest is in `irw_metadata(source = "rank")` from the next irw_meta release,
+and the standard is on [its own page](rankings_standard.qmd). The intake
+floor is 50 rankers rather than the core 100, since each ranker contributes
+several positions.
+
+## 2026-10-15 — The licence on item wording travels with the data
+
+For the minority of IRW tables whose item wording was released by its source
+under an open licence (CC BY-SA, CC BY-NC), that licence no longer lives only
+on the table's Redivis page. `irw_itemtext_licence()` in the R package's
+development version and `itemtext_licence()` in Python 0.7.7 return the
+licence, the attribution it requires and the changes IRW made to the wording,
+and fetching the item text for such a table prints them. The record behind
+both is `itemtext/itemtext_licences.csv` in the processing repository.
+
+The disclaimer carried on every item-text page now also says plainly what such
+a licence does and does not cover: it applies to the wording as published here,
+and implies no licence to reuse the original instrument, whose copyright and
+related rights stay with the rights holders. Permissions for an intended use
+remain the user's to obtain. See [the item text standard](itemtext.qmd).
+
+## 2026-10-14 — Conjoint tables tagged by topic
+
+Every conjoint table now carries two topic tags: `domain`, what the study is
+about (`immigration_asylum`, `candidate_choice`, `health_covid`, ...; a table
+can sit in two), and `choice_object`, what one profile represents (`person`,
+`policy`, `scenario`, ...). They answer the first question people ask of the
+family, "which are the immigration conjoints?", which nothing in the design
+records could. Both are columns of `irw_metadata(source = "conj")` since the
+irw_meta release of 2026-10-13, filters in `irw_filter()` and `irw.filter()`
+(from the packages' next releases), filters in the MCP server, and rows on each
+table's page. The vocabulary and the tagging rules are on
+[the conjoint standard](conjoint_standard.qmd#what-the-studies-are-about).
+Tags are judgement calls from the study descriptions and are corrected by pull
+request when shown wrong.
+
+## 2026-10-14 — Every family's tables are listed, and citable, from the site
+
+The standards page for each family — [competitions](comps_standard.qmd),
+[nominal](nominal_standard.qmd), [conjoint](conjoint_standard.qmd) and
+[simulated and synthetic](simsyn.qmd) — now carries a filterable list of the
+tables that family holds, each row giving the family's own size columns, the
+licence, a link to the source and, where one exists, a link to the table's own
+page. The [documentation listing](docs.qmd) covers the same rows, naming each
+non-core table's family and the `source` argument the packages need for it.
+
+The [Data page](data.qmd)'s single-table lookup read only the core
+bibliography, so a competition, nominal, conjoint or simulated table could not
+be found or cited there at all. It now reads every family's bibliography,
+labels a non-core table with its family, and gives the citation call that
+actually exists — `irw_save_bibtex()` in R, `irw.save_bibtex()` in Python —
+with the `source` argument the table needs.
+
+## 2026-10-13 — Stimulus-norming studies have one shape
+
+The data standard now states how a stimulus-norming study is laid out — the
+kind where people rate words, sentences, images or sounds on judgement
+dimensions. The stimulus is `id`, the judgement dimension is `item` (a single
+value when the study rated one dimension), the rating participant is `rater`,
+and one table holds the study; the rater never goes on `item`. This was already
+the shape such tables were meant to have, but it was not written down, and
+reading one wrongly inverts what the rows mean. [The data standard's column
+list](standard.qmd) is the site's summary of the same format. Two older tables
+that did not follow the rule have been rebuilt in the processing repository;
+those rebuilds are staged on Redivis drafts and are not yet released.
+
+## 2026-10-11 — Conjoint data outgrew one dataset
+
+`irw_conjoint` is close to Redivis' limit of 1000 tables per dataset, so new
+conjoint experiments now go to a second dataset, `irw_conjoint_2`, which went
+live on 2026-10-09 and has been filling since; the first keeps the tables it
+already has. Conjoint is therefore a shard list, the arrangement core response
+data and item text already use: you never name a shard, you fetch a table by
+name with `source = "conj"` and the package resolves it, newest dataset first.
+The data are the same kind as before — respondents choosing between or rating
+randomly assembled profiles, mostly from replication deposits — and
+[the conjoint standard](conjoint_standard.qmd) describes the layout.
+
+Reading both datasets needs a package built from main. The released Python
+package, 0.7.4, knows only the first, so a table that lives in `irw_conjoint_2`
+is invisible to it; the R package's conjoint support has only ever been on
+main, where both datasets are registered. Until a Python release catches up,
+install from GitHub if you want the whole family.
+
+## 2026-10-10 — Conjoint tables get pages, and the standards pages say what each family holds
+
+Conjoint tables now have their own pages in the [/tables/](/tables/) index,
+built from the conjoint metadata. They are sized by rows, respondents, tasks,
+profiles and attributes rather than by items, and each carries a Design section
+giving the country, the languages, the randomization restrictions and every
+outcome's wording and scale. Tables in both conjoint datasets are covered: a
+table is listed under the newest dataset that holds it, the way the packages
+resolve a name.
+
+The competition, nominal and conjoint standards pages each gained a "What the
+family holds" section, read from that family's metadata table when the page is
+built, so it reports what is published rather than a figure typed in by hand;
+nothing on the site summarised these families before. The homepage banner's
+table line now counts conjoint tables alongside the competition and nominal
+ones. See [the competition standard](comps_standard.qmd),
+[the nominal data standard](nominal_standard.qmd) and
+[the conjoint standard](conjoint_standard.qmd).
+
+## 2026-10-10 — Four new analysis pages
+
+Three of them use competition and sports-trial data.
+[Are Competitions Transitive?](./vignettes/intransitivity.qmd) asks whether A
+beating B and B beating C tells you anything about A against C, across a
+century of team sports, Lichess chess, game-playing bots, human judgments and
+animal dominance, and shows why counting cycles — or a naive bootstrap —
+misleads.
+[Home Advantage](./vignettes/home_advantage.qmd) fits a Bradley-Terry model
+with a home term to every season back to the 1870s, asks whether the advantage
+has declined net of team strength, and measures how much of it vanished when
+the 2020-21 seasons were played in empty stadiums.
+[Who Takes the Hard Shot?](./vignettes/sports_trials.qmd) treats shots, kicks,
+passes and map-practice trials as items and finds that adjusting for which
+attempt was taken can hide skill in one sport and inflate it in another.
+
+The fourth,
+[Extending Algorithm Selection for Class Detection to Item Response Data](analysis/plenitude_replication.qmd),
+applies Sotoudeh and DiMaggio's (2021) released code and fitted models —
+trained on simulated survey modules — to 117 IRW tables. Their predictions
+track the validity criteria about as well as on the original data, but they
+nominate the same method for most tables, so the substantive claim carries over
+and the fitted prediction step does not.
+
+## 2026-10-08 — An assistant can reach every data family
+
+Python package 0.7.4. The MCP server was core-only; now `describe_table`,
+`fetch_table` and `get_citation` work out a table's data family from its name —
+names are unique across families — and report which family it came from, and
+`search_tables` takes a `source`. An assistant pointed at the server can
+therefore describe and fetch a competition, nominal, simulated or conjoint
+table, not only a core one. The two views that assume the core id/item/resp
+layout, wide and de-duplicated, are refused off core with a message saying so,
+and the server's filters stay core-only. `info()` in the Python API takes
+`source` for every family as well. Setup is on
+[Using an AI Assistant](agents.qmd).
+
+## 2026-10-08 — Conjoint experiments, and five data families
+
+A new Redivis dataset, `irw_conjoint` (v3.0), holds 216 conjoint experiments,
+most from replication deposits on Harvard Dataverse. Respondents in these studies
+choose between, or rate, hypothetical profiles whose attributes are assigned at
+random, so the tables have their own layout, described in
+[the conjoint standard](conjoint_standard.qmd). Fetch them with
+`source = "conj"` in the R package (GitHub version) or the Python package
+(0.7.4); `irw_conj_long()` gives the usual id/item/resp view. The design of each
+experiment, including outcome wording, rating scales and randomization
+restrictions, is in `irw_metadata(source = "conj")`.
+
+With conjoint, the response data come in five *data families*: core, nominal,
+competitions, simulated and synthetic, and conjoint. The
+[standards overview](overview.qmd#families) defines them. The competition,
+nominal and conjoint standards are no longer labelled experimental. Refs #2887.
+
+## 2026-10-07 — Reading the warehouse needs a Redivis login, in R too
+
+In late September this site said the R package could read IRW data without a
+Redivis login. That was wrong: the test behind the claim used a cached login
+without knowing it, and an anonymous check on 2026-10-07 gets 401 on the
+dataset reads the package makes. The claim is reverted here and in the R
+package's README. Both packages and the MCP server need a free Redivis account,
+and a script or CI job needs a cached login or `REDIVIS_API_TOKEN`.
+
+One path genuinely needs no account: downloading a table under 100 MB as a CSV
+from its page on this site, which [Getting Started](getstarted.qmd) now says
+alongside the rest.
+
+## 2026-10-05 — ENEM 2024 and 2025 ids corrected
+
+Released 2026-10-05, across the eight `enem_2024_1mil_*` and `enem_2025_1mil_*`
+tables and their eight `_nom` companions. From 2024 INEP ships participant and
+results data as two separate files, keyed differently, and the year scripts had
+taken `id` from one file and the responses from the other, pairing them by row
+order. The test municipality in the two files agrees no more often than chance
+would predict, so in effect every response sat under the wrong candidate's id.
+
+`id` now comes from the results file's own `NU_SEQUENCIAL`. The candidates and
+the `resp` and `resp_raw` sequences are unchanged row for row; only the id a
+response carries is different. [Data Notes](data_notes.qmd) records one caveat:
+`NU_SEQUENCIAL` is unique within a year but should not be used to follow a
+person between years. 2013 to 2023 are untouched. Refs #2812.
+
+## 2026-10-05 — The packages will tell you what a column means
+
+Python package 0.4.0 through 0.7.3. `describe_columns` is a new MCP tool: for a
+table it reports each column with the data standard's definition where the
+standard defines it, the source column the build script renamed it from, a
+covariate's value labels in the source's own words, and the source deposit's own
+codebook or questionnaire where one has been found. `covariate_labels()` joins
+the public Python API. The R package has `irw_covariate_labels()` and
+`irw_covariates(labels = TRUE)` on main, but the released R package is still
+1.3.0, so there they are merged and not yet shipped. Setup for the MCP server is
+on [Using an AI Assistant](agents.qmd).
+
+## 2026-10-04 — Every table page now has a Codebook section
+
+The plain Columns list on a table page has become a Codebook: one row per
+column, giving the data standard's definition where it defines the column, and
+the source column the build script renamed it from, linked to the line that
+renames it. Covariates list their labelled codes in code order and in the
+source's own words ("1 = hombre · 2 = mujer"). Where the source deposit's own
+codebook was found, the section links it, and links a questionnaire beside it
+when the codebook names the columns but not the response wording.
+
+The section says it is the IRW's best reconstruction rather than the source's
+codebook, that it may contain mistakes, and that the source data are the
+authority. It never infers a meaning from a column's name: a column with neither
+a definition nor a traced source is shown as not documented. Refs #2755, #2763,
+#2766, #2770, #2787, #2792.
+
+## 2026-10-03 — Non-commercial and GPL licences now proceed
+
+A ruling of 2026-10-01, now in the processing repo's data standard: a
+non-commercial licence is hostable, with the NC carried into the derived
+licence, and so is GPL. ND licences and scraped or relabelled third-party data
+still stop, and a dataset with no licence at all still means asking the author
+for permission. The intake-policy section of [the data standard](standard.qmd)
+on this site has not yet caught up. Refs #2808, #2809.
+
+## 2026-10-03 — The homepage counts the published warehouse, and Standards gets its own menu
+
+The front-page banner is now rebuilt from published `irw_meta` on every render
+and records the version it read, where before it came from a file committed by
+hand and lagged what was published. It also gives the competition and nominal
+table counts. Refs #1940.
+
+The Data menu split in two. Data holds the pages for using the tables, with
+[Corrections](corrections.qmd) moved over from About; Standards holds the
+specifications, the validator and the contributing guidance, with
+[Overview of the IRW Data Standards](overview.qmd) as its hub.
+
+## 2026-10-02 — The standard defines design columns, and `irw-validate` 1.4.0
+
+`cluster_id`, `block_id` and `std_baseline*` are now defined in the standard's
+schema table, its column order and its section on randomised trials; until now
+the validator told the tables carrying them, such as the `gilbert_*` series, to
+rename them as covariates. `irw-validate` 1.4.0 allows them, and demotes its
+composite-item check to a warning, since label names alone cannot establish that
+a column holds a computed score. The standard also now says the 100-respondent
+floor does not apply to animal data, and clause C4 has an exception for
+IEA-style sources: an omitted response is scored 0 with the source's code kept
+in `resp_raw`, while a not-reached response is dropped. The
+[browser validator](validate.qmd) runs 1.4.0 too.
+
+## 2026-10-01 — Competition, nominal and simulated data all grew
+
+`irw_competitions` (v6.2) now covers professional and historical sport, machine
+contests such as chess engines and Kaggle simulation competitions, animal
+dominance hierarchies, comparative judgement and quiz contests; see
+[the competition standard](comps_standard.qmd). `irw_nominal` (v3.3) and
+`irw_simsyn` (v1.4) grew as well; see [the nominal standard](nominal_standard.qmd)
+and [simulated and synthetic data](simsyn.qmd).
+
+## 2026-10-01 — A measured quantity is not a response
+
+Ruled over the week and recorded on [Corrections](corrections.qmd): the
+`continuous_response` collection is for response scales — sliders, 0–100
+ratings, visual analogue scales — and a physical measurement such as minutes,
+hours or amount consumed never belongs in it. Self-reported counts stay.
+Refs #1700.
+
+## 2026-09-30 — Corrections from the corpus audit
+
+The retroactive audit of the existing corpus published its first large batch of
+corrections on 2026-09-30, each listed on [Corrections](corrections.qmd) with
+the version it took effect in. The audit works by class rather than by table —
+sentinel codes stored as responses, covariates out of range, response times in
+the wrong units, binary scales carrying extra codes, exact duplicate rows — so a
+defect found in one table is then looked for everywhere. Refs #2401.
+
+## 2026-09-30 — Eedi NeurIPS licence corrected
+
+Eedi permitted the IRW to reshare its restructured NeurIPS 2020 and 2022 data on
+condition that it carry CC BY-NC-ND 4.0, and the dictionary and bibliography had
+recorded CC BY 4.0. The rows for `neurips_2020`, `neurips_2020_task34` and
+`neurips_2022` now state the licence the permission actually granted.
+
+## 2026-09-30 — Twenty-one collections for specific instruments
+
+Collections were added for the PHQ-9, GAD-7, RSES, SWLS, PSS-10, DASS-21,
+PANAS, CES-D, BFI-44, BFI-10, TIPI, SD3, ERQ, GSE, MSPSS, Brief COPE, PCL-5,
+LOT-R, ISI, FCV-19S and the UCLA Loneliness Scale. Unlike the tag-based
+collections, these are curated table by table, and every member records its
+basis — whether the instrument was identified from the item wording, from what
+the source supplied, or only from the table's name.
+[Browse IRW Collections](collections.qmd) lists them member by member, with the
+basis shown and filterable.
+
+## 2026-09-28 — Source caveats get a Notes section, and a page
+
+A note is not a correction: it describes something odd about a source that the
+IRW table reproduces faithfully, rather than a defect in the IRW's own
+processing. Notes now appear as a plain Notes section on a table page, under
+"About this table", and the new [Data Notes](data_notes.qmd) page lists all of
+them. Because a note is about the source and not about the IRW's handling of it,
+it carries no banner and does not keep a table out of search results.
+
 ## 2026-09-28 — The MCP server can find the script that built a table
 
 Python package 0.3.1. The server's processing-notes tool now resolves a table

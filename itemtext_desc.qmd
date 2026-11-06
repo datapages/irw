@@ -22,6 +22,24 @@ data$FK_grade                 <- as.numeric(data$FK_grade)
 data$mean_character_responses <- as.numeric(data$mean_character_responses)
 data$instrument <- gsub("\n", "", data$instrument)
 
+## Count only tables whose item text a user can actually retrieve.
+## itemtext_metadata lags the item-text shards in both directions: a withdrawn
+## table keeps its row until the next metadata run prunes it, and a new upload
+## has no row until the next run adds one. On 2026-11-02 that put 238 withdrawn
+## tables in the count, and it is why the review found four different counts of
+## "tables with item text" (ben-domingue/irw#3229). So the denominator here is
+## the shards' own listing -- the same thing irw_list_itemtext_tables() returns
+## -- and the descriptives describe the tables in both. Same dataset list as
+## landing/agent_guide_stamp.R's AUXILIARY; a new shard is added in both.
+ITEMTEXT_DATASETS <- c("irw_text", "irw_text_2", "irw_text_3", "irw_text_4")
+key <- function(x) sub("__items$", "", tolower(trimws(as.character(x))))
+listed <- tryCatch(
+  unique(unlist(lapply(ITEMTEXT_DATASETS, function(ds)
+    vapply(user$dataset(ds)$list_tables(), function(t) t$name, character(1))))),
+  error = function(e) NULL)
+n_rows_meta <- nrow(data)
+if (!is.null(listed)) data <- data[key(data$table) %in% key(listed), , drop = FALSE]
+
 n_tables      <- nrow(data)
 n_instruments <- length(unique(data$instrument))
 median_words  <- round(median(data$mean_word, na.rm = TRUE))
@@ -31,7 +49,9 @@ median_fk     <- round(median(data$FK_grade, na.rm = TRUE), 1)
 ojs_define(plot_data = data)
 ```
 
-The IRW item text resource contains full item wording for **`r n_tables` tables** spanning **`r n_instruments` distinct instruments**. Items have a median length of `r median_words` words (`r median_chars` characters) and a median Flesch-Kincaid grade level of `r median_fk`. See the [Item Text Standard](itemtext.qmd) for a full description of the data structure.
+The IRW item text resource contains full item wording for **`r n_tables` tables** spanning **`r n_instruments` distinct instruments**`r if (!is.null(listed)) " (tables whose item text is on the item-text datasets now, which is what <code>irw_list_itemtext_tables()</code> lists; the metadata table can briefly carry rows for tables just withdrawn or lack rows for tables just added)" else ""`. Items have a median length of `r median_words` words (`r median_chars` characters) and a median Flesch-Kincaid grade level of `r median_fk`. See the [Item Text Standard](itemtext.qmd) for a full description of the data structure.
+
+**What the Flesch-Kincaid column is.** For each table, the median over its items of each item's own Flesch-Kincaid grade level, computed on English text only: the original wording when the administration was English, the `item_text_translated` column when it was not. It is blank when a table has no English text to score, which includes tables whose administered language is not yet recorded. The formula was built for English prose, and survey items are short and often not sentences, so a one-word item scores near zero or below. Read it as a rough ordering of how wordy and polysyllabic a table's items are, not as a validated readability measure. (Before November 2026 it was one score over a table's whole text, which merged word lists into a single "sentence" and produced grades in the thousands.)
 
 ## Tables with item text
 

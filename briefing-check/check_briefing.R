@@ -25,9 +25,9 @@ near <- function(x, target, tol) {
 
 # 0. The install lines of section 0, as documented. redivis is needed for the warehouse part only.
 if (!requireNamespace("pak", quietly = TRUE)) install.packages("pak")
-if (!requireNamespace("irw", quietly = TRUE)) pak::pak("itemresponsewarehouse/Rpkg")
+if (!requireNamespace("irw", quietly = TRUE)) install.packages("irw")
 for (p in c("psych", "mokken")) if (!requireNamespace(p, quietly = TRUE)) pak::pak(p)
-check(requireNamespace("irw", quietly = TRUE), "irw installs from itemresponsewarehouse/Rpkg")
+check(requireNamespace("irw", quietly = TRUE), "irw installs from CRAN")
 check(requireNamespace("redivis", quietly = TRUE), "redivis is installed",
       "section 0 documents install.packages(\"redivis\", repos = c(\"https://redivis.r-universe.dev\", getOption(\"repos\"))); without it the first warehouse call stops")
 suppressPackageStartupMessages(library(irw))

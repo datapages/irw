@@ -18,143 +18,7 @@ Translator note: please do NOT translate the following —
 
 [논문 읽기](https://doi.org/10.3758/s13428-025-02796-y) **(오픈 액세스)**
 
-<div class="lang-switch"><button type="button" class="lang-switch-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="lang-switch-panel" aria-label="Choose a language"><i class="bi bi-globe2" aria-hidden="true"></i><i class="bi bi-chevron-down" aria-hidden="true"></i></button><div class="lang-switch-panel" id="lang-switch-panel" hidden><label class="visually-hidden" for="lang-switch-search">Search languages</label><div class="lang-switch-search-wrap"><i class="bi bi-search" aria-hidden="true"></i><input type="text" id="lang-switch-search" class="lang-switch-search" autocomplete="off" placeholder="Search languages"></div><ul class="lang-switch-list" role="listbox"></ul></div></div>
-<noscript>
-
-[English](/) · [Français](/welcome/welcome_fr.html) · [Español](/welcome/welcome_es.html) · [中文](/welcome/welcome_zh.html) · [한국어](/welcome/welcome_ko.html) · [العربية](/welcome/welcome_ar.html) · [日本語](/welcome/welcome_ja.html) · [Português](/welcome/welcome_pt.html) · [Deutsch](/welcome/welcome_de.html) · [हिन्दी](/welcome/welcome_hi.html) · [Русский](/welcome/welcome_ru.html) · [繁體中文](/welcome/welcome_zh-hant.html) · [বাংলা](/welcome/welcome_bn.html) · [Türkçe](/welcome/welcome_tr.html) · [Tiếng Việt](/welcome/welcome_vi.html) · [Italiano](/welcome/welcome_it.html) · [Nederlands](/welcome/welcome_nl.html) · [Polski](/welcome/welcome_pl.html) · [ไทย](/welcome/welcome_th.html) · [اردو](/welcome/welcome_ur.html) · [தமிழ்](/welcome/welcome_ta.html) · [فارسی](/welcome/welcome_fa.html) · [Kiswahili](/welcome/welcome_sw.html) · [עברית](/welcome/welcome_he.html) · [Bahasa Melayu](/welcome/welcome_ms.html)
-
-</noscript>
-<script>
-(function () {
-  var LANGS = [
-    { native: "English",      en: "English",                lang: "en" },
-    { native: "Français",     en: "French",                 lang: "fr" },
-    { native: "Español",      en: "Spanish",                lang: "es" },
-    { native: "中文",          en: "Chinese Simplified",     lang: "zh-hans" },
-    { native: "한국어",        en: "Korean",                 lang: "ko" },
-    { native: "العربية",      en: "Arabic",                 lang: "ar" },
-    { native: "日本語",        en: "Japanese",               lang: "ja" },
-    { native: "Português",    en: "Portuguese",             lang: "pt" },
-    { native: "Deutsch",      en: "German",                 lang: "de" },
-    { native: "हिन्दी",        en: "Hindi",                  lang: "hi" },
-    { native: "Русский",      en: "Russian",                lang: "ru" },
-    { native: "繁體中文",       en: "Chinese Traditional",    lang: "zh-hant" },
-    { native: "বাংলা",        en: "Bengali",                lang: "bn" },
-    { native: "Türkçe",       en: "Turkish",                lang: "tr" },
-    { native: "Tiếng Việt",   en: "Vietnamese",             lang: "vi" },
-    { native: "Italiano",     en: "Italian",                lang: "it" },
-    { native: "Nederlands",   en: "Dutch",                  lang: "nl" },
-    { native: "Polski",       en: "Polish",                 lang: "pl" },
-    { native: "ไทย",          en: "Thai",                   lang: "th" },
-    { native: "اردو",         en: "Urdu",                   lang: "ur" },
-    { native: "தமிழ்",        en: "Tamil",                  lang: "ta" },
-    { native: "فارسی",        en: "Persian",                lang: "fa" },
-    { native: "Kiswahili",    en: "Swahili",                lang: "sw" },
-    { native: "עברית",        en: "Hebrew",                 lang: "he" },
-    { native: "Bahasa Melayu",en: "Malay",                  lang: "ms" }
-  ];
-
-  document.querySelectorAll(".lang-switch").forEach(function (root) {
-    var trigger = root.querySelector(".lang-switch-trigger");
-    var panel = root.querySelector(".lang-switch-panel");
-    var search = root.querySelector(".lang-switch-search");
-    var list = root.querySelector(".lang-switch-list");
-
-    // Hrefs are read from the <noscript> fallback rather than hardcoded,
-    // because Quarto resolves that markdown's links to correct relative
-    // paths per page at build time; a literal string in this script would
-    // stay absolute and break under file:// or non-root deployments.
-    var hrefByNative = {};
-    var noscriptEl = root.nextElementSibling;
-    if (noscriptEl && noscriptEl.tagName === "NOSCRIPT") {
-      var tmp = document.createElement("div");
-      tmp.innerHTML = noscriptEl.textContent;
-      Array.prototype.forEach.call(tmp.querySelectorAll("a"), function (a) {
-        hrefByNative[a.textContent.trim()] = a.href;
-      });
-    }
-
-    // Current language is read from <html lang="...">, which Quarto sets
-    // from each page's own frontmatter, rather than guessed from the URL.
-    var currentLang = (document.documentElement.lang || "").toLowerCase();
-
-    function render(filterText) {
-      list.innerHTML = "";
-      var q = (filterText || "").trim().toLowerCase();
-      var matches = LANGS.filter(function (entry) {
-        return !q || entry.native.toLowerCase().indexOf(q) !== -1 || entry.en.toLowerCase().indexOf(q) !== -1;
-      });
-
-      if (matches.length === 0) {
-        var empty = document.createElement("li");
-        empty.className = "lang-switch-empty";
-        empty.textContent = "No matches";
-        list.appendChild(empty);
-        return;
-      }
-
-      matches.forEach(function (entry) {
-        var li = document.createElement("li");
-        li.setAttribute("role", "option");
-        if (entry.lang === currentLang) {
-          li.className = "lang-switch-current";
-          li.setAttribute("aria-current", "true");
-          var check = document.createElement("i");
-          check.className = "bi bi-check2";
-          check.setAttribute("aria-hidden", "true");
-          li.appendChild(check);
-          li.appendChild(document.createTextNode(" " + entry.native));
-        } else {
-          var a = document.createElement("a");
-          a.href = hrefByNative[entry.native] || "#";
-          a.textContent = entry.native;
-          li.appendChild(a);
-        }
-        list.appendChild(li);
-      });
-    }
-
-    function openPanel() {
-      panel.hidden = false;
-      trigger.setAttribute("aria-expanded", "true");
-      search.value = "";
-      render("");
-      search.focus();
-    }
-
-    function closePanel() {
-      panel.hidden = true;
-      trigger.setAttribute("aria-expanded", "false");
-    }
-
-    trigger.addEventListener("click", function (e) {
-      e.stopPropagation();
-      if (panel.hidden) { openPanel(); } else { closePanel(); }
-    });
-
-    search.addEventListener("input", function () {
-      render(search.value);
-    });
-
-    panel.addEventListener("click", function (e) {
-      e.stopPropagation();
-    });
-
-    document.addEventListener("click", function () {
-      if (!panel.hidden) closePanel();
-    });
-
-    document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && !panel.hidden) {
-        closePanel();
-        trigger.focus();
-      }
-    });
-
-    render("");
-  });
-})();
-</script>
+{{< include /welcome/_lang_switch.md >}}
 
 ---
 
@@ -164,51 +28,47 @@ Translator note: please do NOT translate the following —
 
 이는 잘 알려진 문제입니다. 연구 공동체는 이를 해결하기 위한 공통 기준을 마련했습니다. 데이터는 **FAIR**해야 한다는 것, 즉 찾을 수 있고(Findable), 접근할 수 있고(Accessible), 상호운용 가능하며(Interoperable), 재사용할 수 있어야(Reusable) 한다는 원칙입니다(Wilkinson et al., 2016). 다른 분야들은 이러한 원칙을 실제로 적용하여 공유되고 표준화된 데이터 자원을 구축함으로써 이 문제를 해결했습니다. 컴퓨터 과학 분야에서는 라벨이 지정된 이미지 모음인 ImageNet이 연구자들에게 공통의 기준을 제공하여 인공지능 분야의 빠른 발전을 이끌었습니다. 유전학과 신경과학 역시 각자의 데이터를 위한 유사한 공유 자원을 구축했습니다.
 
-Item Response Warehouse(IRW)는 문항 반응 데이터에 동일한 FAIR 원칙을 적용합니다. 수백 개의 기존 데이터셋을 한데 모아 하나의 공통 형식으로 재구성함으로써, 한 데이터셋에서 검증된 방법을 수백 개의 다른 데이터셋에서도 손쉽게 검증할 수 있게 합니다.
+Item Response Warehouse(IRW)는 문항 반응 데이터에 동일한 FAIR 원칙을 적용합니다. 수천 개의 기존 데이터셋을 한데 모아 하나의 공통 형식으로 재구성함으로써, 한 데이터셋에서 검증된 방법을 수천 개의 다른 데이터셋에서도 손쉽게 검증할 수 있게 합니다.
 
 ## IRW에 포함된 내용
 
-IRW는 **수백 개의 데이터셋**("테이블")을 포함하며, 각 데이터셋은 개별 반응들의 모음입니다. 반응은 어떤 사람(또는 다른 단위)이 어떤 문항(또는 다른 측정 도구)에 응답할 때마다 생성됩니다. 예를 들면:
+IRW는 **수천 개의 데이터셋**("테이블")을 포함하며, 각 데이터셋은 개별 반응들의 모음입니다. 반응은 어떤 사람(또는 다른 단위)이 측정 도구와 마주하고 그 결과가 기록될 때마다 생성됩니다. 무엇이 측정 도구에 해당하는지는 [데이터 계열](/overview.qmd)에 따라 다릅니다. 단독으로 응답하는 문항, 대결에서 만나는 다른 개체, 순서를 매기는 선택지 전체, 또는 무작위로 할당된 속성으로 구성된 프로필 등입니다. 예를 들면:
 
 - 교육 및 능력 검사에서의 학생 응답
 - 성격이나 태도를 측정하는 설문 문항
 - 인간 평가자가 부여한 평정
+- 경기와 직접 비교처럼 두 개체가 맞붙어 한쪽이 이기는 상황
+- 선호 투표 용지, 심사위원단 순위, 설문의 순위 매기기 문항
+- 컬조인트 실험. 응답자가 무작위로 구성된 프로필 중에서 선택합니다
 - 측정 도구 집합에 대해 반복적으로 반응이 이루어지는 그 밖의 모든 상황
 
 IRW의 모든 데이터셋은 다음과 같이 설계되어 있습니다:
 
 - **찾을 수 있음(Findable).** 각 데이터셋에는 참가자 수, 문항 수, 반응 밀도, 주제 분야 및 기타 서술적 태그와 같은 사전 계산된 메타데이터가 포함되어 있어, 먼저 다운로드하지 않고도 데이터셋을 찾고 필터링할 수 있습니다.
 - **접근 가능함(Accessible).** 각 데이터셋은 무료 계정만 있으면 웹 브라우저 또는 `irw` 패키지를 통해 받을 수 있습니다.
-- **상호운용 가능함(Interoperable).** 각 데이터셋은 동일한 단순 구조(아래에서 설명)로 재구성되어 있어, 동일한 분석 코드를 거의 또는 전혀 수정하지 않고 여러 데이터셋에 걸쳐 실행할 수 있습니다.
+- **상호운용 가능함(Interoperable).** 각 데이터셋은 반응 하나당 한 행인 롱 형식으로, 해당 계열의 표준(아래에서 설명)에 따라 재구성되어 있어, 동일한 분석 코드를 거의 또는 전혀 수정하지 않고 여러 데이터셋에 걸쳐 실행할 수 있습니다.
 - **재사용 가능함(Reusable).** 각 데이터셋은 개방형 라이선스가 부여되어 있고, 출처가 문서화되어 있으며, 이를 IRW 형식으로 변환하는 데 사용된 코드도 공개되어 있습니다.
 
-데이터셋은 규모(수백 건의 반응부터 수백만 건까지)와 반응 유형(예/아니오 문항, 다범주 평정, 부분 점수 등)에서 매우 다양합니다. 각 데이터셋에는 참가자 수, 문항 수, 반응 밀도, 주제 분야 및 기타 서술적 태그와 같은 사전 계산된 메타데이터가 함께 제공되어, 연구자들이 모든 데이터셋을 먼저 다운로드하고 처리하지 않고도 관련 데이터셋을 찾을 수 있습니다.
+데이터셋은 규모(수백 건의 반응부터 수백만 건까지)와 반응 유형(예/아니오 문항, 다범주 평정, 부분 점수, 순서 없는 범주, 대결 결과, 순위 등)에서 매우 다양합니다.
 
 ## 데이터 표준
 
-<img src="/welcome/assets/diagram-cross-classification.svg" alt="id와 item으로 구성된 색상별 격자가 화살표를 통해 id, item, resp 열을 가진 롱 포맷 표로 변환되는 모습을 보여주는 다이어그램. 각 resp 셀의 색상은 격자에서 해당 원본 셀의 색상과 일치한다." class="welcome-figure">
+모든 IRW 테이블은 **롱 형식**입니다. 반응 하나당 한 행입니다. 한 행이 *무엇인지*는 그 테이블이 속한 계열에 따라 다르며, 그것을 담는 열도 마찬가지입니다.
 
+<img src="/figures/families/families-tree.svg" alt="데이터셋을 IRW 계열로 분류하는 두 가지 질문."
+     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
 
-모든 IRW 데이터셋은 **롱 포맷(long format)**으로 재구성됩니다: 반응 하나당 한 행입니다. 각 행은 최소한 다음 세 가지 정보를 담고 있습니다:
+| 계열 | `source =` | 표준 |
+|---|---|---|
+| Core | `"core"` | [Core](/standard.qmd) |
+| Nominal | `"nom"` | [Nominal](/nominal_standard.qmd) |
+| Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
+| Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
+| Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
+| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
 
-| 열 | 의미 |
-|---|---|
-| `id` | 누가(또는 무엇이) 반응을 생성했는가 — 일반적으로 한 사람 |
-| `item` | 어떤 측정 도구가 반응을 생성했는가 — 일반적으로 하나의 질문이나 과제 |
-| `resp` | 반응 자체, 서열 점수로 저장됨 |
+Simsyn은 도표에 없습니다. 이 계열은 데이터의 형태가 아니라 출처로 정의되므로, 시뮬레이션 테이블은 이 형태들 중 어느 것이든 가질 수 있습니다. 각 계열의 열은 [표준 개요](/overview.qmd)에 정리되어 있습니다.
 
-**예시:**
-
-| `id` | `item` | `resp` | `rt` | `cov_age` | `rater` |
-|----|------|------|-----|-----|-------|
-| 1  | Q1   | 1    | 2.3 | 26  | a     |
-| 1  | Q2   | 0    | 1.8 | 26  | a     |
-| 2  | Q1   | 1    | 2.1 | 31  | b     |
-| 2  | Q2   | 1    | 2.5 | 31  | b     |
-
-데이터셋에 반응 시간, 평가자 신원, 나이와 같은 공변량 등 추가 정보가 포함된 경우, 해당 정보는 일관된 이름 규칙을 따르는 추가 열에 저장됩니다. 이 하나의 단순한 구조는 매우 다양한 측정 상황을 포괄하며, 이 덕분에 분석 코드를 한 번만 작성하여 저장소 전체에 적용할 수 있습니다.
-
-이 표준에 대한 전체 기술 명세는 [itemresponsewarehouse.org/standard.html](/standard.qmd)에서 확인할 수 있습니다. 문항 텍스트, 쌍대 비교(경쟁) 데이터, 명목형(순서 없는 범주) 반응을 위한 보다 전문화된 표준도 별도로 존재합니다.
 
 ## 사용 방법
 
@@ -218,17 +78,20 @@ IRW의 모든 데이터셋은 다음과 같이 설계되어 있습니다:
 [IRW 데이터 브라우저](/data.qmd)에서 계정 없이도 데이터셋과 그 메타데이터를 바로 탐색할 수 있습니다. 전체 데이터셋을 다운로드하려면 무료 [Redivis](https://redivis.com) 계정이 필요합니다. 이는 Redivis가 실제 데이터를 호스팅하는 플랫폼이기 때문입니다.
 
 **2. `irw` 패키지 사용하기 (권장)**
-**R**과 **Python** 양쪽에서 모두 사용 가능한 `irw` 패키지는 데이터를 찾고, 필터링하고, 다운로드하는 간단한 함수들을 제공합니다.
+`irw` 패키지는 **R**과 **Python** 양쪽에서 모두 사용할 수 있습니다.
 
 ```r
 # R
-devtools::install_github("itemresponsewarehouse/Rpkg")
+install.packages("irw")
 library(irw)
 
 irw_info()                     # overview of the IRW
 irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
 ```python
@@ -240,9 +103,12 @@ irw.info()
 irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
+
+# Other families are the same call with a source: comp, nom, conj, rank, sim
+g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
-패키지를 처음 사용할 때는 무료 Redivis 계정으로 로그인하라는 안내를 받게 됩니다. 이후에는 코드 한 줄이면 어떤 데이터셋이든 R이나 Python으로 직접 다운로드할 수 있습니다. 그러면 데이터는 표준 소프트웨어—예를 들어 문항 반응 이론이나 요인분석 패키지—로 바로 분석할 준비가 됩니다.
+패키지를 처음 사용할 때는 무료 Redivis 계정으로 로그인하라는 안내를 받게 됩니다.
 
 **3. Redivis 클라이언트 라이브러리 직접 사용하기**
 더 낮은 수준의 작업 흐름이나 R/Python을 사용하지 않는 경우, Redivis 자체의 R 및 Python 클라이언트 라이브러리를 통해서도 데이터에 접근할 수 있습니다. 자세한 내용은 [시작하기 가이드](/getstarted.qmd)를 참고하세요.

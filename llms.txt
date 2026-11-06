@@ -5,15 +5,32 @@ tells you what you cannot guess. Read it before writing code.
 
 The researcher runs the code; you write it. Assume they have R (preferred) or
 Python and can install packages. Assume they have NOT yet set up a Redivis
-account unless they say so.
+account unless they say so. If they work in Stata, there is a package for that
+too; it needs no Redivis account, but it cannot read the ~3% of tables that are
+over the 100MB anonymous limit. Everything below is written for R and Python.
 
 Home: https://itemresponsewarehouse.org
 R package: https://itemresponsewarehouse.github.io/Rpkg/
 Python package: https://github.com/itemresponsewarehouse/Python-pkg
+Stata package: https://github.com/itemresponsewarehouse/Stata-pkg
 
-The IRW is a corpus of ~4,200 harmonized item-response tables — cognitive tests,
-personality inventories, RCT outcome measures, psycholinguistic tasks — all
-reshaped to one schema so the same code runs across all of them.
+<!-- asof:start -->
+AS OF: 2026-11-02 · irw_meta v57.0
+Every count in this file is generated from the published catalog at that date by
+landing/agent_guide_stamp.R. If you are reading a copy older than a few weeks,
+the numbers have grown; the structure has not.
+<!-- asof:end -->
+
+The IRW is a corpus of <!-- counts:core -->7,144<!-- /counts:core --> harmonized
+item-response tables in its core family — cognitive tests, personality
+inventories, RCT outcome measures, psycholinguistic tasks — all reshaped to one
+schema so the same code runs across all of them, and
+<!-- counts:all -->9,600<!-- /counts:all --> response tables in all across the
+six families below. (These counts are every table listed on the families'
+Redivis datasets. The published catalog, irw_meta, can trail them by a few
+hundred while new tables wait for their metadata row, and the homepage, table
+pages and irw_filter() count only catalogued tables, so their numbers can be
+lower than these without either being wrong.)
 
 --------------------------------------------------------------------------
 ## 0. START HERE — a real analysis with no account and no download
@@ -23,8 +40,7 @@ The `irw` R package ships real warehouse data. If the researcher has not used
 IRW before, give them THIS first. It proves the install works and produces a
 genuine result before any account, download or quota enters the picture.
 
-    install.packages("pak")
-    pak::pak("itemresponsewarehouse/Rpkg")
+    install.packages("irw")
 
     # Needed by every call that touches the warehouse, though not by this
     # section. redivis is a Suggests and is not on CRAN, so installing irw does
@@ -61,7 +77,10 @@ Verified to run offline. Two more zero-network paths:
 
 Only after that works should the researcher connect to Redivis: create an
 account at https://redivis.com/?createAccount, then the first call that touches
-the warehouse opens a browser prompt to authorize. Once per session.
+the warehouse opens a browser prompt to authorize. Once per session. This
+holds in R and Python alike, and for the IRW MCP server. A script or CI job
+cannot answer the browser prompt: it needs a login cached by an earlier
+interactive session, or a Redivis API token in `REDIVIS_API_TOKEN`.
 
 --------------------------------------------------------------------------
 ## 1. The data standard — what every table looks like
@@ -82,18 +101,49 @@ RESERVED optional columns (exact names — do not invent variants):
   timepoint     alternative occasion marker
   treat         1 = treatment, 0 = control
   rater         external observer, distinct from id
-  item_family   testlet / clone grouping (only ~2 tables have it)
+  item_family   testlet / clone grouping (<!-- counts:item_family -->20<!-- /counts:item_family --> tables have it)
   qmatrix1..N   Q-matrix attributes for cognitive diagnostic models
   cov_*         person-level covariates (constant within id)
   itemcov_*     item-level covariates (constant within item)
   trial_*       trial-level details (trial_number, trial_block); `item` still
                 identifies the probe -- it is always authoritative
 
-Two sibling schemas are NOT id/item/resp. Do not apply the above to them:
+Tables come in SIX DATA FAMILIES, each its own Redivis dataset or shard list,
+chosen with the `source` argument. The counts are generated; the list is not,
+and a family missing from it stops the site build.
+
+<!-- families:start -->
+  core    7,144  (default)   id/item/resp, everything above
+  conj    1,161  source="conj"
+  rank    1,018  source="rank"
+  nom       140  source="nom"
+  comp      121  source="comp"
+  sim        16  source="sim"
+<!-- families:end -->
+
+FOUR families are NOT plain id/item/resp. Do not apply the above to them:
   - Competitions (`source="comp"`): agent_a, agent_b, score_a, score_b, winner,
-    homefield, date. Paired comparisons, e.g. `collegefb_2021and2022`.
+    homefield, date. Contests and paired comparisons of fixed things, e.g.
+    `collegefb_2021and2022`.
   - Nominal (`source="nom"`): `text` replaces `resp`. Reshape with
     `irw_long2resp(df, resp_col = "text")`. e.g. `preference_inventory_nom`.
+  - Conjoint (`source="conj"`): one row per id x task x profile; outcomes
+    `choice` (0/1) and/or `rating` (plus `choice_<name>`/`rating_<name>`),
+    attributes as text in `attr_*`. No item/resp: `irw_conj_long(df)` gives the
+    core view. Design facts (outcome wording, scales, country, randomization
+    restrictions) are in `irw_metadata(source = "conj")`.
+    e.g. `kreps_2020_covid_vaccine`. Standard:
+    https://itemresponsewarehouse.org/conjoint_standard.html
+  - Rankings (`source="rank"`): id/item/resp is KEPT, and `resp` is a POSITION
+    as recorded, not a score. Skipped positions are gaps and a candidate marked
+    twice is two rows, so do not model `resp` as an ordered response without
+    deciding what to do about both. `irw_rank_compress(df)` renumbers positions
+    and drops repeated marks. Ranked-choice ballots, jury rankings and survey
+    ranking questions. Standard:
+    https://itemresponsewarehouse.org/rankings_standard.html
+
+Simulated/synthetic (`source="sim"`) keeps the core schema and has no real
+respondents, so it is the one family defined by provenance rather than shape.
 
 Item text lives in a separate dataset: `irw_itemtext(table)`,
 `irw_list_itemtext_tables()`. IMPORTANT: item-text licensing is separate from
@@ -108,8 +158,9 @@ If you remember nothing else, remember these. Each one runs without error and
 gives you numbers that are wrong.
 
 **(1) `irw_filter()` is already filtering before you ask it to.**
-Its default is `density = c(0.5, 1)`, so sparse matrices are silently excluded.
-It also drops NAs on any argument you name. If you mean "everything", say so:
+Its default is `density = c(0.5, Inf)`, so sparse matrices are silently
+excluded. It also drops NAs on any argument you name. If you mean "everything",
+say so:
 
     irw_filter(n_categories = 2, density = NULL)
 
@@ -126,8 +177,11 @@ Never `df$cov_gender[!duplicated(df$id)]`.
 
 **(3) Metadata `n_categories` is not the truth about the fitted matrix.**
 Tables have passed `irw_filter(n_categories = 2)` and still died in mirt with
-"Item 1 requires exactly 2 unique categories". `n_categories` also counts NA as
-a level. Recompute from the pivoted matrix, then branch:
+"Item 1 requires exactly 2 unique categories". `n_categories` counts the
+distinct non-missing `resp` values across the WHOLE table, so a table can have
+2 while one of its items has only 1 (rows computed before mid-2025 used a
+server-side distinct count that may also include NA). Recompute from the
+pivoted matrix, then branch:
 
     resp <- resp[, sapply(resp, function(x) length(unique(na.omit(x))) > 1),
                  drop = FALSE]                       # drop zero-variance items
@@ -215,6 +269,7 @@ site and package docs, so their behavior is known. All are small.
   andrich_mudfold         non-monotone (unfolding) counterexample; small
   collegefb_2021and2022   source="comp" paired comparisons
   preference_inventory_nom source="nom" nominal responses
+  kreps_2020_covid_vaccine source="conj" conjoint: choice with opt-out + rating
 
 For a known-multidimensional vs known-unidimensional contrast, the site pairs
 `psychtools_bfi` against `4thgrade_math_sirt`.
@@ -224,7 +279,8 @@ For a known-multidimensional vs known-unidimensional contrast, the site pairs
 --------------------------------------------------------------------------
 
     irw_filter(...)             by metadata and tags; returns table NAMES
-    irw_metadata()              the full metadata frame (~4,200 rows — see §7)
+    irw_metadata()              the full metadata frame
+                                (<!-- counts:core -->7,144<!-- /counts:core --> rows — see §7)
     irw_info("table")           one table's summary
     irw_tags(tables)            qualitative tags
     irw_tag_options(col)        allowed values for a tag column
@@ -245,7 +301,10 @@ And to get data, once you have a name:
                                 With align = wide, rows follow wide$id exactly.
 
 All of the above take `source = "core"` (the default), or "comp" / "nom" for the
-sibling schemas in §1.
+sibling schemas in §1. For "conj", irw_list_tables, irw_fetch, irw_info,
+irw_metadata, irw_filter (its own arguments: n_respondents, n_attributes,
+outcome, country, license) and irw_save_bibtex work; functions that need
+item/resp (irw_table_sets, irw_long2resp) want irw_conj_long(df) first.
 
 To find tables that HAVE a covariate at all, filter on the column name — `var`
 accepts an exact name or a prefix:
@@ -259,6 +318,14 @@ n_items, n_categories, responses_per_participant, responses_per_item, density.
 Use these to NARROW a candidate set — then verify on the actual matrix. In
 particular `n_categories` here is metadata and can disagree with what you fit;
 see §2(3).
+
+`density` is RESPONSES PER PERSON-ITEM CELL — n_responses / (n_participants *
+n_items) — not the proportion of cells that are filled, and NOT bounded by 1.
+768 of the core tables are above 1 because they measure a person-item pair more
+than once; 700 of those carry an occasion column (wave, rater, trial_*,
+session, ...) and the largest is 3,624.6, a go/no-go task. Do not treat
+density > 1 as a data defect, and do not read density as a completeness score:
+the proportion of distinct cells filled is a quantity IRW does not publish.
 
 Tag arguments: age_range, child_age__for_child_focused_studies_, construct_type,
 construct_name, sample, measurement_tool, item_format, primary_language_s_.
@@ -278,7 +345,8 @@ Caveats on selection metadata, all real:
     verified. Read it as "the ones we know of".
 
 Do not treat any of these as ground truth about a construct. They are a way to
-narrow 4,200 tables to a workable candidate set, which you then check.
+narrow <!-- counts:core -->7,144<!-- /counts:core --> tables to a workable
+candidate set, which you then check.
 
 --------------------------------------------------------------------------
 ## 6. Fitting models — thresholds and costs that hold up
@@ -394,30 +462,39 @@ tell the researcher which one you think it is.
     import irw
     irw.list_tables(); irw.filter(var="rt"); df = irw.fetch("4thgrade_math_sirt")
 
-R is the fuller surface. In Python there is no `metadata()`, no `tags()`, and no
-version pinning — `version()` reports what the corpus is at, but cannot pin an
-analysis to it, so anything that must be reproducible by version number should
-be written in R. Also note `source="main"` in Python where R uses
-`source="core"`, and no `irw_` prefix on function names.
+<!-- pypkg:start -->
+This section describes PyPI `irw` 0.7.7, read from the released wheel.
+<!-- pypkg:end -->
 
-The concepts in sections 1-3 and 6-8 apply in both languages, but several of
-the remedies named there are R-only. In Python:
+**Python is not the thin surface this file used to describe.** Every remedy in
+sections 1-3 and 6-8 has a Python form, including the four that were listed here
+as missing. Differences that are real:
 
-  - The nominal schema in §1 is not reachable at all: Python's `source` accepts
-    "main", "sim" and "comp" but not "nom", and `long2resp()` has no `resp_col`
-    argument to reshape `text` in place of `resp`. Use R for those tables.
-  - There is no `covariates()`, so the aligned covariate reattachment in
-    pitfall 2 of §2 has no Python equivalent. Merge on `id` against the wide
-    frame's index yourself — never positionally, which is the exact error that
-    pitfall warns about.
-  - There is no `table_sets()`, so the quota-free route in §3 does not exist:
-    in Python the `n_responses=[0, 1e6]` guard is the only protection, and
-    finding out what items or response values a large table holds means
-    downloading it.
-  - There is no `check_resp()` for a pre-fit sanity check on response values.
+  - **No `tags()`.** Get the tag columns from `metadata()`, which carries them,
+    or use `filter()`'s tag arguments.
+  - **No `predict()`** and no `simu_diff()`.
+  - **`source="main"` in Python where R says `source="core"`.** Python's
+    `source` accepts "main", "nom", "sim", "comp", "conj" and "rank" — all six
+    families, nominal included.
+  - **No `irw_` prefix** on function names: `irw.fetch()`, not `irw.irw_fetch()`.
+  - R's error and type handling is not Python's. `filter(n_responses="abc")`
+    raises `InvalidFilterValue` in Python and reports "0 tables matched" in R;
+    `info()` on a missing table raises in R and returns `{}` in Python; a wide
+    frame's columns come back in numeric order in R and lexicographic order in
+    Python.
 
-Also R-only: `merge()`, `recode()`, `decode()`, `imv()`, `predict()`,
-`resp2long()`, `simdata()` and `simu_diff()`.
+So, in Python: `metadata()`, `use_version()` / `set_version()` /
+`reset_version()` (version pinning works, and pins the whole corpus the way R
+does), `covariates()`, `covariate_labels()`, `table_sets()`, `check_resp()`,
+`long2resp(df, resp_col="text")` for nominal tables, `resp2long()`, `merge()`,
+`recode()`, `decode()`, `imv()`, `simdata()`, `conj_long()`, `rank_compress()`,
+`itemtext()`, `itemtext_licence()`, `collections()`, `save_bibtex()` and
+`validate()` all exist.
+
+Why this section was wrong for so long: it was written by hand against an early
+release and never checked against a published one. Nine claims, eight of them
+false by 0.7.7 — `irw_meta`'s own numbers go stale by growing, but a capability
+list goes stale by inverting.
 
 --------------------------------------------------------------------------
 ## 10. Citing

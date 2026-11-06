@@ -10,6 +10,8 @@ This page has two tools, and individual tables have their own pages:
 - [**Look up a single dataset**](#look-up-a-single-dataset) — search for one dataset by name and generate its citation (reference and BibTeX) for use in your own work.
 - [**Browse table pages**](/tables/) — every table with a recorded licence has its own page, giving a description of what it measures and where it came from, its size and shape (responses, respondents, items and response categories), the tags that classify it, item text statistics where they exist, the columns it contains, and ready-to-run R and Python code to fetch it. Each page names the IRW version it describes, so it can be cited.
 
+For what the filter columns mean, see [Metadata](metadata.qmd). Ready-made groups of tables (randomized trials, Big Five, and so on) are listed under [Collections](collections.qmd), and every dataset's description, licence and source are listed in one place on [Dataset documentation](docs.qmd).
+
 ---
 
 ## Explore all datasets
@@ -41,6 +43,11 @@ import {yamultiselect} from '@saneef/yet-another-multi-select'
 md_tagged = transpose(datasets_tagged)
 md_notags = transpose(datasets_all)
 md = use_qual_filters ? md_tagged : md_notags
+// ojs_define() wraps a scalar from R in a length-1 array on some Quarto
+// versions and passes it through on others, so unwrap defensively: the
+// denominator being quietly NaN is exactly the failure this line exists to
+// prevent.
+n_all = Array.isArray(n_corpus) ? +n_corpus[0] : +n_corpus
 ```
 
 {{< include components/_style.qmd >}}
@@ -345,9 +352,13 @@ Plot.plot({
 
 ::: {.table-container}
 ```{ojs result-message}
-html`<i>Filtered to ${ds.length} datasets out of ${md.length} total. ${use_qual_filters
-  ? "Datasets with incomplete metadata (tags, bibliography, or quantitative descriptors) are excluded from this table."
-  : "Qualitative filtering is disabled, so datasets missing qualitative tags are included; datasets with incomplete bibliography or quantitative descriptors are still excluded."}</i>`
+html`<i>Filtered to <b>${ds.length.toLocaleString("en")}</b> datasets.${
+  Number.isFinite(n_all) && md.length < n_all
+    ? html` This tool can show ${md.length.toLocaleString("en")} of the <b>${n_all.toLocaleString("en")}</b> tables in the corpus; the ${(n_all - md.length).toLocaleString("en")} it cannot show ${use_qual_filters
+        ? "are missing tags, a bibliography entry, or quantitative descriptors \u2014 turn off qualitative filtering below to include the untagged ones"
+        : "are missing a bibliography entry or quantitative descriptors"}.`
+    : html` ${md.length.toLocaleString("en")} datasets are available to filter.`
+}</i>`
 ```
 
 ```{ojs table-funs}
@@ -642,7 +653,7 @@ viewof license_vals = tag_checkbox("license")
 
 ## Look up a single dataset
 
-Below we show an example dataset and illustrations of how to access the data programmatically. You can also explore the data [here](https://redivis.com/datasets/as2e-cv7jb41fd/tables).
+Below we show an example dataset and illustrations of how to access the data programmatically. You can also explore the data [here](https://redivis.com/datasets/as2e-cv7jb41fd/tables). The search covers every [data family](overview.qmd#families): tables from the [competition](comps_standard.qmd), [nominal](nominal_standard.qmd), [conjoint](conjoint_standard.qmd), [rankings](rankings_standard.qmd) and [simulated](simsyn.qmd) families are listed with their family after the name, and the citation hint carries the `source` the packages need to fetch them.
 
 Individual tables also have their own citable pages, listed at [IRW table pages](/tables/) and linked from the panel above where one exists.
 
@@ -672,6 +683,7 @@ dataset_map = createDatasetMap(data_index);
 viewof dataset_name = {
   const allNames = Array.from(dataset_map.keys());
   let selectedName = allNames[0];
+  const familyOf = (name) => source_labels[dataset_map.get(name)?.source] ?? "";
 
   // Attach list to body so it's never clipped by layout overflow
   const list = document.createElement("div");
@@ -706,6 +718,13 @@ viewof dataset_name = {
     for (const name of matches.slice(0, 300)) {
       const item = document.createElement("div");
       item.textContent = name;
+      const fam = familyOf(name);
+      if (fam) {
+        const tag = document.createElement("span");
+        tag.textContent = fam;
+        tag.style.cssText = "float:right;color:#888;font-size:11px;";
+        item.appendChild(tag);
+      }
       item.style.cssText = "padding:5px 10px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0;";
       item.onmousedown = (e) => {
         e.preventDefault();
@@ -759,11 +778,16 @@ function findDatasetInfo(dictionary, datasetName) {
   return {
     reference: dictRow?.reference || "Reference not available",
     BibTex: dictRow?.BibTex || "BibTeX not available",
-    doi: dictRow?.doi
+    doi: dictRow?.doi,
+    source: dictRow?.source || "core"
   };
 }
 
 dataset_info = findDatasetInfo(dictionary, dataset_name);
+
+// The family each `source` code names, for the dropdown and the hint. Core
+// tables carry no label: they are the default everywhere.
+source_labels = ({comp: "competitions", nom: "nominal", conj: "conjoint", rank: "rankings", sim: "simulated"})
 
 // Create the display elements with reference and BibTeX
 display = {
@@ -891,7 +915,7 @@ display = {
             font-size: 0.9em;
             transition: background-color 0.2s;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          ">To cite using IRW's R package</button>
+          ">To cite using the IRW packages</button>
 
           <div class="r-citation" style="
             display: none;
@@ -908,7 +932,8 @@ display = {
               border-left: 3px solid #4287f5;
               margin-bottom: 10px;
             ">
-              > <code>irw_citation('${dataset_name}')</code>
+              R: <code>irw_save_bibtex("${dataset_name}", "refs.bib"${dataset_info.source === "core" ? "" : `, source = "${dataset_info.source}"`})</code><br>
+              Python: <code>irw.save_bibtex("${dataset_name}", "refs.bib"${dataset_info.source === "core" ? "" : `, source="${dataset_info.source}"`})</code>
             </div>
           </div>
         </div>

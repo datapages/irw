@@ -27,6 +27,28 @@ pages) source it, so the two cannot drift. The rules were settled by Ben on
   Notes section and stays in search. The file is fetched at build time; in CI a
   failed fetch stops the build rather than publish pages without their notes
   (irw#2529).
+- **The Codebook section is a reconstruction, and says so.** It renders
+  `metadata/column_docs.csv` (stage 14 in ben-domingue/irw) with the definitions
+  in `datastandard.md`'s schema table: per column, what the standard says it is
+  and the source column the build script renamed it from. It opens with a
+  caveat that it is the IRW's best reading, not the source's codebook (Ben,
+  irw#2763). Unlike Notes, a failed fetch is not fatal: the page falls back to
+  the plain column list.
+  Covariates also show their value labels from `metadata/covariate_labels.csv`
+  (irw#1775), in the source's own words; codes that all carry the withheld
+  institution label are described, not listed.
+  It closes with **one line on respondent uniqueness** (irw#3273), from
+  `irw_meta.metadata`'s `k1_prop`: the share of the table's respondents alone in
+  their combination of the `cov_*` quasi-identifiers it publishes. It is a
+  statement, not a warning, and it ends on the IRW's position -- republish what
+  the source published, never finer -- with a link to `datastandard.md` for the
+  reasoning (irw#3232). Blank for the non-core families, whose metadata carries
+  no such column, blank for the core tables publishing no demographics, and
+  blank on any release of `irw_meta` predating the column, so the page is
+  correct before and after that release rather than needing them in step. The
+  arithmetic caveat ("on a sample this size") is printed only under 1,000
+  respondents, where the corpus shows uniqueness really is a sample-size effect;
+  on a table of thousands it would be the misleading half of the sentence.
 - **Withdrawn tables keep their URL as a tombstone.** The list is the data
   repo's withdrawal ledger, `itemtext/withdrawals.csv` in ben-domingue/irw, read at
   build time (whole-table rows, not `irw_text`), plus `withdrawn.tsv` here for
@@ -42,8 +64,8 @@ pages) source it, so the two cannot drift. The rules were settled by Ben on
 
 ## Non-core sources
 
-Tables in `irw_simsyn`, `irw_competitions` and `irw_nominal` get pages too
-(irw#2453, 2026-09-26), under the same flat `/tables/<slug>/`: table names are
+Tables in `irw_simsyn`, `irw_competitions`, `irw_nominal` and `irw_conjoint` get
+pages too (irw#2453, 2026-09-26; conjoint irw#2887), under the same flat `/tables/<slug>/`: table names are
 unique across all sources, which is why the 66 nominal tables were renamed to
 `*_nom`. Their facts come from irw_meta's `<prefix>_metadata` / `_biblio` (and
 `nominal_tags`) tables, and their columns from Redivis, since those tables have
@@ -56,8 +78,16 @@ no `variables` column. The same licence, known-issue and tombstone rules apply.
   record set is `agent_a`, `agent_b`, `winner` instead of `id`, `item`, `resp`.
 - **Nominal** (`nom`): the record set adds `text`. A `x_nom` table and core
   table `x` link to each other when both have a page.
+- **Conjoint** (`conj`): sized as rows (respondent x task x profile), respondents,
+  tasks, profiles and attributes from `conj_metadata`; a Design section opens with
+  its topic tags (`domain`, what the study is about, and `choice_object`, what a
+  profile represents; irw#2954, codes from `data/conjoint/README.md`) and gives its
+  country, languages, randomization restrictions and task/profile provenance in
+  the codes of `data/conjoint/README.md`, and each outcome's wording and scale
+  from `conj_outcomes`. The record set is `id`, `task`, `profile`, `choice`,
+  `rating` (those present); the index's count column shows rows.
 
-The R and Python snippets pass `source =` for all three.
+The R and Python snippets pass `source =` for all four.
 
 ## The index at /tables/
 

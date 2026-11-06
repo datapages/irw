@@ -86,6 +86,26 @@ AGGREGATORS_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/ma
 # Caveats true of a table's source, not IRW defects (ben-domingue/irw#2529).
 DATA_NOTES_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
                          "metadata/data_notes.csv")
+# Per-column codebook rows, built weekly by the data repo's stage 14, and the
+# data standard whose schema table defines the IRW's own columns
+# (ben-domingue/irw#2763).
+COLUMN_DOCS_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
+                          "metadata/column_docs.csv")
+# Covariate value labels (ben-domingue/irw#1775), verbatim from each source:
+# table, covariate, code, label. The same file irw_meta's covariate_labels
+# table is uploaded from.
+COVARIATE_LABELS_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
+                               "metadata/covariate_labels.csv")
+# The source's own codebook files, found by NAME in each deposit's file list
+# (ben-domingue/irw#2766, metadata/find_codebook_links.py): table, url,
+# file_name, host, how_found, n_same_kind_in_deposit, deposit_url, checked_at.
+CODEBOOK_LINKS_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
+                             "metadata/codebook_links.csv")
+STANDARD_RAW_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
+                           "datastandard.md")
+# Filled by main() from .read_standard(); empty until then, so a page built
+# without it shows codebook rows with no definitions rather than failing.
+STANDARD <- list(exact = list(), family = list())
 # Data defects are tracked in the data repo, not this one: a known-issue banner
 # and the index's flag both point here.
 ISSUE_URL    <- "https://github.com/ben-domingue/irw/issues/"
@@ -197,6 +217,88 @@ clean_doi <- function(x) {
   split(n[c("note", "issue")], tolower(n$table))
 }
 
+# tolower(table) -> that table's rows of column_docs.csv. A codebook is help,
+# not a fact the page would be wrong without, so any failure reads as no rows
+# and the page falls back to the plain column list (ben-domingue/irw#2763).
+.read_column_docs <- function() {
+  d <- tryCatch({
+    con <- url(COLUMN_DOCS_URL)
+    on.exit(try(close(con), silent = TRUE), add = TRUE)
+    utils::read.csv(con, colClasses = "character", na.strings = character(0),
+                    encoding = "UTF-8")
+  }, error = function(e) {
+    message("[landing] column_docs.csv unreadable (", conditionMessage(e),
+            "); pages show the plain column list")
+    NULL
+  })
+  if (is.null(d) || !nrow(d)) return(list())
+  split(d, tolower(d$table))
+}
+
+# tolower(table) -> that table's covariate labels. Help, not fact, like the
+# codebook rows: a failed fetch leaves covariates unlabelled (irw#2763 step 3).
+.read_covariate_labels <- function() {
+  d <- tryCatch({
+    con <- url(COVARIATE_LABELS_URL)
+    on.exit(try(close(con), silent = TRUE), add = TRUE)
+    utils::read.csv(con, colClasses = "character", na.strings = character(0),
+                    encoding = "UTF-8")
+  }, error = function(e) {
+    message("[landing] covariate_labels.csv unreadable (", conditionMessage(e),
+            "); codebook covariates carry no value labels")
+    NULL
+  })
+  if (is.null(d) || !nrow(d)) return(list())
+  split(d, tolower(d$table))
+}
+
+# tolower(table) -> that table's source-codebook links. Help, not fact: a
+# failed fetch leaves the page pointing at the deposit, as before (irw#2766).
+.read_codebook_links <- function() {
+  d <- tryCatch({
+    con <- url(CODEBOOK_LINKS_URL)
+    on.exit(try(close(con), silent = TRUE), add = TRUE)
+    utils::read.csv(con, colClasses = "character", na.strings = character(0),
+                    encoding = "UTF-8")
+  }, error = function(e) {
+    message("[landing] codebook_links.csv unreadable (", conditionMessage(e),
+            "); pages point at the source deposit")
+    NULL
+  })
+  if (is.null(d) || !nrow(d)) return(list())
+  split(d, tolower(d$table))
+}
+
+# The data standard's schema table: list(exact = name -> first sentence,
+# family = prefix -> first sentence). Same parsing rules as stage 14 and the
+# MCP: a backticked `name*` or `nameN` is a family.
+.read_standard <- function() {
+  lines <- tryCatch(readLines(url(STANDARD_RAW_URL), warn = FALSE, encoding = "UTF-8"),
+    error = function(e) {
+      message("[landing] datastandard.md unreadable (", conditionMessage(e),
+              "); codebook rows carry no definitions")
+      character(0)
+    })
+  exact <- list(); family <- list()
+  for (ln in grep("^\\| `", lines, value = TRUE)) {
+    cells <- trimws(strsplit(sub("^\\|", "", sub("\\|\\s*$", "", ln)), "|", fixed = TRUE)[[1]])
+    if (length(cells) < 3) next
+    rule <- gsub("\\*\\*|`", "", paste(cells[-(1:2)], collapse = " | "))
+    first <- regmatches(rule, regexpr("^.+?[.](?=\\s|$)", rule, perl = TRUE))
+    first <- if (length(first)) first else rule
+    names_ <- regmatches(cells[1], gregexpr("`[^`]+`", cells[1]))[[1]]
+    for (nm in gsub("`", "", names_)) {
+      if (grepl("\\*$", nm) || grepl("^[A-Za-z_]+N$", nm)) {
+        key <- sub(".$", "", nm)
+        if (is.null(family[[key]])) family[[key]] <- first
+      } else if (!grepl("^[A-Za-z_]+1$", nm) && is.null(exact[[nm]])) {
+        exact[[nm]] <- first
+      }
+    }
+  }
+  list(exact = exact, family = family)
+}
+
 as_df <- function(tbl) as.data.frame(tbl$to_tibble(), stringsAsFactors = FALSE)
 
 # rbind for frames whose columns differ (the non-core metadata tables each carry
@@ -210,6 +312,9 @@ bind_fill <- function(a, b) {
 
 # The table's source, as the packages' `source =` argument spells it.
 source_of <- function(dataset) {
+  for (src in names(FAMILY_SHARDS)) {
+    if (dataset %in% names(FAMILY_SHARDS[[src]])) return(src)
+  }
   i <- match(dataset, NONCORE$dataset)
   if (is.na(i)) "core" else NONCORE$source[i]
 }
@@ -232,6 +337,281 @@ kv_rows <- function(pairs) {
              "</td></tr>"),
       character(1)), collapse = "\n"),
     "\n</table>\n")
+}
+
+# What the columns mean (ben-domingue/irw#2755). A user asked where the codebook
+# for gilbert_meta_10's cluster_id and block_id was; the page listed the names
+# and nothing else. Columns the data standard defines mean the same thing in
+# every table, so they link there; for everything else -- item codes, cov_
+# values -- the codebook is the source's, and the page says so rather than
+# implying the IRW holds one.
+STANDARD_URL  <- "https://github.com/ben-domingue/irw/blob/main/datastandard.md"
+CONJ_STANDARD_URL <- "https://itemresponsewarehouse.org/conjoint_standard.html"
+RANK_STANDARD_URL <- "https://itemresponsewarehouse.org/rankings_standard.html"
+STANDARD_COLS <- c("id", "item", "resp", "resp_raw", "wave", "treat", "rt", "date",
+                   "rater", "item_family", "cluster_id", "block_id", "std_baseline")
+columns_note <- function(x) {
+  # A competitions table's agent_a/agent_b/winner are the IRW's own layout.
+  if (identical(x$src, "comp")) return("")
+  # A conjoint table's layout is the conjoint standard's, not datastandard.md's;
+  # its attr_ columns hold the levels as respondents saw them.
+  if (identical(x$src, "conj")) return(paste0(
+    "<p class=\"note\">The layout (one row per respondent, task and profile; ",
+    "<code>choice</code>/<code>rating</code> outcomes; <code>attr_</code> columns holding ",
+    "each attribute level as displayed) is defined in the <a href=\"", CONJ_STANDARD_URL,
+    "\">IRW conjoint standard</a>. What the outcomes asked is under Design above.</p>\n"))
+  # A rankings table keeps the core names, but resp is a position as recorded:
+  # skips are gaps and a candidate marked twice is two rows (rankings standard).
+  if (identical(x$src, "rank")) return(paste0(
+    "<p class=\"note\">The layout (one row per respondent, ranking and marked position; ",
+    "<code>resp</code> the position as recorded, 1 = first choice; <code>item</code> a candidate ",
+    "code <code>c01</code>, <code>c02</code>, … or a reserved value) is defined in the <a href=\"",
+    RANK_STANDARD_URL, "\">IRW rankings standard</a>. Skipped positions are gaps and ",
+    "duplicate marks are kept, so compress with <code>irw_rank_compress()</code> / ",
+    "<code>irw.rank_compress()</code> before a person-by-item pivot.</p>\n"))
+  std <- x$variables[x$variables %in% STANDARD_COLS | startsWith(x$variables, "std_baseline")]
+  first <- if (length(std)) paste0(
+    paste0("<code>", vapply(std, esc, character(1)), "</code>", collapse = ", "),
+    if (length(std) == 1) " is" else " are",
+    " defined in the <a href=\"", STANDARD_URL, "\">IRW data standard</a> and mean the same in every table. ") else ""
+  # The data URL field also holds "NA" and "Author Permission"; link only a URL.
+  url <- if (!blank(x$source_url) && grepl("^https?://", x$source_url)) x$source_url else ""
+  others <- if (nzchar(first)) "For the other columns" else "For what these columns mean"
+  rest <- if (x$src == "sim") {
+    if (nzchar(url)) paste0("The other columns are set by the <a href=\"", esc(url),
+                            "\">generating script</a>.") else ""
+  } else paste0(others, ", including what item codes and covariate values stand for, ",
+    if (nzchar(cbl <- source_codebook_html(x$cblinks))) paste0("see ", cbl, ".")
+    else if (nzchar(url)) paste0("any codebook is the one released with the <a href=\"", esc(url),
+                            "\">source data</a>.")
+    else "see the source cited above.")
+  if (!nzchar(first) && !nzchar(rest)) return("")
+  paste0("<p class=\"note\">", first, rest, "</p>\n")
+}
+
+# The Codebook section (ben-domingue/irw#2763): one row per column, from
+# column_docs.csv and the data standard. It is a reconstruction -- what the
+# standard says the column is, and the source column the build script renamed
+# it from -- and opens by saying so (Ben, 2026-10-02). Nothing here infers a
+# meaning from a column's name: a column with neither a definition nor a traced
+# source says it is not documented. Returns "" when there are no rows, and the
+# page keeps the plain column list.
+SCRIPT_BLOB <- "https://github.com/ben-domingue/irw/blob/main/"
+
+# A covariate's value labels, in code order: "1 = Rural · 2 = Urban". More
+# than eight fold into a <details>. Labels are the source's own words; when
+# every code shares the withheld-institution label, decoding would only merge
+# distinct groups, so the row says what the codes are instead.
+VALUES_INLINE_MAX <- 8
+WITHHELD_LABEL <- "[institution name withheld]"
+values_html <- function(labels, column) {
+  if (is.null(labels) || !nrow(labels)) return("")
+  v <- labels[labels$covariate == column, , drop = FALSE]
+  if (!nrow(v)) return("")
+  num <- suppressWarnings(as.numeric(v$code))
+  v <- v[order(is.na(num), num, v$code, method = "radix"), , drop = FALSE]
+  if (all(v$label == WITHHELD_LABEL))
+    return(paste0("<span class=\"vals\">", nrow(v),
+                  " codes, each an institution; names withheld.</span>"))
+  pairs <- paste0("<span class=\"val\"><code>", vapply(v$code, esc, character(1)),
+                  "</code>&nbsp;=&nbsp;", vapply(v$label, esc, character(1)), "</span>")
+  if (nrow(v) <= VALUES_INLINE_MAX)
+    paste0("<span class=\"vals\">", paste(pairs, collapse = " &middot; "), "</span>")
+  else paste0("<details class=\"vals\"><summary>", nrow(v), " labelled values</summary>",
+              paste(pairs, collapse = " &middot; "), "</details>")
+}
+# "the source's codebook, <a>file</a>" -- or "" when none was found, and the
+# caller keeps its deposit link. These kinds are shown, in this order:
+#   recorded_at_ingest    the codebook file whoever built the table named when
+#                         staging it (irw#2770): a person read it
+#   recorded_by_review    a statistics office's codebook found by review
+#                         (irw#2787 step 3): a person or agent opened it and
+#                         recorded the evidence. Those codebooks (a CIS
+#                         codigo, say) list the columns but often not the
+#                         response codes, so the same review's questionnaire
+#                         is shown beside it
+#   typed_codebook        a document the repository itself types as a codebook
+#                         (LDbase "Codebook: ..."; irw#2787)
+#   package_doc           a CRAN package's help page for the dataset the
+#                         table's build script loads (irw#2787)
+#   name_codebook         a file whose NAME says codebook / data dictionary / ...
+#   readme_names_columns  a README whose TEXT names at least three of this
+#                         table's own column or item names (irw#2766 follow-on;
+#                         a sample of README-only hits split about half
+#                         describing the variables, half install steps and
+#                         folder layouts, so the name alone is not enough)
+#   doc_names_columns     a journal supplementary document (PLOS, Europe PMC;
+#                         .docx/.pdf/.txt, never the data) whose TEXT names at
+#                         least three of this table's names (irw#2792)
+#   questionnaire         a supplementary file the authors caption as the
+#                         questionnaire or instrument: it shows the items, so
+#                         it is worded softly (irw#2792)
+# A README is shown only when no codebook-named file was found. Other README
+# hits and Dataverse DDI exports stay in the CSV for the MCP. A deposit with
+# more than SOURCE_CODEBOOKS_MAX of a kind -- one per scale, say -- gets one
+# line pointing at the deposit: picking the right one would mean decoding
+# abbreviations, which is a guess.
+SOURCE_CODEBOOKS_MAX <- 3
+source_codebook_html <- function(links) {
+  if (is.null(links) || !nrow(links)) return("")
+  for (kind in c("recorded_at_ingest", "recorded_by_review", "typed_codebook", "package_doc", "name_codebook",
+                 "readme_names_columns", "doc_names_columns", "questionnaire")) {
+    l <- links[links$how_found == kind, , drop = FALSE]
+    l <- l[!duplicated(l$url), , drop = FALSE]
+    if (!nrow(l)) next
+    what <- switch(kind, readme_names_columns = c("README", "READMEs"),
+                   package_doc = c("package documentation", "package help pages"),
+                   doc_names_columns = c("documentation", "documents"),
+                   questionnaire = c("questionnaire", "questionnaires"),
+                   c("codebook", "codebook files"))
+    # the cap stops the page choosing among a deposit's per-scale files; a
+    # reviewed row was chosen for this table (one per wave it pools, say)
+    if (nrow(l) > SOURCE_CODEBOOKS_MAX && kind != "recorded_by_review") {
+      dep <- l$deposit_url[nzchar(l$deposit_url)][1]
+      place <- if (all(l$host %in% c("plos", "epmc"))) "the article" else "the source deposit"
+      where <- if (!is.na(dep)) paste0("<a href=\"", esc(dep), "\">", place, "</a>") else place
+      return(paste0("one of the ", nrow(l), " ", what[2], " in ", where))
+    }
+    files <- paste0("<a href=\"", vapply(l$url, esc, character(1)), "\"><code>",
+                    vapply(basename(l$file_name), esc, character(1)), "</code></a>")
+    whose <- if (kind == "package_doc") "the package&rsquo;s " else "the source&rsquo;s "
+    out <- paste0(whose, if (kind == "package_doc") "documentation" else what[1], ", ",
+                  paste(files, collapse = ", "),
+                  if (kind == "questionnaire") paste0(", which ", if (nrow(l) > 1) "show" else "shows",
+                                                       " the item wording") else "")
+    if (kind == "recorded_by_review") {
+      q <- source_codebook_html(links[links$how_found == "questionnaire", , drop = FALSE])
+      if (nzchar(q)) out <- paste0(out, ", and ", sub("^the source&rsquo;s ", "its ", q))
+    }
+    return(out)
+  }
+  ""
+}
+
+# One line on respondent uniqueness, under the covariate list that prompts the
+# question (irw#3273, from the #3232 ruling). `k1_prop` is the share of a table's
+# respondents alone in their cell when respondents are grouped by the `cov_*`
+# quasi-identifiers the table publishes -- nobody else in the table sharing their
+# exact combination of age, sex, region and the rest.
+#
+# Said here because the alternative is that it is not said anywhere a reader will
+# look: the covariate list shows eight demographics without showing that eight
+# demographics on 3,000 people leaves nearly all of them unique, and before this
+# column existed answering that took a 2,942-query study. It is deliberately a
+# statement and not a warning. The number is a necessary condition for
+# re-identification rather than re-identification; it is mostly a sample-size
+# effect, but only on the tables where that is true, which is why that clause is
+# conditional below; and the IRW's position -- republish what the source
+# published, never at finer granularity -- is what the sentence ends on, so a
+# reader who wants the reasoning has one click to it.
+#
+# Blank for the non-core families, whose metadata tables carry no such column,
+# and blank at zero quasi-identifiers: "0% unique on 0 covariates" is noise on
+# the 1,799 core tables that publish no demographics at all.
+uniqueness_html <- function(x) {
+  nq <- suppressWarnings(as.numeric(x$m$n_quasi_identifiers %||% NA))
+  k  <- suppressWarnings(as.numeric(x$m$k1_prop %||% NA))
+  n  <- suppressWarnings(as.numeric(x$m$n_participants %||% NA))
+  if (!length(nq) || !length(k) || is.na(nq) || is.na(k) || nq < 1) return("")
+  cols <- paste0("the ", if (nq == 1) "single covariate" else paste(nq, "covariates"), " above")
+  # The arithmetic caveat is true of the corpus and not of every table in it:
+  # the median table under 100 respondents is 41.2% unique against 0.3% above
+  # 10,000, so uniqueness there really is a sample-size effect. On a table of
+  # thousands it is not, and friedman_2018_risks_discrimination -- 100% of
+  # 3,110 on twelve quasi-identifiers -- is exactly the page where saying "it
+  # is mostly arithmetic" would be the misleading sentence. So it is said only
+  # where it holds.
+  small <- !is.na(n) && n < 1000
+  fact <- if (k <= 0)
+    paste0("No respondent in this table is unique on ", cols,
+           ": every one of them shares their combination with someone else.")
+  else paste0(
+    if (k < 0.005) "Under 1%" else if (k > 0.995 && k < 1) "Over 99%"
+    else paste0(format(round(100 * k), big.mark = ","), "%"),
+    " of this table&rsquo;s respondents are alone in their combination of ", cols,
+    " &mdash; no one else in the table shares it.")
+  paste0("<p class=\"note\"><strong>Respondent uniqueness.</strong> ", fact,
+    if (k > 0) paste0(" That is a necessary condition for re-identification and not ",
+                      "re-identification itself",
+                      if (small) ", and on a sample this size it is largely arithmetic" else "",
+                      ".") else "",
+    " The IRW republishes the demographics its sources published and never at finer ",
+    "granularity: see the <a href=\"", STANDARD_URL, "\">data standard</a>.</p>\n")
+}
+
+codebook_html <- function(x, standard) {
+  d <- x$coldocs
+  if (is.null(d) || !nrow(d) || !length(x$variables)) return("")
+  d <- d[match(x$variables, d$column, nomatch = 0), , drop = FALSE]  # the table's own order
+  if (!nrow(d)) return("")
+  meaning_of <- function(col, defined_by) {
+    if (defined_by == "standard") return(standard$exact[[col]] %||% "")
+    if (defined_by == "standard_family" && !startsWith(col, "cov_")) {
+      fam <- names(standard$family)[startsWith(col, names(standard$family))]
+      if (length(fam)) return(standard$family[[fam[which.max(nchar(fam))]]])
+    }
+    ""
+  }
+  row_html <- function(i) {
+    r <- d[i, ]
+    line_url <- if (nzchar(r$script) && nzchar(r$script_line))
+      paste0(SCRIPT_BLOB, r$script, "#L", r$script_line) else ""
+    src <- if (r$basis == "renamed")
+      paste0("<a href=\"", esc(line_url), "\"><code>", esc(r$source_column), "</code></a>")
+    else if (r$basis == "built")
+      paste0("<a href=\"", esc(line_url), "\">made in the build script</a>")
+    else "<span class=\"muted\">not traced</span>"
+    meaning <- meaning_of(r$column, r$defined_by)
+    chip <- if (r$defined_by == "standard") c("std", "IRW standard")
+      else if (startsWith(r$column, "cov_")) c("cov", "Covariate")
+      else if (r$documented == "true") c("src", "From source")
+      else c("none", "Not documented")
+    what <- if (nzchar(meaning)) esc(meaning)
+      else if (startsWith(r$column, "cov_")) ""
+      else if (r$documented == "true") "Not defined by the IRW standard; the source column&rsquo;s codebook entry gives its meaning."
+      else "Not documented by the IRW; see the source&rsquo;s codebook."
+    what <- paste0(what, values_html(x$covlabels, r$column))
+    paste0("<tr><td><code class=\"col\">", esc(r$column), "</code></td>",
+           "<td><span class=\"chip ", chip[1], "\">", chip[2], "</span> ", what, "</td>",
+           "<td>", src, "</td></tr>")
+  }
+  group <- ifelse(d$defined_by == "standard", "std",
+                  ifelse(startsWith(d$column, "cov_"), "cov", "other"))
+  labels <- c(std = "IRW standard columns", cov = "Respondent covariates", other = "Other columns")
+  body <- paste(unlist(lapply(names(labels), function(g) {
+    idx <- which(group == g)
+    if (!length(idx)) return(NULL)
+    c(paste0("<tr class=\"grp\"><th colspan=\"3\">", labels[[g]], "</th></tr>"),
+      vapply(idx, row_html, character(1)))
+  })), collapse = "\n")
+  scripts <- unique(d$script[nzchar(d$script)])
+  script_link <- if (length(scripts) == 1)
+    paste0(" and the script that built it, <a href=\"", SCRIPT_BLOB, esc(scripts), "\"><code>",
+           esc(basename(scripts)), "</code></a>") else if (length(scripts) > 1)
+    " and the scripts that built it" else ""
+  url <- if (!blank(x$source_url) && grepl("^https?://", x$source_url)) x$source_url else ""
+  caveat <- paste0(
+    "<p class=\"cbnote\">This codebook is reconstructed by the IRW from the ",
+    "<a href=\"", STANDARD_URL, "\">IRW data standard</a>", script_link, ". ",
+    "It is our best reading, not the source&rsquo;s own codebook, and it may contain mistakes. ",
+    "Where the two disagree, the ",
+    if (nzchar(url)) paste0("<a href=\"", esc(url), "\">source data</a>") else "source data",
+    " are the authority. If you find an error, please ",
+    "<a href=\"", ISSUE_URL, "new\">tell us</a>.</p>\n")
+  labelled <- !is.null(x$covlabels) && nrow(x$covlabels) > 0
+  values <- if (x$src == "sim") "" else paste0(
+    "<p class=\"note\">",
+    if (labelled) "Covariate value labels are the source&rsquo;s own, as the IRW recorded them. " else "",
+    "What item codes", if (labelled) " and any unlabelled values" else " and covariate values",
+    " stand for is in ",
+    if (nzchar(cbl <- source_codebook_html(x$cblinks))) cbl
+    else paste0("the codebook released with the ",
+                if (nzchar(url)) paste0("<a href=\"", esc(url), "\">source data</a>") else "source data"),
+    ".</p>\n")
+  paste0(caveat,
+         "<div class=\"scroll\"><table class=\"cb\">\n",
+         "<thead><tr><th>Column</th><th>What it is</th><th>Source column</th></tr></thead>\n",
+         "<tbody>\n", body, "\n</tbody></table></div>\n", values)
 }
 
 section <- function(title, body, id = NULL) {
@@ -389,6 +769,8 @@ build_croissant <- function(x) {
   std <- switch(x$src,
     comp = c("agent_a", "agent_b", "winner"),
     nom  = c("id", "item", "resp", "text"),
+    conj = c("id", "task", "profile", "choice", "rating"),
+    rank = c("id", "task", "item", "resp"),
     c("id", "item", "resp"))
   core <- intersect(std, x$variables)
   fields <- lapply(core, function(v) {
@@ -396,7 +778,8 @@ build_croissant <- function(x) {
          "@id"   = paste0("responses/", v),
          name    = v,
          description = paste0("The '", v, "' column of the IRW table."),
-         dataType = if (v == "resp") "sc:Float" else "sc:Text",
+         dataType = if (v %in% c("resp", "choice", "rating")) "sc:Float" else
+                    if (v %in% c("task", "profile")) "sc:Integer" else "sc:Text",
          source  = list("fileObject" = list("@id" = "redivis-table"),
                         "extract"    = list("column" = v)))
   })
@@ -468,6 +851,10 @@ build_croissant <- function(x) {
       "@type" = "cr:RecordSet", "@id" = "responses", name = "responses",
       description = if (x$src == "comp")
         "One row per comparison between two agents, per the IRW competitions format."
+        else if (x$src == "conj")
+        "One row per respondent, task and profile, per the IRW conjoint format."
+        else if (x$src == "rank")
+        "One row per respondent, ranking and marked position (resp = the position, as recorded), per the IRW rankings format."
         else "One row per person-item response, per the IRW data standard.",
       field = fields
     ))
@@ -507,6 +894,26 @@ PAGE_CSS <- paste0(
 ".btn.primary{background:#8c1515;color:#fff}",
 ".btn:hover{background:#f7eded}.btn.primary:hover{background:#6f1010}",
 ".note{font-size:.88rem;color:#555}",
+".cbnote{font-size:.88rem;color:#444;background:#f6f7f9;border-left:4px solid #9aa3b2;",
+"padding:.5rem .8rem;margin:.2rem 0 .8rem}",
+".scroll{overflow-x:auto}",
+"table.cb{border-collapse:collapse;width:100%;font-size:.88rem;min-width:34rem}",
+"table.cb thead th{text-align:left;font-weight:600;color:#444;padding:.35rem .6rem .35rem 0;",
+"border-bottom:1px solid #e3e3e3}",
+"table.cb td{padding:.38rem .6rem .38rem 0;vertical-align:top;border-top:1px solid #f0f0f0}",
+"table.cb tr.grp th{text-align:left;font-size:.74rem;text-transform:uppercase;letter-spacing:.06em;",
+"color:#777;padding:.9rem 0 .2rem;font-weight:600}",
+"code.col{background:#f2f2f4;border-radius:3px;padding:.05rem .35rem;font-size:.84rem;white-space:nowrap}",
+".chip{display:inline-block;font-size:.7rem;border-radius:3px;padding:0 .35rem;margin-right:.25rem;",
+"border:1px solid;white-space:nowrap}",
+".chip.std{color:#1d5e3a;border-color:#a9d3b8;background:#eef8f1}",
+".chip.cov{color:#3e4a6b;border-color:#c3cbe0;background:#f1f3f9}",
+".chip.src{color:#6b4a12;border-color:#e3cd9b;background:#fbf6ea}",
+".chip.none{color:#8c1515;border-color:#e6b9b9;background:#fbefef}",
+".muted{color:#777;font-style:italic}",
+".vals{display:block;font-size:.84rem;color:#444;margin-top:.15rem}",
+".val{white-space:nowrap}",
+"details.vals summary{cursor:pointer;color:#8c1515}",
 "th.s{cursor:pointer;user-select:none}th.s:hover{color:#8c1515}",
 "td.restrict{background:#fff6e5}",
 ".flag{display:inline-block;font-size:.76rem;background:#fff6e5;border:1px solid #f0c987;",
@@ -527,6 +934,63 @@ licence_terms <- function(lic) {
     if (grepl("\\bND\\b", u)) "no derivative works may be shared",
     if (grepl("\\bNC\\b|\\bND\\b", u) && grepl("\\bSA\\b", u))
       "adaptations must be shared under the same licence")
+}
+
+# A conjoint table's design (conj_metadata's design columns, conj_outcomes'
+# wording), in the codes data/conjoint/README.md defines. "unknown" is shown as
+# such: it means no source states the fact, and the README forbids guessing.
+# The topic tags (irw#2954) lead: `domain` is what the study is about, one or
+# more codes joined with ";" (primary first), and `choice_object` what one
+# profile represents. They are shown as the codes the packages filter on
+# (irw_filter(source = "conj", domain = ...)), with underscores as spaces.
+CONJ_PROVENANCE <- c(recorded = "recorded in the deposit",
+                     inferred = "inferred from row order",
+                     unknown  = "unknown")
+conj_tag_text <- function(v) {
+  v <- chr(v)
+  if (!nzchar(v)) return("")
+  paste(gsub("_", " ", trimws(strsplit(v, ";", fixed = TRUE)[[1]]), fixed = TRUE), collapse = ", ")
+}
+design_html <- function(x) {
+  m <- x$m
+  restr <- chr(m$restrictions)
+  restr_txt <- if (!nzchar(restr)) "" else switch(restr,
+    none     = "none (levels randomized independently and uniformly, per the source)",
+    yes      = "yes (stated by the source)",
+    observed = "observed in the data (not documented by the source)",
+    restr)
+  if (restr %in% c("yes", "observed") && !blank(m$restrictions_note))
+    restr_txt <- paste0(restr_txt, ": ", chr(m$restrictions_note))
+  prov <- function(v) { v <- chr(v); if (v %in% names(CONJ_PROVENANCE)) CONJ_PROVENANCE[[v]] else v }
+  out <- kv_rows(list(
+    list("Topic",                    conj_tag_text(m$domain)),
+    list("A profile represents",     conj_tag_text(m$choice_object)),
+    list("Country",                  gsub(";", ", ", chr(m$country))),
+    list("Language shown",           gsub(";", ", ", chr(m$display_language))),
+    list("Language of stored levels", gsub(";", ", ", chr(m$label_language))),
+    list("Randomization restrictions", restr_txt),
+    list("Task order",               prov(m$task_source)),
+    list("Profile position",         prov(m$profile_source))))
+  warn <- c(
+    if (restr %in% c("yes", "observed"))
+      "Because the attribute levels were not randomized independently, an estimator has to account for the restriction; a plain difference in means across levels can mislead.",
+    if ("inferred" %in% c(chr(m$task_source), chr(m$profile_source)))
+      "Task order or profile position was rebuilt from row order; analyses of position or task order should leave it out.")
+  if (length(warn)) out <- paste0(out, "<p class=\"note\">", esc(paste(warn, collapse = " ")), "</p>\n")
+  o <- x$outcomes
+  if (!is.null(o) && nrow(o)) {
+    o <- o[order(o$outcome, method = "radix"), , drop = FALSE]
+    out <- paste0(out, "<p>Outcomes:</p>\n", kv_rows(lapply(seq_len(nrow(o)), function(i) {
+      r <- o[i, , drop = FALSE]
+      detail <- if (chr(r$type) == "rating") {
+        end <- function(v, a) paste0(num_fmt(v), if (!blank(a)) paste0(" (", chr(a), ")") else "")
+        paste0("rating, ", end(r$scale_min, r$low_anchor), " to ", end(r$scale_max, r$high_anchor))
+      } else paste0("choice", if (chr(r$opt_out) == "yes") ", opt-out allowed"
+                              else if (chr(r$opt_out) == "no") ", forced" else "")
+      list(chr(r$outcome), paste0(chr(r$question), " [", detail, "]"))
+    })))
+  }
+  out
 }
 
 build_page <- function(x) {
@@ -577,7 +1041,35 @@ build_page <- function(x) {
     list("Responses per respondent",  num_fmt(x$m$responses_per_participant)),
     list("Responses per item",        num_fmt(x$m$responses_per_item)),
     list("Density",                   num_fmt(x$m$density)),
-    list("Longitudinal",              x$m$longitudinal)))
+    list("Longitudinal",              x$m$longitudinal),
+    # Conjoint (irw#2887): conj_metadata counts rows, not responses. Rankings
+    # (irw#3024) shares n_respondents/n_rows/n_tasks with its own meaning, so
+    # each family labels them itself.
+    list(if (x$src == "rank") "Rankers" else "Respondents", num_fmt(x$m$n_respondents)),
+    list(if (x$src == "rank") "Marked positions (one row each)" else "Rows (one per respondent, task and profile)",
+         num_fmt(x$m$n_rows)),
+    list(if (x$src == "rank") "Rankings per respondent" else "Tasks per respondent (most)",
+         num_fmt(x$m$n_tasks)),
+    # Rankings design record (data/rankings/README.md, "Design record").
+    list("Counting method",           x$m$method),
+    list("Seats",                     x$m$seats),
+    list("Positions offered",         num_fmt(x$m$n_positions)),
+    list("Candidates",                num_fmt(x$m$n_candidates)),
+    list("Ballots cast",              num_fmt(x$m$n_ballots_cast)),
+    list("Ballots with marks",        num_fmt(x$m$n_ballots_with_marks)),
+    list("Duplicate marks",           num_fmt(x$m$n_duplicate_marks)),
+    list("Overvotes",                 num_fmt(x$m$n_overvotes)),
+    list("Write-ins",                 num_fmt(x$m$n_writeins)),
+    list("Write-in allowed",          x$m$write_in_allowed),
+    list("Candidate order",           x$m$candidate_order),
+    list("Jurisdiction",              x$m$jurisdiction),
+    list("Contest date",              x$m$date),
+    list("Office",                    x$m$office),
+    list("Profiles per task",         num_fmt(x$m$n_profiles)),
+    list("Attributes",                num_fmt(x$m$n_attributes)),
+    list("Tasks with no profile chosen", num_fmt(x$m$n_optout_tasks))))
+
+  design <- if (x$src == "conj") design_html(x) else ""
 
   about <- kv_rows(list(
     list("Description", x$description),
@@ -598,9 +1090,54 @@ build_page <- function(x) {
     about <- paste0(about, "<p class=\"note\">", note, "</p>\n")
   }
 
+  # The Classification section showed tags as bare facts, with nothing saying
+  # where a value came from and no sign of which collections the table is in
+  # (review R-33, ben-domingue/irw#3225). The Codebook block on this same page
+  # had modelled the right pattern for two years -- open by saying what the
+  # thing is -- so this follows it rather than inventing a second voice.
+  #
+  # The provenance sentence is deliberately general. Nothing published per row
+  # records WHICH values a human wrote and which the tagger did: the tags table
+  # is eight value columns and a table name. So the note says what the mixture
+  # is and sends a reader who needs the per-column answer to the page that has
+  # it, instead of implying a precision the data cannot support.
   tagbody <- ""
   if (length(x$tags)) {
-    tagbody <- kv_rows(lapply(names(x$tags), function(k) list(k, x$tags[[k]])))
+    tagbody <- paste0(
+      kv_rows(lapply(names(x$tags), function(k) list(k, x$tags[[k]]))),
+      "<p class=\"note\">These are classifications the IRW records, not the ",
+      "study&rsquo;s own words. Some were annotated by hand and some written by ",
+      "an automated tagger whose output is published only where it clears a ",
+      "measured accuracy bar; which values came from which is not recorded per ",
+      "table. Coverage and accuracy per column, and what is held back, are on ",
+      "<a href=\"", SITE_URL, "/tags_quality.html\">Tag quality</a>.</p>\n")
+  }
+  if (!is.null(x$collections) && nrow(x$collections)) {
+    cl <- x$collections
+    cl <- cl[order(tolower(ifelse(is.na(cl$label) | !nzchar(cl$label),
+                                  cl$collection, cl$label))), , drop = FALSE]
+    items <- vapply(seq_len(nrow(cl)), function(i) {
+      lab <- if (!blank(cl$label[i])) chr(cl$label[i]) else ""
+      # `basis` is the record of HOW this table got in: a rule, or a human
+      # decision with the evidence named. It travels with the membership
+      # precisely so a reader can weigh it, so it belongs on the page.
+      how <- trimws(sub("^rule:.*", "by rule", chr(cl$basis[i])))
+      paste0("<li>", if (nzchar(lab)) paste0(esc(lab), " ") else "",
+             "<code>", esc(cl$collection[i]), "</code>",
+             if (nzchar(how)) paste0(" &mdash; <span class=\"note\">",
+                                     esc(how), "</span>") else "", "</li>")
+    }, character(1))
+    tagbody <- paste0(
+      tagbody,
+      "<p>This table is in ", nrow(cl),
+      if (nrow(cl) == 1) " collection" else " collections",
+      ". Each membership records how it was decided:</p>\n",
+      "<ul>\n", paste0(items, collapse = "\n"), "\n</ul>\n",
+      "<p class=\"note\">Membership is the IRW&rsquo;s judgment and is worth ",
+      "checking before you use a collection as a sample. A hand-curated list is ",
+      "a snapshot: it is not re-checked when tables are added, so a table that ",
+      "would qualify may be missing. See <a href=\"", SITE_URL,
+      "/collections.html\">Collections</a>.</p>\n")
   }
 
   itext <- ""
@@ -634,7 +1171,7 @@ build_page <- function(x) {
   if (length(x$variables)) {
     vars <- paste0("<p>",
       paste0("<span class=\"pill\">", vapply(x$variables, esc, character(1)),
-             "</span>", collapse = ""), "</p>\n")
+             "</span>", collapse = ""), "</p>\n", columns_note(x))
   }
 
   btn <- function(href, label, hint, cls = "btn")
@@ -689,13 +1226,24 @@ btn(x$redivis_url, "Browse on Redivis", "sign in to download"),
 "</div>\n",
 "<p class=\"note\">This table is larger than Redivis serves without a login, so ",
 "download it with one of the packages below or while signed in to Redivis.</p>\n"),
-"<p class=\"note\">Or load it directly in R or Python:</p>\n",
-"<pre># R\ninstall.packages(\"remotes\")\nremotes::install_github(\"itemresponsewarehouse/Rpkg\")\n",
+"<p class=\"note\">Or load it directly in R (no account needed with <code>irw</code> 1.4.0 or later) ",
+"or Python (needs a free Redivis account; the first call opens a browser to sign in):</p>\n",
+"<pre># R\ninstall.packages(\"irw\")\n",
 "library(irw)\ndf &lt;- irw_fetch(\"", esc(x$table), "\"",
 if (x$src != "core") paste0(", source = \"", x$src, "\"") else "", ")</pre>\n",
 "<pre># Python\npip install irw\n\n",
 "import irw\ndf = irw.fetch(\"", esc(x$table), "\"",
-if (x$src != "core") paste0(", source=\"", x$src, "\"") else "", ")</pre>\n")
+if (x$src != "core") paste0(", source=\"", x$src, "\"") else "", ")</pre>\n",
+# Stata reads the anonymous CSV above rather than the Redivis SDK, which has
+# no Stata client. So the snippet appears on exactly the pages that offer the
+# CSV button: over ANON_MAX_BYTES, rows_url is "" and Stata cannot get the
+# table at all without a token.
+if (nzchar(x$rows_url)) paste0(
+"<p class=\"note\">Or in <a href=\"https://github.com/itemresponsewarehouse/Stata-pkg\">",
+"Stata</a>, which reads the same no-account CSV as the button above:</p>\n",
+"<pre>* Stata\nnet install irw, from(\"https://raw.githubusercontent.com/itemresponsewarehouse/Stata-pkg/main/\")\n\n",
+"irw_fetch ", esc(x$table), ", clear",
+if (x$src != "core") paste0(" source(", x$src, ")") else "", "</pre>\n") else "")
 
   prov <- kv_rows(list(
     list("IRW version",               paste0("v", x$irw_version)),
@@ -725,9 +1273,13 @@ related$note,
 section("About this table", about),
 section("Notes", notes, id = "notes"),
 section("Size and shape", size),
+section("Design", design, id = "design"),
 section("Classification", tagbody),
 section("Item text", itext),
-section("Columns", vars),
+{ cb <- codebook_html(x, STANDARD)
+  uniq <- uniqueness_html(x)   # irw#3273; appended to whichever branch renders
+  if (nzchar(cb)) section("Codebook", paste0(cb, uniq), id = "codebook")
+  else section("Columns", paste0(vars, uniq)) },
 section("Get the data", access),
 section("How to cite", cite),
 section("Related tables", related$list, id = "related"),
@@ -872,6 +1424,10 @@ main <- function() {
   manifest <- .read_manifest()
   aggregators <- .read_aggregators()
   notes_of <- .read_data_notes()
+  coldocs_of <- .read_column_docs()
+  covlabels_of <- .read_covariate_labels()
+  cblinks_of <- .read_codebook_links()
+  STANDARD <<- .read_standard()
   irw_version <- max(manifest$irw_version)
   pins <- manifest[manifest$irw_version == irw_version, ]
   pin_of <- setNames(pins$redivis_tag, pins$dataset)
@@ -891,22 +1447,56 @@ main <- function() {
   tg    <- as_df(meta_ds$table("tags"))
   itm   <- as_df(meta_ds$table("itemtext_metadata"))
   message("[landing] read irw_meta ", meta_ver, ": ", nrow(md), " metadata rows")
-  # The non-core sources keep their own metadata/biblio (and, for nom, tags)
-  # tables in irw_meta, with no `dataset` column of their own to rely on.
+  # The non-core sources keep their own metadata/biblio (and, for nom, tags;
+  # for conj, outcomes) tables in irw_meta, with no `dataset` column of their own.
+  outc <- data.frame(table = character(0), outcome = character(0), stringsAsFactors = FALSE)
+  meta_tabs <- vapply(meta_ds$list_tables(), function(t) t$name, character(1))
   for (i in seq_len(nrow(NONCORE))) {
     pf <- NONCORE$prefix[i]
+    # An optional family (page_rules.R) whose metadata is not in irw_meta yet
+    # gets no pages this publish, and says so, rather than stopping the render.
+    if (isTRUE(NONCORE$optional[i]) &&
+        !all(paste0(pf, c("_metadata", "_biblio")) %in% meta_tabs)) {
+      message("[landing] ", pf, "_metadata/_biblio not in irw_meta yet; no ",
+              NONCORE$dataset[i], " pages this publish")
+      next
+    }
     m2 <- as_df(meta_ds$table(paste0(pf, "_metadata")))
     m2$dataset <- NONCORE$dataset[i]
     md  <- bind_fill(md,  m2)
     bib <- bind_fill(bib, as_df(meta_ds$table(paste0(pf, "_biblio"))))
     tname <- paste0(pf, "_tags")
-    if (tname %in% vapply(meta_ds$list_tables(), function(t) t$name, character(1)))
-      tg <- bind_fill(tg, as_df(meta_ds$table(tname)))
+    if (tname %in% meta_tabs) tg <- bind_fill(tg, as_df(meta_ds$table(tname)))
+    # conj_outcomes: one row per table x outcome column (what was asked, its scale).
+    oname <- paste0(pf, "_outcomes")
+    if (oname %in% meta_tabs) outc <- bind_fill(outc, as_df(meta_ds$table(oname)))
     message("[landing] read ", pf, "_metadata: ", nrow(m2), " rows")
+  }
+
+  # Collection membership, so a table page can say which collections it is in
+  # (review R-33, ben-domingue/irw#3225). The page carried tags and no
+  # membership, which left discovery entirely to the collections page: a reader
+  # on a table page could not see that it was one of the 20 DASS-21 tables.
+  # Both tables are optional for the same reason the non-core families are -- a
+  # render against an irw_meta that predates them should lose the block, not
+  # the publish.
+  cmem <- data.frame(table = character(0), collection = character(0),
+                     basis = character(0), stringsAsFactors = FALSE)
+  coll <- data.frame(collection = character(0), label = character(0),
+                     coverage = character(0), stringsAsFactors = FALSE)
+  if (all(c("collection_members", "collections") %in% meta_tabs)) {
+    cmem <- as_df(meta_ds$table("collection_members"))
+    coll <- as_df(meta_ds$table("collections"))
+    message("[landing] read collection_members: ", nrow(cmem), " memberships over ",
+            nrow(coll), " collections")
+  } else {
+    message("[landing] collections not in irw_meta yet; table pages omit membership")
   }
 
   key <- function(df) tolower(trimws(as.character(df[[1]])))
   md$.k <- key(md); bib$.k <- key(bib); tg$.k <- key(tg); itm$.k <- key(itm)
+  outc$.k <- key(outc)
+  cmem$.k <- key(cmem)
 
   # One listing per shard, not one request per table: at ~4,000 tables the
   # per-table call was the whole runtime. Each listed table carries Redivis' own
@@ -929,7 +1519,7 @@ main <- function() {
     # Core tables' columns come from irw_meta's `variables`; the non-core
     # metadata tables have none, so their columns are read from Redivis, one call
     # per table (about a hundred in all).
-    if (shard %in% NONCORE$dataset) {
+    if (shard %in% c(NONCORE$dataset, names(FAMILY_SHARD_REFS))) {
       listed[[shard]]$vars <- vapply(tabs, function(t)
         paste(sort(vapply(t$list_variables(), function(v) v$name, character(1))),
               collapse = ","), character(1))
@@ -938,6 +1528,22 @@ main <- function() {
             length(tabs), " tables listed")
   }
   live_names <- unlist(lapply(listed, `[[`, ".k"), use.names = FALSE)
+  # A conj or rank table belongs to the newest shard of its family that lists it
+  # (page_rules.R); conj_metadata and rank_metadata say nothing about shards, so
+  # every row arrives as the family's first shard.
+  md$dataset <- as.character(md$dataset)
+  for (src in names(FAMILY_SHARDS)) {
+    shards <- FAMILY_SHARDS[[src]]
+    todo <- md$dataset %in% names(shards)
+    for (shard in rev(names(shards))) {
+      hit <- todo & md$.k %in% listed[[shard]]$.k
+      md$dataset[hit] <- shard
+      todo <- todo & !hit
+    }
+    message("[landing] ", src, " tables by shard: ", paste(names(shards), vapply(names(shards),
+            function(sh) sum(md$dataset == sh & md$.k %in% listed[[sh]]$.k), numeric(1)),
+            sep = " ", collapse = ", "))
+  }
 
   tables <- page_tables(md, bib, live = live_names)
   # A tombstone for every withdrawn name that has no page. A name withdrawn in
@@ -1051,12 +1657,24 @@ main <- function() {
     size_sentence <- if (src == "comp") paste0(
       num_fmt(mrow$n_responses), " comparisons among ",
       num_fmt(mrow$n_actors), " agents.")
+    else if (src == "conj") paste0(
+      num_fmt(mrow$n_rows), " rated or chosen profiles from ",
+      num_fmt(mrow$n_respondents), " respondents, in up to ",
+      num_fmt(mrow$n_tasks), " tasks of ", num_fmt(mrow$n_profiles),
+      if (identical(num_fmt(mrow$n_profiles), "1")) " profile" else " profiles",
+      " varying on ", num_fmt(mrow$n_attributes), " attributes.")
+    else if (src == "rank") paste0(
+      num_fmt(mrow$n_rows), " marked positions from ",
+      num_fmt(mrow$n_respondents), " rankers over ",
+      num_fmt(mrow$n_items), " options.")
     else paste0(
       num_fmt(mrow$n_responses), if (src == "sim") " simulated" else "", " responses from ",
       num_fmt(mrow$n_participants), " respondents to ",
       num_fmt(mrow$n_items), " items.")
 
-    manifest_pin <- pin_of[[shard]] %||% ""
+    # A dataset the manifest does not track yet (irw_conjoint, 2026-10) has no
+    # pin; [[ ]] on a missing name is an error, not NULL.
+    manifest_pin <- if (shard %in% names(pin_of)) pin_of[[shard]] %||% "" else ""
     if (nzchar(manifest_pin) && nzchar(si$version) && manifest_pin != si$version)
       lagging <- unique(c(lagging, shard))
 
@@ -1079,13 +1697,25 @@ main <- function() {
       doi = doi, doi_url = doi_url,
       keywords = c(unname(unlist(tags)),
                    switch(src, sim = "simulated data", comp = "paired comparisons",
-                          nom = "nominal responses", NULL)),
+                          nom = "nominal responses", conj = "conjoint experiment",
+                          rank = "ranked-choice ballots", NULL)),
       src = src, twin = unname(twin_of[k]), family = family_of[[k]],
+      outcomes = outc[outc$.k == k, , drop = FALSE],
+      collections = {
+        cm <- cmem[cmem$.k == k, , drop = FALSE]
+        if (nrow(cm)) merge(cm, coll[, intersect(c("collection", "label", "coverage"),
+                                                 names(coll))],
+                            by = "collection", all.x = TRUE)
+        else cm
+      },
       truth_cols = grep("^cov_true_", vars, value = TRUE),
       page_url = page_url,
       croissant_url = paste0(SITE_URL, "/tables/", slug, "/croissant.jsonld"),
       issue = if (is.na(issue_of[k])) "" else unname(issue_of[k]),
-      notes = notes_of[[k]]
+      notes = notes_of[[k]],
+      coldocs = coldocs_of[[k]],
+      covlabels = covlabels_of[[k]],
+      cblinks = cblinks_of[[k]]
     )
     agg <- if (nzchar(x$source_via)) aggregators[[x$source_via]] else NULL
     x$via_note   <- if (is.null(agg)) "" else agg$note
@@ -1109,6 +1739,7 @@ main <- function() {
                sim  = "Simulated item response data",
                comp = "Paired-comparison data",
                nom  = "Item response data keeping the option each respondent chose,",
+               conj = "Conjoint experiment data",
                "Item response data"),
              " in the Item Response Warehouse (IRW), a harmonised ",
              "collection of item-level response data for psychometric research."),
@@ -1130,7 +1761,8 @@ main <- function() {
       urls <- c(urls, page_url)
     }
     rows[[length(rows) + 1]] <- list(table = x$table, slug = slug, shard = shard,
-                                     n_responses = mrow$n_responses,
+                                     # conj and rank have no responses; their count is rows
+                                     n_responses = if (src %in% c("conj", "rank")) mrow$n_rows else mrow$n_responses,
                                      license = x$license, issue = x$issue)
     if (!nzchar(x$rows_url)) too_big <- c(too_big, x$table)
   }

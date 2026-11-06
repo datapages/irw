@@ -22,9 +22,9 @@ exact <- reg$collection[reg$kind == "instrument" & reg$coverage == "curated-only
 KIND_META <- tibble::tribble(
   ~kind,        ~heading,                     ~blurb,
   "design",     "Study &amp; instrument design",
-    "How the study was run, and what structure the data carries. Derived from the columns each table actually has, so these cover every documented table.",
+    "How the study was run, and what structure the data carries. Derived from the columns each table actually has, so these cover every documented table; the exceptions are `continuous_response` and `trials`, which are hand-curated.",
   "instrument", "Instrument family",
-    "Which measure was administered. These group together tables that record the same instrument under different names &mdash; 63 Big Five tables are spread across more than forty spellings of the construct name.",
+    "Which measure was administered. These group together tables that record the same instrument under different names &mdash; the Big Five tables alone are spread across more than forty spellings of the construct name.",
   "construct",  "Construct",
     "What is being measured, across instruments."
 )
@@ -36,6 +36,13 @@ back the tables, ready to fetch.
 
 A table belongs to as many collections as apply: `frac20` is in both
 `math` and `q_matrix`.
+
+Collections cover the **core family only**. No conjoint, rankings,
+competition, nominal or simulated table is a member of any collection; find
+those with `irw_list_tables(source = ...)` and the family's own metadata (for
+conjoint, its topic tags `domain` and `choice_object`). The `collection` column
+in the rankings metadata is unrelated: it names the archive a ballot file came
+from, not an IRW collection.
 
 ```{r}
 #| label: coverage-note
@@ -56,6 +63,84 @@ fmt <- function(n) format(n, big.mark = ",")
 searched_txt <- if (is.na(n_searched)) "the tables" else
   glue("the **{fmt(n_searched)} of {fmt(n_total)}** tables")
 n_part <- sum(reg$coverage == "tagged-subset-only")
+
+## The hand-curated lists carry a date now, for the same reason the tagged ones
+## carry a denominator: `curated-only` says a human chose the members and says
+## nothing about WHEN, so a list frozen in September reads exactly like one
+## checked this morning (review R-28, ben-domingue/irw#3225). Parsed out of the
+## definition rather than hardcoded, and the prose drops the dates rather than
+## showing stale ones if that shape ever changes -- the same discipline the
+## denominator above is under. The registry grows the clause on its next
+## pipeline run, so this has to read sensibly before it is there.
+cur_rev <- str_match(reg$definition,
+                     "member list last revised ([0-9]{4}-[0-9]{2}-[0-9]{2})")[, 2]
+n_cur  <- sum(reg$coverage == "curated-only")
+n_meta <- sum(reg$coverage == "metadata-complete")
+## Agreement, because these counts are read off a registry that can hold one.
+plural <- function(n, one, many) if (n == 1) one else many
+cur_n <- glue("{n_cur} hand-curated collection{plural(n_cur, '', 's')}")
+cur_txt <- if (all(is.na(cur_rev))) {
+  glue("The {cur_n} {plural(n_cur, 'was', 'were')} assembled table by table, ",
+       "and a curated list is not re-checked when tables are added. ")
+} else {
+  d <- sort(cur_rev[!is.na(cur_rev)])
+  when <- if (d[1] == d[length(d)]) glue("on **{d[1]}**") else
+    glue("between **{d[1]}** and **{d[length(d)]}**")
+  glue("The {cur_n} {plural(n_cur, 'was', 'were')} last revised {when}, and a ",
+       "curated list is not re-checked when tables are added --- it is a ",
+       "snapshot of a growing corpus, and each card below carries its own ",
+       "date. ")
+}
+
+## Where the construct-name gap actually is, measured rather than asserted.
+##
+## This paragraph used to say the field is "much sparser in the newer
+## warehouses" and that tagged-subset collections "lean toward older tables".
+## By October 2026 that was wrong in DIRECTION, not just in degree: shard 8 is
+## 100% covered, shard 7 is 95.6% and shard 1 is 98.2%, while the thin ones are
+## shards 3 (25.6%), 4 (27.1%) and 6 (51.4%) -- the middle of the corpus, not
+## its new end. A directional claim about a moving quantity is the one kind of
+## caveat that cannot be left to hand maintenance, because when it inverts it
+## does not read as stale, it reads as information. So it is computed here, and
+## named by shard rather than by age.
+shard_gap <- tryCatch({
+  md <- irw_metadata()
+  tg <- irw_tags()
+  cn_col <- names(tg)[gsub("[^a-z]", "", tolower(names(tg))) == "constructname"][1]
+  stopifnot(!is.na(cn_col), all(c("table", "dataset") %in% names(md)))
+  tagged <- tolower(tg$table[!is.na(tg[[cn_col]]) &
+                             nzchar(trimws(tg[[cn_col]])) &
+                             toupper(trimws(tg[[cn_col]])) != "NA"])
+  cov <- md |>
+    mutate(has = tolower(table) %in% tagged) |>
+    group_by(dataset) |>
+    summarise(n = n(), pct = 100 * mean(has), .groups = "drop") |>
+    arrange(pct)
+  glue("Coverage runs from **{round(cov$pct[1])}%** in `{cov$dataset[1]}` to ",
+       "**{round(cov$pct[nrow(cov)])}%** in `{cov$dataset[nrow(cov)]}`, and it ",
+       "does not track a warehouse's age --- the newest shards are among the ",
+       "best covered. ")
+}, error = function(e) "")
+
+## What the page was rendered against.
+##
+## The registry is read live, but the SITE is republished only when its own
+## repository moves (datapages/irw#205), and a new irw_meta release changes what
+## this page would say without changing anything here. So the published page can
+## disagree with the published registry -- on 2026-10-24 it showed rct 259,
+## clustered 147 and response_time 172 against a registry at 272, 157 and 178,
+## which reads as a contradiction and is in fact an age. A page that names the
+## release it read is a page whose staleness is legible instead of looking like
+## an error. Reported daily by ben-domingue/irw's drift-report.yml, which is the
+## thing that notices; this line is what a reader notices.
+rendered_against <- tryCatch({
+  v <- irw_version()
+  glue("Rendered against **IRW v{attr(v, 'irw_version')}** on ",
+       "{format(Sys.Date(), '%e %B %Y')}. ",
+       "The site is republished when its own source changes, so a newer IRW ",
+       "release can leave these counts behind for a few days; ",
+       "`irw_collections()` always reads the current one.")
+}, error = function(e) "")
 cat(glue(
   '::: {{.callout-warning appearance="simple"}}\n',
   '## Please check a collection before relying on it\n\n',
@@ -71,12 +156,17 @@ cat(glue(
   '`irw_collection_members()` --- so you can inspect a collection and form your own view; ',
   'please do so before using one as the sample for an analysis.\n\n',
   '**Coverage is also uneven.** Collections built from the tag annotations searched only ',
-  '{searched_txt} whose tags include a construct name, and that field is much sparser in ',
-  'the newer warehouses. {n_part} of the ',
+  '{searched_txt} whose tags include a construct name, and that field is unevenly ',
+  'filled across the warehouses. {n_part} of the ',
   '{nrow(reg)} collections below are marked `tagged-subset-only` for that reason: they are ',
-  'useful starting points, but they are not exhaustive, and they lean toward older tables. ',
-  'Treat them as "the ones we know of", not "all of them". The rest searched every ',
-  'documented table.\n\n',
+  'useful starting points, but they are not exhaustive. ',
+  '{shard_gap}',
+  'Treat them as "the ones we know of", not "all of them".\n\n',
+  '**And a hand-curated collection is a snapshot.** {cur_txt}',
+  'The {n_meta} collection{plural(n_meta, "", "s")} assigned from the published metadata ',
+  '{plural(n_meta, "is", "are")} the only one{plural(n_meta, "", "s")} that searched every ',
+  'documented table, and did it at render time.\n\n',
+  '{rendered_against}\n\n',
   'Corrections are welcome --- open an issue on ',
   '[ben-domingue/irw](https://github.com/ben-domingue/irw/issues).\n',
   ':::\n\n'
@@ -95,10 +185,11 @@ cat(glue(
 library(irw)
 
 irw_collections()                    # what exists: kind, definition, coverage, size
-tabs <- irw_collection("depression") # 70 table names, and a note on coverage
+tabs <- irw_collection("depression") # table names, and a note on coverage
 
-# Narrow to a modellable corpus. Note irw_filter()'s default density = c(0.5, 1),
-# which is why 70 becomes 32 rather than the 41 that pass on sample size alone.
+# Narrow to a modellable corpus. Note irw_filter()'s default
+# density = c(0.5, Inf), which drops more tables than the sample-size cut
+# alone would.
 tabs <- irw_filter(collection = "depression", n_participants = c(500, Inf))
 
 dat <- irw_fetch(tabs)               # named list, one long-format table each
@@ -150,21 +241,9 @@ m[m.basis.str.startswith("wording")]
 #| results: asis
 cat('
 <style>
-.coll-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 2rem; }
-@media (max-width: 768px) { .coll-grid { grid-template-columns: 1fr; } }
-.coll-card { border: 1px solid #dee2e6; border-left: 4px solid #2780e3; border-radius: 6px;
-  padding: 1rem 1.25rem; background: #fff; transition: box-shadow 0.15s;
-  display: flex; flex-direction: column; }
-.coll-card.partial { border-left-color: #c98a30; }
-.coll-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-.coll-name { font-family: var(--bs-font-monospace, monospace); font-size: 0.95rem;
-  font-weight: 600; color: #212529; margin-bottom: 0.15rem; }
-.coll-label { font-size: 0.8rem; color: #6c757d; margin-bottom: 0.5rem; }
-.coll-desc { font-size: 0.85rem; color: #495057; flex: 1; line-height: 1.5; margin-bottom: 0.75rem; }
-.coll-foot { margin-top: auto; padding-top: 0.6rem; display: flex; flex-wrap: wrap;
-  gap: 0.5rem; align-items: baseline; }
-.coll-n { font-size: 0.85rem; font-weight: 600; color: #212529; }
-.coll-cov { font-size: 0.72rem; padding: 0.12rem 0.5rem; border-radius: 100px;
+.coll-code { font-family: var(--bs-font-monospace, monospace); font-size: 0.85rem; font-weight: 400; color: #6c757d; margin-left: 0.5rem; }
+.coll-n { font-weight: 600; color: #212529; }
+.coll-cov { font-size: 0.72rem; padding: 0.12rem 0.5rem; border-radius: 100px; margin-left: 0.4rem;
   background: #e8f1fb; color: #1a5c9e; white-space: nowrap; }
 .coll-cov.partial { background: #f6ead6; color: #8f5410; }
 .coll-cov.curated { background: #eceef0; color: #495057; }
@@ -213,6 +292,9 @@ exact_instruments <- function() {
     '- <span class="ex-sw ex-supplied"></span> **supplied**: IRW identified the instrument and supplied its canonical wording, so a ',
     'wording match only confirms that identification. Identity is asserted.\n',
     '- <span class="ex-sw ex-name"></span> **name**: there is no usable English item text; only the table\'s metadata names the instrument.\n\n',
+    '{if (all(is.na(cur_rev))) "A list is not re-checked when new tables arrive" else ',
+    '"Each list names when it was last gone through, and it is not re-checked when new tables arrive"}',
+    ' --- so a table that would qualify may have entered the corpus since. ',
     'A note after the basis marks a partial table (`partial: 18/20 items`) or a single subscale ',
     '(`subscale: anxiety (7/21)`). For the strictly verified set, keep members whose basis starts ',
     'with `wording`. The method is written up in the ',
@@ -227,6 +309,10 @@ exact_instruments <- function() {
       '<span class="ex-{b}" style="width:{round(100 * cnt[[b]] / n, 2)}%" title="{b}: {cnt[[b]]}"></span>') else "", ""),
       collapse = "")
     what <- str_match(r$definition, "^Tables that administered (.*?): ")[, 2]
+    ##When this list was last gone through. A frozen list and a current one
+    ##look identical without it (R-28, ben-domingue/irw#3225).
+    rev_i <- cur_rev[match(r$collection, reg$collection)]
+    rev_txt <- if (is.na(rev_i)) "" else glue(" &middot; revised {rev_i}")
     trs <- paste0(glue_data(mm,
       '<tr data-b="{b}" data-t="{tolower(table)}"><td><a href="tables/{table}/"><code>{table}</code></a></td>',
       '<td><span class="ex-pill"><span class="ex-sw ex-{b}"></span>{b}</span></td>',
@@ -235,7 +321,7 @@ exact_instruments <- function() {
     glue('<details class="ex-coll" data-slug="{r$collection}">',
       '<summary><span class="ex-title"><span class="ex-label">{htmlEscape(r$label)}</span>',
       '<code>{r$collection}</code></span>',
-      '<span class="ex-count"><b>{n}</b> tables &middot; {cnt[["wording"]]} wording</span>',
+      '<span class="ex-count"><b>{n}</b> tables &middot; {cnt[["wording"]]} wording{rev_txt}</span>',
       '<span class="ex-bar" aria-hidden="true">{bar}</span></summary>',
       '<div class="ex-body">{if (!is.na(what)) paste0("<p class=\\"ex-what\\">", htmlEscape(what), "</p>") else ""}',
       '<div class="ex-tbl"><table><thead><tr><th>Table</th><th>Basis</th><th>Note</th></tr></thead>',
@@ -279,17 +365,21 @@ for (k in KIND_META$kind) {
   if (nrow(rows) == 0) next
 
   cat(glue('\n## {meta$heading}\n\n{meta$blurb}\n\n'))
-  cat('<div class="coll-grid">\n')
+  cat('<div class="entry-list">\n')
 
   for (i in seq_len(nrow(rows))) {
     r <- rows[i, ]
     partial <- r$coverage == "tagged-subset-only"
-    ##Strip the denominator clause the pipeline appends -- it is shown as a
-    ##chip below instead, and reads as clutter inside the prose.
+    ##Strip the clause the pipeline appends -- the denominator for a tagged
+    ##search, the revision date for a curated list. Both are shown as a chip
+    ##below instead, and read as clutter inside the prose.
     desc <- str_squish(str_remove(r$definition, "\\s*\\(searched the.*?\\)\\s*$"))
+    desc <- str_squish(str_remove(desc, "\\s*\\(hand-curated;.*?\\)\\s*$"))
     cov_txt <- dplyr::case_when(
       r$coverage == "tagged-subset-only" & !is.na(n_searched) ~ glue("of {fmt(n_searched)} searched"),
       r$coverage == "tagged-subset-only" ~ "partial search",
+      r$coverage == "curated-only" & !is.na(cur_rev[reg$collection == r$collection][1]) ~
+        glue("hand-curated {cur_rev[reg$collection == r$collection][1]}"),
       r$coverage == "curated-only"       ~ "hand-curated",
       !is.na(n_total)                    ~ glue("of all {fmt(n_total)}"),
       TRUE                               ~ "of all documented"
@@ -300,13 +390,11 @@ for (k in KIND_META$kind) {
       TRUE                               ~ ""
     )
     cat(as.character(HTML(glue(
-      '<div class="coll-card{if (partial) " partial" else ""}">',
-      '<div class="coll-name">{r$collection}</div>',
-      '<div class="coll-label">{r$label}</div>',
-      '<div class="coll-desc">{htmlEscape(desc)}</div>',
-      '<div class="coll-foot">',
-      '<span class="coll-n">{r$n_tables} tables</span>',
-      '<span class="coll-cov {cov_cls}">{cov_txt}</span>',
+      '<div class="entry entry-static"><div class="entry-row">',
+      '<span class="entry-title">{r$label}<span class="coll-code">{r$collection}</span></span>',
+      '<span class="entry-teaser">{htmlEscape(desc)}</span>',
+      '<span class="entry-meta"><span class="coll-n">{r$n_tables} tables</span>',
+      '<span class="coll-cov {cov_cls}">{cov_txt}</span></span>',
       '</div></div>\n'
     ))))
   }
