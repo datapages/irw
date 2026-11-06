@@ -260,6 +260,17 @@ check the compute script (`nominal_imv_compute.R`) directly if you're relying
 on the numbers here.
 :::
 
+::: {.callout-tip}
+## The full analysis
+This page is a compact version of the comparison in @rivadeneira2026, a
+[PsyArXiv preprint](https://doi.org/10.31234/osf.io/zwvm2_v1). The paper runs it on 116 of the 140 tables of
+`irw_nominal` version 5.0, ENCCEJA included, and on TIMSS, PIRLS and Czech
+national exams. It reports the nominal model's gain over the 2PL in predicting
+the option chosen, in $\omega_c$ and in bits split into right/wrong and which
+wrong answer, where on the ability scale that gain lies, and how well each
+model's scores track ability against an external criterion.
+:::
+
 ## Motivation
 
 Score a multiple-choice item 0/1 and two respondents who both got it wrong look the same, though one may have chosen the answer a nearly-right reader would choose and the other an answer nobody who understood the item would pick. The [course lesson on nominal models](https://ben-domingue.github.io/irw-course/lessons/nominal.html) shows that the wrong answers carry *information* about the respondents who miss items. It leaves open whether that information improves *prediction*. This page asks that across the multiple-choice tables in the IRW's nominal source, in two forms:
@@ -431,7 +442,7 @@ ggplot(d, aes(imv, label, colour = cmp)) +
   labs(x = expression(omega[c]), y = NULL)
 ```
 
-Judged on the option chosen, the option models beat 2PL + shares on every table. That is not guaranteed, because the baseline already knows how popular each distractor is. On `r length(cat_over_yard)` of the `r n_tab` tables (`r and_list(cat_over_yard)`), the nested logit's gain over 2PL + shares is larger than the gain from adding discrimination, measured the same way. The yardstick can gain only on the pairs that include the key, since Rasch and the 2PL split the wrong answers by the same shares.
+Judged on the option chosen, the option models beat 2PL + shares on every table. That is not guaranteed, because the baseline already knows how popular each distractor is. Grey is not a like-for-like yardstick here, though. Rasch and the 2PL split the wrong answers by the same shares, so adding discrimination can gain only on the pairs that include the key. $\omega_c$ averages over all pairs, so how the two gains compare depends on how the pairs are weighted. The paper [@rivadeneira2026] compares them in bits instead, where the nominal model's gain over the 2PL exceeds the Rasch → 2PL gain on 89 of its 116 tables.
 
 That gain mixes two things: predicting the key better, which the first section already measured, and predicting which distractor is chosen. The right panel of @fig-option isolates the second. It keeps only the held-out cells answered wrongly and asks which wrong answer was chosen. The baseline is the distractors' shares alone, which know nothing about θ, so this IMV measures what knowing θ tells you about the choice of distractor. Rasch and the 2PL use the same shares there, so the yardstick is zero and the right panel has no grey.
 
@@ -473,7 +484,7 @@ terc_plot <- function(ycol, ylab, group) {
 terc_plot("twopl_to_nest", "IMV, 2PL → nested logit", "Pick out a table")
 ```
 
-For right/wrong, where the gain lands depends on the test. On most tables it goes to the bottom third, as the course lesson's information curves predict: low scorers are the respondents with wrong answers to read. ENEM never shows that pattern. On humanities and languages the gain peaks in the middle third. On the two hardest tests (natural sciences and math, about a quarter of responses correct), it rises toward the top, and the bottom third gains least. Low scorers who guess close to at random would produce this pattern, because their wrong answers carry no signal. [Issue #284](https://github.com/datapages/irw/issues/284) tests this directly.
+For right/wrong, where the gain lands depends on the test. On most tables it goes to the bottom third, as the course lesson's information curves predict: low scorers are the respondents with wrong answers to read. ENEM never shows that pattern. On humanities and languages the gain peaks in the middle third. On the two hardest tests (natural sciences and math, about a quarter of responses correct), it rises toward the top, and the bottom third gains least. Low scorers who guess close to at random would produce this pattern, because their wrong answers carry no signal. [Issue #284](https://github.com/datapages/irw/issues/284) tests this directly. The paper finds that ENEM's low scorers do not spread their wrong answers evenly over the distractors, and that in ENEM a large part of what the options add at the bottom of the scale is also captured by the 3PL's guessing floor.
 
 ```{r}
 #| label: fig-terciles-wrong
@@ -530,7 +541,7 @@ for (w in unique(sk$why)) cat("- ", w, ": ", paste0("`", sub("_nom$", "", sk$tab
 
 **Draws of 3,000 respondents.** Each draw takes up to 3,000 respondents, and the results average `r draws_txt`, each with its own split into folds. On tables much larger than 3,000 the draws barely overlap, so the spread between them is close to what fresh samples would give. On smaller tables the draws share respondents, so the standard errors mostly reflect the split and understate the uncertainty from sampling respondents.
 
-**Four ENEM tests stand in for 52, and ENCCEJA is left out.** We used one 2013 test per subject area. The differences between areas are large here; whether they hold in other years is untested. The 56 ENCCEJA tables, added to `irw_nominal` after this analysis was designed, are not included.
+**Four ENEM tests stand in for 52, and ENCCEJA is left out.** We used one 2013 test per subject area. The differences between areas are large here; whether they hold in other years is untested. The 56 ENCCEJA tables, added to `irw_nominal` after this analysis was designed, are not included. The paper [@rivadeneira2026] runs the comparison on 116 of the 140 tables of version 5.0, all 52 ENEM and 56 ENCCEJA tables among them.
 
 **Dense blocks are not random samples of items.** For EdNet, the 40 most-answered questions and the learners who answered at least half of them are a particular slice of the app's use. The EdNet results describe that block, not the whole item bank.
 
@@ -542,9 +553,9 @@ for (w in unique(sk$why)) cat("- ", w, ": ", paste0("`", sub("_nom$", "", sk$tab
 
 **"Who gains" groups respondents by the 2PL θ.** Grouping by an option model's θ would move some respondents between thirds and could change the shape of the curves at the margins.
 
-**Only unidimensional models, and no guessing.** We did not fit a 3PL or any other guessing model; the [guessing vignette](guessing.qmd) covers those on ENEM.
+**Only unidimensional models, and no guessing.** We did not fit a 3PL or any other guessing model; the [guessing vignette](guessing.qmd) covers those on ENEM. The paper adds the 3PL and the nested logit with guessing: against the 3PL, the nominal model's gain on right/wrong disappears overall and reverses on ENEM, while the nested logit with guessing beats the 3PL on right/wrong in all 116 tables.
 
-**Cross-validation is over cells, not people.** The held-out cells belong to respondents whose other answers the models have seen, so these IMVs measure predicting a missing response from a known respondent. Scoring new respondents from a few items could show a different gain.
+**Cross-validation is over cells, not people.** The held-out cells belong to respondents whose other answers the models have seen, so these IMVs measure predicting a missing response from a known respondent. Scoring new respondents from a few items could show a different gain. The paper also scores test-takers held out of calibration, from half of their responses, and there the nominal model still improves on the 2PL in predicting the option chosen, in all 116 tables.
 
 ## Reproducibility
 
@@ -562,7 +573,7 @@ N_DRAWS=10 WORKERS=4 Rscript vignettes/nominal_imv_compute.R
 quarto render vignettes/nominal_imv.qmd
 ```
 
-The script needs the R packages `irw`, `mirt`, `imv`, `furrr`, `data.table`, `dplyr` and `tibble`. The results above were computed with R 4.6.0, `irw` 1.3.0 and `mirt` 1.47: each fitted table's entry in `nominal_imv_results.rds` records the `irw` and `mirt` versions it used, and `session` holds the full `sessionInfo()`. `renv.lock` pins older versions of both, which this page does not need to render, so a run inside the renv library may not reproduce these numbers exactly.
+The script needs the R packages `irw`, `mirt`, `imv`, `furrr`, `data.table`, `dplyr` and `tibble`. The results above were computed with R 4.6.0, `irw` 1.3.0 and `mirt` 1.47: each fitted table's entry in `nominal_imv_results.rds` records the `irw` and `mirt` versions it used, and `session` holds the full `sessionInfo()`. `renv.lock` pins other versions of both, which this page does not need to render, so a run inside the renv library may not reproduce these numbers exactly.
 
 Three environment variables control the run:
 

@@ -646,6 +646,13 @@ manual_entries <- c(
   year   = {2023},
   note   = {Chapter 3, with Benjamin W. Domingue: Bookmaking for Categorical Responses: Extending the InterModel Vigorish to Quantify the Performance of Polytomous Item Response Models},
   url    = {https://purl.stanford.edu/tr545td7650}
+}",
+"@misc{rivadeneira2026,
+  author       = {Rivadeneira Quintero, Santiago and Kanopka, Klint and Mazzaferro, Mateus and Domingue, Benjamin W.},
+  title        = {What Is a Wrong Answer Worth? {The} Out-of-Sample Value of the Chosen Option in Multiple-Choice Tests},
+  year         = {2026},
+  howpublished = {PsyArXiv preprint},
+  doi          = {10.31234/osf.io/zwvm2_v1}
 }"
 )
 entry_key <- function(entry) sub("^@\\w+\\{([^,]+),.*$", "\\1", trimws(entry))
