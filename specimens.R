@@ -185,6 +185,18 @@ cols_for <- function(df, source) {
     outcome <- head(intersect(c("choice", "rating"), names(df)), 1)
     want <- c(setdiff(want, "choice"), head(sort(attrs), 2), outcome)
   }
+  # Core: one extra column when the table has one, so the card shows that a
+  # core table can carry more than id/item/resp (Ben, 2026-11-11). Preference:
+  # `treat` (the RCT specimen), then the first cov_* column in the table's own
+  # order, then the first other non-standard column (4thgrade_math_sirt's
+  # testlet). A table with only the three standard columns (verbagg) stays
+  # three wide.
+  if (identical(source, "core")) {
+    extra <- setdiff(names(df), want)
+    extra <- c(intersect("treat", extra), grep("^cov_", extra, value = TRUE),
+               setdiff(grep("^cov_", extra, value = TRUE, invert = TRUE), "treat"))
+    want <- c(want, head(extra, 1))
+  }
   intersect(want, names(df))
 }
 
