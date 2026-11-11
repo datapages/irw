@@ -137,6 +137,14 @@ pick_rows <- function(df, cols, src) {
     # per respondent by design, and a bullet-voted ballot has one mark.
     idx <- idx[vapply(idx, length, integer(1)) >= N_ROWS]
     if (!length(idx)) return(fallback())
+    # When the card shows `treat`, prefer a treated respondent: treat is
+    # constant within a person, so a control respondent shows a column of
+    # zeros that reads as dead (Ben, 2026-11-11). Falls back to everyone if no
+    # respondent with five rows was treated.
+    if ("treat" %in% cols) {
+      treated <- idx[vapply(idx, function(i) isTRUE(as.numeric(df$treat[i[1]]) == 1), logical(1))]
+      if (length(treated)) idx <- treated
+    }
     n_distinct <- vapply(idx,
       function(i) length(unique(df[[outcome]][head(i, N_ROWS)])), integer(1))
     # which.max takes the first maximum, so a tie resolves to the earliest
