@@ -19,14 +19,17 @@ One row per respondent × task × marked position. The core column names are kep
 | `cov_<name>` | optional | Ballot- or respondent-level columns from the source, as text, repeated on every row of the ballot: `cov_precinct`, `cov_ballot_style`, `cov_jury_country`. |
 | `trial_<name>` | optional | Task-level details, if any (question order, survey arm). |
 
-Two rules decide what a user sees when pivoting a rankings table, and both are departures from what a person × item pivot assumes:
+Three rules decide what a user sees when pivoting a rankings table, and all three are departures from what a person × item pivot assumes:
 
 - **Skipped positions are gaps, not rows.** A ballot marked at positions 1 and 3 keeps `resp` 1 and 3; nothing is renumbered. A ballot with no marks has no rows at all, so the design record (below) keeps the number of ballots cast as well as the number with marks.
 - **Duplicate marks are kept as recorded.** A candidate marked at positions 1 and 2 gives two rows with the same `item` and different `resp`. Counting rules for duplicates differ by jurisdiction (most treat the later mark as a skip), so the table does not apply one. This is the one place a rankings table breaks the one-row-per-`id × item` habit, and it is why `irw_fetch()` / `irw.fetch()` with `dedup = TRUE` leaves these tables alone.
+- **Ties are kept as recorded.** Two named items at the same position within one `id × task` are a tie, and both rows stay. Some ballots allow equal ranks: the 33 Debian vote tables (`debian_*`), where equal ranks are part of how the vote is counted, and `ojwang_2020_sweetpotato_traits`, where respondents could give traits the same rank. A few French experimental ballots have a handful of ties. Tables number a tie in one of two ways. Debian keeps the voter's own numbers (1, 1, 2). The sweet potato source stores averaged mid-ranks, and each tied group is given its lowest position (1, 1, 3). So a gap after a tie does not mean the same thing in both.
 
-Within one `id × task`, positions are unique: an overvote (more than one candidate marked at the same position) is already one row, with `item = "(overvote)"`, since the source does not say which candidates were marked. `(write-in)` is a row with that item unless the source names the written-in candidate. Both reserved values are spelled the same in every table, like `(not shown)` in the conjoint family.
+An overvote (more than one candidate marked at the same position) is one row, with `item = "(overvote)"`, since the source does not say which candidates were marked. `(write-in)` is a row with that item unless the source names the written-in candidate. Both reserved values are spelled the same in every table, like `(not shown)` in the conjoint family.
 
-The packages apply the common counting rule on request. `irw_rank_compress()` in R and `irw.rank_compress()` in Python take each ranking in `resp` order, drop an item's later marks (the reserved values are never dropped: two write-in rows are usually two different people), and renumber `resp` 1..k so that the gaps close. `drop_repeats = FALSE` closes the gaps and keeps the repeats.
+The packages close the gaps on request. `irw_rank_compress()` in R and `irw.rank_compress()` in Python take each ranking in `resp` order, drop an item's later marks (the reserved values are never dropped: two write-in rows are usually two different people), and renumber `resp` 1..k so that the gaps close. `drop_repeats = FALSE` closes the gaps and keeps the repeats. A tie has no order to renumber by. In the releases after irw 1.4.0 (R) and 0.8.0 (Python), the helpers stop on a tie unless you pass `ties = "keep"`, which gives tied items one shared position (1, 1, 2). Earlier releases put tied items in input row order, so do not use them to compress a table with ties.
+
+This is a convenience, **not a jurisdiction's counting rule**. The helpers do not stop a ballot at an overvote, do not treat a second write-in mark as a duplicate ranking (Alaska does), and do not apply a limit on consecutive skips (in Alaska, two skipped rankings in a row exhaust a ballot). The rules each jurisdiction applies are recorded in [`counting_rules.csv`](https://github.com/ben-domingue/irw/blob/main/data/rankings/counting_rules.csv), and a recount has to apply them itself.
 
 ### Candidate codes
 
@@ -80,7 +83,7 @@ head(df)
 meta <- irw_metadata(source = "rank")
 meta[meta$method == "irv", c("table", "n_candidates", "n_positions", "n_ballots_with_marks")]
 
-# Apply the common counting rule: drop repeated marks, close the gaps
+# Drop repeated marks and close the gaps (not a counting rule; see above)
 b <- irw_rank_compress(irw_fetch("rcv_burlington_20060307_mayor", source = "rank"))
 table(b$item[b$resp == 1])   # first choices
 
@@ -107,7 +110,7 @@ df.head()
 meta = irw.metadata(source="rank")
 meta.loc[meta.method == "irv", ["table", "n_candidates", "n_positions", "n_ballots_with_marks"]]
 
-# Apply the common counting rule: drop repeated marks, close the gaps
+# Drop repeated marks and close the gaps (not a counting rule; see above)
 b = irw.rank_compress(irw.fetch("rcv_burlington_20060307_mayor", source="rank"))
 b.loc[b.resp == 1, "item"].value_counts()   # first choices
 
@@ -131,6 +134,20 @@ ballots <- split(d$item, d$id)               # each ballot's options, first choi
 R <- PlackettLuce::as.rankings(ballots, input = "orderings")
 fit <- PlackettLuce::PlackettLuce(R)
 coef(fit, log = FALSE)                       # worth of each candidate code
+```
+
+`PlackettLuce` reads a partial ballot as a ranking of the listed candidates only, so a ballot with a single mark carries no information and drops out. That is about half of the US instant-runoff ballots in these tables. To read the listed candidates as ranked above all the others (a top-k reading), write the likelihood with every eligible option in the denominator instead.
+
+A table with ties should not be compressed into orderings. `PlackettLuce` fits ties directly from a ballot × option matrix of positions:
+
+```{r}
+#| eval: false
+#| echo: true
+d <- irw_fetch("debian_2021_gr_fsf_statement", source = "rank")
+X <- with(d, tapply(resp, list(id, item), min))   # ballot x option, tied options share a value
+X[is.na(X)] <- 0                                   # 0 = not ranked (Debian counts these as tied last)
+fit <- PlackettLuce::PlackettLuce(PlackettLuce::as.rankings(X, input = "rankings"))
+coef(fit)                                          # worths, plus one parameter per size of tie
 ```
 
 The same steps in Python give a list of lists for `choix` or a hand-written likelihood: `d.sort_values(["id", "resp"]).groupby("id")["item"].agg(list)`.
