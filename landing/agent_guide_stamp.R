@@ -63,8 +63,12 @@ FAMILIES <- list(
   rank = c("irw_rank", "irw_rank_2"),
   nom  = c("irw_nominal"),
   comp = c("irw_competitions"),
-  sim  = c("irw_simsyn")
+  sim  = c("irw_simsyn"),
+  # Published correlation/covariance matrices: summary statistics, not
+  # responses, so they are listed but left out of the response-table total.
+  cov  = c("irw_cov")
 )
+SUMMARY_FAMILIES <- c("cov")
 # Datasets that hold no response data, so they are not a family and must not be
 # reported as an undeclared one. ARCHITECTURE.md section 2: "Auxiliary means
 # only these."
@@ -192,7 +196,7 @@ item_family <- tryCatch({
 
 values <- list(
   core = fmt(counts$per_family[["core"]]),
-  all = fmt(sum(counts$per_family)),
+  all = fmt(sum(counts$per_family[!names(counts$per_family) %in% SUMMARY_FAMILIES])),
   item_family = if (is.na(item_family)) NULL else fmt(item_family)
 )
 

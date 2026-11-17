@@ -15,18 +15,18 @@ Python package: https://github.com/itemresponsewarehouse/Python-pkg
 Stata package: https://github.com/itemresponsewarehouse/Stata-pkg
 
 <!-- asof:start -->
-AS OF: 2026-11-02 · irw_meta v57.0
+AS OF: 2026-11-17 · irw_meta v73.0
 Every count in this file is generated from the published catalog at that date by
 landing/agent_guide_stamp.R. If you are reading a copy older than a few weeks,
 the numbers have grown; the structure has not.
 <!-- asof:end -->
 
-The IRW is a corpus of <!-- counts:core -->7,144<!-- /counts:core --> harmonized
+The IRW is a corpus of <!-- counts:core -->8,264<!-- /counts:core --> harmonized
 item-response tables in its core family — cognitive tests, personality
 inventories, RCT outcome measures, psycholinguistic tasks — all reshaped to one
 schema so the same code runs across all of them, and
-<!-- counts:all -->9,600<!-- /counts:all --> response tables in all across the
-six families below. (These counts are every table listed on the families'
+<!-- counts:all -->10,963<!-- /counts:all --> response tables in all across the
+six response families below. (These counts are every table listed on the families'
 Redivis datasets. The published catalog, irw_meta, can trail them by a few
 hundred while new tables wait for their metadata row, and the homepage, table
 pages and irw_filter() count only catalogued tables, so their numbers can be
@@ -101,24 +101,26 @@ RESERVED optional columns (exact names — do not invent variants):
   timepoint     alternative occasion marker
   treat         1 = treatment, 0 = control
   rater         external observer, distinct from id
-  item_family   testlet / clone grouping (<!-- counts:item_family -->20<!-- /counts:item_family --> tables have it)
+  item_family   testlet / clone grouping (<!-- counts:item_family -->23<!-- /counts:item_family --> tables have it)
   qmatrix1..N   Q-matrix attributes for cognitive diagnostic models
   cov_*         person-level covariates (constant within id)
   itemcov_*     item-level covariates (constant within item)
   trial_*       trial-level details (trial_number, trial_block); `item` still
                 identifies the probe -- it is always authoritative
 
-Tables come in SIX DATA FAMILIES, each its own Redivis dataset or shard list,
+Tables come in SEVEN DATA FAMILIES, six of response data and one of
+correlation/covariance matrices, each its own Redivis dataset or shard list,
 chosen with the `source` argument. The counts are generated; the list is not,
 and a family missing from it stops the site build.
 
 <!-- families:start -->
-  core    7,144  (default)   id/item/resp, everything above
-  conj    1,161  source="conj"
-  rank    1,018  source="rank"
-  nom       140  source="nom"
+  core    8,264  (default)   id/item/resp, everything above
+  conj    1,292  source="conj"
+  rank    1,109  source="rank"
+  nom       161  source="nom"
   comp      121  source="comp"
   sim        16  source="sim"
+  cov        48  source="cov"
 <!-- families:end -->
 
 FOUR families are NOT plain id/item/resp. Do not apply the above to them:
@@ -144,6 +146,24 @@ FOUR families are NOT plain id/item/resp. Do not apply the above to them:
 
 Simulated/synthetic (`source="sim"`) keeps the core schema and has no real
 respondents, so it is the one family defined by provenance rather than shape.
+
+Covariance (`source="cov"`) holds NO responses: each table is a published
+correlation or covariance matrix (from a paper, a methods text, an R package or
+a meta-analytic SEM corpus) whose raw data the IRW does not have. One row per
+cell of the lower triangle, diagonal included: `stat` ("cor"/"cov", or
+"sd"/"mean" for a variable's moments, with `var2` blank), `var1`, `var2`,
+`value` (as published, never repaired; some matrices are not positive definite
+and are kept that way), `n` (never blank), and optional `group` when one source
+published several samples (in meta-analytic SEM corpora, one study per group,
+with differing variable sets). `irw_cov2matrix(df, group =)` gives one square
+matrix plus N for `lavaan(sample.cov =, sample.nobs =)`; `irw_cov2list(df)`
+gives every group padded to common variables for `metaSEM::tssem1(Cov =, n =)`.
+`irw_fetch(<core table>, source = "cov", cov_args = list(method = ...))` does
+not read this family: it COMPUTES the core table's item matrix (pearson,
+spearman, kendall, polychoric, tetrachoric or a user function), and the result
+is labelled computed. These functions are in the development versions of the
+packages, not yet on CRAN or PyPI. Standard:
+https://itemresponsewarehouse.org/cov_standard.html
 
 Item text lives in a separate dataset: `irw_itemtext(table)`,
 `irw_list_itemtext_tables()`. IMPORTANT: item-text licensing is separate from
@@ -280,7 +300,7 @@ For a known-multidimensional vs known-unidimensional contrast, the site pairs
 
     irw_filter(...)             by metadata and tags; returns table NAMES
     irw_metadata()              the full metadata frame
-                                (<!-- counts:core -->7,144<!-- /counts:core --> rows — see §7)
+                                (<!-- counts:core -->8,264<!-- /counts:core --> rows — see §7)
     irw_info("table")           one table's summary
     irw_tags(tables)            qualitative tags
     irw_tag_options(col)        allowed values for a tag column
@@ -345,7 +365,7 @@ Caveats on selection metadata, all real:
     verified. Read it as "the ones we know of".
 
 Do not treat any of these as ground truth about a construct. They are a way to
-narrow <!-- counts:core -->7,144<!-- /counts:core --> tables to a workable
+narrow <!-- counts:core -->8,264<!-- /counts:core --> tables to a workable
 candidate set, which you then check.
 
 --------------------------------------------------------------------------
@@ -463,7 +483,7 @@ tell the researcher which one you think it is.
     irw.list_tables(); irw.filter(var="rt"); df = irw.fetch("4thgrade_math_sirt")
 
 <!-- pypkg:start -->
-This section describes PyPI `irw` 0.7.7, read from the released wheel.
+This section describes PyPI `irw` 0.8.0, read from the released wheel.
 <!-- pypkg:end -->
 
 **Python is not the thin surface this file used to describe.** Every remedy in
