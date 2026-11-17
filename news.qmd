@@ -14,6 +14,99 @@ This log begins in September 2026, when the page was created. The IRW is older
 than the log, and changes before then are recorded only in the repositories'
 commit history and in the versioned data itself.
 
+## 2026-11-08 — `irw_info()` counts the whole warehouse, not just core
+
+Called with no arguments, `irw_info()` reported core alone — under a heading
+that read "Combined", which made it look like a total. The one call that
+answers "how big is the IRW?" therefore left out five of the six data families.
+It now prints a row for each of them, with that family's table count and size
+and totals across them: checked live on 2026-11-08, 7,514 core tables, 140
+nominal, 16 simsyn, 121 competitions, 1,161 conjoint and 1,018 rankings, 9,970
+in all. If a family cannot be opened its row says unavailable, a warning names
+it, and the total is relabelled "Total (available only)", so an outage cannot
+pass as a smaller corpus. `irw_info(source = "core")` gives the old output, and
+a table lookup still defaults to core. This is merged in both clients and in
+neither release; it arrives with the next CRAN and PyPI cuts.
+
+## 2026-11-06 — A middle answer that had been dropped, and twelve more tables whose ids named two people
+
+Seven `spain_*` tables built from Spanish CIS surveys dropped response code 3
+along with the don't-know and no-answer codes. Each study's own value labels
+mark 3 as the unread middle of a five-point scale — *Ni sí ni no*, *Regular*,
+*Ni de acuerdo ni en desacuerdo* — so it is an answer, and 9,985 rows of it are
+back, adding as many as 194 respondents to a single table. One item is
+deliberately left alone: in `spain_2013_services`, p27c's 3 means "still being
+processed", a status rather than a response.
+
+Twelve more tables were rebuilt under the id problem reported here on
+2026-11-02. In the five `matzke` tables the processing script's duplicate-drop
+deleted trials that matched on every column, which took most of the successful
+stop trials with them — one experiment kept 40 of 360 — and every trial is now
+back, keyed by its position within the participant. In `ptcichina` and four
+`crspolish` tables the source ID restarts across samples and repeats inside
+them, pairing people of different sex, age and answers under one key; `id` is
+now the source row, with the original kept as `cov_source_id` and the sample as
+`cov_group` or `cov_set`. `face_memory_amado_2024` and
+`selfcompassionscale_shortform_fuochi_2025` had ids that restart per sample and
+are renumbered. Responses themselves are unchanged in all of these, but ids do
+not carry over from earlier releases. The corrections went out on 2026-11-06 as
+IRW versions 689 to 693, and each table's own note is on
+[Corrections](corrections.qmd). Refs #3237, #2864.
+
+## 2026-11-06 — What a wrong answer is worth
+
+A new analysis page, [What Is a Wrong Answer
+Worth?](./vignettes/nominal_imv.qmd), asks what is lost when multiple-choice
+data reach a model as right or wrong. The IRW's
+[nominal tables](nominal_standard.qmd) keep the option the respondent chose, so
+the question is answerable on real data: the page compares a 2PL on the 0/1
+scores against the nominal and nested logit models on the options, out of
+sample, in InterModel Vigorish, first for right and wrong, then for the option
+chosen and for which wrong option it was. The preprint behind it is now listed
+on [Research](research.qmd).
+
+The [vignettes index](./vignettes/index.qmd) also now says what these pages
+are. Many of them are attempts to explore a new idea rather than settled
+results, and should be read that way — suggestive, sometimes wrong, and a
+starting point for your own analysis rather than something to cite. The
+standing caveat that much of the dataset search, compute, design and writing
+behind them is Claude's work under human review is unchanged.
+
+## 2026-11-05 — The ENEM and ENCCEJA tables carry CC BY-ND 3.0
+
+108 core tables and 108 nominal ones — 52 ENEM and 56 ENCCEJA — were published
+under CC BY 4.0, which was chosen because no source licence had been found for
+them. gov.br puts INEP's content under CC BY-ND 3.0, and the ruling on
+2026-11-05 was that these tables are that same data reformatted and so travel
+under INEP's terms. The difference is worth knowing before you build on them:
+ND permits use and redistribution of the material as it stands but not the
+distribution of a modified version, so analysing one of these tables is covered
+where passing on a reshaped copy of it is not. The corrected licence is in the
+metadata the pipeline generates; the commits do not show the metadata tables
+republished, so the licence this site displays and the packages return for these
+tables may still read CC BY 4.0 until they are. Refs #3316.
+
+## 2026-11-04 — The Python package catches up with the warehouse
+
+`pip install irw` now gives 0.8.0. PyPI had been on 0.7.7 since 2026-10-18, and
+the drift report had that release 878 tables short of what is live: it could not
+see `irw_rank_2`, `irw_text_4` or the current `item_response_warehouse_8`, and
+had no shard discovery with which to notice. 0.8.0 reads the warehouse
+catalogue once per session and lets the published metadata decide which core
+tables exist, so a dataset released after a package release can no longer go
+missing that way — the same change CRAN `irw` 1.4.0 carried on 2026-11-02.
+
+It also brings the Python half of work this log has already recorded for R,
+including the gap left open on 2026-11-02: `long2resp()` names item columns by
+the item id and returns them in natural order, and takes an `occasion` argument
+for `rater`, `trial_*`, `session` and the other columns on which a response can
+repeat. Alongside those, the four psychometric filters, a default `density`
+filter that no longer caps at 1, and `source = "core"` as the canonical spelling
+with `"main"` still accepted — 0.7.7 raised an error on `"core"`, which is the
+spelling this site and the R package document. A missing credential, a missing
+table and a failed listing now raise an error rather than looking like absence.
+Refs #3091, #3221, #3222.
+
 ## 2026-11-02 — The R package on CRAN catches up with the warehouse
 
 `install.packages("irw")` now gives 1.4.0, and with it everything that had
