@@ -558,6 +558,10 @@ codebook_html <- function(x, standard) {
       paste0(SCRIPT_BLOB, r$script, "#L", r$script_line) else ""
     src <- if (r$basis == "renamed")
       paste0("<a href=\"", esc(line_url), "\"><code>", esc(r$source_column), "</code></a>")
+    else if (r$basis == "built" && nzchar(r$source_column))
+      ## recoded from exactly one named source column (irw#3558)
+      paste0("<code>", esc(r$source_column), "</code>, <a href=\"", esc(line_url),
+             "\">recoded in the build script</a>")
     else if (r$basis == "built")
       paste0("<a href=\"", esc(line_url), "\">made in the build script</a>")
     else "<span class=\"muted\">not traced</span>"
