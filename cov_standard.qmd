@@ -1,0 +1,97 @@
+---
+title: "The Covariance Data Standard"
+---
+
+Much of structural equation modelling and other limited-information work starts from a correlation or covariance matrix, not from responses. Decades of those matrices sit in papers, textbooks and software manuals, and many of them have no raw data behind them anywhere. The covariance family (`source = "cov"`) collects published matrices like these in one format, so they can be found, cited and fitted the way the IRW's response tables are. It is the one [data family](overview.qmd#families) whose tables hold summary statistics, not responses.
+
+A table belongs here when its source publishes a matrix of correlations or covariances among variables, and the IRW does not hold the responses it was computed from. Examples are a correlation table in a paper, a matrix in a methods text or an R package, and a study's matrix from a meta-analytic SEM corpus. Three kinds of matrix do not belong here:
+
+- **A matrix that can be computed from an IRW table** is derived data, and it is never stored. The packages compute it on request (below).
+- **A simulated or artificial matrix** that no real sample produced.
+- **Model output**, such as factor loadings or path coefficients. Only the input to a model is in scope.
+
+## The data standard
+
+One table holds one source's matrix, or several matrices that one source published together for different samples. There is one row per cell of the **lower triangle, diagonal included**, in the published order of the variables, plus optional rows for each variable's standard deviation and mean.
+
+| column | | meaning |
+|---|---|---|
+| `stat` | required | `cor` or `cov` for a cell of the matrix; `sd` or `mean` for a moment of one variable. One sample's matrix is all `cor` or all `cov`. |
+| `var1`, `var2` | required | The variable names as the source gives them. `var2` is blank on `sd` and `mean` rows. |
+| `value` | required | The number **as published**, never rounded, smoothed or corrected. |
+| `n` | required | The sample size behind the cell: the pairwise n when the source reports one, otherwise the matrix's N on every row. It is never blank, so a table on its own is enough to fit a model. |
+| `group` | optional | Present only when one source publishes matrices for several samples, such as boys and girls, or two random halves. Each group is its own matrix. |
+
+The values are kept as published, and this matters most for matrices that are **not positive definite**, which rounding, pairwise deletion and typos make common in old literature. Such a matrix is kept and flagged, never repaired. Burt's 1915 matrix of eleven emotions is in the family as printed, with its negative eigenvalue: it most likely carries a typo (0.87 where 0.81 would make it positive definite), and you should know that before you fit it, not find out from an optimiser.
+
+Each table also has a record: the N, the kind of correlation (Pearson, polychoric, tetrachoric, mixed or unknown), how missing data were handled, the population, the citation and where in the source the matrix is printed, how it was captured, and whether the capture was checked. A matrix whose source gives no sample size is not taken, because a model cannot be fitted without one. Tables are named for the study that collected the data, not for the book that reprinted it: `mullen_1939_physical8` is the eight physical measures that Harman's *Modern Factor Analysis* made famous.
+
+## Accessing the covariance data
+
+The published matrices are in the Redivis dataset [`irw_cov`](https://stanford.redivis.com/datasets/4e2q-7dgrmd3ek), and both `irw` packages read them with `source = "cov"`. The same call computes a matrix for any core table. If the name is a published matrix, it comes back as published. If the name is a core table, the packages fetch that table's `id`, `item` and `resp` and return its item-by-item matrix in the same layout, labelled as computed. Computed matrices are not stored in the IRW. `cov_args` chooses what to compute:
+
+- `method`: Pearson (the default), Spearman, Kendall, polychoric, tetrachoric, or a function of your own that takes the person-by-item matrix and returns a symmetric item-by-item matrix.
+- `type`: a correlation or a covariance matrix.
+- `use`: pairwise deletion (the default, with each pair's n kept) or complete cases.
+
+::: {.callout-note}
+`source = "cov"` arrives in the next releases of both packages: CRAN for R, PyPI for Python. Until then, install the development versions from GitHub to run the code below.
+:::
+
+::: panel-tabset
+## R
+```{r}
+#| eval: false
+#| echo: true
+library(irw)
+
+# The published matrices
+irw_list_tables(source = "cov")
+
+# A published matrix, and the square matrix lavaan wants
+hs <- irw_fetch("holzinger_1939_grantwhite9", source = "cov")
+m  <- irw_cov2matrix(hs)
+m$matrix
+m$n
+
+library(lavaan)
+model <- "visual  =~ vis_perc + cubes + lozenges
+          textual =~ par_comp + sen_comp + wordmean
+          speed   =~ addition + count_dot + s_c_caps"
+fit <- cfa(model, sample.cov = m$matrix, sample.nobs = m$n)
+summary(fit, fit.measures = TRUE)
+
+# A matrix computed from a core table: polychoric, pairwise
+pc <- irw_fetch("environment_ltm", source = "cov",
+                cov_args = list(method = "polychoric"))
+irw_cov2matrix(pc)$matrix
+```
+
+## Python
+
+```{python}
+#| eval: false
+#| echo: true
+#| python.reticulate: false
+import irw
+
+# The published matrices
+irw.list_tables(source="cov")
+
+# A published matrix, as a square DataFrame
+hs = irw.fetch("holzinger_1939_grantwhite9", source="cov")
+m = irw.cov2matrix(hs)
+m["matrix"], m["n"]
+
+# A matrix computed from a core table: Spearman covariances, complete cases
+sp = irw.fetch("environment_ltm", source="cov",
+               cov_args={"method": "spearman", "type": "cov", "use": "complete"})
+irw.cov2matrix(sp)["matrix"]
+```
+:::
+
+A table holding several samples needs `group =` (`irw_cov2matrix(df, group = "girls")`). A multi-group fit takes one matrix and one N per group.
+
+## What the family holds
+
+The family was first released in November 2026. Its first matrices are the classics of factor analysis: Holzinger and Swineford's Grant-White tests, Thurstone's and Bechtoldt's ability batteries, Brigham's 1932 College Board matrices for boys and girls, Tucker's interbattery example, Mullen's physical measures, Burt's emotions, and matrices from health measurement. Each was taken from an R package, and the IRW copy has been checked cell by cell against the package's copy. A matrix taken from a GPL-licensed package is reshared under the GPL. Matrices from open-access papers and meta-analytic SEM corpora are being added. A listing of the family's tables, with their records, will appear here once the family's metadata is published.
