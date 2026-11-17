@@ -14,98 +14,163 @@ This log begins in September 2026, when the page was created. The IRW is older
 than the log, and changes before then are recorded only in the repositories'
 commit history and in the versioned data itself.
 
+## 2026-11-16 — Conjoint tables keep every respondent the experiment reached
+
+Conjoint processing scripts used to reproduce the authors' analysis sample,
+applying whatever the deposit's own code applied: attention checks, speeder
+cuts, bot scores, a `Finished` flag, complete-case drops. Twenty-three tables
+are rebuilt to keep everyone who gave a conjoint outcome, with what the
+authors' rule used stored as covariates instead — `cov_attention_pass`,
+`cov_finished`, `cov_duration_sec` and the like — and each script's header
+says how to get the authors' sample back. Consent, age and eligibility filters
+stay. Two smaller rules changed with it. A profile shown in a task the
+respondent did answer now keeps its row, with empty outcomes, where the old
+row-level drop removed it; and a rating code outside the scale it was stored on
+— 88 for "don't know", an unlabelled 6 on a 1–5 item — is missing rather than a
+response, which in two tables leaves out respondents who had given no other
+answer.
+
+Attributes changed too. Where no source gives the text of an attribute's levels
+as respondents saw them, but the deposit's codes stand one-to-one for those
+levels, the attribute now ships as `attr_<name>_code` rather than being left out
+of the table, and `irw_metadata(source = "conj")` carries a `levels_labelled`
+column saying whether a table's attributes are all text, some of them, or none.
+Codes say which profiles shared a level, which is what position, task-order and
+heterogeneity analyses need; they do not say what the level was. The matching
+filter is on `main` in both clients and in a release of neither. The rules are
+in the family's
+[README](https://github.com/ben-domingue/irw/blob/main/data/conjoint/README.md),
+and each table's own note is on [Corrections](corrections.qmd). Released as IRW
+723 and 724. Refs #3474, #3534, #3536.
+
+## 2026-11-15 — Rankings tables can hold ties
+
+The [rankings standard](rankings_standard.qmd) said that positions within one
+`id` × `task` are unique. Published tables say otherwise: the 33 Debian vote
+tables allow equal ranks as part of how the vote is counted,
+`ojwang_2020_sweetpotato_traits` let respondents give two traits the same rank,
+and a few French experimental ballots carry a handful of ties. Ties are now a
+third layout rule beside skipped positions and duplicate marks, with both
+numbering conventions written down — Debian keeps the voter's own numbers (1, 1,
+2), while the sweet potato source gives each tied group its lowest position (1,
+1, 3) — so a gap after a tie does not mean the same thing in both.
+`irw_metadata(source = "rank")` gains `n_tied_ballots`.
+
+A tie has no order to renumber by, which is a problem for the compress helpers.
+`irw_rank_compress()` in R 1.4.0 and `irw.rank_compress()` in Python 0.8.0 put
+tied items in input row order, so the same ballot came back as A before B or B
+before A depending only on the order of its rows, and nothing said so. Both now
+stop on a tie unless you pass `ties = "keep"`, which gives tied items one shared
+position — on `main` in each package, not yet in a release of either, so do not
+use a released version to compress a table with ties. The page also says plainly
+what these helpers are not. They close the gaps in a ranking; they are not any
+jurisdiction's counting rule, and so they do not stop a ballot at an overvote,
+treat a second write-in as a duplicate ranking, or apply a limit on consecutive
+skipped positions. Refs #3024, #3538.
+
+## 2026-11-15 — Ranked and approval ballots from voting research
+
+The rankings datasets now hold the ballots from the Electoral Reform Society
+elections that Nicolaus Tideman tabulated, shared by his permission, and the
+ranked tasks from Mao, Procaccia and Chen's MTurk experiments. The core
+warehouses gained approval and evaluative ballots from the French Voter
+Autrement in-situ experiments, run at polling stations alongside the 2007, 2012,
+2017 and 2022 presidential elections, and the agree / disagree / pass votes on
+participant-written statements from Polis open-data conversations, one table per
+conversation. Candidates are stored as codes rather than names throughout, and
+the Electoral Reform Society organisations are anonymous, as that permission
+requires. The rankings layout is on the
+[rankings standard](rankings_standard.qmd). Refs #3024.
+
 ## 2026-11-08 — `irw_info()` counts the whole warehouse, not just core
 
-Called with no arguments, `irw_info()` reported core alone — under a heading
-that read "Combined", which made it look like a total. The one call that
-answers "how big is the IRW?" therefore left out five of the six data families.
-It now prints a row for each of them, with that family's table count and size
-and totals across them: checked live on 2026-11-08, 7,514 core tables, 140
-nominal, 16 simsyn, 121 competitions, 1,161 conjoint and 1,018 rankings, 9,970
-in all. If a family cannot be opened its row says unavailable, a warning names
-it, and the total is relabelled "Total (available only)", so an outage cannot
-pass as a smaller corpus. `irw_info(source = "core")` gives the old output, and
-a table lookup still defaults to core. This is merged in both clients and in
-neither release; it arrives with the next CRAN and PyPI cuts.
+Called with no arguments, `irw_info()` reported core alone, under a heading
+that read "Combined", which made it look like a total. It now prints a row for
+each of the six data families, with that family's table count and size, and
+totals across them. If a family cannot be opened its row says unavailable, a
+warning names it, and the total is relabelled "Total (available only)", so an
+outage cannot pass as a smaller corpus. `irw_info(source = "core")` gives the
+old output, and a table lookup still defaults to core. This is merged in both
+clients and in neither release; it arrives with the next CRAN and PyPI cuts.
 
-## 2026-11-06 — A middle answer that had been dropped, and twelve more tables whose ids named two people
+## 2026-11-06 — A new vignette on what a wrong answer is worth
 
-Seven `spain_*` tables built from Spanish CIS surveys dropped response code 3
-along with the don't-know and no-answer codes. Each study's own value labels
-mark 3 as the unread middle of a five-point scale — *Ni sí ni no*, *Regular*,
-*Ni de acuerdo ni en desacuerdo* — so it is an answer, and 9,985 rows of it are
-back, adding as many as 194 respondents to a single table. One item is
-deliberately left alone: in `spain_2013_services`, p27c's 3 means "still being
-processed", a status rather than a response.
+[What Is a Wrong Answer Worth?](./vignettes/nominal_imv.qmd) asks whether
+knowing which wrong option a respondent chose helps predict how they answer
+items you have not seen. It sets a 2PL on the 0/1 scores against the nominal
+response model and the nested logit, out of sample, across the IRW's nominal
+tables, scored in InterModel Vigorish — first for right or wrong, then for the
+option chosen and for which wrong answer. The preprint behind it is listed on
+[Research](research.qmd).
 
-Twelve more tables were rebuilt under the id problem reported here on
-2026-11-02. In the five `matzke` tables the processing script's duplicate-drop
-deleted trials that matched on every column, which took most of the successful
-stop trials with them — one experiment kept 40 of 360 — and every trial is now
-back, keyed by its position within the participant. In `ptcichina` and four
-`crspolish` tables the source ID restarts across samples and repeats inside
-them, pairing people of different sex, age and answers under one key; `id` is
-now the source row, with the original kept as `cov_source_id` and the sample as
-`cov_group` or `cov_set`. `face_memory_amado_2024` and
-`selfcompassionscale_shortform_fuochi_2025` had ids that restart per sample and
-are renumbered. Responses themselves are unchanged in all of these, but ids do
-not carry over from earlier releases. The corrections went out on 2026-11-06 as
-IRW versions 689 to 693, and each table's own note is on
-[Corrections](corrections.qmd). Refs #3237, #2864.
+## 2026-11-06 — Seven more tables had ids that stood for several people, and five had lost trials
 
-## 2026-11-06 — What a wrong answer is worth
+Continuing the id work recorded here on 2026-11-02, in `ptcichina_zhan_2024`
+and the four `crspolish_wiesyk_2024` tables the deposit's `ID` restarts in each
+sample and repeats within them, which had collapsed 2,375 respondents into
+1,206 ids and 1,448 into 783. `id` is now the source row, and the deposit's own
+`ID` and sample are kept as `cov_source_id` and `cov_group` or `cov_set`.
+`selfcompassionscale_shortform_fuochi_2025` ids now carry their sample as a
+prefix, and `face_memory_amado_2024` offsets the ids of its second phase, a
+separate sample that numbered its participants from 1 as well. Ids from earlier
+releases do not carry over in any of these tables.
 
-A new analysis page, [What Is a Wrong Answer
-Worth?](./vignettes/nominal_imv.qmd), asks what is lost when multiple-choice
-data reach a model as right or wrong. The IRW's
-[nominal tables](nominal_standard.qmd) keep the option the respondent chose, so
-the question is answerable on real data: the page compares a 2PL on the 0/1
-scores against the nominal and nested logit models on the options, out of
-sample, in InterModel Vigorish, first for right and wrong, then for the option
-chosen and for which wrong option it was. The preprint behind it is now listed
-on [Research](research.qmd).
+The five `matzke-*` stop-signal tables had a different defect: the build removed
+any trial identical to another on every column, which on this task deletes most
+successful stops, since a successful stop has no response time and the
+stop-signal delay repeats. In one table only 40 of 360 trials with no response
+had survived; in another the rebuild goes from 20,251 rows to 58,831. Every
+trial in the deposit is back, and a new `trialnum` column records its position
+within the participant, which is the order it was presented in. Released as IRW
+689 and 693, with each table's note on [Corrections](corrections.qmd). Refs
+#3237.
 
-The [vignettes index](./vignettes/index.qmd) also now says what these pages
-are. Many of them are attempts to explore a new idea rather than settled
-results, and should be read that way — suggestive, sometimes wrong, and a
-starting point for your own analysis rather than something to cite. The
-standing caveat that much of the dataset search, compute, design and writing
-behind them is Claude's work under human review is unchanged.
+## 2026-11-06 — The volunteered middle answer is back in seven Spanish survey tables
 
-## 2026-11-05 — The ENEM and ENCCEJA tables carry CC BY-ND 3.0
+In seven `spain_*` tables built from CIS surveys, code 3 — the middle answer an
+interviewer did not read out but recorded when a respondent volunteered it
+("Ni sí ni no", "Regular") — had been dropped as missing, so `resp` ran 1, 2, 4,
+5 on what is a five-point scale. It is kept now. Every other response is
+unchanged, the item text gains the code-3 option, and each table also gains the
+few respondents who had answered only with code 3 and so had been absent
+entirely. Anyone who has fitted a model to the gapped version of these scales
+should refit it. Released as IRW 690 to 692, with each table's note on
+[Corrections](corrections.qmd). Refs #2864.
 
-108 core tables and 108 nominal ones — 52 ENEM and 56 ENCCEJA — were published
-under CC BY 4.0, which was chosen because no source licence had been found for
-them. gov.br puts INEP's content under CC BY-ND 3.0, and the ruling on
-2026-11-05 was that these tables are that same data reformatted and so travel
-under INEP's terms. The difference is worth knowing before you build on them:
-ND permits use and redistribution of the material as it stands but not the
-distribution of a modified version, so analysing one of these tables is covered
-where passing on a reshaped copy of it is not. The corrected licence is in the
-metadata the pipeline generates; the commits do not show the metadata tables
-republished, so the licence this site displays and the packages return for these
-tables may still read CC BY 4.0 until they are. Refs #3316.
+## 2026-11-05 — The ENEM and ENCCEJA tables carry INEP's no-derivatives terms
 
-## 2026-11-04 — The Python package catches up with the warehouse
+The Brazilian ENEM and ENCCEJA tables, in the core and nominal families, had
+been published under CC BY 4.0 over a source licence the IRW had not recorded.
+gov.br puts INEP's content under CC BY-ND 3.0, and these tables are the same
+data reformatted, so they carry INEP's terms: both the original and the outbound
+licence now read CC BY-ND 3.0. That is a narrower grant than what the rows
+stated before, since ND does not cover redistributing a modified version, so
+anyone who read the earlier licence as permission to reshare a derivative should
+check it against the new one. [Docs](docs.qmd) links the licence. Refs #3316.
 
-`pip install irw` now gives 0.8.0. PyPI had been on 0.7.7 since 2026-10-18, and
-the drift report had that release 878 tables short of what is live: it could not
-see `irw_rank_2`, `irw_text_4` or the current `item_response_warehouse_8`, and
-had no shard discovery with which to notice. 0.8.0 reads the warehouse
-catalogue once per session and lets the published metadata decide which core
-tables exist, so a dataset released after a package release can no longer go
-missing that way — the same change CRAN `irw` 1.4.0 carried on 2026-11-02.
+## 2026-11-05 — How to read the vignettes
 
-It also brings the Python half of work this log has already recorded for R,
-including the gap left open on 2026-11-02: `long2resp()` names item columns by
-the item id and returns them in natural order, and takes an `occasion` argument
-for `rater`, `trial_*`, `session` and the other columns on which a response can
-repeat. Alongside those, the four psychometric filters, a default `density`
-filter that no longer caps at 1, and `source = "core"` as the canonical spelling
-with `"main"` still accepted — 0.7.7 raised an error on `"core"`, which is the
-spelling this site and the R package document. A missing credential, a missing
-table and a failed listing now raise an error rather than looking like absence.
-Refs #3091, #3221, #3222.
+[Vignettes](./vignettes/index.qmd) already said that most of these pages — the
+dataset search, the compute scripts, the analysis design and the writing — were
+produced largely by Claude working from a task specification and with human
+review. It now also says what they are for: many are attempts to explore a new
+idea rather than settled results, and should be read as suggestive, sometimes
+wrong, and a starting point for your own analysis rather than something to cite.
+
+## 2026-11-04 — The Python client catches up
+
+`pip install irw` now gives 0.8.0, which brings the Python half of the work the
+R package shipped in 1.4.0 and that this log noted on 2026-11-02 as still
+unreleased. `long2resp()` names each item column by the item id and returns them
+in natural order, so the two clients give the same table the same columns, and
+it no longer averages across an occasion column without being told to: the new
+`occasion` argument chooses one, for `rater`, `trial_*`, `session` and the rest,
+and a table keyed by such a column stops rather than silently pooling. With it
+come the four psychometric filters, `filter()`'s `density` default no longer
+capping at 1, shard discovery so a dataset published after a release is still
+reachable, and the published metadata as the authority for which core tables
+exist. `"core"` is the source spelling in Python too now, as it is in R and on
+the site; `"main"` keeps working. Refs #3091, #3221, #3222.
 
 ## 2026-11-02 — The R package on CRAN catches up with the warehouse
 
