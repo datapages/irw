@@ -129,3 +129,78 @@ family_table_list("cov", "irw_cov", "cov",
                   c(n_mat = "Matrices", n_vars = "Variables", n_obs = "N", stat = "Stat", pd = "Positive definite"),
                   md = per, bib = cov_bib)
 ```
+
+## An example: what a meta-analytic corpus can pool
+
+Most of the family's tables are single matrices, fitted the way the lavaan example above fits Holzinger and Swineford. A meta-analytic SEM corpus is different: it is a stack of small matrices from different studies, and the first job is to see what the stack supports before pooling it. The table is `boer_2016_lmx` (Boer et al., 2016, from `metaSEM::Boer16`), a corpus of studies of transformational leadership (TFL), leader-member exchange (LMX), job satisfaction (JS), organizational commitment (OC) and leader effectiveness (LE). It is read from the released `irw_cov` when this page is built.
+
+```{r}
+#| label: cov-example
+#| include: false
+boer <- as.data.frame(redivis$user("datapages")$dataset("irw_cov")$table("boer_2016_lmx")$to_tibble())
+bc <- boer[boer$stat == "cor" & boer$var1 != boer$var2, ]
+vv <- c("TFL", "LMX", "JS", "OC", "LE")
+ord <- function(a, b) ifelse(match(a, vv) < match(b, vv), paste(a, b, sep = "-"), paste(b, a, sep = "-"))
+bc$pair <- ord(bc$var1, bc$var2)
+n_studies <- length(unique(boer$group))
+r_per_study <- table(bc$group)
+n_one <- sum(r_per_study == 1)
+max_vars <- max(tapply(c(boer$var1, boer$var2), c(boer$group, boer$group), function(x) length(unique(x))))
+hs <- do.call(rbind, lapply(split(bc, bc$pair), function(x) {
+  rbar <- weighted.mean(x$value, x$n)
+  s2 <- weighted.mean((x$value - rbar)^2, x$n)       # observed variance of r, n-weighted
+  se2 <- (1 - rbar^2)^2 / (mean(x$n) - 1)             # expected from sampling error alone
+  data.frame(pair = x$pair[1], k = nrow(x), N = sum(x$n), rbar = rbar,
+             pct_se = 100 * min(1, se2 / s2), tau = sqrt(max(0, s2 - se2)))
+}))
+hs <- hs[order(-hs$k), ]
+big <- hs[hs$k >= 20, ]
+tl <- hs[hs$pair == "TFL-LMX", ]
+fp <- bc[bc$pair == big$pair[1], ]
+fp_rbar <- big$rbar[1]
+fp_label <- sub("-", " and ", big$pair[1])
+f2 <- function(x) sprintf("%.2f", x)
+pct <- function(x) sprintf("%.0f%%", x)
+fig_cap_cov <- sprintf("boer_2016_lmx (irw_cov). Left: how many of the %d studies report each correlation. Right: the %d studies that report %s, each study's r against its sample size; the curves are the range sampling error alone would give around the n-weighted mean (%s).",
+                       n_studies, big$k[1], fp_label, f2(fp_rbar))
+```
+
+The table holds `r n_studies` studies, and `r n_one` of them report a single correlation. No study measured more than `r max_vars` of the five variables, so a pooled five-by-five matrix is assembled from studies that each saw a corner of it. The left panel shows which corners: the correlations of job satisfaction and commitment with leadership are each reported by twenty or more studies, while the path at the centre of the paper's model, TFL to LMX, rests on `r tl$k` studies and `r fmt_n(tl$N)` people.
+
+```{r}
+#| label: fig-cov-example
+#| fig-cap: !expr fig_cap_cov
+#| fig-width: 9
+#| fig-height: 4.2
+op <- par(mfrow = c(1, 2), mar = c(4, 4, 1, 1), mgp = c(2.4, 0.7, 0))
+K <- matrix(NA, 5, 5, dimnames = list(vv, vv))
+for (i in seq_len(nrow(hs))) { p <- strsplit(hs$pair[i], "-")[[1]]; K[p[2], p[1]] <- hs$k[i] }
+image(1:5, 1:5, t(K[5:1, ]), col = colorRampPalette(c("#e8ecf3", family_fill))(30),
+      axes = FALSE, xlab = "", ylab = "")
+axis(1, 1:5, vv, tick = FALSE); axis(2, 1:5, rev(vv), tick = FALSE, las = 1)
+kk <- which(!is.na(t(K[5:1, ])), arr.ind = TRUE)
+text(kk[, 1], kk[, 2], t(K[5:1, ])[kk], col = ifelse(t(K[5:1, ])[kk] > 15, "white", "black"))
+nn <- exp(seq(log(min(fp$n)), log(max(fp$n)), length.out = 100))
+band <- 1.96 * (1 - fp_rbar^2) / sqrt(nn - 1)
+plot(fp$n, fp$value, log = "x", pch = 16, col = family_fill, las = 1,
+     xlab = "Study sample size (log scale)", ylab = paste("r between", fp_label),
+     ylim = range(c(fp$value, fp_rbar - band, fp_rbar + band)))
+abline(h = fp_rbar, col = "grey40")
+lines(nn, fp_rbar + band, lty = 2, col = "grey40"); lines(nn, fp_rbar - band, lty = 2, col = "grey40")
+par(op)
+```
+
+The right panel is the usual first check on whether the studies estimate one correlation. If they did, the points would sit inside the dashed curves, spreading less as samples grow. They do not: for the `r nrow(big)` correlations reported by twenty or more studies, sampling error accounts for `r pct(min(big$pct_se))` to `r pct(max(big$pct_se))` of the variance of r across studies, against the 75% that Hunter and Schmidt's rule of thumb asks before treating a correlation as one population value. The standard deviation of the true correlations left over runs from `r f2(min(big$tau))` to `r f2(max(big$tau))`. The four studies of TFL and LMX, by contrast, agree with each other (sampling error accounts for `r pct(tl$pct_se)` of their spread), but four studies are a thin base for the path the model is about.
+
+Both facts point to the same next step: pool the matrices with a random-effects model, which carries the spread between studies into the pooled matrix's uncertainty, rather than averaging them into one matrix and fitting it as if it were a single sample. `irw_cov2list()` returns the corpus in the shape `metaSEM::tssem1()` takes:
+
+```{r}
+#| eval: false
+#| echo: true
+library(irw); library(metaSEM)
+x <- irw_cov2list(irw_fetch("boer_2016_lmx", source = "cov"))
+stage1 <- tssem1(x$matrices, x$n, method = "REM", RE.type = "Diag")
+summary(stage1)
+```
+
+This is a one-table illustration of a check every corpus in the family invites, not a claim about leadership. The numbers above are computed from the released table when this page is built.
