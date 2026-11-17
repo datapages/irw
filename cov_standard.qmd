@@ -94,4 +94,38 @@ A table holding several samples needs `group =` (`irw_cov2matrix(df, group = "gi
 
 ## What the family holds
 
-The family was first released in November 2026. Its first matrices are the classics of factor analysis: Holzinger and Swineford's Grant-White tests, Thurstone's and Bechtoldt's ability batteries, Brigham's 1932 College Board matrices for boys and girls, Tucker's interbattery example, Mullen's physical measures, Burt's emotions, and matrices from health measurement. Each was taken from an R package, and the IRW copy has been checked cell by cell against the package's copy. A matrix taken from a GPL-licensed package is reshared under the GPL. Matrices from open-access papers and meta-analytic SEM corpora are being added. A listing of the family's tables, with their records, will appear here once the family's metadata is published.
+{{< include _load-family-meta.qmd >}}
+
+```{r}
+#| label: cov-meta
+#| include: false
+## cov_metadata is one row per matrix (table x group), from stage 22 of the
+## metadata pipeline; licence and source come from the matrix records in the
+## same table, since the family has no cov_biblio yet.
+cm <- irw_meta_table("cov_metadata")
+cm$table <- trimws(as.character(cm$table))
+one <- function(x) paste(sort(unique(x[!is.na(x) & nzchar(x)])), collapse = "; ")
+per <- do.call(rbind, lapply(split(cm, cm$table), function(d) data.frame(
+  table = d$table[1], n_mat = nrow(d), n_vars = max(d$n_vars), n_obs = sum(d$n_obs),
+  stat = one(d$stat), pd = if (all(d$is_pd %in% TRUE)) "yes" else if (any(d$is_pd %in% FALSE)) "no" else "",
+  licence = one(d$licence), via = one(d$via))))
+cov_bib <- data.frame(table = per$table, Derived_License = per$licence, URL__for_data_ = per$via)
+n_tab <- nrow(per); n_mat <- nrow(cm)
+n_masem <- sum(per$n_mat > 2)
+n_deposit <- length(unique(cm$table[cm$capture == "digital deposit"]))
+n_nonpd <- sum(per$pd == "no")
+```
+
+The family was first released in November 2026 and now holds `r fmt_n(n_mat)` matrices in `r n_tab` tables. Its first matrices were the classics of factor analysis: Holzinger and Swineford's Grant-White tests, Thurstone's and Bechtoldt's ability batteries, Brigham's 1932 College Board matrices for boys and girls, Tucker's interbattery example, Mullen's physical measures and Burt's emotions. `r n_masem` tables are meta-analytic SEM corpora with one matrix per study, read with `irw_cov2list()` in one call. Most matrices were taken from R packages and checked cell by cell against the package's copy; a matrix from a GPL-licensed package is reshared under the GPL. `r n_deposit` tables come from openly licensed data deposits. `r n_nonpd` tables hold a matrix that is not positive definite as published, and they are kept that way.
+
+### Every table in the family
+
+N is the matrix's sample size, summed over the matrices in a table that has several. Licence and source are those of the copy the IRW took the matrix from.
+
+```{r}
+#| label: cov-table-list
+#| results: asis
+family_table_list("cov", "irw_cov", "cov",
+                  c(n_mat = "Matrices", n_vars = "Variables", n_obs = "N", stat = "Stat", pd = "Positive definite"),
+                  md = per, bib = cov_bib)
+```

@@ -61,9 +61,12 @@ esc_html <- function(x) {
 ## `cols` names the metadata columns to show, in order, with their headings:
 ## c(n_respondents = "Respondents", ...). Numeric columns are formatted with
 ## thousands separators; anything else is shown as text.
-family_table_list <- function(prefix, dataset, source, cols) {
-  md  <- irw_meta_table(paste0(prefix, "_metadata"))
-  bib <- irw_meta_table(paste0(prefix, "_biblio"))
+## `md` and `bib` may be passed in for a family whose tables do not fit the
+## one-row-per-table metadata plus <prefix>_biblio shape (cov: one row per
+## matrix, licence and source in the metadata itself).
+family_table_list <- function(prefix, dataset, source, cols, md = NULL, bib = NULL) {
+  if (is.null(md))  md  <- irw_meta_table(paste0(prefix, "_metadata"))
+  if (is.null(bib)) bib <- irw_meta_table(paste0(prefix, "_biblio"))
   md$table <- trimws(as.character(md$table))
   md$dataset <- dataset
   md <- md[order(tolower(md$table)), , drop = FALSE]
