@@ -355,6 +355,12 @@ def tree_panel():
     out += box(154, 166, 52, 30, "Nominal", "nom", "unordered")
     out += box(214, 166, 84, 30, "Competitions", "comp", "pairs")
     out += box(302, 166, 62, 30, "Rankings", "rank", "positions")
+    # Covariance sits outside both questions: it holds no responses, only a
+    # published matrix. A side branch, so the figure stays "two questions".
+    out.append(t(330, 12, "no responses,", 7.5, MUTED))
+    out.append(t(330, 21, "only a matrix?", 7.5, MUTED))
+    out.append('<path d="M330,25 V40" fill="none" stroke="#adb5bd" stroke-width="1.3" stroke-dasharray="3 2"/>')
+    out += box(296, 40, 68, 30, "Covariance", "cov", "a published matrix")
     return out
 
 
