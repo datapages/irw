@@ -213,3 +213,69 @@ summary(stage1)
 ```
 
 This is a one-table illustration of a check every corpus in the family invites, not a claim about leadership. The numbers above are computed from the released table when this page is built.
+
+## An example: a published matrix beside its raw data
+
+Matrices computed from IRW tables are not stored, but one corpus in the family comes close to that rule, and it makes a useful lesson. Gnambs, Scharl and Schroeders' (2018) meta-analysis of the Rosenberg Self-Esteem Scale (`gnambs_2018_rses10`, from `metaSEM::Gnambs18`) includes ten samples it computed, country by country, from the Open Psychometrics online data. The IRW holds those responses too, as the core table `rosenberg_selfesteem`, but without the country column, so Gnambs's per-country matrices cannot be recomputed from the IRW copy, and they are kept. The record's `overlaps` field names `rosenberg_selfesteem`, and the packages print a note when the table is fetched, because pooling both would count the same people twice. Set side by side, the published matrices and the raw data show three things that go wrong when matrices from different sources are compared.
+
+```{r}
+#| label: cov-rses
+#| include: false
+gn <- as.data.frame(redivis$user("datapages")$dataset("irw_cov")$table("gnambs_2018_rses10")$to_tibble())
+gn <- gn[gn$stat == "cor" & grepl("^Opd2014", gn$group), ]
+iv <- paste0("I", 1:10)
+opd <- unique(gn$group)
+n_opd <- sapply(opd, function(g) max(gn$n[gn$group == g]))
+avg <- matrix(0, 10, 10, dimnames = list(iv, iv))
+for (g in opd) {
+  d <- gn[gn$group == g, ]; m <- matrix(NA, 10, 10, dimnames = list(iv, iv))
+  m[cbind(d$var1, d$var2)] <- d$value; m[cbind(d$var2, d$var1)] <- d$value
+  avg <- avg + m * n_opd[[g]]
+}
+avg <- avg / sum(n_opd)
+rs <- as.data.frame(redivis$user("datapages")$dataset("item_response_warehouse")$table("rosenberg_selfesteem")$to_tibble())
+rs$resp <- as.numeric(rs$resp); rs$resp[rs$resp == 0] <- NA        # 0 = no answer in the source
+wide <- tapply(rs$resp, list(rs$id, as.character(rs$item)), function(x) x[1])
+wide <- wide[, as.character(1:10)]
+irw_r <- cor(wide, use = "pairwise.complete.obs")
+n_irw <- nrow(wide)
+lt <- lower.tri(avg)
+neg_irw <- sum(irw_r[lt] < 0); neg_gn <- sum(avg[lt] < 0)
+# Gnambs numbers the items in Rosenberg's standard order; the online
+# questionnaire behind rosenberg_selfesteem numbers them differently. The map
+# is inferred from the matrices (it is recorded as inferred in the table's
+# `variables` field), and the numbers below show why.
+map <- c(I1 = 7, I2 = 10, I3 = 2, I4 = 4, I5 = 5, I6 = 9, I7 = 1, I8 = 8, I9 = 3, I10 = 6)
+as_num <- irw_r[as.character(1:10), as.character(1:10)]
+as_map <- irw_r[as.character(map), as.character(map)]
+r_before <- cor(abs(avg[lt]), abs(as_num[lt])); r_after <- cor(abs(avg[lt]), abs(as_map[lt]))
+gap_after <- mean(abs(abs(avg[lt]) - abs(as_map[lt])))
+fig_cap_rses <- sprintf("gnambs_2018_rses10's ten Open Psychometrics samples (N-weighted mean r, %s people) against the matrix computed from rosenberg_selfesteem (%s people), each point one of the 45 item pairs, as absolute values. Left: items matched by their numbers. Right: items matched by the map between Rosenberg's standard order and the online questionnaire's order.",
+                        fmt_n(sum(n_opd)), fmt_n(n_irw))
+```
+
+**Reverse-keying.** Half of Rosenberg's items are worded negatively ("at times I think I am no good at all"). Gnambs reverse-scored them before computing the matrices, so all `r sum(lt)` correlations are positive. The IRW keeps responses as answered, so `r neg_irw` of the correlations computed from `rosenberg_selfesteem` are negative: every pair of one positive and one negative item. Neither is wrong, but a comparison has to know which convention it is looking at.
+
+**Numbering.** Matched by item number, the two matrices barely resemble each other: the sizes of the correlations agree at r = `r f2(r_before)` (left panel). The reason is that Gnambs numbers the items in Rosenberg's standard order, and the online questionnaire numbers them in its own. Its item 1 appears to be Rosenberg's item 7. Matched by content, they agree at r = `r f2(r_after)` (right panel). The source never states the order, so the correspondence is inferred from these matrices, and the table's record says so.
+
+**Pooling.** After the map, the published and recomputed correlations differ by `r f2(gap_after)` on average. That is what pooling ten countries should leave: Gnambs's matrices are within-country, and the IRW copy, with no country column, can only be computed across all of them.
+
+```{r}
+#| label: fig-cov-rses
+#| fig-cap: !expr fig_cap_rses
+#| fig-width: 9
+#| fig-height: 4.2
+op <- par(mfrow = c(1, 2), mar = c(4, 4, 1, 1), mgp = c(2.4, 0.7, 0))
+for (k in 1:2) {
+  y <- abs(if (k == 1) as_num[lt] else as_map[lt])
+  plot(abs(avg[lt]), y, pch = 16, col = family_fill, las = 1, xlim = c(0, 0.8), ylim = c(0, 0.8),
+       xlab = "Published |r| (Gnambs)",
+       ylab = "|r| computed from rosenberg_selfesteem")
+  abline(0, 1, col = "grey40", lty = 2)
+  mtext(if (k == 1) sprintf("matched by item number: r = %s", f2(r_before))
+        else sprintf("matched by item content: r = %s", f2(r_after)), side = 3, line = -1.2, adj = 0.03, cex = 0.85)
+}
+par(op)
+```
+
+The same check, a published item matrix against one computed from the IRW's own copy of the data, is worth running wherever both exist: a mismatch that a renumbering does not explain would point to an error in one copy or the other. The numbers above are computed from the released tables when this page is built.
