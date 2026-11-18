@@ -18,9 +18,11 @@ One table holds one source's matrix, or several matrices that one source publish
 |---|---|---|
 | `stat` | required | `cor` or `cov` for a cell of the matrix; `sd` or `mean` for a moment of one variable. One sample's matrix is all `cor` or all `cov`. |
 | `var1`, `var2` | required | The variable names as the source gives them. `var2` is blank on `sd` and `mean` rows. |
-| `value` | required | The number **as published**, never rounded, smoothed or corrected. |
+| `value` | required | The number **as published**, never rounded, smoothed or corrected. Empty only for a cell the source did not report (below). |
 | `n` | required | The sample size behind the cell: the pairwise n when the source reports one, otherwise the matrix's N on every row. It is never blank, so a table on its own is enough to fit a model. |
 | `group` | optional | Present only when one source publishes matrices for several samples, such as boys and girls, or two random halves. Each group is its own matrix. |
+
+Some sources leave cells blank: a study in a meta-analytic corpus often measured two variables but did not report their correlation. Such a cell is kept as a row with an empty `value`, so the table shows exactly what the source reported. Every other cell still has its row, so a blank always means "not reported", never a gap in the transcription. A variable the source never measured at all is left out of that sample's matrix instead. The family's record counts the blank cells (`n_missing_cells`).
 
 The values are kept as published, and this matters most for matrices that are **not positive definite**, which rounding, pairwise deletion and typos make common in old literature. Such a matrix is kept and flagged, never repaired. Burt's 1915 matrix of eleven emotions is in the family as printed, with its negative eigenvalue: it most likely carries a typo (0.87 where 0.81 would make it positive definite), and you should know that before you fit it, not find out from an optimiser.
 
@@ -90,7 +92,9 @@ irw.cov2matrix(sp)["matrix"]
 ```
 :::
 
-A table holding several samples needs `group =` (`irw_cov2matrix(df, group = "girls")`). A multi-group fit takes one matrix and one N per group.
+A table holding several samples needs `group =` (`irw_cov2matrix(df, group = "girls")`). A multi-group fit takes one matrix and one N per group, and `irw_cov2list()` returns them all at once.
+
+A matrix with cells the source did not report comes back with `NA` in those cells and a warning, because most fitting functions, lavaan among them, refuse it. `irw_cov2matrix(df, complete = TRUE)` returns the complete part instead: the matrix after dropping the fewest variables that leaves no blank, with what was dropped in `$dropped`. Whether a matrix is positive definite is judged on that same complete part. `irw_cov2list()` keeps the `NA`s, which is what `metaSEM::tssem1()` expects.
 
 ## What the family holds
 
