@@ -1,4 +1,5 @@
-"""Generate the IRW data-families figure (core / nominal / comp / conj / rank).
+"""Generate the IRW data-families figure (core / nominal / comp / conj / rank),
+and the covariance panel (families-cov.svg; not in the combined figure).
 
 Extends diagram-cross-classification.svg: each panel shows what a respondent
 meets (left) and the long table it becomes (right). The panels differ in what
@@ -15,7 +16,7 @@ NOMCOL = {"A": "#8352ff", "B": "#ff4d8d", "C": "#00a3a3", "D": "#8a8478"}
 ATTR1 = {"r": "#ee7c4f", "b": "#5c98e0", "g": "#1ec288"}       # attr_1 levels
 ATTR2 = {"c": "●", "t": "▲", "s": "■"}                         # attr_2 levels
 ACCENT = {"core": "#2469bc", "nom": "#8352ff", "comp": "#cc4814",
-          "conj": "#127350", "rank": "#a86f00"}
+          "conj": "#127350", "rank": "#a86f00", "cov": "#a3195b"}
 
 W, H = 372, 212   # panel size
 
@@ -357,8 +358,39 @@ def tree_panel():
     return out
 
 
+def cov_panel():
+    """A published matrix among three items (the suits, as in the other panels)
+    becomes one row per cell of its lower triangle, diagonal included."""
+    out = header("cov", "Covariance", "cov",
+                 "a published correlation matrix, not responses")
+    col = ACCENT["cov"]
+    v = SUITS[:3]
+    R = {(0, 0): "1", (1, 0): ".42", (1, 1): "1", (2, 0): ".31", (2, 1): ".55", (2, 2): "1"}
+    shade = {".42": "#e7b3c9", ".31": "#f0cddc", ".55": "#d98aab"}
+    gx, gy, c = 34, 66, 36
+    for j, s in enumerate(v):
+        out.append(g(gx + j * c + c / 2, gy - 8, s, 15))
+        out.append(g(gx - 12, gy + j * c + c / 2 + 5, s, 15))
+    for (i, j), val in R.items():
+        fill = "#ececec" if i == j else shade[val]
+        out.append(r(gx + j * c, gy + i * c, c, c, fill, "#ffffff", 2))
+        out.append(t(gx + j * c + c / 2, gy + i * c + c / 2 + 4, val, 11,
+                     MUTED if i == j else INK, weight="700"))
+    out.append(t(gx + 1.5 * c, gy + 3 * c + 16, "N = 200", 10, HEAD, weight="600"))
+    out += arrow(158, gy + 1.5 * c)
+    rows = []
+    for (i, j), val in sorted(R.items()):
+        rows.append([mono("cor"), suit(v[i]), suit(v[j]),
+                     num(val, col if i != j else INK), num("200")])
+    tb, _ = table(194, 44, [("stat", 30), ("var1", 30), ("var2", 30), ("value", 34), ("n", 30)],
+                  rows, rh=12)
+    out += tb
+    out += footer("one row = one cell of the lower triangle  ·  value as published")
+    return out
+
+
 PANELS = {"core": core_panel, "nom": nom_panel, "comp": comp_panel,
-          "conj": conj_panel, "rank": rank_panel}
+          "conj": conj_panel, "rank": rank_panel, "cov": cov_panel}
 
 
 def wrap(parts, w=W, h=H, label=""):
@@ -372,6 +404,7 @@ ALT = {
     "nom": "Nominal: an id-by-item grid of unordered categories becomes a long table of id, item, text.",
     "comp": "Competitions: an agent-by-agent matrix of contests becomes a table of agent_a, agent_b, winner.",
     "conj": "Conjoint: randomly built profiles chosen within tasks become a table of id, task, profile, attributes, choice.",
+    "cov": "Covariance: a published correlation matrix among three variables, with its N, becomes a table of stat, var1, var2, value, n, one row per cell of the lower triangle.",
     "rank": "Rankings: ballots ordering a fixed set of options become a table of id, task, item, resp where resp is a position; skipped positions are gaps.",
 }
 

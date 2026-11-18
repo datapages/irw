@@ -348,6 +348,7 @@ kv_rows <- function(pairs) {
 STANDARD_URL  <- "https://github.com/ben-domingue/irw/blob/main/datastandard.md"
 CONJ_STANDARD_URL <- "https://itemresponsewarehouse.org/conjoint_standard.html"
 RANK_STANDARD_URL <- "https://itemresponsewarehouse.org/rankings_standard.html"
+COV_STANDARD_URL <- "https://itemresponsewarehouse.org/cov_standard.html"
 STANDARD_COLS <- c("id", "item", "resp", "resp_raw", "wave", "treat", "rt", "date",
                    "rater", "item_family", "cluster_id", "block_id", "std_baseline")
 columns_note <- function(x) {
@@ -369,6 +370,12 @@ columns_note <- function(x) {
     RANK_STANDARD_URL, "\">IRW rankings standard</a>. Skipped positions are gaps and ",
     "duplicate marks are kept, so compress with <code>irw_rank_compress()</code> / ",
     "<code>irw.rank_compress()</code> before a person-by-item pivot.</p>\n"))
+  if (identical(x$src, "cov")) return(paste0(
+    "<p class=\"note\">The layout (one row per cell of the lower triangle, diagonal included, ",
+    "with <code>stat</code> <code>cor</code> or <code>cov</code>, plus optional <code>sd</code> and ",
+    "<code>mean</code> rows; <code>value</code> as published; <code>n</code> the sample size behind ",
+    "the cell; <code>group</code> the sample, when a source published several) is defined in the ",
+    "<a href=\"", COV_STANDARD_URL, "\">IRW covariance standard</a>.</p>\n"))
   std <- x$variables[x$variables %in% STANDARD_COLS | startsWith(x$variables, "std_baseline")]
   first <- if (length(std)) paste0(
     paste0("<code>", vapply(std, esc, character(1)), "</code>", collapse = ", "),
@@ -775,6 +782,7 @@ build_croissant <- function(x) {
     nom  = c("id", "item", "resp", "text"),
     conj = c("id", "task", "profile", "choice", "rating"),
     rank = c("id", "task", "item", "resp"),
+    cov  = c("stat", "var1", "var2", "value", "n", "group"),
     c("id", "item", "resp"))
   core <- intersect(std, x$variables)
   fields <- lapply(core, function(v) {
@@ -782,8 +790,8 @@ build_croissant <- function(x) {
          "@id"   = paste0("responses/", v),
          name    = v,
          description = paste0("The '", v, "' column of the IRW table."),
-         dataType = if (v %in% c("resp", "choice", "rating")) "sc:Float" else
-                    if (v %in% c("task", "profile")) "sc:Integer" else "sc:Text",
+         dataType = if (v %in% c("resp", "choice", "rating", "value")) "sc:Float" else
+                    if (v %in% c("task", "profile", "n")) "sc:Integer" else "sc:Text",
          source  = list("fileObject" = list("@id" = "redivis-table"),
                         "extract"    = list("column" = v)))
   })
@@ -859,6 +867,8 @@ build_croissant <- function(x) {
         "One row per respondent, task and profile, per the IRW conjoint format."
         else if (x$src == "rank")
         "One row per respondent, ranking and marked position (resp = the position, as recorded), per the IRW rankings format."
+        else if (x$src == "cov")
+        "One row per cell of the lower triangle of a published correlation or covariance matrix, diagonal included, plus optional sd and mean rows, per the IRW covariance standard."
         else "One row per person-item response, per the IRW data standard.",
       field = fields
     ))
@@ -868,6 +878,15 @@ build_croissant <- function(x) {
 # --------------------------------------------------------------------- the page
 
 PAGE_CSS <- paste0(
+# The covariance family's matrix grid and sample list (cov_matrix_html).
+".hmw{overflow-x:auto;margin:.6rem 0}.hm{border-collapse:collapse;font-size:.72rem;",
+"font-variant-numeric:tabular-nums}.hm th{font-weight:600;color:#555;padding:0 .4rem;",
+"white-space:nowrap;text-align:right}.hm thead th{text-align:center;padding:0}",
+".hm td{min-width:2.3rem;height:1.55rem;text-align:center;padding:0;border:1px solid #fff}",
+".hm.dense td{min-width:.75rem;height:.75rem}.hm td.dg{background:#ececec;color:#888}",
+".st{border-collapse:collapse;font-size:.85rem;margin:.4rem 0}.st th,.st td{padding:.2rem .7rem;",
+"border-bottom:1px solid #eee;text-align:left}.st td.n,.st th.n{text-align:right}",
+"h3{font-size:.95rem;margin:1.1rem 0 .2rem}",
 "body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.55;",
 "max-width:52rem;margin:0 auto;padding:1.5rem 1.25rem 4rem;color:#1c1c1c}",
 "a{color:#8c1515}h1{font-size:1.6rem;margin:.2rem 0 .1rem;word-break:break-word}",
@@ -955,6 +974,193 @@ conj_tag_text <- function(v) {
   if (!nzchar(v)) return("")
   paste(gsub("_", " ", trimws(strsplit(v, ";", fixed = TRUE)[[1]]), fixed = TRUE), collapse = ", ")
 }
+# ------------------------------------------------------------ covariance family
+#
+# cov_standard.qmd; datapages/irw#438. A cov table holds a published matrix,
+# not responses, so its page reports the matrix's record (cov_metadata) and
+# draws the matrix, instead of response counts and a design block.
+
+.cov_tf  <- function(v) tolower(trimws(as.character(v))) %in% c("true", "1", "yes")
+.cov_num <- function(v) suppressWarnings(as.numeric(v))
+.cov_chr <- function(v) { v <- as.character(v); v[is.na(v)] <- ""; trimws(v) }
+
+# cov_metadata has one row per table x sample; the page index and the size
+# block want one per table. A field that differs across a table's samples
+# reads "varies by sample", never one sample's value standing for all.
+cov_collapse <- function(g) {
+  if (!nrow(g)) return(g)
+  one <- function(v) {
+    u <- unique(.cov_chr(v)); u <- u[nzchar(u)]
+    if (!length(u)) NA_character_ else if (length(u) == 1) u else "varies by sample"
+  }
+  fin <- function(f, v) { v <- .cov_num(v); v <- v[!is.na(v)]; if (length(v)) f(v) else NA_real_ }
+  k <- tolower(.cov_chr(g$table))
+  out <- lapply(split(seq_len(nrow(g)), factor(k, levels = unique(k))), function(i) {
+    r <- g[i, , drop = FALSE]
+    data.frame(
+      table = .cov_chr(r$table[1]), n_groups = length(i),
+      n_vars = fin(max, r$n_vars), n_obs = fin(sum, r$n_obs), n_obs_max = fin(max, r$n_obs),
+      stat = one(r$stat), n_not_pd = sum(!.cov_tf(r$is_pd)),
+      min_eigenvalue = fin(min, r$min_eigenvalue),
+      has_sd = any(.cov_tf(r$has_sd)), has_mean = any(.cov_tf(r$has_mean)),
+      matrix_type = one(r$matrix_type), missing = one(r$missing),
+      population = one(r$population), source_location = one(r$source_location),
+      capture = one(r$capture), verified = one(r$verified), cov_notes = one(r$notes),
+      stringsAsFactors = FALSE)
+  })
+  do.call(rbind, out)
+}
+
+.cov_what <- function(stat, plural = FALSE)
+  switch(chr(stat), cor = if (plural) "correlation matrices" else "correlation matrix",
+                    cov = if (plural) "covariance matrices" else "covariance matrix",
+         if (plural) "correlation or covariance matrices" else "correlation or covariance matrix")
+
+cov_size_sentence <- function(m) {
+  if (.cov_num(m$n_groups) > 1) paste0(
+    num_fmt(m$n_groups), " published ", .cov_what(m$stat, TRUE), ", one per sample, of up to ",
+    num_fmt(m$n_vars), " variables; ", num_fmt(m$n_obs), " observations in all.")
+  else paste0("A published ", .cov_what(m$stat), " of ", num_fmt(m$n_vars),
+              " variables, from a sample of ", num_fmt(m$n_obs), ".")
+}
+
+# Every variable a table holds, across its samples: a meta-analytic corpus can
+# hold more than any one sample measured (boer_2016_lmx: 5, at most 4 per study).
+.cov_union <- function(d) {
+  if (is.null(d) || !nrow(d)) return(NA_integer_)
+  m <- d[.cov_chr(d$stat) %in% c("cor", "cov") & nzchar(.cov_chr(d$var2)), , drop = FALSE]
+  length(unique(c(.cov_chr(m$var1), .cov_chr(m$var2))))
+}
+
+cov_size_html <- function(x) {
+  m <- x$m
+  multi <- .cov_num(m$n_groups) > 1
+  ev <- .cov_num(m$min_eigenvalue)
+  pd <- if (!multi) {
+    if (.cov_num(m$n_not_pd) > 0) paste0("no (smallest eigenvalue ", formatC(ev, format = "fg", digits = 3), ")") else "yes"
+  } else if (.cov_num(m$n_not_pd) > 0) paste0("no: ", num_fmt(m$n_not_pd), " of ", num_fmt(m$n_groups), " samples are not")
+  else "yes, every sample"
+  yn <- function(v) if (isTRUE(as.logical(v))) "yes" else "no"
+  kv_rows(list(
+    list(if (multi) "Variables, all samples" else "Variables",
+         if (multi) num_fmt(.cov_union(x$cells)) else num_fmt(m$n_vars)),
+    list("Variables, most in one sample", if (multi) num_fmt(m$n_vars) else ""),
+    list(if (multi) "Observations, all samples" else "Sample size (N)", num_fmt(m$n_obs)),
+    list("Samples", if (multi) num_fmt(m$n_groups) else ""),
+    list("Largest sample", if (multi) num_fmt(m$n_obs_max) else ""),
+    list("Statistic", switch(chr(m$stat), cor = "correlations", cov = "covariances", chr(m$stat))),
+    list("Kind of correlation", m$matrix_type),
+    list("Positive definite", pd),
+    list("Standard deviations reported", yn(m$has_sd)),
+    list("Means reported", yn(m$has_mean)),
+    list("Missing data", m$missing),
+    list("Population", m$population),
+    list("Where in the source", m$source_location),
+    list("How it was captured", m$capture),
+    list("Capture checked", m$verified),
+    list("Notes", m$cov_notes)))
+}
+
+# A diverging fill: red for positive, blue for negative, deeper as |r| grows.
+.cov_fill <- function(r) {
+  if (is.na(r)) return("#f4f4f4")
+  t <- min(abs(r), 1)
+  base <- if (r < 0) c(33, 102, 172) else c(178, 24, 43)
+  v <- round(255 + (base - 255) * t)
+  sprintf("#%02x%02x%02x", v[1], v[2], v[3])
+}
+
+# One sample's matrix as a grid of coloured cells written into the page: no
+# image files, so the cost grows with the page, not with a render-time plot
+# per table. Variables in order of first appearance, as irw_cov2matrix() puts
+# them. Values are printed in the cells up to 12 variables; above that the
+# grid is colour only, with each value on hover.
+cov_heatmap <- function(d) {
+  m <- d[.cov_chr(d$stat) %in% c("cor", "cov") & nzchar(.cov_chr(d$var2)), , drop = FALSE]
+  if (!nrow(m)) return("")
+  a <- .cov_chr(m$var1); b <- .cov_chr(m$var2); val <- .cov_num(m$value)
+  v <- unique(c(a, b)); k <- length(v)
+  M <- matrix(NA_real_, k, k, dimnames = list(v, v)); TX <- matrix("", k, k, dimnames = list(v, v))
+  for (i in seq_along(a)) { M[a[i], b[i]] <- M[b[i], a[i]] <- val[i]; TX[a[i], b[i]] <- TX[b[i], a[i]] <- as.character(m$value[i]) }
+  is_cov <- identical(unique(.cov_chr(m$stat)), "cov")
+  R <- if (is_cov) { s <- sqrt(pmax(diag(M), 0)); M / outer(s, s) } else M
+  dense <- k > 12
+  show_txt <- !dense && !is_cov
+  short <- function(z) sub("^(-?)0\\.", "\\1.", z)
+  head <- paste0("<tr><th></th>", if (!dense) paste0("<th>", seq_len(k), "</th>", collapse = "") else
+    paste0(rep("<th></th>", k), collapse = ""), "</tr>")
+  body <- vapply(seq_len(k), function(i) {
+    cells <- vapply(seq_len(i), function(j) {
+      tip <- paste0(v[i], " × ", v[j], ": ", if (nzchar(TX[i, j])) TX[i, j] else "not reported")
+      if (i == j) return(paste0("<td class=\"dg\" title=\"", esc(tip), "\">",
+                                if (show_txt && nzchar(TX[i, j])) esc(short(TX[i, j])) else "", "</td>"))
+      r <- R[i, j]
+      ink <- if (!is.na(r) && abs(r) > 0.55) "#fff" else "#1c1c1c"
+      paste0("<td style=\"background:", .cov_fill(r), ";color:", ink, "\" title=\"", esc(tip), "\">",
+             if (show_txt && nzchar(TX[i, j])) esc(short(TX[i, j])) else "", "</td>")
+    }, character(1))
+    paste0("<tr><th>", if (!dense) paste0(i, ". ") else "", esc(v[i]), "</th>", paste(cells, collapse = ""), "</tr>")
+  }, character(1))
+  paste0("<div class=\"hmw\"><table class=\"hm", if (dense) " dense" else "", "\">\n<thead>", head, "</thead>\n<tbody>\n",
+         paste(body, collapse = "\n"), "\n</tbody></table></div>\n")
+}
+
+# The R and Python lines that turn the fetched table into what a model takes:
+# one square matrix, or, for a table of several samples, all of them at once.
+cov_snippet <- function(x, lang) {
+  multi <- .cov_num(x$m$n_groups) > 1
+  if (lang == "r") {
+    if (multi) "\nx &lt;- irw_cov2list(df)   # x$matrices, x$n: one per sample (metaSEM::tssem1)"
+    else "\nm &lt;- irw_cov2matrix(df)   # m$matrix, m$n: lavaan's sample.cov, sample.nobs"
+  } else {
+    if (multi) "\nx = irw.cov2list(df)" else "\nm = irw.cov2matrix(df)"
+  }
+}
+
+cov_matrix_html <- function(x) {
+  d <- x$cells; g <- x$covgrp
+  legend <- paste0("<p class=\"note\">Lower triangle, as published. Red is a positive ",
+    if (identical(chr(x$m$stat), "cov")) "covariance, blue a negative one, coloured by the correlation it implies; "
+    else "correlation, blue a negative one; ",
+    "the deeper the colour, the stronger. Hover over a cell for its value.</p>\n")
+  pd_note <- if (.cov_num(x$m$n_not_pd) > 0 && .cov_num(x$m$n_groups) <= 1) paste0(
+    "<p class=\"note\">As published, this matrix is not positive definite (smallest eigenvalue ",
+    formatC(.cov_num(x$m$min_eigenvalue), format = "fg", digits = 3),
+    "). The IRW keeps it as printed and does not repair it; a model fitted to it may fail or need ",
+    "smoothing, which is your choice to make.</p>\n") else ""
+  if (is.null(d) || !nrow(d)) return(pd_note)
+  grp <- if ("group" %in% names(d)) .cov_chr(d$group) else rep("", nrow(d))
+  groups <- unique(grp)
+  if (length(groups) <= 4) {
+    maps <- vapply(groups, function(s) paste0(
+      if (nzchar(s)) paste0("<h3>", esc(s), "</h3>\n") else "",
+      cov_heatmap(d[grp == s, , drop = FALSE])), character(1))
+    return(paste0(paste(maps, collapse = ""), legend, pd_note))
+  }
+  # A corpus of many samples: list them rather than draw dozens of grids.
+  g <- g[order(match(.cov_chr(g$group), groups)), , drop = FALSE]
+  pops <- unique(.cov_chr(g$population)); showpop <- length(pops[nzchar(pops)]) > 1
+  anybad <- any(!.cov_tf(g$is_pd))
+  rows <- vapply(seq_len(nrow(g)), function(i) paste0(
+    "<tr><td>", esc(.cov_chr(g$group[i])), "</td><td class=\"n\">", num_fmt(g$n_obs[i]),
+    "</td><td class=\"n\">", num_fmt(g$n_vars[i]), "</td>",
+    if (showpop) paste0("<td>", esc(.cov_chr(g$population[i])), "</td>") else "",
+    if (anybad) paste0("<td>", if (.cov_tf(g$is_pd[i])) "" else "not positive definite", "</td>") else "",
+    "</tr>"), character(1))
+  tab <- paste0("<table class=\"st\"><thead><tr><th>Sample</th><th class=\"n\">N</th><th class=\"n\">Variables</th>",
+                if (showpop) "<th>Population</th>" else "", if (anybad) "<th></th>" else "",
+                "</tr></thead><tbody>\n", paste(rows, collapse = "\n"), "\n</tbody></table>\n")
+  nu <- .cov_union(d)
+  partial <- any(.cov_num(g$n_vars) < nu, na.rm = TRUE)
+  paste0(
+    "<p>One matrix per sample, ", num_fmt(nrow(g)), " in all.",
+    if (partial) paste0(" Not every sample measured every variable: a sample with fewer variables than the ",
+                        num_fmt(nu), " in the table did not report the rest.") else "",
+    " <code>irw_cov2list()</code> returns them all at once, padded to the same variables, in the form ",
+    "<code>metaSEM::tssem1()</code> takes.</p>\n",
+    if (nrow(g) > 15) paste0("<details><summary>All ", nrow(g), " samples</summary>\n", tab, "</details>\n") else tab)
+}
+
 design_html <- function(x) {
   m <- x$m
   restr <- chr(m$restrictions)
@@ -1073,7 +1279,9 @@ build_page <- function(x) {
     list("Attributes",                num_fmt(x$m$n_attributes)),
     list("Tasks with no profile chosen", num_fmt(x$m$n_optout_tasks))))
 
-  design <- if (x$src == "conj") design_html(x) else ""
+  design <- if (x$src == "conj") design_html(x) else if (x$src == "cov") cov_matrix_html(x) else ""
+  # A matrix's size is its own record, not the response-table counts above.
+  if (x$src == "cov") size <- cov_size_html(x)
 
   about <- kv_rows(list(
     list("Description", x$description),
@@ -1234,15 +1442,19 @@ btn(x$redivis_url, "Browse on Redivis", "sign in to download"),
 "or Python (needs a free Redivis account; the first call opens a browser to sign in):</p>\n",
 "<pre># R\ninstall.packages(\"irw\")\n",
 "library(irw)\ndf &lt;- irw_fetch(\"", esc(x$table), "\"",
-if (x$src != "core") paste0(", source = \"", x$src, "\"") else "", ")</pre>\n",
+if (x$src != "core") paste0(", source = \"", x$src, "\"") else "", ")",
+# A cov table is the long lower triangle; this is the square matrix lavaan takes.
+if (x$src == "cov") cov_snippet(x, "r") else "", "</pre>\n",
 "<pre># Python\npip install irw\n\n",
 "import irw\ndf = irw.fetch(\"", esc(x$table), "\"",
-if (x$src != "core") paste0(", source=\"", x$src, "\"") else "", ")</pre>\n",
+if (x$src != "core") paste0(", source=\"", x$src, "\"") else "", ")",
+if (x$src == "cov") cov_snippet(x, "py") else "", "</pre>\n",
 # Stata reads the anonymous CSV above rather than the Redivis SDK, which has
 # no Stata client. So the snippet appears on exactly the pages that offer the
 # CSV button: over ANON_MAX_BYTES, rows_url is "" and Stata cannot get the
 # table at all without a token.
-if (nzchar(x$rows_url)) paste0(
+# The Stata package has no covariance family.
+if (nzchar(x$rows_url) && x$src != "cov") paste0(
 "<p class=\"note\">Or in <a href=\"https://github.com/itemresponsewarehouse/Stata-pkg\">",
 "Stata</a>, which reads the same no-account CSV as the button above:</p>\n",
 "<pre>* Stata\nnet install irw, from(\"https://raw.githubusercontent.com/itemresponsewarehouse/Stata-pkg/main/\")\n\n",
@@ -1277,7 +1489,7 @@ related$note,
 section("About this table", about),
 section("Notes", notes, id = "notes"),
 section("Size and shape", size),
-section("Design", design, id = "design"),
+section(if (x$src == "cov") "The matrix" else "Design", design, id = "design"),
 section("Classification", tagbody),
 section("Item text", itext),
 { cb <- codebook_html(x, STANDARD)
@@ -1454,6 +1666,7 @@ main <- function() {
   # The non-core sources keep their own metadata/biblio (and, for nom, tags;
   # for conj, outcomes) tables in irw_meta, with no `dataset` column of their own.
   outc <- data.frame(table = character(0), outcome = character(0), stringsAsFactors = FALSE)
+  covgrp <- data.frame(table = character(0), group = character(0), stringsAsFactors = FALSE)
   meta_tabs <- vapply(meta_ds$list_tables(), function(t) t$name, character(1))
   for (i in seq_len(nrow(NONCORE))) {
     pf <- NONCORE$prefix[i]
@@ -1466,6 +1679,9 @@ main <- function() {
       next
     }
     m2 <- as_df(meta_ds$table(paste0(pf, "_metadata")))
+    # cov_metadata is one row per table x sample; the page wants one per table,
+    # and the per-sample rows for its sample list.
+    if (identical(pf, "cov")) { covgrp <- m2; m2 <- cov_collapse(m2) }
     m2$dataset <- NONCORE$dataset[i]
     md  <- bind_fill(md,  m2)
     bib <- bind_fill(bib, as_df(meta_ds$table(paste0(pf, "_biblio"))))
@@ -1500,6 +1716,7 @@ main <- function() {
   key <- function(df) tolower(trimws(as.character(df[[1]])))
   md$.k <- key(md); bib$.k <- key(bib); tg$.k <- key(tg); itm$.k <- key(itm)
   outc$.k <- key(outc)
+  covgrp$.k <- key(covgrp)
   cmem$.k <- key(cmem)
 
   # One listing per shard, not one request per table: at ~4,000 tables the
@@ -1667,6 +1884,7 @@ main <- function() {
       num_fmt(mrow$n_tasks), " tasks of ", num_fmt(mrow$n_profiles),
       if (identical(num_fmt(mrow$n_profiles), "1")) " profile" else " profiles",
       " varying on ", num_fmt(mrow$n_attributes), " attributes.")
+    else if (src == "cov") cov_size_sentence(mrow)
     else if (src == "rank") paste0(
       num_fmt(mrow$n_rows), " marked positions from ",
       num_fmt(mrow$n_respondents), " rankers over ",
@@ -1702,9 +1920,18 @@ main <- function() {
       keywords = c(unname(unlist(tags)),
                    switch(src, sim = "simulated data", comp = "paired comparisons",
                           nom = "nominal responses", conj = "conjoint experiment",
-                          rank = "ranked-choice ballots", NULL)),
+                          rank = "ranked-choice ballots",
+                          cov = c("correlation matrix", "structural equation modelling"), NULL)),
       src = src, twin = unname(twin_of[k]), family = family_of[[k]],
       outcomes = outc[outc$.k == k, , drop = FALSE],
+      covgrp = covgrp[covgrp$.k == k, , drop = FALSE],
+      # The matrix itself, for the page's heatmap: a cov table is a few hundred
+      # rows at most, read whole, one call per table. A failed read loses the
+      # heatmap, not the page.
+      cells = if (src == "cov") tryCatch(
+        as_df(redivis$user("datapages")$dataset(PAGE_REF[[shard]])$table(chr(mrow$table))),
+        error = function(e) { message("[landing] could not read ", chr(mrow$table), ": ",
+                                      conditionMessage(e)); NULL }) else NULL,
       collections = {
         cm <- cmem[cmem$.k == k, , drop = FALSE]
         if (nrow(cm)) merge(cm, coll[, intersect(c("collection", "label", "coverage"),
@@ -1744,6 +1971,7 @@ main <- function() {
                comp = "Paired-comparison data",
                nom  = "Item response data keeping the option each respondent chose,",
                conj = "Conjoint experiment data",
+               cov  = "A published correlation or covariance matrix",
                "Item response data"),
              " in the Item Response Warehouse (IRW), a harmonised ",
              "collection of item-level response data for psychometric research."),
@@ -1766,7 +1994,9 @@ main <- function() {
     }
     rows[[length(rows) + 1]] <- list(table = x$table, slug = slug, shard = shard,
                                      # conj and rank have no responses; their count is rows
-                                     n_responses = if (src %in% c("conj", "rank")) mrow$n_rows else mrow$n_responses,
+                                     # cov has no responses either; its count is people (N)
+                                     n_responses = if (src %in% c("conj", "rank")) mrow$n_rows
+                                                   else if (src == "cov") mrow$n_obs else mrow$n_responses,
                                      license = x$license, issue = x$issue)
     if (!nzchar(x$rows_url)) too_big <- c(too_big, x$table)
   }

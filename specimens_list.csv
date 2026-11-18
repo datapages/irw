@@ -16,7 +16,7 @@
 # same kind of thing. Counts are from src/metadata/*.csv as of 2026-10-28;
 # specimens.R recomputes them from the fetched table.
 #
-table,source,title
+table,source,title,note,show,cov_method
 #
 # -- Core: a person answers an item, ordered response.
 # verbagg              316 people, 24 items, 2 categories     GPL-3.0 (via lme4)
@@ -113,3 +113,19 @@ bansak_2016_asylum,conj,Which asylum seeker should be admitted
 duch_2021_vaccine_priority,conj,Who should be first in line for a vaccine
 smith_2024_supply_chain,conj,How strict a supply-chain disclosure law should be
 letki_2025_park_cleanup,conj,"Would you join a local park clean-up?"
+#
+# -- Covariance: a published correlation or covariance matrix (cov_standard.qmd).
+# Chosen with Ben 2026-11-18. Four kinds: a founding path model with cryptic
+# variable names (the note says what they are), a matrix printed with a typo
+# and kept as published, a meta-analytic corpus of one matrix per sample, and
+# a matrix COMPUTED from a core table's responses, which the family's tables
+# never store but the packages compute on request. The last two are the same
+# ten Rosenberg items, published and computed, on purpose.
+# blau_1967_occupation5    20,700 people, 5 variables       GPL (>= 2) (via sem)
+# burt_1915_emotions11     172 people, 11 variables, non-PD GPL (>= 2) (via psychTools)
+# gnambs_2018_rses10       36 samples, 109,988 people       GPL (>= 2) (via metaSEM)
+# rosenberg_selfesteem     core: 47,974 people, 10 items    computed, polychoric
+blau_1967_occupation5,cov,"How 20,700 American men got their jobs, 1962","x1, x2: father's education and occupation; y3: son's education; y4: first job; y5: job in 1962. The matrix behind Blau and Duncan's path model of status attainment.",x1|x2;x1|y3;x2|y3;y3|y4;y4|y5,
+burt_1915_emotions11,cov,"Eleven emotions in schoolchildren, printed in 1915 with a likely typo","Sorrow and Tenderness at .87 is probably .81: as printed, the matrix is not positive definite. The IRW keeps it as published and flags it.",Sorrow|Tenderness;Sorrow|Sociality;Tenderness|Sociality;Joy|Sociality;Anger|Wonder,
+gnambs_2018_rses10,cov,The ten Rosenberg self-esteem items in 36 published samples,"One matrix per sample, from a cross-cultural meta-analysis (Gnambs et al., 2018). The card shows the first sample.",,
+rosenberg_selfesteem,cov,"The same ten items, from 47,974 people's answers in the IRW","Not a published matrix: computed on request from IRW response data, the core table rosenberg_selfesteem (polychoric, pairwise), and not stored. The negative correlations are the reverse-worded items, which the IRW leaves as answered.",2|1;3|1;3|2;4|1;5|1,polychoric

@@ -10,8 +10,21 @@
 # Input: specimens_list.csv, hand-edited, one row per specimen, columns
 #
 #   table   the IRW table name, as the warehouse spells it
-#   source  core | nom | comp | rank | conj  (the irw package's `source`)
+#   source  core | nom | comp | rank | conj | cov  (the irw package's `source`)
 #   title   the one-line human title shown on the card
+#
+# and three optional ones, used by the covariance family (cov_standard.qmd)
+# and blank everywhere else:
+#
+#   note        a line shown under the card's rows, e.g. what cryptic variable
+#               names stand for, or that a matrix was computed, not published
+#   show        the cells to show, as "var1|var2;var1|var2" (either order);
+#               blank shows the first five off-diagonal cells of the first group
+#   cov_method  set for a matrix COMPUTED from a core table instead of a
+#               published one (`table` is then the core table): the method
+#               passed in cov_args, e.g. "polychoric". Computed matrices are
+#               never stored in the IRW; this script computes it here once and
+#               the JSON keeps the five cells.
 #
 # Output: data/specimens.json, one object per row, in the row order of the CSV,
 # with "placeholder": false. preview.qmd reads it with FileAttachment and tags
@@ -78,7 +91,7 @@ FULL_FETCH_MAX <- 2000000
 
 # Family label shown in the card's chip and on its buttons, per `source`.
 FAMILY <- c(core = "core", nom = "nominal", comp = "competitions",
-            rank = "rankings", conj = "conjoint")
+            rank = "rankings", conj = "conjoint", cov = "covariance")
 
 # The standard columns to show, per family, in order. Columns absent from a
 # given table are dropped rather than shown empty; for conjoint the attr_*
@@ -89,7 +102,8 @@ STANDARD_COLS <- list(
   nom  = c("id", "item", "text"),
   comp = c("agent_a", "agent_b", "winner"),
   rank = c("id", "task", "item", "resp"),
-  conj = c("id", "task", "profile", "choice")
+  conj = c("id", "task", "profile", "choice"),
+  cov  = c("stat", "var1", "var2", "value", "n")
 )
 
 # Columns the sample is sorted by before the top 5 are taken, so the excerpt
@@ -101,7 +115,8 @@ SORT_COLS <- list(
   nom  = c("id", "item"),
   comp = character(0),
   rank = c("id", "task", "resp"),
-  conj = c("id", "task", "profile")
+  conj = c("id", "task", "profile"),
+  cov  = c("group", "var1", "var2")
 )
 
 # The respondent key to group an excerpt by, and the column whose variation
@@ -162,7 +177,26 @@ pick_rows <- function(df, cols, src) {
 # differ by family: core and nominal count responses, conjoint and rankings
 # count rows, competitions counts contests.
 META_ROWS <- c(core = "n_responses", nom = "n_responses", comp = "n_responses",
-               rank = "n_rows", conj = "n_rows")
+               rank = "n_rows", conj = "n_rows", cov = NA)
+
+# Covariance cells to show. A matrix is not a set of respondents, so pick_rows
+# does not apply: the excerpt is cells of one sample's matrix, off the diagonal
+# (a column of 1s says nothing), either the ones the list names in `show` or
+# the first five. A table with several samples shows its first.
+pick_cells <- function(df, cols, show) {
+  cells <- df[df$stat %in% c("cor", "cov") & !is.na(df$var2) & df$var1 != df$var2, , drop = FALSE]
+  if ("group" %in% names(cells)) cells <- cells[cells$group == cells$group[1], , drop = FALSE]
+  if (!is.na(show) && nzchar(show)) {
+    pairs <- strsplit(strsplit(show, ";", fixed = TRUE)[[1]], "|", fixed = TRUE)
+    at <- vapply(pairs, function(p) {
+      hit <- which((cells$var1 == p[1] & cells$var2 == p[2]) | (cells$var1 == p[2] & cells$var2 == p[1]))
+      if (!length(hit)) stop("show: no cell ", p[1], "|", p[2], call. = FALSE)
+      hit[1]
+    }, integer(1))
+    cells <- cells[at, , drop = FALSE]
+  }
+  head(cells[, cols, drop = FALSE], N_ROWS)
+}
 
 stopifnot(file.exists(LIST_PATH))
 spec_list <- read.csv(LIST_PATH, colClasses = "character", comment.char = "#")
@@ -205,6 +239,9 @@ cols_for <- function(df, source) {
                setdiff(grep("^cov_", extra, value = TRUE, invert = TRUE), "treat"))
     want <- c(want, head(extra, 1))
   }
+  # Covariance: a table holding several samples shows which one in place of
+  # `stat`, which is the same on every cell and is in the dimensions line.
+  if (identical(source, "cov") && "group" %in% names(df)) want <- c("group", setdiff(want, "stat"))
   intersect(want, names(df))
 }
 
@@ -234,15 +271,28 @@ dims_for <- function(meta_row, source) {
     comp = c(part(g("n_actors"), "actors"), part(g("n_responses"), "contests")),
     rank = c(part(g("n_respondents"), "ballots"), part(g("n_items"), "options")),
     conj = c(part(g("n_respondents"), "people"), part(g("n_tasks"), "tasks"),
-             part(g("n_attributes"), "attributes"))
+             part(g("n_attributes"), "attributes")),
+    # cov_metadata is one row per table x sample, so these come from all of a
+    # table's rows (meta_for keeps them all for cov).
+    cov = if (is.null(meta_row)) character(0) else {
+      k <- nrow(meta_row)
+      stat <- unique(meta_row$stat)
+      c(if (k > 1) part(k, "samples"),
+        part(sum(as.numeric(meta_row$n_obs), na.rm = TRUE), "people"),
+        part(max(as.numeric(meta_row$n_vars), na.rm = TRUE), "variables"),
+        if (identical(stat, "cor")) "correlations" else if (identical(stat, "cov")) "covariances",
+        if (any(tolower(as.character(meta_row$is_pd)) %in% c("false", "0"))) "not positive definite")
+    }
   )
   paste(parts[!is.na(parts)], collapse = " · ")
 }
 
 # The fetch call printed on the card. Core takes no `source`, as the package's
 # own default; the other families name theirs.
-fetch_call <- function(table, source) {
-  if (identical(source, "core")) sprintf('irw_fetch("%s")', table)
+fetch_call <- function(table, source, cov_method = NA) {
+  if (!is.na(cov_method) && nzchar(cov_method))
+    sprintf('irw_fetch("%s", source = "cov",\n          cov_args = list(method = "%s"))', table, cov_method)
+  else if (identical(source, "core")) sprintf('irw_fetch("%s")', table)
   else sprintf('irw_fetch("%s", source = "%s")', table, source)
 }
 
@@ -262,7 +312,7 @@ meta_for <- function(source, table) {
             "count will be omitted", call. = FALSE)
     return(NULL)
   }
-  hit[1, , drop = FALSE]
+  if (identical(source, "cov")) hit else hit[1, , drop = FALSE]
 }
 
 # Redivis download connections fail intermittently, and the client's own retry
@@ -272,13 +322,14 @@ meta_for <- function(source, table) {
 # specimen.
 FETCH_TRIES <- 3L
 
-fetch_one <- function(tbl, src, cap) {
+fetch_one <- function(tbl, src, cap, cov_method = NA) {
   for (attempt in seq_len(FETCH_TRIES)) {
     got <- tryCatch(
       {
         args <- list(tbl)
         if (!identical(src, "core")) args$source <- src
         if (!is.null(cap)) args$max_rows <- cap
+        if (!is.na(cov_method) && nzchar(cov_method)) args$cov_args <- list(method = cov_method)
         df <- do.call(irw_fetch, args)
         df <- as.data.frame(df)
         if (!nrow(df)) stop("fetched 0 rows", call. = FALSE)
@@ -303,16 +354,24 @@ for (k in seq_len(nrow(spec_list))) {
   row <- spec_list[k, ]
   tbl <- trimws(row$table)
   src <- trimws(row$source)
+  opt <- function(col) if (col %in% names(row) && !is.na(row[[col]])) trimws(row[[col]]) else NA_character_
+  cov_method <- opt("cov_method")
+  computed <- !is.na(cov_method) && nzchar(cov_method)
+  # A computed matrix has no cov_metadata row: it is described by the core
+  # table it is computed from.
+  meta_src <- if (computed) "core" else src
   # Metadata first: its row count decides whether the whole table is fetched.
-  meta_row <- meta_for(src, tbl)
-  n_rows <- if (is.null(meta_row)) NA_real_ else
-    suppressWarnings(as.numeric(meta_row[[META_ROWS[[src]]]][1]))
+  meta_row <- meta_for(meta_src, tbl)
+  n_rows <- if (is.null(meta_row) || is.na(META_ROWS[[meta_src]])) NA_real_ else
+    suppressWarnings(as.numeric(meta_row[[META_ROWS[[meta_src]]]][1]))
+  # A computed matrix's size is not the core table's; a cov table is small.
+  if (identical(src, "cov")) n_rows <- NA_real_
   cap <- if (!is.na(n_rows) && n_rows > FULL_FETCH_MAX) SAMPLE_ROWS else NULL
 
   message("fetching ", tbl, " (source = ", src, ", ",
           if (is.null(cap)) "whole table" else paste0("max_rows = ", cap), ") ...")
 
-  df <- fetch_one(tbl, src, cap)
+  df <- fetch_one(tbl, src, cap, cov_method)
   # Carry on through a failure rather than halting, so one run reports every
   # broken specimen instead of only the first. Nothing is written unless all of
   # them succeed; see the all-or-nothing check below.
@@ -330,7 +389,11 @@ for (k in seq_len(nrow(spec_list))) {
   sort_by <- intersect(SORT_COLS[[src]], names(df))
   if (length(sort_by)) df <- df[do.call(order, unname(as.list(df[sort_by]))), , drop = FALSE]
 
-  head_df <- pick_rows(df, cols, src)
+  if (identical(src, "cov")) n_rows <- nrow(df)
+  head_df <- if (identical(src, "cov")) pick_cells(df, cols, opt("show")) else pick_rows(df, cols, src)
+  # A published value is shown as stored; a computed one has full precision,
+  # which is noise on a card.
+  if (computed) head_df$value <- round(head_df$value, 3)
   # Every cell goes out as a string: the card renders text, and a numeric
   # column would otherwise arrive as 1 vs "1" depending on the column's type.
   rows <- lapply(seq_len(nrow(head_df)), function(j) {
@@ -345,12 +408,16 @@ for (k in seq_len(nrow(spec_list))) {
     family = unname(FAMILY[[src]]),
     source = src,
     title = trimws(row$title),
-    dims = dims_for(meta_row, src),
+    dims = if (computed) paste(c(dims_for(meta_row, "core"), paste("computed,", cov_method)),
+                               collapse = " · ")
+           else dims_for(meta_row, src),
     columns = cols,
     rows = rows,
     # The card hides this line when it is not a positive number.
     n_rows = if (is.na(n_rows)) 0 else round(n_rows),
-    fetch = fetch_call(tbl, src),
+    fetch = fetch_call(tbl, src, cov_method),
+    note = if (is.na(opt("note"))) "" else opt("note"),
+    computed = computed,
     # Table pages are emitted at /tables/<lowercased name>/ -- a directory, not
     # a .html file. See slug_of() in landing/page_rules.R.
     page_url = sprintf("tables/%s/", tolower(tbl)),
