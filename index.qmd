@@ -118,7 +118,13 @@ FAMILIES = [
     desc: "A person puts a set of options in order." },
   { key: "conjoint",     name: "Conjoint",     count: count(totals.n_tables_conj), field: "n_tables_conj",
     href: "conjoint_standard.html",
-    desc: "Choices between profiles built from attributes." }
+    desc: "Choices between profiles built from attributes." },
+  // The one family of summary statistics, not responses (cov_standard.qmd,
+  // datapages/irw#439). Its count is landing/hero_stats.R's n_tables_cov,
+  // distinct tables in cov_metadata (one row there per table x sample).
+  { key: "covariance",   name: "Covariance",   count: count(totals.n_tables_cov), field: "n_tables_cov",
+    href: "cov_standard.html",
+    desc: "Published correlation and covariance matrices." }
 ]
 
 // Six steps, in order. The last one gets the dashed pink treatment.
@@ -217,7 +223,7 @@ homeRoot = {
       <div class="hero-copy">
         <p class="eyebrow">AN OPEN WAREHOUSE OF RESPONSE DATA</p>
         <h1>Every table, documented, citable, one line away.</h1>
-        <p class="subhead">Test answers, survey ratings, chess games, ranked ballots and choice experiments from thousands of studies, reshaped so one analysis runs across all of them.</p>
+        <p class="subhead">Test answers, survey ratings, chess games, ranked ballots, choice experiments and published correlation matrices from thousands of studies, reshaped so one analysis runs across all of them.</p>
         <div class="hero-actions">
           <a class="btn-solid" href="data.html">Explore the data</a>
           <a class="btn-ghost" href="https://doi.org/10.3758/s13428-025-02796-y">Read the paper</a>
@@ -295,6 +301,10 @@ homeRoot = {
           (Array.isArray(r) ? r : []).map(v => `<span>${esc(v)}</span>`).join("")}</div>`).join("");
       const more = (typeof d.n_rows === "number" && d.n_rows > 0)
         ? `<div class="spec-more">… ${fmtInt(d.n_rows)} rows</div>` : "";
+      // A line under the rows, used by the covariance specimens: what cryptic
+      // variable names mean, or that a matrix was computed from IRW responses
+      // rather than published (specimens_list.csv, `note`).
+      const note = d.note ? `<p class="spec-note">${esc(d.note)}</p>` : "";
 
       // One button per family that has at least one specimen; the family on
       // screen reads as pressed.
@@ -309,6 +319,7 @@ homeRoot = {
           <span class="spec-pos">${many ? `SPECIMEN ${si + 1} OF ${group.items.length}` : ""}</span>
           <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
             ${d.placeholder ? `<span class="spec-fake">placeholder</span>` : ""}
+            ${d.computed ? `<span class="spec-fake" title="Computed from IRW response data on request; not stored">computed from IRW responses</span>` : ""}
             <span class="spec-chip">${esc(String(d.family || "").toUpperCase())}</span>
           </span>
         </div>
@@ -320,6 +331,7 @@ homeRoot = {
           </div>
         </div>
         <div class="spec-grid-wrap">${head}${body}${more}</div>
+        ${note}
         <div class="spec-fetch">
           <button type="button" class="spec-code-toggle" data-toggle-code
                   aria-expanded="${codeOpen ? "true" : "false"}">

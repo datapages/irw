@@ -92,10 +92,18 @@ totals$n_tables_nom  <- count_branch("nominal_metadata")
 totals$n_tables_conj <- count_branch("conj_metadata")
 totals$n_tables_rank <- count_branch("rank_metadata")
 totals$n_tables_sim  <- count_branch("simsyn_metadata")
+# cov_metadata is one row per table x sample (a meta-analytic corpus has up to
+# 123), so the family's count is its distinct tables, not its rows.
+totals$n_tables_cov  <- tryCatch(
+  length(unique(redivis$user("datapages")$dataset("irw_meta:bdxt")$table("cov_metadata")$to_tibble()$table)),
+  error = function(e) {
+    warning("landing/hero_stats.R: could not count cov_metadata (", conditionMessage(e), ")", call. = FALSE)
+    NULL
+  })
 # Which family counts failed, by field name. Always written (possibly empty), so
 # the page can tell "read failed" from "this file predates the field".
 branch_fields <- c("n_tables_comp", "n_tables_nom", "n_tables_conj",
-                   "n_tables_rank", "n_tables_sim")
+                   "n_tables_rank", "n_tables_sim", "n_tables_cov")
 totals$unread <- I(branch_fields[vapply(branch_fields,
                                         function(k) is.null(totals[[k]]),
                                         logical(1))])

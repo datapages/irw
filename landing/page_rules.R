@@ -54,12 +54,18 @@ SHARD_REF <- c(
 # before rank_metadata reached irw_meta (pipeline stage 18, irw#3029), so the
 # emitter skips the family, with a message, while the table is absent instead
 # of failing the publish. The other families' tables are required.
+# Covariance (irw_cov, cov_standard.qmd, datapages/irw#438) holds published
+# matrices, not responses: one row per cell of the lower triangle. Its
+# cov_metadata is one row per table x sample, so the emitter collapses it to
+# one row per table and keeps the per-sample rows for the page. Optional for
+# the same reason as rankings: irw_cov was released before cov_biblio reached
+# irw_meta, and its pages appear once it does.
 NONCORE <- data.frame(
-  dataset  = c("irw_simsyn",      "irw_competitions",      "irw_nominal",      "irw_conjoint",      "irw_rank"),
-  ref      = c("irw_simsyn:0btg", "irw_competitions:cmd7", "irw_nominal:614n", "irw_conjoint:5wjx", "irw_rank:93f5"),
-  prefix   = c("simsyn",          "comps",                 "nominal",          "conj",              "rank"),
-  source   = c("sim",             "comp",                  "nom",              "conj",              "rank"),
-  optional = c(FALSE,             FALSE,                   FALSE,              FALSE,               TRUE),
+  dataset  = c("irw_simsyn",      "irw_competitions",      "irw_nominal",      "irw_conjoint",      "irw_rank",      "irw_cov"),
+  ref      = c("irw_simsyn:0btg", "irw_competitions:cmd7", "irw_nominal:614n", "irw_conjoint:5wjx", "irw_rank:93f5", "irw_cov:4e2q"),
+  prefix   = c("simsyn",          "comps",                 "nominal",          "conj",              "rank",          "cov"),
+  source   = c("sim",             "comp",                  "nom",              "conj",              "rank",          "cov"),
+  optional = c(FALSE,             FALSE,                   FALSE,              FALSE,               TRUE,            TRUE),
   stringsAsFactors = FALSE)
 # Conjoint and rankings are split across shards, because Redivis caps a dataset
 # at 1,000 tables (ben-domingue/irw#2934 and #3024; new tables go to the newest
