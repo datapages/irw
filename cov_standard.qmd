@@ -223,7 +223,9 @@ bc$pair <- ord(bc$var1, bc$var2)
 n_studies <- length(unique(boer$group))
 r_per_study <- table(bc$group)
 n_one <- sum(r_per_study == 1)
-max_vars <- max(tapply(c(boer$var1, boer$var2), c(boer$group, boer$group), function(x) length(unique(x))))
+## Variables per study, counted over the correlations it reports (sd, mean and rel
+## rows name a variable too, but say nothing about which pairs were reported).
+max_vars <- max(tapply(c(bc$var1, bc$var2), c(bc$group, bc$group), function(x) length(unique(x))))
 hs <- do.call(rbind, lapply(split(bc, bc$pair), function(x) {
   rbar <- weighted.mean(x$value, x$n)
   s2 <- weighted.mean((x$value - rbar)^2, x$n)       # observed variance of r, n-weighted
@@ -238,6 +240,9 @@ fp <- bc[bc$pair == big$pair[1], ]
 fp_rbar <- big$rbar[1]
 fp_label <- sub("-", " and ", big$pair[1])
 f2 <- function(x) sprintf("%.2f", x)
+tl_sentence <- if (tl$pct_se >= 75)
+  sprintf("The %d studies of TFL and LMX, by contrast, agree with each other (sampling error accounts for %.0f%% of their spread), but %d studies are a thin base for the path the model is about.", tl$k, tl$pct_se, tl$k) else
+  sprintf("The %d studies of TFL and LMX do no better (sampling error accounts for %.0f%% of their spread), and %d studies are a thin base for the path the model is about.", tl$k, tl$pct_se, tl$k)
 pct <- function(x) sprintf("%.0f%%", x)
 fig_cap_cov <- sprintf("boer_2016_lmx (irw_cov). Left: how many of the %d studies report each correlation. Right: the %d studies that report %s, each study's r against its sample size; the curves are the range sampling error alone would give around the n-weighted mean (%s).",
                        n_studies, big$k[1], fp_label, f2(fp_rbar))
@@ -268,7 +273,7 @@ lines(nn, fp_rbar + band, lty = 2, col = "grey40"); lines(nn, fp_rbar - band, lt
 par(op)
 ```
 
-The right panel is the usual first check on whether the studies estimate one correlation. If they did, the points would sit inside the dashed curves, spreading less as samples grow. They do not: for the `r nrow(big)` correlations reported by twenty or more studies, sampling error accounts for `r pct(min(big$pct_se))` to `r pct(max(big$pct_se))` of the variance of r across studies, against the 75% that Hunter and Schmidt's rule of thumb asks before treating a correlation as one population value. The standard deviation of the true correlations left over runs from `r f2(min(big$tau))` to `r f2(max(big$tau))`. The four studies of TFL and LMX, by contrast, agree with each other (sampling error accounts for `r pct(tl$pct_se)` of their spread), but four studies are a thin base for the path the model is about.
+The right panel is the usual first check on whether the studies estimate one correlation. If they did, the points would sit inside the dashed curves, spreading less as samples grow. They do not: for the `r nrow(big)` correlations reported by twenty or more studies, sampling error accounts for `r pct(min(big$pct_se))` to `r pct(max(big$pct_se))` of the variance of r across studies, against the 75% that Hunter and Schmidt's rule of thumb asks before treating a correlation as one population value. The standard deviation of the true correlations left over runs from `r f2(min(big$tau))` to `r f2(max(big$tau))`. `r tl_sentence`
 
 Both facts point to the same next step: pool the matrices with a random-effects model, which carries the spread between studies into the pooled matrix's uncertainty, rather than averaging them into one matrix and fitting it as if it were a single sample. `irw_cov2list()` returns the corpus in the shape `metaSEM::tssem1()` takes:
 
