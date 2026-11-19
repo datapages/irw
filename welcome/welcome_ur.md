@@ -57,7 +57,7 @@ IRW میں شامل ہر ڈیٹاسیٹ کو اس طرح ڈیزائن کیا گ�
 IRW کا ہر ٹیبل **لمبے فارمیٹ** میں ہے: ہر ریسپانس کے لیے ایک سطر۔ ایک سطر دراصل *کیا ہے*، یہ اس بات پر منحصر ہے کہ ٹیبل کس خاندان سے تعلق رکھتا ہے، اور اسے اٹھانے والے کالم بھی اسی پر۔
 
 <img src="/figures/families/families-tree.svg" alt="دو سوالات جو کسی ڈیٹاسیٹ کو IRW کے کسی خاندان میں رکھتے ہیں۔"
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | خاندان | `source =` | معیار |
 |---|---|---|

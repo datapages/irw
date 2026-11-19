@@ -56,7 +56,7 @@ IRW содержит **тысячи наборов данных** («табли�
 Каждая таблица IRW имеет **длинный формат**: по одной строке на ответ. Что *именно* представляет собой строка, зависит от семейства, к которому относится таблица, и то же самое касается столбцов, которые её несут.
 
 <img src="/figures/families/families-tree.svg" alt="Два вопроса, которые относят набор данных к семейству IRW."
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | Семейство | `source =` | Стандарт |
 |---|---|---|

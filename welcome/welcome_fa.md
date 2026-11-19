@@ -57,7 +57,7 @@ IRW شامل **هزاران مجموعه‌داده** ("جدول") است که �
 هر جدول IRW در **قالب بلند** است: یک سطر برای هر پاسخ. اینکه یک سطر *چیست* به خانواده‌ای بستگی دارد که جدول به آن تعلق دارد، و ستون‌هایی که آن را می‌سازند نیز همین‌طور.
 
 <img src="/figures/families/families-tree.svg" alt="دو پرسش که یک مجموعه‌داده را در یکی از خانواده‌های IRW جای می‌دهند."
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | خانواده | `source =` | استاندارد |
 |---|---|---|

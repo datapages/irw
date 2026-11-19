@@ -56,7 +56,7 @@ Seti za data hutofautiana sana kwa ukubwa (kutoka majibu mia chache hadi mamilio
 Kila jedwali la IRW liko katika **muundo mrefu**: safu moja kwa kila jibu. Safu moja *ni nini* hutegemea familia ambayo jedwali hilo ni mali yake, na vivyo hivyo safu wima zinazoibeba.
 
 <img src="/figures/families/families-tree.svg" alt="Maswali mawili yanayoweka seti ya data katika familia ya IRW."
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | Familia | `source =` | Kiwango |
 |---|---|---|

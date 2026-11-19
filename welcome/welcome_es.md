@@ -56,7 +56,7 @@ Los conjuntos de datos varían ampliamente en tamaño (desde unos pocos cientos 
 Cada tabla del IRW está en **formato largo**: una fila por respuesta. Lo que *es* una fila depende de la familia a la que pertenece la tabla, y lo mismo ocurre con las columnas que la componen.
 
 <img src="/figures/families/families-tree.svg" alt="Dos preguntas que clasifican un conjunto de datos en una familia del IRW."
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | Familia | `source =` | Estándar |
 |---|---|---|

@@ -56,7 +56,7 @@ IRW-இல் உள்ள ஒவ்வொரு தரவுத் தொகு
 ஒவ்வொரு IRW அட்டவணையும் **நீள் வடிவில்** உள்ளது: ஒரு பதிலுக்கு ஒரு வரிசை. ஒரு வரிசை *எதைக் குறிக்கிறது* என்பது அந்த அட்டவணை சேர்ந்த குடும்பத்தைப் பொருத்தது; அதைச் சுமக்கும் நிரல்களும் அதே போல்.
 
 <img src="/figures/families/families-tree.svg" alt="ஒரு தரவுத் தொகுப்பை IRW குடும்பத்தில் சேர்க்கும் இரண்டு கேள்விகள்."
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | குடும்பம் | `source =` | தரநிலை |
 |---|---|---|

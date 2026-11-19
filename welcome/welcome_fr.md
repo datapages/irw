@@ -56,7 +56,7 @@ Les jeux de données varient considérablement en taille (allant de quelques diz
 Chaque tableau de l'IRW est au **format long** : une ligne par réponse. Ce que *représente* une ligne dépend de la famille à laquelle appartient le tableau, tout comme les colonnes qui la portent.
 
 <img src="/figures/families/families-tree.svg" alt="Deux questions qui permettent de classer un jeu de données dans une famille de l'IRW."
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | Famille | `source =` | Standard |
 |---|---|---|

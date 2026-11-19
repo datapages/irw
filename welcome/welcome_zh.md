@@ -56,7 +56,7 @@ IRW 中的每一个数据集都力求做到：
 每一张 IRW 表都采用**长格式**：每条反应占一行。一行具体*代表什么*，取决于该表所属的数据族，承载它的列也是如此。
 
 <img src="/figures/families/families-tree.svg" alt="将数据集归入某个 IRW 数据族的两个问题。"
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | 数据族 | `source =` | 标准 |
 |---|---|---|

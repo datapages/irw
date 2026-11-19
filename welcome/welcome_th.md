@@ -56,7 +56,7 @@ IRW ประกอบด้วย **ชุดข้อมูลหลายพ�
 ตาราง IRW ทุกตารางอยู่ใน**รูปแบบยาว** คือหนึ่งแถวต่อหนึ่งคำตอบ สิ่งที่หนึ่งแถว*เป็น*ขึ้นอยู่กับตระกูลที่ตารางนั้นสังกัดอยู่ และคอลัมน์ที่รองรับก็เช่นกัน
 
 <img src="/figures/families/families-tree.svg" alt="สองคำถามที่จัดชุดข้อมูลเข้าตระกูลของ IRW"
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | ตระกูล | `source =` | มาตรฐาน |
 |---|---|---|

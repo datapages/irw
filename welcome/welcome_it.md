@@ -56,7 +56,7 @@ I dataset variano molto per dimensione (da poche centinaia di risposte a molti m
 Ogni tabella dell'IRW è in **formato lungo**: una riga per risposta. Che cosa *sia* una riga dipende dalla famiglia a cui appartiene la tabella, e lo stesso vale per le colonne che la compongono.
 
 <img src="/figures/families/families-tree.svg" alt="Due domande che collocano un dataset in una famiglia dell'IRW."
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | Famiglia | `source =` | Standard |
 |---|---|---|

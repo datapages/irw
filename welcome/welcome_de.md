@@ -56,7 +56,7 @@ Die Datensätze variieren stark in ihrer Größe (von einigen Hundert Antworten 
 Jede IRW-Tabelle liegt im **Langformat** vor: eine Zeile pro Antwort. Was eine Zeile *ist*, hängt von der Familie ab, zu der die Tabelle gehört, und ebenso die Spalten, die sie tragen.
 
 <img src="/figures/families/families-tree.svg" alt="Zwei Fragen, die einen Datensatz einer IRW-Familie zuordnen."
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | Familie | `source =` | Standard |
 |---|---|---|
