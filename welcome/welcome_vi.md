@@ -56,7 +56,7 @@ Các bộ dữ liệu có sự khác biệt lớn về quy mô (từ vài trăm 
 Mọi bảng IRW đều ở **định dạng dài**: một dòng cho mỗi phản hồi. Một dòng *là gì* tùy thuộc vào họ mà bảng đó thuộc về, và các cột mang nó cũng vậy.
 
 <img src="/figures/families/families-tree.svg" alt="Hai câu hỏi để xếp một bộ dữ liệu vào một họ của IRW."
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | Họ | `source =` | Chuẩn |
 |---|---|---|

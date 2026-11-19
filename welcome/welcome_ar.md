@@ -57,7 +57,7 @@ Translator note: please do NOT translate the following —
 كل جدول في IRW في **صيغة طويلة**: صفّ واحد لكل استجابة. وما *يمثّله* الصفّ يعتمد على العائلة التي ينتمي إليها الجدول، وكذلك الأعمدة التي تحمله.
 
 <img src="/figures/families/families-tree.svg" alt="سؤالان يصنّفان مجموعة بيانات ضمن إحدى عائلات IRW."
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | العائلة | `source =` | المعيار |
 |---|---|---|

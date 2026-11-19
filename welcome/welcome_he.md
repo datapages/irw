@@ -57,7 +57,7 @@ IRW מכיל **אלפי מערכי נתונים** ("טבלאות"), וכל אח�
 כל טבלה ב-IRW היא ב**פורמט ארוך**: שורה אחת לכל תגובה. מה שורה *מייצגת* תלוי במשפחה שאליה שייכת הטבלה, וכך גם העמודות שנושאות אותה.
 
 <img src="/figures/families/families-tree.svg" alt="שתי שאלות הממיינות מערך נתונים לאחת ממשפחות IRW."
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | משפחה | `source =` | תקן |
 |---|---|---|

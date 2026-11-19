@@ -56,7 +56,7 @@ IRW의 모든 데이터셋은 다음과 같이 설계되어 있습니다:
 모든 IRW 테이블은 **롱 형식**입니다. 반응 하나당 한 행입니다. 한 행이 *무엇인지*는 그 테이블이 속한 계열에 따라 다르며, 그것을 담는 열도 마찬가지입니다.
 
 <img src="/figures/families/families-tree.svg" alt="데이터셋을 IRW 계열로 분류하는 두 가지 질문."
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | 계열 | `source =` | 표준 |
 |---|---|---|

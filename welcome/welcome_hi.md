@@ -56,7 +56,7 @@ IRW का हर डेटासेट इस तरह डिज़ाइन �
 हर IRW टेबल **लॉन्ग प्रारूप** में है: प्रति प्रतिक्रिया एक पंक्ति। एक पंक्ति *क्या है*, यह इस पर निर्भर करता है कि टेबल किस परिवार की है, और उसे ढोने वाले कॉलम भी उसी पर।
 
 <img src="/figures/families/families-tree.svg" alt="दो प्रश्न जो किसी डेटासेट को IRW के किसी परिवार में रखते हैं।"
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | परिवार | `source =` | मानक |
 |---|---|---|

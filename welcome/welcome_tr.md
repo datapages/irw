@@ -56,7 +56,7 @@ Veri kümeleri boyut açısından (birkaç yüz tepkiden milyonlarcasına kadar)
 Her IRW tablosu **uzun biçimdedir**: tepki başına bir satır. Bir satırın *ne olduğu* tablonun ait olduğu aileye bağlıdır; onu taşıyan sütunlar da öyle.
 
 <img src="/figures/families/families-tree.svg" alt="Bir veri kümesini bir IRW ailesine yerleştiren iki soru."
-     class="standard-tree" style="display:block;width:100%;max-width:480px;height:auto;margin:1rem auto 1.25rem">
+     class="standard-tree" style="display:block;width:100%;max-width:720px;height:auto;margin:1rem auto 1.25rem">
 
 | Aile | `source =` | Standart |
 |---|---|---|
