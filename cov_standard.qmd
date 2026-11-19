@@ -2,9 +2,9 @@
 title: "The Covariance Data Standard"
 ---
 
-Much of structural equation modelling and other limited-information work starts from a correlation or covariance matrix, not from responses. Decades of those matrices sit in papers, textbooks and software manuals, and many of them have no raw data behind them anywhere. The covariance family (`source = "cov"`) collects published matrices like these in one format, so they can be found, cited and fitted the way the IRW's response tables are. It is the one [data family](overview.qmd#families) whose tables hold summary statistics, not responses.
+Much of structural equation modelling, and of limited-information work more generally, starts from a correlation or covariance matrix rather than from responses. Decades of these matrices sit in papers, textbooks and software manuals, and many of them have no raw data behind them anywhere. The covariance family (`source = "cov"`) collects published matrices in one format so that they can be found, cited and fitted the way the IRW's response tables are. It is the one [data family](overview.qmd#families) whose tables hold summary statistics, not responses.
 
-A table belongs here when its source publishes a matrix of correlations or covariances among variables, and the IRW does not hold the responses it was computed from. Examples are a correlation table in a paper, a matrix in a methods text or an R package, and a study's matrix from a meta-analytic SEM corpus. Three kinds of matrix do not belong here:
+A table belongs here when its source publishes a matrix of correlations or covariances among variables and the IRW does not hold the responses it was computed from: a correlation table in a paper, a matrix in a methods text or an R package, a study's matrix in a meta-analytic SEM corpus. Three kinds of matrix are left out, by design:
 
 - **A matrix that can be computed from an IRW table** is derived data, and it is never stored. The packages compute it on request (below).
 - **A simulated or artificial matrix** that no real sample produced.
@@ -104,11 +104,17 @@ A matrix with cells the source did not report comes back with `NA` in those cell
 #| label: cov-meta
 #| include: false
 ## cov_metadata is one row per matrix (table x group), from stage 22 of the
-## metadata pipeline; licence and source come from the matrix records in the
-## same table, since the family has no cov_biblio yet.
+## metadata pipeline, with each matrix's record fields (capture, licence,
+## country, ...) merged in. The family's unit is the matrix, so most counts
+## below are over matrices; the listing is one row per table. Licence and
+## source are taken from the matrix records rather than cov_biblio, because a
+## table's matrices carry them directly.
 cm <- irw_meta_table("cov_metadata")
 cm$table <- trimws(as.character(cm$table))
-one <- function(x) paste(sort(unique(x[!is.na(x) & nzchar(x)])), collapse = "; ")
+filled <- function(x) !is.na(x) & nzchar(trimws(as.character(x)))
+one <- function(x) paste(sort(unique(x[filled(x)])), collapse = "; ")
+## A multinational sample lists each ISO code, ";"-separated, and counts once for each.
+split_codes <- function(x) { x <- trimws(unlist(strsplit(as.character(x[filled(x)]), ";"))); x[nzchar(x)] }
 per <- do.call(rbind, lapply(split(cm, cm$table), function(d) data.frame(
   table = d$table[1], n_mat = nrow(d), n_vars = max(d$n_vars), n_obs = sum(d$n_obs),
   stat = one(d$stat),
@@ -117,25 +123,86 @@ per <- do.call(rbind, lapply(split(cm, cm$table), function(d) data.frame(
   pd = if (nrow(d) == 1) { if (isTRUE(d$is_pd)) "yes" else if (isFALSE(d$is_pd)) "no" else "" }
        else paste0(sum(d$is_pd %in% TRUE), "/", nrow(d)),
   any_nonpd = any(d$is_pd %in% FALSE),
+  n_ctry = if ("country" %in% names(d)) length(unique(split_codes(d$country))) else 0,
   licence = one(d$licence), via = one(d$via))))
+per$n_ctry <- ifelse(per$n_ctry > 0, as.character(per$n_ctry), "")
 cov_bib <- data.frame(table = per$table, Derived_License = per$licence, URL__for_data_ = per$via)
-n_tab <- nrow(per); n_mat <- nrow(cm)
-n_masem <- sum(per$n_mat > 2)
-n_deposit <- length(unique(cm$table[cm$capture == "digital deposit"]))
+
+n_tab <- nrow(per); n_mat <- nrow(cm); n_people <- sum(cm$n_obs)
+med_vars <- median(cm$n_vars); med_n <- median(cm$n_obs); max_vars <- max(cm$n_vars)
+n_single <- sum(per$n_mat == 1)
+n_corpus <- sum(per$n_mat >= 20)
+share_corpus <- round(100 * sum(per$n_mat[per$n_mat >= 20]) / n_mat)
 n_nonpd <- sum(per$any_nonpd)
+n_blank <- sum(cm$n_missing_cells > 0, na.rm = TRUE)
+
+## Where the matrices came from, by the record's `capture` field.
+cap <- function(k) c(tabs = length(unique(cm$table[cm$capture == k])), mats = sum(cm$capture == k))
+pkg <- cap("package transcription"); dep <- cap("digital deposit"); ext <- cap("extracted")
+
+## How much of the record is known. "unknown" is the record saying the source
+## does not say; it is never a guess.
+k_type <- sum(!cm$matrix_type %in% c("unknown", NA, ""))
+k_miss <- sum(!cm$missing %in% c("unknown", NA, ""))
+k_rel  <- sum(cm$has_rel %in% TRUE)
+has_ctry <- "country" %in% names(cm) && any(filled(cm$country))
+k_ctry <- if (has_ctry) sum(filled(cm$country)) else 0
+k_mod  <- if ("moderators" %in% names(cm)) sum(filled(cm$moderators)) else 0
+ctry_long <- if (has_ctry) split_codes(cm$country) else character(0)
+n_ctry <- length(unique(ctry_long))
+ctry_top <- sort(table(ctry_long), decreasing = TRUE)[seq_len(min(10, n_ctry))]
+
+nonpd_blank <- if (n_blank > 0)
+  sprintf("%d tables hold at least one matrix that is not positive definite as published, and %s matrices have cells the source did not report; both are kept as published.", n_nonpd, fmt_n(n_blank)) else
+  sprintf("%d tables hold at least one matrix that is not positive definite as published, and those matrices are kept that way.", n_nonpd)
+of <- function(k) sprintf("%s of the %s", fmt_n(k), fmt_n(n_mat))
+coverage <- paste0(
+  "The kind of correlation is known for ", of(k_type), " matrices, and how missing data were handled for ", fmt_n(k_miss), ". ",
+  if (has_ctry) paste0(fmt_n(k_ctry), " matrices name the country of their sample (", n_ctry, " countries in all), and ",
+                       fmt_n(k_mod), " carry other study-level moderators. ")
+  else "The study-level moderators (year, country and the rest) reach this page with the next metadata release. ",
+  if (k_rel > 0) paste0(fmt_n(k_rel), " come with reliabilities. ") else "")
 ```
 
-The family was first released in November 2026 and now holds `r fmt_n(n_mat)` matrices in `r n_tab` tables. Its first matrices were the classics of factor analysis: Holzinger and Swineford's Grant-White tests, Thurstone's and Bechtoldt's ability batteries, Brigham's 1932 College Board matrices for boys and girls, Tucker's interbattery example, Mullen's physical measures and Burt's emotions. `r n_masem` tables are meta-analytic SEM corpora with one matrix per study, read with `irw_cov2list()` in one call. Most matrices were taken from R packages and checked cell by cell against the package's copy; a matrix from a GPL-licensed package is reshared under the GPL. `r n_deposit` tables come from openly licensed data deposits. `r n_nonpd` tables hold a matrix that is not positive definite as published, and they are kept that way. For a table of several matrices, the listing below gives how many of them are positive definite.
+The family holds `r fmt_n(n_mat)` matrices in `r n_tab` tables, computed from `r fmt_big(n_people)` people in all. Most matrices are small: the median one has `r med_vars` variables and `r fmt_n(med_n)` people, though the largest has `r max_vars` variables. Its first matrices were the classics of factor analysis (Holzinger and Swineford's Grant-White tests, Thurstone's ability batteries, Mullen's physical measures, Burt's emotions), but these are now a small part of it.
+
+Most tables are one of two rather different kinds. `r n_single` hold a single matrix, the kind fitted directly, as in the lavaan example above. `r n_corpus` are meta-analytic SEM corpora of twenty or more matrices, one per study, and together they hold `r share_corpus`% of the family's matrices; `irw_cov2list()` reads a corpus in one call. Where did the matrices come from? `r pkg[["tabs"]]` tables (`r fmt_n(pkg[["mats"]])` matrices) were transcribed from R packages and checked cell by cell against the package's copy, `r dep[["tabs"]]` tables (`r fmt_n(dep[["mats"]])` matrices) were read from openly licensed data deposits, and `r ext[["tabs"]]` tables (`r fmt_n(ext[["mats"]])` matrices) were copied from the correlation tables of openly licensed articles. A matrix takes the licence of the copy it came from: a GPL package's matrix is reshared under the GPL, an article's under its CC BY licence.
+
+The records are only as complete as their sources, and the gaps are worth knowing about before you fit anything. `r coverage``r nonpd_blank` Each matrix's record is in `irw_metadata(source = "cov")`, and the `n_vars`, `n_obs`, `n_samples`, `matrix_type` and `is_pd` filters in `irw_filter()` select on the quantities summarised here. There is not yet a way to select tables by subject ([irw#3645](https://github.com/ben-domingue/irw/issues/3645)).
+
+```{r}
+#| label: fig-cov-design
+#| fig-cap: "The covariance family by matrices per table, variables per matrix and sample size per matrix. The left panel counts tables; the other two count matrices, since the matrix is what gets fitted."
+#| fig-height: 3.4
+#| fig-width: 9
+par(mfrow = c(1, 3))
+family_bar(table(cut(per$n_mat, c(0, 1, 2, 5, 19, 50, Inf), labels = c("1", "2", "3-5", "6-19", "20-50", "51+"), right = TRUE)),
+           xlab = "Matrices per table")
+family_bar(table(cut(cm$n_vars, c(0, 3, 5, 8, 12, 20, Inf), labels = c("2-3", "4-5", "6-8", "9-12", "13-20", "21+"), right = TRUE)),
+           xlab = "Variables per matrix", ylab = "Matrices")
+family_bar(table(cut(cm$n_obs, c(0, 100, 250, 500, 1000, 5000, Inf), labels = c("<100", "100-\n249", "250-\n499", "500-\n999", "1,000-\n4,999", "5,000+"), right = FALSE)),
+           xlab = "N per matrix", ylab = "Matrices")
+```
+
+```{r}
+#| label: fig-cov-country
+#| eval: !expr has_ctry
+#| fig-cap: "The ten countries with the most matrices. A multinational sample counts once for each country; matrices whose source does not state a country are left out."
+#| fig-height: 3.4
+#| fig-width: 7
+family_bar(ctry_top, xlab = "Country (ISO code)", ylab = "Matrices")
+```
 
 ### Every table in the family
 
-N is the matrix's sample size, summed over the matrices in a table that has several. Licence and source are those of the copy the IRW took the matrix from.
+Each table links to its own page, with the record, citation, licence and fetch snippets. N is the matrix's sample size, summed over the matrices in a table that has several, and Countries counts the distinct countries its matrices name. Licence and source are those of the copy the IRW took the matrix from.
 
 ```{r}
 #| label: cov-table-list
 #| results: asis
 family_table_list("cov", "irw_cov", "cov",
-                  c(n_mat = "Matrices", n_vars = "Variables", n_obs = "N", stat = "Stat", pd = "Positive definite"),
+                  c(n_mat = "Matrices", n_vars = "Variables", n_obs = "N", stat = "Stat",
+                    pd = "Positive definite", n_ctry = "Countries"),
                   md = per, bib = cov_bib)
 ```
 
@@ -147,14 +214,18 @@ Most of the family's tables are single matrices, fitted the way the lavaan examp
 #| label: cov-example
 #| include: false
 boer <- as.data.frame(redivis$user("datapages")$dataset("irw_cov")$table("boer_2016_lmx")$to_tibble())
-bc <- boer[boer$stat == "cor" & boer$var1 != boer$var2, ]
+boer$value <- as.numeric(boer$value)
+## Cells the source did not report are rows with an empty value; they count for nothing here.
+bc <- boer[boer$stat == "cor" & boer$var1 != boer$var2 & !is.na(boer$value), ]
 vv <- c("TFL", "LMX", "JS", "OC", "LE")
 ord <- function(a, b) ifelse(match(a, vv) < match(b, vv), paste(a, b, sep = "-"), paste(b, a, sep = "-"))
 bc$pair <- ord(bc$var1, bc$var2)
 n_studies <- length(unique(boer$group))
 r_per_study <- table(bc$group)
 n_one <- sum(r_per_study == 1)
-max_vars <- max(tapply(c(boer$var1, boer$var2), c(boer$group, boer$group), function(x) length(unique(x))))
+## Variables per study, counted over the correlations it reports (sd, mean and rel
+## rows name a variable too, but say nothing about which pairs were reported).
+max_vars <- max(tapply(c(bc$var1, bc$var2), c(bc$group, bc$group), function(x) length(unique(x))))
 hs <- do.call(rbind, lapply(split(bc, bc$pair), function(x) {
   rbar <- weighted.mean(x$value, x$n)
   s2 <- weighted.mean((x$value - rbar)^2, x$n)       # observed variance of r, n-weighted
@@ -169,6 +240,9 @@ fp <- bc[bc$pair == big$pair[1], ]
 fp_rbar <- big$rbar[1]
 fp_label <- sub("-", " and ", big$pair[1])
 f2 <- function(x) sprintf("%.2f", x)
+tl_sentence <- if (tl$pct_se >= 75)
+  sprintf("The %d studies of TFL and LMX, by contrast, agree with each other (sampling error accounts for %.0f%% of their spread), but %d studies are a thin base for the path the model is about.", tl$k, tl$pct_se, tl$k) else
+  sprintf("The %d studies of TFL and LMX do no better (sampling error accounts for %.0f%% of their spread), and %d studies are a thin base for the path the model is about.", tl$k, tl$pct_se, tl$k)
 pct <- function(x) sprintf("%.0f%%", x)
 fig_cap_cov <- sprintf("boer_2016_lmx (irw_cov). Left: how many of the %d studies report each correlation. Right: the %d studies that report %s, each study's r against its sample size; the curves are the range sampling error alone would give around the n-weighted mean (%s).",
                        n_studies, big$k[1], fp_label, f2(fp_rbar))
@@ -199,7 +273,7 @@ lines(nn, fp_rbar + band, lty = 2, col = "grey40"); lines(nn, fp_rbar - band, lt
 par(op)
 ```
 
-The right panel is the usual first check on whether the studies estimate one correlation. If they did, the points would sit inside the dashed curves, spreading less as samples grow. They do not: for the `r nrow(big)` correlations reported by twenty or more studies, sampling error accounts for `r pct(min(big$pct_se))` to `r pct(max(big$pct_se))` of the variance of r across studies, against the 75% that Hunter and Schmidt's rule of thumb asks before treating a correlation as one population value. The standard deviation of the true correlations left over runs from `r f2(min(big$tau))` to `r f2(max(big$tau))`. The four studies of TFL and LMX, by contrast, agree with each other (sampling error accounts for `r pct(tl$pct_se)` of their spread), but four studies are a thin base for the path the model is about.
+The right panel is the usual first check on whether the studies estimate one correlation. If they did, the points would sit inside the dashed curves, spreading less as samples grow. They do not: for the `r nrow(big)` correlations reported by twenty or more studies, sampling error accounts for `r pct(min(big$pct_se))` to `r pct(max(big$pct_se))` of the variance of r across studies, against the 75% that Hunter and Schmidt's rule of thumb asks before treating a correlation as one population value. The standard deviation of the true correlations left over runs from `r f2(min(big$tau))` to `r f2(max(big$tau))`. `r tl_sentence`
 
 Both facts point to the same next step: pool the matrices with a random-effects model, which carries the spread between studies into the pooled matrix's uncertainty, rather than averaging them into one matrix and fitting it as if it were a single sample. `irw_cov2list()` returns the corpus in the shape `metaSEM::tssem1()` takes:
 
