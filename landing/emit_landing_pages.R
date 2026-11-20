@@ -453,16 +453,26 @@ values_html <- function(labels, column) {
 #   questionnaire         a supplementary file the authors caption as the
 #                         questionnaire or instrument: it shows the items, so
 #                         it is worded softly (irw#2792)
+#   labelled_data         an SPSS (.sav/.zsav/.por) or Stata (.dta) data file
+#                         in the deposit, which carries its own variable and
+#                         value labels (ben-domingue/irw#3675). Last, so it is
+#                         shown only when no document does the job
 # A README is shown only when no codebook-named file was found. Other README
 # hits and Dataverse DDI exports stay in the CSV for the MCP. A deposit with
 # more than SOURCE_CODEBOOKS_MAX of a kind -- one per scale, say -- gets one
 # line pointing at the deposit: picking the right one would mean decoding
 # abbreviations, which is a guess.
 SOURCE_CODEBOOKS_MAX <- 3
+# "SPSS file" / "Stata files" / "labelled data files", from the extensions
+labelled_data_what <- function(file_name) {
+  ext <- tolower(sub(".*\\.", "", basename(file_name)))
+  fmt <- unique(ifelse(ext == "dta", "Stata", "SPSS"))
+  if (length(fmt) == 1) paste(fmt, c("file", "files")) else c("labelled data file", "labelled data files")
+}
 source_codebook_html <- function(links) {
   if (is.null(links) || !nrow(links)) return("")
   for (kind in c("recorded_at_ingest", "recorded_by_review", "typed_codebook", "package_doc", "name_codebook",
-                 "readme_names_columns", "doc_names_columns", "questionnaire")) {
+                 "readme_names_columns", "doc_names_columns", "questionnaire", "labelled_data")) {
     l <- links[links$how_found == kind, , drop = FALSE]
     l <- l[!duplicated(l$url), , drop = FALSE]
     if (!nrow(l)) next
@@ -470,6 +480,7 @@ source_codebook_html <- function(links) {
                    package_doc = c("package documentation", "package help pages"),
                    doc_names_columns = c("documentation", "documents"),
                    questionnaire = c("questionnaire", "questionnaires"),
+                   labelled_data = labelled_data_what(l$file_name),
                    c("codebook", "codebook files"))
     # the cap stops the page choosing among a deposit's per-scale files; a
     # reviewed row was chosen for this table (one per wave it pools, say)
@@ -482,10 +493,14 @@ source_codebook_html <- function(links) {
     files <- paste0("<a href=\"", vapply(l$url, esc, character(1)), "\"><code>",
                     vapply(basename(l$file_name), esc, character(1)), "</code></a>")
     whose <- if (kind == "package_doc") "the package&rsquo;s " else "the source&rsquo;s "
-    out <- paste0(whose, if (kind == "package_doc") "documentation" else what[1], ", ",
+    out <- paste0(whose, if (kind == "package_doc") "documentation"
+                  else if (kind == "labelled_data" && nrow(l) > 1) what[2] else what[1], ", ",
                   paste(files, collapse = ", "),
                   if (kind == "questionnaire") paste0(", which ", if (nrow(l) > 1) "show" else "shows",
-                                                       " the item wording") else "")
+                                                       " the item wording")
+                  else if (kind == "labelled_data") paste0(", which ", if (nrow(l) > 1) "carry their" else "carries its",
+                                                           " own variable and value labels")
+                  else "")
     if (kind == "recorded_by_review") {
       q <- source_codebook_html(links[links$how_found == "questionnaire", , drop = FALSE])
       if (nzchar(q)) out <- paste0(out, ", and ", sub("^the source&rsquo;s ", "its ", q))
