@@ -163,7 +163,8 @@ CACHES <- list(
                                "network_psych_data/network_psych_prior_sensitivity_results.rds",
                                "network_psych_data/network_psych_sbm_results.rds"),
   "rt_imv"                 = "rtimvdata/rt_imv_results.rds",
-  "sports_trials"          = "sports_trials_data/results.rds"
+  "sports_trials"          = "sports_trials_data/results.rds",
+  "typical_correlation"    = "typical_correlation_data/typical_correlation_results.rds"
 )
 
 # Vignettes whose caches predate the date_run convention, dated from git instead.
