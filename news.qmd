@@ -14,6 +14,122 @@ This log begins in September 2026, when the page was created. The IRW is older
 than the log, and changes before then are recorded only in the repositories'
 commit history and in the versioned data itself.
 
+## 2026-11-23 — Two designs get a lower intake floor than 100 respondents
+
+The intake floor of 100 unique `id` values now bends for two kinds of study
+where the respondents are few by design and the information sits in the trials.
+Intensive longitudinal data — experience sampling and ecological momentary
+assessment — is accepted at 30 people, provided the table as shipped also has a
+median of at least 20 responses per person per item, taken over the whole
+person × item grid and counting a skipped item as zero. Both conditions have to
+hold: the second makes the exception about the design rather than the source,
+and it keeps out a thin item inside a qualifying study, such as an end-of-day
+question asked once a day for five days. Psychophysics — trial-level perceptual
+decisions and estimates, where the stimulus itself is varied and each observer
+contributes hundreds of trials — is accepted at 50 people.
+
+Everything else keeps the 100 floor, panels with a handful of waves included,
+and the three-item floor applies to all of it. `irw-validate` cannot tell one
+design from another, so its sample-size check still warns below 100, and the
+warning is expected on these tables. The [intake policy on this
+site](standard.qmd#intake) still lists the 100 floor alone; the data standard in
+the processing repository is authoritative for intake and carries both
+exceptions. Refs #3421, #3686.
+
+## 2026-11-20 — The ranked-choice ballots are counted back against the official rounds
+
+The rankings family's ranked-choice tables already carried the counting rules in
+force for each contest. The jurisdiction's own round-by-round report is now kept
+beside them in the processing repository — one file per table, figures copied as
+printed, each with the URL of every document it is written from — so the claim
+that the ballots are the ones that were counted can be checked rather than
+taken. Counted under the recorded rules, 422 of the 475 tables that have a
+published report reproduce it in every figure, and 471 elect the published
+winner. The 53 that differ each carry a written reason: a county that ran its
+report with a setting it has since disowned, a deposit that holds one ward where
+the page totals two, a write-in line the cast vote record does not have. The
+layout is on the [rankings standard](rankings_standard.qmd). Refs #3606.
+
+## 2026-11-20 — When nothing else documents a column, the source's own SPSS file does
+
+A table page links whatever its source deposit offers as documentation for the
+columns: a codebook, a README, a questionnaire. Many deposits ship none of those
+but do ship an SPSS or Stata data file, which carries its own variable and value
+labels, and that now counts. The finder records such a file as a link of its
+own, and a table page shows it when nothing better was found — 646 tables
+recorded as shipping no codebook turn out to ship a labelled file. The IRW MCP
+server's `describe_columns` accepts the new kind in its `source_codebooks`
+filter and says what it is. Refs #2766.
+
+## 2026-11-19 — The ENEM tables were missing the examinees of two booklet colours
+
+ENEM gives each day's exam in four booklet colours, and the build for the
+2013–2015 tables listed only the first and last code of each block of four.
+Because the examinee filter ran on the day-1 booklet code, that dropped the
+examinees of the other two colours from every area, and the humanities and
+natural-science items appeared at two positions instead of four. All twelve
+tables are rebuilt from all four main colours and released, in
+`item_response_warehouse` v82.0 (IRW 740), and the twelve nominal-response
+tables regenerated from them are released in `irw_nominal` v6.0 (IRW 743). Each
+table's note is on [Corrections](corrections.qmd). Refs #3632, #3561.
+
+## 2026-11-18 — Published covariance matrices are a data family of their own
+
+Much of structural equation modelling starts from a correlation or covariance
+matrix rather than from responses, and decades of those matrices sit in papers,
+textbooks and software manuals with no raw data behind them anywhere. The IRW
+now holds them as the covariance family, in the Redivis dataset `irw_cov`: one
+row per cell of the lower triangle, the diagonal included, with the sample size
+on every row, so a table on its own is enough to fit a model. Values are kept
+exactly as published, never rounded, smoothed or corrected, and a matrix that is
+not positive definite is flagged rather than repaired — in this literature,
+rounding and pairwise deletion make that common enough to matter. A cell the
+source did not report is a row with an empty value, so a blank always means "not
+reported" and never a gap in the transcription. The family also keeps each
+source's variable order, its reliabilities, and the study-level moderators a
+meta-analytic corpus publishes for each sample. The standard is on its own page,
+[The Covariance Data Standard](cov_standard.qmd).
+
+Both clients read the family with `source = "cov"`, and the same call computes a
+matrix from any core table's responses — Pearson, Spearman, Kendall, polychoric
+or tetrachoric — labelled as computed, because a matrix the IRW can compute from
+a table it holds is derived data and is never stored. `irw_cov2matrix()` returns
+the square matrix, N and pairwise n that `lavaan` asks for, and `irw_cov2list()`
+hands every sample of a multi-group table to `metaSEM` in one call; the MCP
+server serves the family too. None of this is in a release of either package: it
+is on `main` in both and arrives with the next CRAN and PyPI cuts, so for now it
+needs a development install. With covariance added, the site counts six data
+families, and simulated and synthetic tables are now shown as a labelled subset
+of core rather than a family of their own. Refs #3582, #3594.
+
+## 2026-11-17 — `homefield` appears only where the advantage is real
+
+In the competitions family, `homefield` records which competitor had an
+advantage from the structure of the contest: playing at home, going first, being
+shown on the left. It is now included only where that advantage is visible in
+the data. A source in which one slot could plausibly be favoured gets a
+z-statistic for `agent_a`'s share of decided contests, recorded in the build
+script and the dictionary row, and the column is added at roughly |z| >= 3 —
+of the arena sets checked so far, only `lmarena_text_2025` crosses the line. An
+absent column is therefore a statement rather than an omission, and the rule is
+on the [competitions standard](comps_standard.qmd).
+
+## 2026-11-16 — `irw_merge()` was returning less than it announced
+
+`irw_merge()` fetches every table that belongs with a named one and stacks them.
+It used to drop any member whose columns differed from the first table fetched,
+which is an ordinary thing for IRW tables to do, since they carry different
+`cov_*` columns: `irw_merge("act_kay_2025")` announced twelve tables and
+returned five, and `irw_merge("chakraborty2026_IWAH_IRW")` returned nothing at
+all, with which members survived depending only on which one happened to be the
+anchor. Members are now stacked on the union of their columns, with a missing
+column named in the summary and filled with NA, and a column whose class differs
+across members returned as character. A member that cannot be fetched raises a
+warning as well as a message, so a partial merge cannot pass for a complete one.
+Both clients also fall back to grouping by the data DOI, for tables that neither
+a paper DOI nor BibTeX groups. This is on `main` in both packages and in a
+release of neither. Refs #3572.
+
 ## 2026-11-16 — Conjoint tables keep every respondent the experiment reached
 
 Conjoint processing scripts used to reproduce the authors' analysis sample,
