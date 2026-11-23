@@ -59,16 +59,27 @@ FAMILIES <- list(
            "item_response_warehouse_5", "item_response_warehouse_6",
            "item_response_warehouse_7", "item_response_warehouse_8",
            "item_response_warehouse_9"),
+  # Simsyn sits directly under core: it is listed (so the undeclared-family
+  # check below still knows its dataset) but framed as a branch of core, not a
+  # sixth response family -- see BRANCHES.
+  sim  = c("irw_simsyn"),
   conj = c("irw_conjoint", "irw_conjoint_2"),
   rank = c("irw_rank", "irw_rank_2"),
   nom  = c("irw_nominal"),
   comp = c("irw_competitions"),
-  sim  = c("irw_simsyn"),
   # Published correlation/covariance matrices: summary statistics, not
   # responses, so they are listed but left out of the response-table total.
   cov  = c("irw_cov")
 )
 SUMMARY_FAMILIES <- c("cov")
+# Branches: entries of FAMILIES that are written as a sub-entry of another
+# family rather than as a family of their own. The site's house line
+# (datapages/irw#385, #386) is five response families -- core, nominal,
+# competitions, conjoint, rankings -- with simulated and synthetic data shown as
+# a branch of core: it keeps the core schema and is defined by where the data
+# come from, not by their shape. The homepage tiles and overview.qmd say the
+# same. A branch still has its own `source` value and its own count.
+BRANCHES <- c(sim = "core")
 # Datasets that hold no response data, so they are not a family and must not be
 # reported as an undeclared one. ARCHITECTURE.md section 2: "Auxiliary means
 # only these."
@@ -200,12 +211,20 @@ values <- list(
   item_family = if (is.na(item_family)) NULL else fmt(item_family)
 )
 
+# A branch is indented under its parent (FAMILIES lists it right after) and
+# says whose branch it is; the column widths still line up.
+family_line <- function(key, n) {
+  if (key %in% names(BRANCHES)) {
+    return(sprintf("    %-4s %6s  source=\"%s\"   branch of %s", key, n, key,
+                   BRANCHES[[key]]))
+  }
+  sprintf("  %-6s %6s  %s", key, n,
+          if (key == "core") "(default)   id/item/resp, everything above"
+          else paste0("source=\"", key, "\""))
+}
 family_block <- paste0(
   "<!-- families:start -->\n",
-  paste0(sprintf("  %-6s %6s  %s", names(FAMILIES), fmt(counts$per_family),
-                 ifelse(names(FAMILIES) == "core", "(default)   id/item/resp, everything above",
-                        paste0("source=\"", names(FAMILIES), "\""))),
-         collapse = "\n"),
+  paste0(mapply(family_line, names(FAMILIES), fmt(counts$per_family)), collapse = "\n"),
   "\n<!-- families:end -->")
 
 pypkg_block <- paste0(
