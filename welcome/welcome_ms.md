@@ -65,9 +65,9 @@ Setiap jadual IRW berada dalam **format panjang**: satu baris bagi setiap respon
 | Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
 | Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
 | Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
-| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
+| Covariance | `"cov"` | [Covariance](/cov_standard.qmd) |
 
-Simsyn tiada dalam carta: keluarga ini ditakrifkan oleh asal usul data, bukan bentuknya, jadi jadual simulasi boleh mempunyai mana-mana daripada bentuk ini. Lajur bagi setiap keluarga ada dalam [gambaran keseluruhan standard](/overview.qmd).
+[Simsyn](/simsyn.qmd) bukan keluarga yang berasingan: jadualnya ialah jadual Core dengan respons simulasi atau sintetik, dan ia mengekalkan skema Core. Lajur bagi setiap keluarga ada dalam [gambaran keseluruhan standard](/overview.qmd).
 
 
 ## Cara menggunakannya
@@ -90,7 +90,8 @@ irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
@@ -104,7 +105,8 @@ irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 

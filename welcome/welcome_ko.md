@@ -65,9 +65,9 @@ IRW의 모든 데이터셋은 다음과 같이 설계되어 있습니다:
 | Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
 | Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
 | Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
-| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
+| Covariance | `"cov"` | [Covariance](/cov_standard.qmd) |
 
-Simsyn은 도표에 없습니다. 이 계열은 데이터의 형태가 아니라 출처로 정의되므로, 시뮬레이션 테이블은 이 형태들 중 어느 것이든 가질 수 있습니다. 각 계열의 열은 [표준 개요](/overview.qmd)에 정리되어 있습니다.
+[Simsyn](/simsyn.qmd)은 별도의 계열이 아닙니다. 그 테이블은 시뮬레이션 또는 합성된 응답을 담은 Core 테이블이며, Core의 스키마를 그대로 따릅니다. 각 계열의 열은 [표준 개요](/overview.qmd)에 정리되어 있습니다.
 
 
 ## 사용 방법
@@ -90,7 +90,8 @@ irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
@@ -104,7 +105,8 @@ irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 

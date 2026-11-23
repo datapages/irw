@@ -59,10 +59,6 @@ FAMILIES <- list(
            "item_response_warehouse_5", "item_response_warehouse_6",
            "item_response_warehouse_7", "item_response_warehouse_8",
            "item_response_warehouse_9"),
-  # Simsyn sits directly under core: it is listed (so the undeclared-family
-  # check below still knows its dataset) but framed as a branch of core, not a
-  # sixth response family -- see BRANCHES.
-  sim  = c("irw_simsyn"),
   conj = c("irw_conjoint", "irw_conjoint_2"),
   rank = c("irw_rank", "irw_rank_2"),
   nom  = c("irw_nominal"),
@@ -72,14 +68,18 @@ FAMILIES <- list(
   cov  = c("irw_cov")
 )
 SUMMARY_FAMILIES <- c("cov")
-# Branches: entries of FAMILIES that are written as a sub-entry of another
-# family rather than as a family of their own. The site's house line
-# (datapages/irw#385, #386) is five response families -- core, nominal,
-# competitions, conjoint, rankings -- with simulated and synthetic data shown as
-# a branch of core: it keeps the core schema and is defined by where the data
-# come from, not by their shape. The homepage tiles and overview.qmd say the
-# same. A branch still has its own `source` value and its own count.
-BRANCHES <- c(sim = "core")
+# Subsets of core that have their own `source` value and Redivis dataset but are
+# NOT a family. Ben's ruling on datapages/irw#386: six families (the five above
+# that hold responses, plus cov), and simulated/synthetic data are "all core
+# tables just simulated" -- they keep the core schema. They are counted, listed
+# indented under core in llms.txt, and known to the undeclared-dataset check
+# below, but never called a family.
+CORE_SUBSETS <- list(
+  sim = c("irw_simsyn")
+)
+# Everything listed and counted, in the order llms.txt shows it: core, then its
+# subsets, then the other families.
+LISTED <- c(FAMILIES["core"], CORE_SUBSETS, FAMILIES[names(FAMILIES) != "core"])
 # Datasets that hold no response data, so they are not a family and must not be
 # reported as an undeclared one. ARCHITECTURE.md section 2: "Auxiliary means
 # only these."
@@ -119,7 +119,7 @@ read_catalog <- function() {
 }
 
 counts <- tryCatch({
-  out <- vapply(FAMILIES, function(datasets) sum(vapply(datasets, count_tables, numeric(1))),
+  out <- vapply(LISTED, function(datasets) sum(vapply(datasets, count_tables, numeric(1))),
                 numeric(1))
   list(per_family = out,
        item_family = NA_integer_,
@@ -131,14 +131,14 @@ if (inherits(counts, "error")) fail(paste0("could not read the catalog (",
 # A live family nobody has written prose for. Checked by DATASET name against
 # the configured lists, so a new shard of a known family is fine and a new
 # family is not.
-known <- c(unlist(FAMILIES, use.names = FALSE), AUXILIARY)
+known <- c(unlist(LISTED, use.names = FALSE), AUXILIARY)
 live <- tryCatch(read_catalog(), error = function(e) character(0))
 undeclared <- setdiff(live, known)
 if (length(undeclared) > 0) {
   fail(paste0("the catalog holds ", length(undeclared),
               " IRW dataset(s) this file does not describe: ",
               paste(undeclared, collapse = ", "),
-              ". Add the family to FAMILIES and to the prose of ",
+              ". Add the family to FAMILIES (or a subset of core to CORE_SUBSETS) and to the prose of ",
               paste(targets, collapse = ", "),
               " -- or to AUXILIARY if it holds no response data. ",
               "An assistant that has never heard of a family will apply the ",
@@ -211,12 +211,11 @@ values <- list(
   item_family = if (is.na(item_family)) NULL else fmt(item_family)
 )
 
-# A branch is indented under its parent (FAMILIES lists it right after) and
-# says whose branch it is; the column widths still line up.
+# A subset of core is indented under core (LISTED puts it right after) and says
+# so; the column widths still line up.
 family_line <- function(key, n) {
-  if (key %in% names(BRANCHES)) {
-    return(sprintf("    %-4s %6s  source=\"%s\"   branch of %s", key, n, key,
-                   BRANCHES[[key]]))
+  if (key %in% names(CORE_SUBSETS)) {
+    return(sprintf("    %-4s %6s  source=\"%s\"   subset of core, not a family", key, n, key))
   }
   sprintf("  %-6s %6s  %s", key, n,
           if (key == "core") "(default)   id/item/resp, everything above"
@@ -224,7 +223,7 @@ family_line <- function(key, n) {
 }
 family_block <- paste0(
   "<!-- families:start -->\n",
-  paste0(mapply(family_line, names(FAMILIES), fmt(counts$per_family)), collapse = "\n"),
+  paste0(mapply(family_line, names(LISTED), fmt(counts$per_family)), collapse = "\n"),
   "\n<!-- families:end -->")
 
 pypkg_block <- paste0(

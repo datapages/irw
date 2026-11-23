@@ -26,7 +26,7 @@ item-response tables in its core family — cognitive tests, personality
 inventories, RCT outcome measures, psycholinguistic tasks — all reshaped to one
 schema so the same code runs across all of them, and
 <!-- counts:all -->11,138<!-- /counts:all --> response tables in all across the
-five response families below and core's simulated/synthetic branch. (These counts are every table listed on the families'
+five response families below (core including its simulated/synthetic subset). (These counts are every table listed on the families'
 Redivis datasets. The published catalog, irw_meta, can trail them by a few
 hundred while new tables wait for their metadata row, and the homepage, table
 pages and irw_filter() count only catalogued tables, so their numbers can be
@@ -108,17 +108,17 @@ RESERVED optional columns (exact names — do not invent variants):
   trial_*       trial-level details (trial_number, trial_block); `item` still
                 identifies the probe -- it is always authoritative
 
-Tables come in FIVE FAMILIES OF RESPONSE DATA (core, conjoint, rankings,
-nominal, competitions), plus one family of correlation/covariance matrices.
-Simulated and synthetic data (`sim`) are a BRANCH OF CORE, listed indented under
-it: same schema as core, but no real respondents. Each family and the branch is
-its own Redivis dataset or shard list, chosen with the `source` argument. The
-counts are generated; the list is not, and a family missing from it stops the
-site build.
+Tables come in SIX DATA FAMILIES: five of response data (core, conjoint,
+rankings, nominal, competitions) and one of correlation/covariance matrices.
+Simulated and synthetic data (`sim`) are NOT a family: they are a SUBSET OF CORE,
+core tables whose responses no real person produced, in the core schema, listed
+indented under core. Each family, and the sim subset, is its own Redivis dataset
+or shard list, chosen with the `source` argument. The counts are generated; the
+list is not, and a family missing from it stops the site build.
 
 <!-- families:start -->
   core    8,435  (default)   id/item/resp, everything above
-    sim      16  source="sim"   branch of core
+    sim      16  source="sim"   subset of core, not a family
   conj    1,292  source="conj"
   rank    1,113  source="rank"
   nom       161  source="nom"
@@ -147,9 +147,9 @@ FOUR families are NOT plain id/item/resp. Do not apply the above to them:
     ranking questions. Standard:
     https://itemresponsewarehouse.org/rankings_standard.html
 
-Simulated/synthetic (`source="sim"`) is a branch of core rather than a family
-of its own: it keeps the core schema and has no real respondents, so it is
-defined by provenance rather than shape. Everything above about core applies.
+Simulated/synthetic (`source="sim"`) is a subset of core, not a family: these
+are core tables whose responses were simulated or synthesized, and they keep the
+core schema. Everything above about core applies.
 
 Covariance (`source="cov"`) holds NO responses: each table is a published
 correlation or covariance matrix (from a paper, a methods text, an R package or
@@ -498,8 +498,8 @@ as missing. Differences that are real:
     or use `filter()`'s tag arguments.
   - **No `predict()`** and no `simu_diff()`.
   - **`source="main"` in Python where R says `source="core"`.** Python's
-    `source` accepts "main", "nom", "sim", "comp", "conj" and "rank" — all five
-    response families and the simsyn branch, nominal included.
+    `source` accepts "main", "nom", "sim", "comp", "conj" and "rank" — the five
+    response families and the simulated/synthetic subset of core, nominal included.
   - **No `irw_` prefix** on function names: `irw.fetch()`, not `irw.irw_fetch()`.
   - R's error and type handling is not Python's. `filter(n_responses="abc")`
     raises `InvalidFilterValue` in Python and reports "0 tables matched" in R;

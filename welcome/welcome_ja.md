@@ -65,9 +65,9 @@ IRW のすべてのテーブルは**ロング形式**です。反応1件につ�
 | Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
 | Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
 | Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
-| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
+| Covariance | `"cov"` | [Covariance](/cov_standard.qmd) |
 
-Simsyn は図に含まれていません。このファミリーはデータの形ではなく出所によって定義されるため、シミュレーションによるテーブルはこれらのどの形をとることもあります。各ファミリーの列については[標準の概要](/overview.qmd)をご覧ください。
+[Simsyn](/simsyn.qmd) は独立したファミリーではありません。そのテーブルはシミュレーションまたは合成による回答を持つ Core のテーブルで、Core と同じスキーマを保っています。各ファミリーの列については[標準の概要](/overview.qmd)をご覧ください。
 
 
 ## 使い方
@@ -90,7 +90,8 @@ irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
@@ -104,7 +105,8 @@ irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
