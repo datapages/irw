@@ -214,6 +214,11 @@ pypkg_block <- paste0(
   ", read from the released wheel.\n",
   "<!-- pypkg:end -->")
 
+# The "irw_meta vNN.N" in this line is also read back from the LIVE llms.txt by
+# the `decide` job in .github/workflows/quarto_publish.yaml, to tell whether a
+# newer irw_meta has been released since the site was built
+# (datapages/irw#404). Reword it and decide stops seeing releases: it logs a
+# warning and falls back to watching main alone. Change both together.
 asof_block <- paste0(
   "<!-- asof:start -->\n",
   "AS OF: ", format(Sys.Date()), " · irw_meta ", counts$version, "\n",
