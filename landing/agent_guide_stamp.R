@@ -63,12 +63,23 @@ FAMILIES <- list(
   rank = c("irw_rank", "irw_rank_2"),
   nom  = c("irw_nominal"),
   comp = c("irw_competitions"),
-  sim  = c("irw_simsyn"),
   # Published correlation/covariance matrices: summary statistics, not
   # responses, so they are listed but left out of the response-table total.
   cov  = c("irw_cov")
 )
 SUMMARY_FAMILIES <- c("cov")
+# Subsets of core that have their own `source` value and Redivis dataset but are
+# NOT a family. Ben's ruling on datapages/irw#386: six families (the five above
+# that hold responses, plus cov), and simulated/synthetic data are "all core
+# tables just simulated" -- they keep the core schema. They are counted, listed
+# indented under core in llms.txt, and known to the undeclared-dataset check
+# below, but never called a family.
+CORE_SUBSETS <- list(
+  sim = c("irw_simsyn")
+)
+# Everything listed and counted, in the order llms.txt shows it: core, then its
+# subsets, then the other families.
+LISTED <- c(FAMILIES["core"], CORE_SUBSETS, FAMILIES[names(FAMILIES) != "core"])
 # Datasets that hold no response data, so they are not a family and must not be
 # reported as an undeclared one. ARCHITECTURE.md section 2: "Auxiliary means
 # only these."
@@ -108,7 +119,7 @@ read_catalog <- function() {
 }
 
 counts <- tryCatch({
-  out <- vapply(FAMILIES, function(datasets) sum(vapply(datasets, count_tables, numeric(1))),
+  out <- vapply(LISTED, function(datasets) sum(vapply(datasets, count_tables, numeric(1))),
                 numeric(1))
   list(per_family = out,
        item_family = NA_integer_,
@@ -120,14 +131,14 @@ if (inherits(counts, "error")) fail(paste0("could not read the catalog (",
 # A live family nobody has written prose for. Checked by DATASET name against
 # the configured lists, so a new shard of a known family is fine and a new
 # family is not.
-known <- c(unlist(FAMILIES, use.names = FALSE), AUXILIARY)
+known <- c(unlist(LISTED, use.names = FALSE), AUXILIARY)
 live <- tryCatch(read_catalog(), error = function(e) character(0))
 undeclared <- setdiff(live, known)
 if (length(undeclared) > 0) {
   fail(paste0("the catalog holds ", length(undeclared),
               " IRW dataset(s) this file does not describe: ",
               paste(undeclared, collapse = ", "),
-              ". Add the family to FAMILIES and to the prose of ",
+              ". Add the family to FAMILIES (or a subset of core to CORE_SUBSETS) and to the prose of ",
               paste(targets, collapse = ", "),
               " -- or to AUXILIARY if it holds no response data. ",
               "An assistant that has never heard of a family will apply the ",
@@ -200,12 +211,19 @@ values <- list(
   item_family = if (is.na(item_family)) NULL else fmt(item_family)
 )
 
+# A subset of core is indented under core (LISTED puts it right after) and says
+# so; the column widths still line up.
+family_line <- function(key, n) {
+  if (key %in% names(CORE_SUBSETS)) {
+    return(sprintf("    %-4s %6s  source=\"%s\"   subset of core, not a family", key, n, key))
+  }
+  sprintf("  %-6s %6s  %s", key, n,
+          if (key == "core") "(default)   id/item/resp, everything above"
+          else paste0("source=\"", key, "\""))
+}
 family_block <- paste0(
   "<!-- families:start -->\n",
-  paste0(sprintf("  %-6s %6s  %s", names(FAMILIES), fmt(counts$per_family),
-                 ifelse(names(FAMILIES) == "core", "(default)   id/item/resp, everything above",
-                        paste0("source=\"", names(FAMILIES), "\""))),
-         collapse = "\n"),
+  paste0(mapply(family_line, names(LISTED), fmt(counts$per_family)), collapse = "\n"),
   "\n<!-- families:end -->")
 
 pypkg_block <- paste0(

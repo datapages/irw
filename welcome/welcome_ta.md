@@ -65,9 +65,9 @@ IRW-இல் உள்ள ஒவ்வொரு தரவுத் தொகு
 | Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
 | Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
 | Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
-| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
+| Covariance | `"cov"` | [Covariance](/cov_standard.qmd) |
 
-Simsyn வரைபடத்தில் இல்லை: இந்தக் குடும்பம் தரவின் வடிவால் அல்ல, அதன் மூலத்தால் வரையறுக்கப்படுகிறது, எனவே ஒரு உருவகம் அட்டவணை இவற்றில் எந்த வடிவில் வேண்டுமானாலும் இருக்கலாம். ஒவ்வொரு குடும்பத்தின் நிரல்கள் [தரநிலைகளின் கண்ணோட்டம்](/overview.qmd) பக்கத்தில் உள்ளன.
+[Simsyn](/simsyn.qmd) ஒரு தனிக் குடும்பம் அல்ல: அதன் அட்டவணைகள் உருவகப்படுத்தப்பட்ட அல்லது செயற்கையான பதில்களைக் கொண்ட Core அட்டவணைகள், அவை Core-இன் கட்டமைப்பைக் கொண்டுள்ளன. ஒவ்வொரு குடும்பத்தின் நிரல்கள் [தரநிலைகளின் கண்ணோட்டம்](/overview.qmd) பக்கத்தில் உள்ளன.
 
 
 ## எப்படிப் பயன்படுத்துவது
@@ -90,7 +90,8 @@ irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
@@ -104,7 +105,8 @@ irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 

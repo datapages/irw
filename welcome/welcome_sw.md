@@ -65,9 +65,9 @@ Kila jedwali la IRW liko katika **muundo mrefu**: safu moja kwa kila jibu. Safu 
 | Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
 | Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
 | Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
-| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
+| Covariance | `"cov"` | [Covariance](/cov_standard.qmd) |
 
-Simsyn haiko kwenye chati: familia hii hufafanuliwa na chanzo cha data, si umbo lake, hivyo jedwali la kuiga linaweza kuwa na umbo lolote kati ya haya. Safu wima za kila familia zimeorodheshwa katika [muhtasari wa viwango](/overview.qmd).
+[Simsyn](/simsyn.qmd) si familia tofauti: majedwali yake ni majedwali ya Core yenye majibu ya kuiga au ya sintetiki, na yanabaki na muundo wa Core. Safu wima za kila familia zimeorodheshwa katika [muhtasari wa viwango](/overview.qmd).
 
 
 ## Jinsi ya kuitumia
@@ -90,7 +90,8 @@ irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
@@ -104,7 +105,8 @@ irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 

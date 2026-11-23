@@ -15,18 +15,18 @@ Python package: https://github.com/itemresponsewarehouse/Python-pkg
 Stata package: https://github.com/itemresponsewarehouse/Stata-pkg
 
 <!-- asof:start -->
-AS OF: 2026-11-17 · irw_meta v73.0
+AS OF: 2026-11-23 · irw_meta v79.0
 Every count in this file is generated from the published catalog at that date by
 landing/agent_guide_stamp.R. If you are reading a copy older than a few weeks,
 the numbers have grown; the structure has not.
 <!-- asof:end -->
 
-The IRW is a corpus of <!-- counts:core -->8,264<!-- /counts:core --> harmonized
+The IRW is a corpus of <!-- counts:core -->8,435<!-- /counts:core --> harmonized
 item-response tables in its core family — cognitive tests, personality
 inventories, RCT outcome measures, psycholinguistic tasks — all reshaped to one
 schema so the same code runs across all of them, and
-<!-- counts:all -->10,963<!-- /counts:all --> response tables in all across the
-six response families below. (These counts are every table listed on the families'
+<!-- counts:all -->11,138<!-- /counts:all --> response tables in all across the
+five response families below (core including its simulated/synthetic subset). (These counts are every table listed on the families'
 Redivis datasets. The published catalog, irw_meta, can trail them by a few
 hundred while new tables wait for their metadata row, and the homepage, table
 pages and irw_filter() count only catalogued tables, so their numbers can be
@@ -108,19 +108,22 @@ RESERVED optional columns (exact names — do not invent variants):
   trial_*       trial-level details (trial_number, trial_block); `item` still
                 identifies the probe -- it is always authoritative
 
-Tables come in SEVEN DATA FAMILIES, six of response data and one of
-correlation/covariance matrices, each its own Redivis dataset or shard list,
-chosen with the `source` argument. The counts are generated; the list is not,
-and a family missing from it stops the site build.
+Tables come in SIX DATA FAMILIES: five of response data (core, conjoint,
+rankings, nominal, competitions) and one of correlation/covariance matrices.
+Simulated and synthetic data (`sim`) are NOT a family: they are a SUBSET OF CORE,
+core tables whose responses no real person produced, in the core schema, listed
+indented under core. Each family, and the sim subset, is its own Redivis dataset
+or shard list, chosen with the `source` argument. The counts are generated; the
+list is not, and a family missing from it stops the site build.
 
 <!-- families:start -->
-  core    8,264  (default)   id/item/resp, everything above
+  core    8,435  (default)   id/item/resp, everything above
+    sim      16  source="sim"   subset of core, not a family
   conj    1,292  source="conj"
-  rank    1,109  source="rank"
+  rank    1,113  source="rank"
   nom       161  source="nom"
   comp      121  source="comp"
-  sim        16  source="sim"
-  cov        48  source="cov"
+  cov       383  source="cov"
 <!-- families:end -->
 
 FOUR families are NOT plain id/item/resp. Do not apply the above to them:
@@ -144,8 +147,9 @@ FOUR families are NOT plain id/item/resp. Do not apply the above to them:
     ranking questions. Standard:
     https://itemresponsewarehouse.org/rankings_standard.html
 
-Simulated/synthetic (`source="sim"`) keeps the core schema and has no real
-respondents, so it is the one family defined by provenance rather than shape.
+Simulated/synthetic (`source="sim"`) is a subset of core, not a family: these
+are core tables whose responses were simulated or synthesized, and they keep the
+core schema. Everything above about core applies.
 
 Covariance (`source="cov"`) holds NO responses: each table is a published
 correlation or covariance matrix (from a paper, a methods text, an R package or
@@ -300,7 +304,7 @@ For a known-multidimensional vs known-unidimensional contrast, the site pairs
 
     irw_filter(...)             by metadata and tags; returns table NAMES
     irw_metadata()              the full metadata frame
-                                (<!-- counts:core -->8,264<!-- /counts:core --> rows — see §7)
+                                (<!-- counts:core -->8,435<!-- /counts:core --> rows — see §7)
     irw_info("table")           one table's summary
     irw_tags(tables)            qualitative tags
     irw_tag_options(col)        allowed values for a tag column
@@ -365,7 +369,7 @@ Caveats on selection metadata, all real:
     verified. Read it as "the ones we know of".
 
 Do not treat any of these as ground truth about a construct. They are a way to
-narrow <!-- counts:core -->8,264<!-- /counts:core --> tables to a workable
+narrow <!-- counts:core -->8,435<!-- /counts:core --> tables to a workable
 candidate set, which you then check.
 
 --------------------------------------------------------------------------
@@ -494,8 +498,8 @@ as missing. Differences that are real:
     or use `filter()`'s tag arguments.
   - **No `predict()`** and no `simu_diff()`.
   - **`source="main"` in Python where R says `source="core"`.** Python's
-    `source` accepts "main", "nom", "sim", "comp", "conj" and "rank" — all six
-    families, nominal included.
+    `source` accepts "main", "nom", "sim", "comp", "conj" and "rank" — the five
+    response families and the simulated/synthetic subset of core, nominal included.
   - **No `irw_` prefix** on function names: `irw.fetch()`, not `irw.irw_fetch()`.
   - R's error and type handling is not Python's. `filter(n_responses="abc")`
     raises `InvalidFilterValue` in Python and reports "0 tables matched" in R;

@@ -66,9 +66,9 @@ IRW کا ہر ٹیبل **لمبے فارمیٹ** میں ہے: ہر ریسپان�
 | Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
 | Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
 | Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
-| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
+| Covariance | `"cov"` | [Covariance](/cov_standard.qmd) |
 
-Simsyn خاکے میں نہیں ہے: یہ خاندان ڈیٹا کی شکل سے نہیں بلکہ اس کے ماخذ سے متعین ہوتا ہے، چنانچہ ایک مصنوعی ٹیبل ان میں سے کوئی بھی شکل رکھ سکتا ہے۔ ہر خاندان کے کالم [معیارات کا جائزہ](/overview.qmd) میں دیے گئے ہیں۔
+[Simsyn](/simsyn.qmd) کوئی الگ خاندان نہیں ہے: اس کے ٹیبل نقلی یا مصنوعی جوابات والے Core ٹیبل ہیں، اور وہ Core کی ساخت برقرار رکھتے ہیں۔ ہر خاندان کے کالم [معیارات کا جائزہ](/overview.qmd) میں دیے گئے ہیں۔
 
 
 ## اسے کیسے استعمال کریں
@@ -91,7 +91,8 @@ irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
@@ -105,7 +106,8 @@ irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 

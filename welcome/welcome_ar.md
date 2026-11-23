@@ -66,9 +66,9 @@ Translator note: please do NOT translate the following —
 | Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
 | Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
 | Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
-| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
+| Covariance | `"cov"` | [Covariance](/cov_standard.qmd) |
 
-لا يظهر Simsyn في المخطط: فهذه العائلة تُعرَّف بمصدر البيانات لا بشكلها، ولذلك قد يأخذ الجدول المحاكى أيًّا من هذه الأشكال. أعمدة كل عائلة مذكورة في [نظرة عامة على المعايير](/overview.qmd).
+[Simsyn](/simsyn.qmd) ليست عائلة مستقلة: جداولها جداول Core استجاباتها محاكاة أو اصطناعية، وتحتفظ ببنية Core نفسها. أعمدة كل عائلة مذكورة في [نظرة عامة على المعايير](/overview.qmd).
 
 
 ## كيفية الاستخدام
@@ -91,7 +91,8 @@ irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
@@ -105,7 +106,8 @@ irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 

@@ -65,9 +65,9 @@ IRW-এর প্রতিটি টেবিল **লং ফরম্যাট�
 | Competitions | `"comp"` | [Competitions](/comps_standard.qmd) |
 | Rankings | `"rank"` | [Rankings](/rankings_standard.qmd) |
 | Conjoint | `"conj"` | [Conjoint](/conjoint_standard.qmd) |
-| Simulated and synthetic | `"sim"` | [Simsyn](/simsyn.qmd) |
+| Covariance | `"cov"` | [Covariance](/cov_standard.qmd) |
 
-Simsyn চার্টে নেই: এই পরিবারটি ডেটার আকার দিয়ে নয়, উৎস দিয়ে নির্ধারিত, তাই একটি সিমুলেটেড টেবিল এই যেকোনো আকারের হতে পারে। প্রতিটি পরিবারের কলাম [স্ট্যান্ডার্ডের সংক্ষিপ্তসার](/overview.qmd)-এ দেওয়া আছে।
+[Simsyn](/simsyn.qmd) আলাদা কোনো পরিবার নয়: এর টেবিলগুলো সিমুলেটেড বা সিন্থেটিক রেসপন্সসহ Core টেবিল, এবং এগুলো Core-এর কাঠামো বজায় রাখে। প্রতিটি পরিবারের কলাম [স্ট্যান্ডার্ডের সংক্ষিপ্তসার](/overview.qmd)-এ দেওয়া আছে।
 
 
 ## কীভাবে ব্যবহার করবেন
@@ -90,7 +90,8 @@ irw_list_tables()              # list all available tables
 irw_filter(var = "rt")         # find tables that include response times
 df <- irw_fetch("4thgrade_math_sirt")   # download one table
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g <- irw_fetch("lichess_2013_blitz", source = "comp")
 ```
 
@@ -104,7 +105,8 @@ irw.list_tables()
 irw.filter(var="rt")
 df = irw.fetch("4thgrade_math_sirt")
 
-# Other families are the same call with a source: comp, nom, conj, rank, sim
+# Other families are the same call with a source: comp, nom, conj, rank, cov
+# Simulated and synthetic core tables use source "sim"
 g = irw.fetch("lichess_2013_blitz", source="comp")
 ```
 
