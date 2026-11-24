@@ -43,12 +43,8 @@ force for each contest. The jurisdiction's own round-by-round report is now kept
 beside them in the processing repository — one file per table, figures copied as
 printed, each with the URL of every document it is written from — so the claim
 that the ballots are the ones that were counted can be checked rather than
-taken. Counted under the recorded rules, 422 of the 475 tables that have a
-published report reproduce it in every figure, and 471 elect the published
-winner. The 53 that differ each carry a written reason: a county that ran its
-report with a setting it has since disowned, a deposit that holds one ward where
-the page totals two, a write-in line the cast vote record does not have. The
-layout is on the [rankings standard](rankings_standard.qmd). Refs #3606.
+taken. Where a table does not reproduce the official report, it carries a
+written reason. The layout is on the [rankings standard](rankings_standard.qmd). Refs #3606.
 
 ## 2026-11-20 — When nothing else documents a column, the source's own SPSS file does
 
@@ -56,10 +52,7 @@ A table page links whatever its source deposit offers as documentation for the
 columns: a codebook, a README, a questionnaire. Many deposits ship none of those
 but do ship an SPSS or Stata data file, which carries its own variable and value
 labels, and that now counts. The finder records such a file as a link of its
-own, and a table page shows it when nothing better was found — 646 tables
-recorded as shipping no codebook turn out to ship a labelled file. The IRW MCP
-server's `describe_columns` accepts the new kind in its `source_codebooks`
-filter and says what it is. Refs #2766.
+own, and a table page shows it when nothing better was found. Refs #2766.
 
 ## 2026-11-19 — The ENEM tables were missing the examinees of two booklet colours
 
@@ -90,15 +83,7 @@ source's variable order, its reliabilities, and the study-level moderators a
 meta-analytic corpus publishes for each sample. The standard is on its own page,
 [The Covariance Data Standard](cov_standard.qmd).
 
-Both clients read the family with `source = "cov"`, and the same call computes a
-matrix from any core table's responses — Pearson, Spearman, Kendall, polychoric
-or tetrachoric — labelled as computed, because a matrix the IRW can compute from
-a table it holds is derived data and is never stored. `irw_cov2matrix()` returns
-the square matrix, N and pairwise n that `lavaan` asks for, and `irw_cov2list()`
-hands every sample of a multi-group table to `metaSEM` in one call; the MCP
-server serves the family too. None of this is in a release of either package: it
-is on `main` in both and arrives with the next CRAN and PyPI cuts, so for now it
-needs a development install. With covariance added, the site counts six data
+With covariance added, the site counts six data
 families, and simulated and synthetic tables are now shown as a labelled subset
 of core rather than a family of their own. Refs #3582, #3594.
 
@@ -113,22 +98,6 @@ script and the dictionary row, and the column is added at roughly |z| >= 3 —
 of the arena sets checked so far, only `lmarena_text_2025` crosses the line. An
 absent column is therefore a statement rather than an omission, and the rule is
 on the [competitions standard](comps_standard.qmd).
-
-## 2026-11-16 — `irw_merge()` was returning less than it announced
-
-`irw_merge()` fetches every table that belongs with a named one and stacks them.
-It used to drop any member whose columns differed from the first table fetched,
-which is an ordinary thing for IRW tables to do, since they carry different
-`cov_*` columns: `irw_merge("act_kay_2025")` announced twelve tables and
-returned five, and `irw_merge("chakraborty2026_IWAH_IRW")` returned nothing at
-all, with which members survived depending only on which one happened to be the
-anchor. Members are now stacked on the union of their columns, with a missing
-column named in the summary and filled with NA, and a column whose class differs
-across members returned as character. A member that cannot be fetched raises a
-warning as well as a message, so a partial merge cannot pass for a complete one.
-Both clients also fall back to grouping by the data DOI, for tables that neither
-a paper DOI nor BibTeX groups. This is on `main` in both packages and in a
-release of neither. Refs #3572.
 
 ## 2026-11-16 — Conjoint tables keep every respondent the experiment reached
 
