@@ -58,7 +58,7 @@ FAMILIES <- list(
            "item_response_warehouse_3", "item_response_warehouse_4",
            "item_response_warehouse_5", "item_response_warehouse_6",
            "item_response_warehouse_7", "item_response_warehouse_8",
-           "item_response_warehouse_9"),
+           "item_response_warehouse_9", "item_response_warehouse_10"),
   conj = c("irw_conjoint", "irw_conjoint_2"),
   rank = c("irw_rank", "irw_rank_2"),
   nom  = c("irw_nominal"),
