@@ -56,10 +56,11 @@ sd_people <- res$spread$median_sd_between_people_ms_deg
 
 # Results from data the IRW does not host (mental_rotation_external.R)
 ext <- readRDS("mental_rotation_data/mental_rotation_external.rds")
-es <- ext$summary
+es <- ext$summary            # forest/pooled rows: LEVANTE one row per site and item type
+eo <- ext$overall            # one row per external dataset (LEVANTE 2D and 3D pooled over sites)
 ma <- ext$meta_all
 pooled_all <- as.numeric(ma$b); pooled_all_lo <- ma$ci.lb; pooled_all_hi <- ma$ci.ub
-ES <- function(t, col) es[[col]][es$table == t]
+ES <- function(t, col) eo[[col]][eo$table == t]
 ```
 
 In 1971, Shepard and Metzler showed people pairs of drawings of 3D block figures and asked whether the two were the same object or mirror images [@shepard1971]. The time it took to answer "same" grew in a straight line with the angle between the two figures, at roughly one second for every 60 degrees, or about 17 ms per degree. It looked as though people were turning a mental image at a steady speed. The result became a textbook staple, and the task has since been run in hundreds of studies.
@@ -79,7 +80,7 @@ s |>
   knitr::kable()
 ```
 
-We also fit the same model to `r nrow(es)` chronometric datasets that the IRW does not host (@tbl-external), to see whether they tell the same story: the cross-cultural MRTX study [@ruginski2019], a small study of athletes and non-athletes, and the LEVANTE mental rotation task for children aged 5 to 12 [@levante2026], in its 2D (animal) and 3D (shape) forms. Their results are kept apart from the IRW tables in every figure below.
+We also fit the same model to chronometric datasets that the IRW does not host (@tbl-external), to see whether they tell the same story: the cross-cultural MRTX study [@ruginski2019], a small study of athletes and non-athletes, and the LEVANTE mental rotation task for children aged 5 to 12 [@levante2026], in its 2D (animal) and 3D (shape) forms. Their results are kept apart from the IRW tables in every figure below.
 
 Sources: @bauer2021, @ebert2024, @ganis2015, @liu2026, @jost2023, @jost2022 (two experiments), and @borst2011 as distributed with @vandermaas2011. Angles are angular disparity, folded to 0–180 degrees, so a 270° turn counts as 90°.
 
@@ -87,7 +88,7 @@ Sources: @bauer2021, @ebert2024, @ganis2015, @liu2026, @jost2023, @jost2022 (two
 #| label: tbl-external
 #| tbl-cap: "Datasets the IRW does not host. A separate script (`mental_rotation_external.R`) downloads each file from the depositor's repository when it runs, fits the same model, and keeps only summary results."
 
-es |>
+eo |>
   transmute(Study = label, Source = source_url, `Why not in the IRW` = why_not_hosted,
             Stimuli = stimuli, Sample = sample, People = n_people, Angles = angles,
             Accuracy = scales::percent(accuracy, 1)) |>
@@ -102,7 +103,7 @@ es |>
 
 ba <- bind_rows(
   res$by_angle |> left_join(s |> select(table, label), by = "table") |> mutate(hosted = "IRW table"),
-  ext$by_angle |> left_join(es |> select(table, label), by = "table") |> mutate(hosted = "Not hosted by the IRW"))
+  ext$by_angle |> left_join(eo |> select(table, label), by = "table") |> mutate(hosted = "Not hosted by the IRW"))
 p <- ggplot(ba, aes(angle, median_rt, colour = label, group = label, linetype = hosted,
                     text = paste0(label, "<br>", angle, "°: ", f2(median_rt), " s (", n, " trials)"))) +
   geom_line() + geom_point() +
@@ -120,14 +121,14 @@ $\beta_1$ is the typical slope in the study, and the spread of $u_{1p}$ says how
 
 ```{r}
 #| label: fig-forest
-#| fig-cap: "Slope of response time on rotation angle (ms per degree) in each dataset, with 95% intervals, and random-effects pooled estimates with and without the datasets the IRW does not host (grey). The dashed line marks Shepard and Metzler's roughly 17 ms per degree."
+#| fig-cap: "Slope of response time on rotation angle (ms per degree) in each dataset, with 95% intervals, and random-effects pooled estimates with and without the data the IRW does not host (grey; LEVANTE appears once per pilot site and item type). The dashed line marks Shepard and Metzler's roughly 17 ms per degree."
 
 fd <- bind_rows(s |> mutate(kind = "IRW table"), es |> mutate(kind = "Not hosted by the IRW")) |>
   mutate(lo = slope_ms_deg - 1.96 * slope_se, hi = slope_ms_deg + 1.96 * slope_se) |>
   arrange(kind == "IRW table", slope_ms_deg)
 fd <- bind_rows(fd,
   tibble(label = "Pooled, IRW tables", slope_ms_deg = pooled, lo = pooled_lo, hi = pooled_hi, kind = "Pooled"),
-  tibble(label = paste0("Pooled, all ", nrow(s) + nrow(es), " datasets"), slope_ms_deg = pooled_all, lo = pooled_all_lo, hi = pooled_all_hi, kind = "Pooled"))
+  tibble(label = "Pooled, IRW and external", slope_ms_deg = pooled_all, lo = pooled_all_lo, hi = pooled_all_hi, kind = "Pooled"))
 fd$label <- factor(fd$label, levels = fd$label)
 p <- ggplot(fd, aes(slope_ms_deg, label, xmin = lo, xmax = hi,
                     text = paste0(label, ": ", f1(slope_ms_deg), " ms/°  [", f1(lo), ", ", f1(hi), "]"))) +
@@ -139,7 +140,7 @@ p <- ggplot(fd, aes(slope_ms_deg, label, xmin = lo, xmax = hi,
 show_plot(p)
 ```
 
-Every slope is clearly positive. Pooled across the eight tables, response time rises by **`r f1(pooled)` ms per degree** (95% CI `r f1(pooled_lo)` to `r f1(pooled_hi)`), about half of Shepard and Metzler's figure. Adding the `r nrow(es)` datasets the IRW does not host gives `r f1(pooled_all)` ms per degree (`r f1(pooled_all_lo)` to `r f1(pooled_all_hi)`). The large cross-cultural MRTX study, with `r f0(ES("external_mrtx", "n_people"))` people aged 5 to 84 at six field sites, comes in at `r f1(ES("external_mrtx", "slope_ms_deg"))` ms per degree. The one dataset near Shepard and Metzler's value is LEVANTE's 3D task: `r f0(ES("external_levante_3d", "n_people"))` children rotating 3D shapes slow down by `r f1(ES("external_levante_3d", "slope_ms_deg"))` ms per degree, about twice as steeply as the same children rotating 2D animal silhouettes (`r f1(ES("external_levante_2d", "slope_ms_deg"))` ms per degree). Stimulus complexity seems to matter more for the slope than age does: the preschoolers judging animal pictures in the IRW's Ebert et al. table have one of the shallowest slopes. A turn of 90° adds a bit under a second, not a second and a half. The slowest rotators are the preschoolers in @ebert2024 at `r f1(s$slope_ms_deg[s$table == "ebert_2024_animal_mr"])` ms per degree; the steepest slopes, around 11 ms per degree, come from adults rotating cube figures.
+Every slope is clearly positive. Pooled across the eight tables, response time rises by **`r f1(pooled)` ms per degree** (95% CI `r f1(pooled_lo)` to `r f1(pooled_hi)`), about half of Shepard and Metzler's figure. Adding the data the IRW does not host, with each LEVANTE pilot sample entered as its own study (separately for 2D and 3D items, in a multilevel model that allows for the same children contributing both), gives `r f1(pooled_all)` ms per degree (`r f1(pooled_all_lo)` to `r f1(pooled_all_hi)`). The large cross-cultural MRTX study, with `r f0(ES("external_mrtx", "n_people"))` people aged 5 to 84 at six field sites, comes in at `r f1(ES("external_mrtx", "slope_ms_deg"))` ms per degree. The one dataset near Shepard and Metzler's value is LEVANTE's 3D task: `r f0(ES("external_levante_3d", "n_people"))` children rotating 3D shapes slow down by `r f1(ES("external_levante_3d", "slope_ms_deg"))` ms per degree, about twice as steeply as the same children rotating 2D animal silhouettes (`r f1(ES("external_levante_2d", "slope_ms_deg"))` ms per degree). Stimulus complexity seems to matter more for the slope than age does: the preschoolers judging animal pictures in the IRW's Ebert et al. table have one of the shallowest slopes. A turn of 90° adds a bit under a second, not a second and a half. The slowest rotators are the preschoolers in @ebert2024 at `r f1(s$slope_ms_deg[s$table == "ebert_2024_animal_mr"])` ms per degree; the steepest slopes, around 11 ms per degree, come from adults rotating cube figures.
 
 Several things could pull the slope below the classic value. Shepard and Metzler's eight participants each did 1,600 trials, many more than in any of these studies. Several of these studies use simpler shapes or picture stimuli. And our model averages same and mirror trials, where the original slope was for "same" pairs only. Whatever the reason, a figure near 8–9 ms per degree looks like a better default expectation for a modern study than 17.
 

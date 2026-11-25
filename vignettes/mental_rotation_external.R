@@ -156,17 +156,37 @@ info <- data.frame(
                      "LEVANTE Data Use Agreement forbids redistribution",
                      "LEVANTE Data Use Agreement forbids redistribution"))
 
-ext_summary <- bind_rows(lapply(sources, `[[`, "summary")) %>% left_join(info, by = "table")
+# Overall results per dataset (used for the curves and the dataset table)
+overall <- bind_rows(lapply(sources, `[[`, "summary")) %>% left_join(info, by = "table")
+
+# Rows for the forest plot and pooled estimate: MRTX and the athletes study
+# as one row each; LEVANTE as one row per pilot site and item type (2D/3D),
+# so each LEVANTE sample counts as its own study. The 2D and 3D rows of a
+# site share children, so the pooled model is multilevel: rows nested in a
+# cluster (the LEVANTE site; every other dataset is its own cluster).
+site_names <- c(pilot_mpieva_de_main = "Leipzig (DE)", pilot_uniandes_co_bogota = "Bogotá (CO)",
+                pilot_uniandes_co_rural = "Rural Colombia (CO)", pilot_western_ca_main = "London, Ontario (CA)")
+lev_rows <- bind_rows(levante_sites)
+if (nrow(lev_rows)) lev_rows <- lev_rows %>%
+  mutate(label = paste0("LEVANTE ", items, ", ", site_names[site]), cluster = site,
+         stimuli = ifelse(items == "2D", "Animal silhouettes", "3D shapes"),
+         sample = "Children 4-13", format = "Rotation judgement",
+         source_url = "https://doi.org/10.57761/fwqx-vx48",
+         why_not_hosted = "LEVANTE Data Use Agreement forbids redistribution")
+ext_summary <- bind_rows(
+  overall %>% filter(!grepl("levante", table)) %>% mutate(cluster = table),
+  lev_rows)
 
 # Pooled slope with and without the external data (needs the IRW results
 # from mental_rotation_compute.R)
 irw_res <- readRDS("mental_rotation_data/mental_rotation_results.rds")
-all_s <- bind_rows(irw_res$summary[, c("table", "slope_ms_deg", "slope_se", "acc_logit_per100", "acc_se")],
-                   ext_summary[, c("table", "slope_ms_deg", "slope_se", "acc_logit_per100", "acc_se")])
-meta_all <- metafor::rma(yi = slope_ms_deg, sei = slope_se, data = all_s, method = "REML")
+all_s <- bind_rows(irw_res$summary %>% mutate(cluster = table),
+                   ext_summary)[, c("table", "cluster", "slope_ms_deg", "slope_se")]
+meta_all <- metafor::rma.mv(yi = slope_ms_deg, V = slope_se^2, random = ~ 1 | cluster / table,
+                            data = all_s, method = "REML")
 
 saveRDS(list(
-  summary = ext_summary, meta_all = meta_all, age_bands = bind_rows(age_bands),
+  summary = ext_summary, overall = overall, meta_all = meta_all, age_bands = bind_rows(age_bands),
   levante_sites = bind_rows(levante_sites),
   person = bind_rows(lapply(sources, `[[`, "person")),
   by_angle = bind_rows(lapply(sources, `[[`, "by_angle")),
