@@ -1,0 +1,516 @@
+---
+title: "Small, Typical, Large? Correlations in Published Matrices and Item Responses"
+description: |
+  The effect-size benchmarks people cite for individual-differences research
+  come from correlations coded one at a time out of meta-analyses. IRW can come
+  at the question from two other directions: whole correlation matrices as
+  authors published them, and item-by-item matrices computed from raw responses.
+  Both say that a typical correlation is larger than the benchmarks suggest.
+  This is a pilot.
+date: today
+bibliography: typical_correlation_data/references.bib
+format:
+  html:
+    toc: true
+    toc-depth: 2
+---
+
+```{r}
+#| label: setup
+
+library(dplyr)
+library(tidyr)
+library(tibble)
+library(ggplot2)
+library(knitr)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue  <- "#2166ac"
+irw_red   <- "#d73027"
+irw_amber <- "#b8791f"
+irw_grey  <- "grey50"
+
+cache_path   <- "typical_correlation_data/typical_correlation_results.rds"
+rel_path     <- "typical_correlation_data/rel_ceiling.rds"
+matched_path <- "typical_correlation_data/matched_rses.rds"
+cache_ok <- file.exists(cache_path) && file.exists(rel_path) && file.exists(matched_path)
+knitr::opts_chunk$set(eval = cache_ok)
+
+f2  <- function(x) sub("^(-?)0\\.", "\\1.", formatC(x, format = "f", digits = 2))
+pct <- function(x) paste0(round(100 * x), "%")
+num <- function(x) format(x, big.mark = ",")
+`%||%` <- function(a, b) if (is.null(a)) b else a
+# link a table name to its landing page
+tl  <- function(t) sprintf("[`%s`](https://itemresponsewarehouse.org/tables/%s/)", t, t)
+```
+
+```{r}
+#| label: cache-warning
+#| eval: true
+#| output: asis
+if (!cache_ok) {
+  cat("::: {.callout-warning}\n## Results cache not found\n\n",
+      "Run `vignettes/typical_correlation_compute.R`, `typical_correlation_rel.R` and ",
+      "`typical_correlation_matched.R` from the repository root to generate it.\n:::\n", sep = "")
+}
+```
+
+```{r}
+#| label: load
+
+.c <- readRDS(cache_path)
+date_run <- .c$date_run
+
+# ---- published side ----
+cov_meta <- .c$cov_meta
+pub_all  <- .c$pub_cells |> filter(!is.na(r))
+pub      <- pub_all |> filter(!overlap_dropped)
+pub$matrix <- paste(pub$table, ifelse(is.na(pub$group), "", pub$group))
+
+n_pub_tables_all <- n_distinct(pub_all$table)
+n_pub_tables     <- n_distinct(pub$table)
+n_pub_matrices   <- n_distinct(pub$matrix)
+n_pub_cells      <- nrow(pub)
+
+pub_table <- pub |>
+  group_by(table) |>
+  summarise(med_abs = median(abs(r)), med = median(r), share_neg = mean(r < 0),
+            n_cells = n(), n_med = median(n, na.rm = TRUE), .groups = "drop")
+pub_matrix <- pub |>
+  group_by(table, matrix) |>
+  summarise(med_abs = median(abs(r)), n_med = median(n, na.rm = TRUE), .groups = "drop")
+
+# cell-level quantiles with each table weighted equally (1 / cells in table)
+wq <- function(x, w, p) {
+  o <- order(x); x <- x[o]; w <- cumsum(w[o]) / sum(w)
+  vapply(p, function(pp) x[which(w >= pp)[1]], numeric(1))
+}
+pub$w_table <- 1 / ave(rep(1, nrow(pub)), pub$table, FUN = sum)
+q_pub_tab  <- wq(abs(pub$r), pub$w_table, c(.25, .5, .75))
+q_pub_cell <- quantile(abs(pub$r), c(.25, .5, .75))
+q_pub_n    <- wq(abs(pub$r), ifelse(is.na(pub$n), 0, pub$n) * pub$w_table * n_distinct(pub$table), c(.25, .5, .75))
+q_pub_mat  <- wq(abs(pub$r), 1 / ave(rep(1, nrow(pub)), pub$matrix, FUN = sum), c(.25, .5, .75))
+q_pub_sgn  <- wq(pub$r, pub$w_table, c(.25, .5, .75))
+
+# ---- subject tags (published) ----
+split_tags <- function(x) lapply(strsplit(ifelse(is.na(x), "", x), "\\s*[|;,]\\s*"), function(v) v[nzchar(v)])
+tag_pub <- cov_meta |>
+  filter(table %in% pub_table$table) |>
+  select(table, construct_type) |>
+  mutate(tag = split_tags(construct_type)) |>
+  unnest(tag) |>
+  distinct(table, tag)
+
+# ---- core side ----
+core_cells <- .c$core_cells |> filter(!is.na(r))
+core_meta  <- .c$core_meta
+core_info  <- .c$core_info
+core_fail  <- .c$core_fail
+core_meta$gap <- core_meta$mean_abs_item_rest_r - core_meta$mean_item_rest_r
+low_gap <- core_meta$table[!is.na(core_meta$gap) & core_meta$gap < 0.005]
+
+core_table <- core_cells |>
+  group_by(table) |>
+  summarise(med_abs = median(abs(r)), med = median(r), share_neg = mean(r < 0),
+            med_abs_pearson = median(abs(r_pearson), na.rm = TRUE), .groups = "drop") |>
+  left_join(core_info, by = "table") |>
+  mutate(low_gap = table %in% low_gap)
+core_cells$w_table <- 1 / ave(rep(1, nrow(core_cells)), core_cells$table, FUN = sum)
+q_core_tab  <- wq(abs(core_cells$r), core_cells$w_table, c(.25, .5, .75))
+q_core_pear <- with(core_cells[!is.na(core_cells$r_pearson), ],
+                    wq(abs(r_pearson), w_table, c(.25, .5, .75)))
+lg <- core_cells[core_cells$table %in% low_gap, ]
+q_core_lg_sgn <- wq(lg$r, lg$w_table, c(.25, .5, .75))
+q_core_lg_abs <- wq(abs(lg$r), lg$w_table, c(.25, .5, .75))
+
+core_tags <- .c$core_tags
+tag_core <- if (!is.null(core_tags)) {
+  core_tags |>
+    filter(table %in% core_table$table) |>
+    select(table, construct_type) |>
+    mutate(tag = split_tags(construct_type)) |>
+    unnest(tag) |>
+    distinct(table, tag)
+} else tibble(table = character(), tag = character())
+
+# ---- reliability ceiling ----
+rel <- readRDS(rel_path)$cells |> filter(!is.na(r), !is.na(ceiling))
+# ---- matched RSES ----
+mt <- readRDS(matched_path)
+```
+
+```{r}
+#| label: derived
+# ---- overlap and counts ----
+n_dropped_tables <- n_pub_tables_all - n_pub_tables
+n_core_ok <- nrow(core_table)
+meth <- table(core_info$method)
+nm <- function(k) if (k %in% names(meth)) meth[[k]] else 0L
+
+# ---- published, by construct type ----
+tp  <- pub_table |> inner_join(tag_pub, by = "table")
+lev <- tp |> group_by(tag) |> summarise(m = median(med_abs), k = n(), .groups = "drop") |> arrange(m)
+lev_k <- lev |> filter(k >= 10)
+hi <- lev_k |> slice_max(m, n = 1); lo <- lev_k |> slice_min(m, n = 1)
+
+# ---- published, by framework ----
+fw <- cov_meta |>
+  filter(table %in% pub_table$table) |>
+  distinct(table, framework) |>
+  mutate(fw = split_tags(framework)) |>
+  unnest(fw, keep_empty = TRUE) |>
+  mutate(grp = case_when(
+    fw %in% c("TPB", "TAM", "UTAUT", "RAA", "HAPA", "HBM", "SCCT") ~ "behaviour or technology-acceptance model",
+    fw == "status_attainment" ~ "status attainment",
+    TRUE ~ "no framework tag")) |>
+  distinct(table, grp) |>
+  left_join(pub_table, by = "table")
+fw_sum <- fw |> group_by(grp) |>
+  summarise(tables = n(), median = median(med_abs), q25 = quantile(med_abs, .25),
+            q75 = quantile(med_abs, .75), .groups = "drop") |>
+  arrange(desc(median))
+fwb <- fw_sum |> filter(grp == "behaviour or technology-acceptance model")
+fwn <- fw_sum |> filter(grp == "no framework tag")
+
+# ---- core, by construct type and keying ----
+tc_tab <- core_table |> inner_join(tag_core, by = "table")
+levc <- tc_tab |> group_by(tag) |> summarise(m = median(med_abs), k = n(), .groups = "drop") |> arrange(m)
+km <- tag_core |> mutate(low_gap = table %in% low_gap) |> group_by(tag) |>
+  summarise(k = n(), flagged = sum(!low_gap), share_flagged = mean(!low_gap), .groups = "drop") |>
+  filter(k >= 10) |> arrange(desc(share_flagged))
+neg_lg   <- mean(lg$r < 0)
+neg_rest <- mean(core_cells$r[!core_cells$table %in% low_gap] < 0)
+
+# ---- toy aggregation example ----
+k_toy   <- 10
+rbar    <- q_core_pear[2]
+rel_toy <- k_toy * rbar / (1 + (k_toy - 1) * rbar)
+true_r  <- q_pub_tab[2] / rel_toy
+
+# ---- matched RSES ----
+pm <- mt$pub
+ov_groups <- mt$pub_meta$group[!is.na(mt$pub_meta$overlaps) & mt$pub_meta$overlaps != ""]
+pm_ind <- pm[!pm$group %in% ov_groups, ]
+m_pub_all <- median(pm$value); m_pub_ind <- median(pm_ind$value)
+m_core_poly <- median(abs(mt$core$value)); m_core_pear <- median(abs(mt$core$r_pearson))
+
+# ---- reliability ceiling ----
+n_rel_tab <- n_distinct(rel$table)
+ex <- rel |> filter(exceeds)
+ex_tab <- ex |> count(table, sort = TRUE)
+
+# ---- widget payload: table-weighted ECDF of |r| on a grid, by side and tag ----
+grid <- seq(0, 1, by = 0.01)
+ecdf_w <- function(x, w) vapply(grid, function(g) sum(w[x <= g + 1e-9]) / sum(w), numeric(1))
+ecdf_side <- function(cells, tags, side, min_tables = 5) {
+  out <- list(tibble(side = side, tag = "All construct types", x = grid,
+                     F = ecdf_w(abs(cells$r), cells$w_table), k = n_distinct(cells$table)))
+  for (t in sort(unique(tags$tag))) {
+    tb <- tags$table[tags$tag == t]
+    if (length(tb) < min_tables) next
+    cc <- cells[cells$table %in% tb, ]
+    out[[length(out) + 1]] <- tibble(side = side, tag = t, x = grid,
+                                     F = ecdf_w(abs(cc$r), cc$w_table), k = length(tb))
+  }
+  bind_rows(out)
+}
+tc_ecdf <- bind_rows(
+  ecdf_side(pub, tag_pub, "published matrices"),
+  ecdf_side(core_cells |> filter(!is.na(r_pearson)) |> mutate(r = r_pearson),
+            tag_core, "core, between items")
+) |> mutate(F = round(F, 4))
+ojs_define(tc_ecdf = tc_ecdf, tc_blue = irw_blue, tc_amber = irw_amber)
+```
+
+::: {.callout-note appearance="simple"}
+This vignette (the analysis design, the compute scripts and the writing below) was produced largely by Claude (Anthropic), working from a task specification and with human review. It is a pilot: the published side uses every matrix in `irw_cov` (`r n_pub_tables_all` tables), but the core side uses a seeded random sample of `r .c$n_core_sampled` of the `r num(.c$n_eligible)` eligible core tables, each capped at `r num(.c$max_people)` randomly chosen people and `r .c$max_items` randomly chosen items. Numbers will move when the core pass is run on everything. The design is under discussion in [datapages/irw#451](https://github.com/datapages/irw/issues/451); comments there are welcome. Check the compute scripts directly if you are relying on the numbers here.
+:::
+
+## Where does your correlation fall?
+
+Pick a correlation and, if you like, a construct type. The widget reports where that value sits among the correlations in published matrices and among the correlations between items in core tables, with each table counted once. The core side uses Pearson correlations, the same estimator as most published matrices.
+
+```{ojs}
+//| echo: false
+tc = transpose(tc_ecdf)
+tc_tags = ["All construct types", ...Array.from(new Set(tc.map(d => d.tag))).filter(t => t !== "All construct types").sort()]
+viewof tc_r = Inputs.range([0, 1], {step: 0.01, value: 0.30, label: "Your correlation, |r|"})
+viewof tc_tag = Inputs.select(tc_tags, {label: "Construct type"})
+tc_fmt = v => v.toFixed(2).replace(/^0/, "")
+tc_at = side => {
+  const d = tc.find(e => e.side === side && e.tag === tc_tag && Math.abs(e.x - tc_r) < 0.005);
+  return d ? d : null;
+}
+tc_line = side => {
+  const d = tc_at(side);
+  if (!d) return `Too few ${side === "published matrices" ? "published" : "core"} tables are tagged *${tc_tag}* to say (fewer than five).`;
+  const what = side === "published matrices" ? "correlations in published matrices" : "correlations between items in core tables";
+  return `It is larger than **${Math.round(100 * d.F)}%** of the ${what} (${d.k} tables).`;
+}
+tc_gs = tc_r >= 0.30 ? "relatively large" : tc_r >= 0.20 ? "typical" : tc_r >= 0.10 ? "small" : "smaller than small"
+md`An |r| of **${tc_fmt(tc_r)}**:
+
+- ${tc_line("published matrices")}
+- ${tc_line("core, between items")}
+- Gignac and Szodorai's guidelines would call it **${tc_gs}**.`
+```
+
+```{ojs}
+//| echo: false
+Plot.plot({
+  height: 260,
+  marginLeft: 50,
+  x: {domain: [0, 1], label: "|r|"},
+  y: {domain: [0, 1], label: "share of correlations at or below", tickFormat: "%"},
+  color: {domain: ["published matrices", "core, between items"], range: [tc_blue, tc_amber], legend: true},
+  marks: [
+    Plot.ruleX([0.10, 0.20, 0.30], {stroke: "#999", strokeDasharray: "4,3"}),
+    Plot.line(tc.filter(d => d.tag === tc_tag), {x: "x", y: "F", stroke: "side", strokeWidth: 2}),
+    Plot.ruleX([tc_r], {stroke: "#333", strokeWidth: 1.5}),
+    Plot.dot(tc.filter(d => d.tag === tc_tag && Math.abs(d.x - tc_r) < 0.005), {x: "x", y: "F", fill: "side", r: 5})
+  ]
+})
+```
+
+The dashed lines are Gignac and Szodorai's guidelines (.10, .20, .30).
+
+## The short answer
+
+A typical correlation is larger than the benchmarks suggest, and how much larger depends on what is being correlated. Between the scales that authors print in published matrices, the median |r| is **`r f2(q_pub_tab[2])`**. Between items within one instrument, computed the same way (Pearson), it is **`r f2(q_core_pear[2])`**. Both sit well above the .19 that is usually quoted as "typical" for individual-differences research. Items correlate somewhat more strongly than published scales, but on a like-for-like basis the difference is modest. Polychoric and tetrachoric correlations, which estimate the correlation between the latent variables behind the items, put the item median higher still, at `r f2(q_core_tab[2])`. The rest of the page explains where these numbers come from and how the two sides compare.
+
+## Where the benchmarks come from
+
+The benchmarks most often cited are those of @gignac2016. From 708 correlations drawn out of meta-analyses, the 25th, 50th and 75th percentiles were .11, .19 and .29, and they suggested reading .10, .20 and .30 as small, typical and relatively large. @bosco2015 did the same for applied psychology using 147,328 coded correlations from metaBUS and found a median |r| of .16.
+
+Both are built from correlations that someone coded one at a time. IRW holds two other kinds of evidence:
+
+- **Published matrices** (`irw_cov`). These are whole correlation and covariance matrices as authors printed them. Most are correlations *between scales*, chosen because the authors had a model they wanted to fit.
+- **Core response data.** Any core table can be turned into an item-by-item correlation matrix with `irw_fetch(<table>, source = "cov")`. These are correlations *between items within one instrument*, computed the same way for every table. Nobody chose which cells to print.
+
+These answer somewhat different questions, and we think the gap between them is as informative as either number on its own.
+
+## Published matrices
+
+Some published tables share a sample, so we keep one table from each such group; this drops `r n_dropped_tables` tables, using the `overlaps` record field. That leaves `r n_pub_tables` tables, `r num(n_pub_matrices)` matrices and `r num(n_pub_cells)` off-diagonal cells. Covariances are converted to correlations. Each table counts once: its cells share a single unit of weight. This keeps the large meta-analytic tables, some of which hold dozens of matrices, from swamping everything else.
+
+With that weighting, the 25th, 50th and 75th percentiles of |r| are **`r f2(q_pub_tab[1])`, `r f2(q_pub_tab[2])` and `r f2(q_pub_tab[3])`**. Each is roughly double the corresponding Gignac and Szodorai percentile (.11, .19, .29).
+
+```{r}
+#| label: fig-pub-dist
+#| fig-cap: "Median |r| per published table. Dashed lines: Gignac and Szodorai's 25th, 50th and 75th percentiles."
+#| fig-height: 4
+ggplot(pub_table, aes(med_abs)) +
+  geom_histogram(binwidth = 0.025, boundary = 0, fill = irw_blue, colour = "white") +
+  geom_vline(xintercept = c(.11, .19, .29), linetype = "dashed", colour = irw_red) +
+  labs(x = "median |r| within the table", y = "tables")
+```
+
+Does the weighting drive this? Not especially:
+
+```{r}
+#| label: tbl-pub-weights
+tibble(
+  weighting = c("each table equally (headline)", "each matrix equally", "each cell equally",
+                "each table equally, then by sample size", "each table equally, signed r"),
+  p25 = c(q_pub_tab[1], q_pub_mat[1], q_pub_cell[1], q_pub_n[1], q_pub_sgn[1]),
+  p50 = c(q_pub_tab[2], q_pub_mat[2], q_pub_cell[2], q_pub_n[2], q_pub_sgn[2]),
+  p75 = c(q_pub_tab[3], q_pub_mat[3], q_pub_cell[3], q_pub_n[3], q_pub_sgn[3])
+) |>
+  mutate(across(p25:p75, f2)) |>
+  kable(col.names = c("Weighting", "25th", "50th", "75th"), align = "lrrr")
+```
+
+The last row keeps signs. Between-scale signs depend on how each scale was scored, so the signed distribution is only a rough guide; `r pct(mean(pub$r < 0))` of published cells are negative.
+
+### By subject
+
+The cov subject tags give each matrix a construct type. A table carrying more than one tag counts in each.
+
+```{r}
+#| label: fig-pub-tags
+#| fig-cap: "Median |r| per published table, by construct-type tag. The number of tables is on the right."
+#| fig-height: 4.5
+tp$tag <- factor(tp$tag, levels = lev$tag)
+ggplot(tp, aes(med_abs, tag)) +
+  geom_boxplot(outlier.shape = NA, fill = "grey92") +
+  geom_jitter(height = 0.15, alpha = 0.35, size = 1, colour = irw_blue) +
+  geom_text(data = lev, aes(x = 1.02, y = tag, label = k), hjust = 0, size = 3.3, colour = irw_grey) +
+  coord_cartesian(xlim = c(0, 1.08)) +
+  labs(x = "median |r| within the table", y = NULL)
+```
+
+Among tags with at least 10 tables, **`r hi$tag`** matrices run hottest (median `r f2(hi$m)`) and **`r lo$tag`** matrices coolest (median `r f2(lo$m)`). The proposal predicted that matrices fitted to attitude and behaviour models (TPB, UTAUT, TAM) would run hotter than personality or attainment ones. Construct type is too coarse to test that. The `framework` tag is the better test, but so far it is set on only a few tables:
+
+```{r}
+#| label: tbl-framework
+fw_sum |> mutate(across(median:q75, f2)) |>
+  kable(col.names = c("Framework", "Tables", "Median of table medians", "25th", "75th"), align = "lrrrr")
+```
+
+The `r fwb$tables` tables fitted to a behaviour or technology-acceptance model (TPB, TAM, UTAUT, RAA, HAPA, HBM, SCCT) have a median |r| of `r f2(fwb$median)`, against `r f2(fwn$median)` for untagged tables. That is in the predicted direction, but `r fwb$tables` tables is too few to lean on.
+
+## Item-level matrices from core
+
+The core pass computed an item-by-item matrix for `r n_core_ok` of the `r .c$n_core_sampled` sampled tables (`r nrow(core_fail)` failed; see the end of the page). Binary items get tetrachoric correlations (`r nm("tetrachoric")` tables), items with 3 to 8 categories get polychoric (`r nm("polychoric") + nm("polychoric (correct = 0)")`), and anything else gets Pearson (`r nm("pearson")`). Two details of the estimation are worth noting:
+
+- Before estimation, each item's codes are recoded to consecutive integers, keeping their order. psych counts categories from the range of the codes, so an item scored 0/5/10/15 otherwise trips its eight-category limit.
+- For `r nm("polychoric (correct = 0)")` sparse tables, psych's continuity correction for empty cells fails, and those tables are estimated without it (`correct = 0`).
+
+Pearson is also computed on the raw codes for every table.
+
+The two estimators answer different questions. Polychoric and tetrachoric correlations estimate how the latent variables behind the items correlate. Pearson describes the observed codes, as the published matrices, mostly Pearson on scale scores, do. So when the two sides are compared we use Pearson on both (thanks to Lijin Zhang for pressing this point in review), and within core we report both.
+
+Response direction is not harmonised across core items. A reverse-keyed item stored raw correlates negatively with the rest of its scale, and that sign means nothing substantively, so the headline uses |r|. Weighting each table equally, the 25th, 50th and 75th percentiles of inter-item Pearson |r| are **`r f2(q_core_pear[1])`, `r f2(q_core_pear[2])` and `r f2(q_core_pear[3])`**. With polychoric and tetrachoric correlations they are `r f2(q_core_tab[1])`, `r f2(q_core_tab[2])` and `r f2(q_core_tab[3])`. The choice of estimator alone moves the median by `r f2(q_core_tab[2] - q_core_pear[2])`. The keying check and the by-subject breakdown below stay within core and use the polychoric estimates.
+
+### Keying: |r| and a known-direction subset
+
+Could the |r| headline be hiding something? The core metadata carries each table's mean item-rest correlation twice, signed (`mean_item_rest_r`) and absolute (`mean_abs_item_rest_r`). If no item correlates negatively with the rest of its scale, the two agree. Tables where they agree to within .005 (`r sum(core_table$low_gap)` of the `r n_core_ok` here) show no sign of reverse keying, so we can read their signed r directly. Only `r pct(neg_lg)` of item pairs in this subset are negative, against `r pct(neg_rest)` in the rest. This is a proxy, not a keying record: an instrument whose subscales correlate negatively can open the gap without any reverse keying.
+
+```{r}
+#| label: tbl-keying
+tibble(
+  set = c("all sampled tables, |r|", "low-gap subset, |r|", "low-gap subset, signed r"),
+  tables = c(n_core_ok, sum(core_table$low_gap), sum(core_table$low_gap)),
+  p25 = c(q_core_tab[1], q_core_lg_abs[1], q_core_lg_sgn[1]),
+  p50 = c(q_core_tab[2], q_core_lg_abs[2], q_core_lg_sgn[2]),
+  p75 = c(q_core_tab[3], q_core_lg_abs[3], q_core_lg_sgn[3])
+) |>
+  mutate(across(p25:p75, f2)) |>
+  kable(col.names = c("Set", "Tables", "25th", "50th", "75th"), align = "lrrrr")
+```
+
+Restricting to the low-gap subset raises the median from `r f2(q_core_tab[2])` to `r f2(q_core_lg_abs[2])`, and within the subset signed and absolute r agree at these percentiles. The subset is not a random slice of core, though. It changes the mix of construct types:
+
+```{r}
+#| label: tbl-keying-mix
+tag_core |>
+  mutate(low_gap = table %in% low_gap) |>
+  count(tag, low_gap) |>
+  group_by(low_gap) |> mutate(share = n / sum(n)) |> ungroup() |>
+  select(-n) |>
+  pivot_wider(names_from = low_gap, values_from = share, values_fill = 0) |>
+  rename(flagged = `FALSE`, `low gap` = `TRUE`) |>
+  arrange(desc(`low gap`)) |>
+  mutate(across(-tag, pct)) |>
+  kable(col.names = c("Construct type", "Among tables showing reverse keying", "Among low-gap tables"),
+        align = "lrr")
+```
+
+Among construct types with at least 10 sampled tables, **`r km$tag[1]`** tables are flagged most often (`r km$flagged[1]` of `r km$k[1]`) and **`r km$tag[nrow(km)]`** tables least often (`r km$flagged[nrow(km)]` of `r km$k[nrow(km)]`). Going in, we expected the subset to tilt towards binary achievement tests. In this sample it does not: cognitive/educational tables are a small share of both groups. The shift is instead away from personality scales and towards opinion/attitude scales.
+
+### By subject
+
+```{r}
+#| label: fig-core-tags
+#| fig-cap: "Median inter-item |r| per core table, by construct-type tag. The number of tables is on the right."
+#| fig-height: 4.5
+tc_tab$tag <- factor(tc_tab$tag, levels = levc$tag)
+ggplot(tc_tab, aes(med_abs, tag)) +
+  geom_boxplot(outlier.shape = NA, fill = "grey92") +
+  geom_jitter(height = 0.15, alpha = 0.45, size = 1.2, colour = irw_amber) +
+  geom_text(data = levc, aes(x = 1.02, y = tag, label = k), hjust = 0, size = 3.3, colour = irw_grey) +
+  coord_cartesian(xlim = c(0, 1.08)) +
+  labs(x = "median inter-item |r| within the table", y = NULL)
+```
+
+## Items versus scales
+
+```{r}
+#| label: fig-both
+#| fig-cap: "Median |r| per table: published matrices (mostly between scales) and core item-level Pearson matrices (within one instrument). Each table counts once. Dashed lines: Gignac and Szodorai's percentiles."
+#| fig-height: 4
+both <- bind_rows(
+  pub_table |> transmute(side = "published matrices", med_abs),
+  core_table |> filter(!is.na(med_abs_pearson)) |> transmute(side = "core, between items", med_abs = med_abs_pearson)
+)
+ggplot(both, aes(med_abs, colour = side, fill = side)) +
+  geom_density(alpha = 0.2, adjust = 0.9) +
+  geom_vline(xintercept = c(.11, .19, .29), linetype = "dashed", colour = irw_grey) +
+  scale_colour_manual(values = c(irw_amber, irw_blue)) +
+  scale_fill_manual(values = c(irw_amber, irw_blue)) +
+  labs(x = "median |r| within the table", y = "density", colour = NULL, fill = NULL) +
+  theme(legend.position = "top")
+```
+
+With Pearson on both sides, item pairs run only a little hotter than scale pairs: medians of `r f2(q_core_pear[2])` and `r f2(q_pub_tab[2])`. Two forces pull in opposite directions. Averaging items into a scale score raises reliability, and higher reliability raises the observed correlation between two scales. But items within one instrument are written to measure the same thing, while two scales in a published matrix usually measure different things.
+
+A simple case shows how these balance. Take a `r k_toy`-item scale whose items correlate at the core Pearson median, `r f2(rbar)`. By the Spearman-Brown formula its reliability is `r k_toy` × `r f2(rbar)` / (1 + `r k_toy - 1` × `r f2(rbar)`) = `r f2(rel_toy)`. Two such scales that correlate at the published median, `r f2(q_pub_tab[2])`, would have true scores correlating at about `r f2(q_pub_tab[2])` / `r f2(rel_toy)` = `r f2(true_r)`, `r if (abs(true_r - rbar) < .03) "about the same as" else if (true_r < rbar) "below" else "above"` the `r f2(rbar)` between items within one instrument. So the forces roughly cancel. Correcting for reliability, a typical pair of published scales is about as strongly related as a typical pair of items within one instrument, even though the scales usually measure different constructs and the items measure one. The toy example is rough: real scales vary in length and reliability, and published matrices mix within- and between-construct pairs.
+
+One more thing tilts the observed comparison slightly toward the published side. Pearson correlations between items with few response categories are pulled down by the coarse coding, while scale scores are close to continuous. The modest observed gap is therefore, if anything, a slight understatement.
+
+### One instrument on both sides: the Rosenberg Self-Esteem Scale
+
+So far the two sides differ in both what is correlated and who was sampled. What happens when we hold the instrument fixed? The Rosenberg scale is the one instrument confirmed on both sides at the item level. `r tl("gnambs_2018_rses10")` holds `r n_distinct(pm$group)` published 10-item matrices from the meta-analysis by @gnambs2018, and `r tl("rosenberg_selfesteem")` holds raw responses, of which we use `r num(mt$n_core_people)` randomly chosen respondents.
+
+- **Published:** the median item-pair r across the `r n_distinct(pm$group)` matrices is `r f2(m_pub_all)`. Leaving out the `r length(ov_groups)` matrices whose `overlaps` field says they share data with `rosenberg_selfesteem`, it is `r f2(m_pub_ind)`. The published matrices are recoded so that all items point the same way: only `r pct(mean(pm$value < 0))` of cells are negative.
+- **Core:** `r pct(mean(mt$core$value < 0))` of item pairs are negative, which reflects the scale's five reverse-keyed items stored raw. The median |r| is `r f2(m_core_pear)` with Pearson and `r f2(m_core_poly)` with polychoric correlations.
+
+Even with the instrument held fixed, and comparing Pearson with Pearson (`r f2(m_core_pear)` against `r f2(m_pub_ind)`), the core sample correlates more strongly than the published samples. Here the estimator plays no part: the difference is between samples. Some of the meta-analysis's matrices were reconstructed from published loadings, which the table's notes record.
+
+## A reliability ceiling check
+
+Two scales with reliabilities $\rho_i$ and $\rho_j$ can correlate at most $\sqrt{\rho_i \rho_j}$, which is the observed correlation when their true scores correlate perfectly. `r n_rel_tab` published tables report reliabilities (`rel` rows), covering `r num(nrow(rel))` scale pairs. Of these, **`r nrow(ex)` (`r sprintf("%.1f%%", 100 * nrow(ex) / nrow(rel))`) exceed the ceiling**, spread over `r nrow(ex_tab)` tables. The median overshoot is `r f2(median(abs(ex$r) - ex$ceiling))`.
+
+```{r}
+#| label: tbl-rel
+ex |>
+  group_by(table) |>
+  summarise(pairs = n(), max_over = max(abs(r) - ceiling), .groups = "drop") |>
+  arrange(desc(pairs)) |>
+  mutate(table = tl(table), max_over = f2(max_over)) |>
+  kable(col.names = c("Table", "Pairs above the ceiling", "Largest overshoot"))
+```
+
+A pair above the ceiling is not necessarily an error. Coefficient alpha understates reliability when items are not tau-equivalent, the reliabilities may come from a different sample than the correlations, and correlations between latent variables are not bounded this way. Mostly, the check flags tables that merit a second look at the source.
+
+## Caveats
+
+- **Published matrices are curated.** Authors print the variables they modelled, and IRW's holdings lean on CC BY articles and open deposits. The published side answers "typical in openly licensed published matrices", not "typical in psychology".
+- **Core has its own selection.** It holds whatever data people chose to share, and the pilot excludes longitudinal, sparse (density below .5) and very large tables.
+- **|r| is biased upward near zero.** Taking absolute values folds noise around zero into positive values, which inflates small correlations. This matters little for inter-item pairs, which mostly sit well above zero, but it is why both sides are summarised with |r| for the comparison.
+- **The estimators differ.** Published matrices are mostly Pearson on scale scores, so the comparisons between the two sides use Pearson on core items too. Even then, Pearson on coarse item codes is attenuated in a way that Pearson on scale scores largely is not. Polychoric and tetrachoric correlations remove that attenuation but describe latent variables rather than observed scores, and run higher (see the figures above).
+- **Within- and between-construct pairs are mixed** on the published side. Separating them needs construct labels on variables, which IRW does not have yet.
+
+## What the full run would add
+
+- The core pass on every eligible table, not just `r .c$n_core_sampled`, with breakdowns by sample and framework tags as well as construct type.
+- Fuller `framework` tagging on the published side, so the behaviour-model comparison rests on more than a handful of tables.
+- More instruments matched across the two sides, beyond the Rosenberg scale.
+
+```{r}
+#| label: failures
+#| output: asis
+if (nrow(core_fail)) {
+  cat("\n**Core tables that failed in this run:**\n\n")
+  cat(paste0("- ", tl(core_fail$table), ": ", core_fail$error, collapse = "\n"), "\n")
+}
+```
+
+## Acknowledgements
+
+We thank Lijin Zhang for comments on the design in [#451](https://github.com/datapages/irw/issues/451), which shaped how this page handles response direction.
+
+## Reproducibility
+
+```{r}
+#| output: asis
+source("../components/source_links.R")
+irw_source_links(extra = c("typical_correlation_rel.R", "typical_correlation_matched.R"))
+```
+
+{{< include ../components/_data-version.qmd >}}
+
+Results were computed on `r format(date_run, "%B %d, %Y")` against `irw_cov` `r .c$irw_version$version[.c$irw_version$dataset == "irw_cov"]`, using the development version of the irw R package, which adds `source = "cov"` (not yet on CRAN). To regenerate:
+
+```r
+# from the project root, with the development irw installed
+source("vignettes/typical_correlation_compute.R")
+source("vignettes/typical_correlation_rel.R")
+source("vignettes/typical_correlation_matched.R")
+quarto::quarto_render("vignettes/typical_correlation.qmd")
+```
+
+## References
+
+::: {#refs}
+:::
