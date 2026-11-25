@@ -183,7 +183,7 @@ neg_rest <- mean(core_cells$r[!core_cells$table %in% low_gap] < 0)
 
 # ---- toy aggregation example ----
 k_toy   <- 10
-rbar    <- q_core_tab[2]
+rbar    <- q_core_pear[2]
 rel_toy <- k_toy * rbar / (1 + (k_toy - 1) * rbar)
 true_r  <- q_pub_tab[2] / rel_toy
 
@@ -216,7 +216,8 @@ ecdf_side <- function(cells, tags, side, min_tables = 5) {
 }
 tc_ecdf <- bind_rows(
   ecdf_side(pub, tag_pub, "published matrices"),
-  ecdf_side(core_cells, tag_core, "core, between items")
+  ecdf_side(core_cells |> filter(!is.na(r_pearson)) |> mutate(r = r_pearson),
+            tag_core, "core, between items")
 ) |> mutate(F = round(F, 4))
 ojs_define(tc_ecdf = tc_ecdf, tc_blue = irw_blue, tc_amber = irw_amber)
 ```
@@ -227,7 +228,7 @@ This vignette (the analysis design, the compute scripts and the writing below) w
 
 ## Where does your correlation fall?
 
-Pick a correlation and, if you like, a construct type. The widget reports where that value sits among the correlations in published matrices and among the correlations between items in core tables, with each table counted once.
+Pick a correlation and, if you like, a construct type. The widget reports where that value sits among the correlations in published matrices and among the correlations between items in core tables, with each table counted once. The core side uses Pearson correlations, the same estimator as most published matrices.
 
 ```{ojs}
 //| echo: false
@@ -275,7 +276,7 @@ The dashed lines are Gignac and Szodorai's guidelines (.10, .20, .30).
 
 ## The short answer
 
-A typical correlation is larger than the benchmarks suggest, and how much larger depends on what is being correlated. Between the scales that authors print in published matrices, the median |r| is **`r f2(q_pub_tab[2])`**. Between items within one instrument, it is **`r f2(q_core_tab[2])`** (`r f2(q_core_pear[2])` if we stick with Pearson). Both sit well above the .19 that is usually quoted as "typical" for individual-differences research. The rest of the page explains where these numbers come from and why the two differ.
+A typical correlation is larger than the benchmarks suggest, and how much larger depends on what is being correlated. Between the scales that authors print in published matrices, the median |r| is **`r f2(q_pub_tab[2])`**. Between items within one instrument, computed the same way (Pearson), it is **`r f2(q_core_pear[2])`**. Both sit well above the .19 that is usually quoted as "typical" for individual-differences research. Items correlate somewhat more strongly than published scales, but on a like-for-like basis the difference is modest. Polychoric and tetrachoric correlations, which estimate the correlation between the latent variables behind the items, put the item median higher still, at `r f2(q_core_tab[2])`. The rest of the page explains where these numbers come from and how the two sides compare.
 
 ## Where the benchmarks come from
 
@@ -355,9 +356,11 @@ The core pass computed an item-by-item matrix for `r n_core_ok` of the `r .c$n_c
 - Before estimation, each item's codes are recoded to consecutive integers, keeping their order. psych counts categories from the range of the codes, so an item scored 0/5/10/15 otherwise trips its eight-category limit.
 - For `r nm("polychoric (correct = 0)")` sparse tables, psych's continuity correction for empty cells fails, and those tables are estimated without it (`correct = 0`).
 
-Pearson is also computed on the raw codes for every table, as a check.
+Pearson is also computed on the raw codes for every table.
 
-Response direction is not harmonised across core items. A reverse-keyed item stored raw correlates negatively with the rest of its scale, and that sign means nothing substantively, so the headline uses |r|. Weighting each table equally, the 25th, 50th and 75th percentiles of inter-item |r| are **`r f2(q_core_tab[1])`, `r f2(q_core_tab[2])` and `r f2(q_core_tab[3])`**. With Pearson throughout they are `r f2(q_core_pear[1])`, `r f2(q_core_pear[2])` and `r f2(q_core_pear[3])`. The choice of estimator alone moves the median by `r f2(q_core_tab[2] - q_core_pear[2])`.
+The two estimators answer different questions. Polychoric and tetrachoric correlations estimate how the latent variables behind the items correlate. Pearson describes the observed codes, as the published matrices, mostly Pearson on scale scores, do. So when the two sides are compared we use Pearson on both (thanks to Lijin Zhang for pressing this point in review), and within core we report both.
+
+Response direction is not harmonised across core items. A reverse-keyed item stored raw correlates negatively with the rest of its scale, and that sign means nothing substantively, so the headline uses |r|. Weighting each table equally, the 25th, 50th and 75th percentiles of inter-item Pearson |r| are **`r f2(q_core_pear[1])`, `r f2(q_core_pear[2])` and `r f2(q_core_pear[3])`**. With polychoric and tetrachoric correlations they are `r f2(q_core_tab[1])`, `r f2(q_core_tab[2])` and `r f2(q_core_tab[3])`. The choice of estimator alone moves the median by `r f2(q_core_tab[2] - q_core_pear[2])`. The keying check and the by-subject breakdown below stay within core and use the polychoric estimates.
 
 ### Keying: |r| and a known-direction subset
 
@@ -414,11 +417,11 @@ ggplot(tc_tab, aes(med_abs, tag)) +
 
 ```{r}
 #| label: fig-both
-#| fig-cap: "Median |r| per table: published matrices (mostly between scales) and core item-level matrices (within one instrument). Each table counts once. Dashed lines: Gignac and Szodorai's percentiles."
+#| fig-cap: "Median |r| per table: published matrices (mostly between scales) and core item-level Pearson matrices (within one instrument). Each table counts once. Dashed lines: Gignac and Szodorai's percentiles."
 #| fig-height: 4
 both <- bind_rows(
   pub_table |> transmute(side = "published matrices", med_abs),
-  core_table |> transmute(side = "core, between items", med_abs)
+  core_table |> filter(!is.na(med_abs_pearson)) |> transmute(side = "core, between items", med_abs = med_abs_pearson)
 )
 ggplot(both, aes(med_abs, colour = side, fill = side)) +
   geom_density(alpha = 0.2, adjust = 0.9) +
@@ -429,9 +432,11 @@ ggplot(both, aes(med_abs, colour = side, fill = side)) +
   theme(legend.position = "top")
 ```
 
-Why are item pairs hotter than scale pairs? Two forces pull in opposite directions. Averaging items into a scale score raises reliability, and higher reliability raises the observed correlation between two scales. But items within one instrument are written to measure the same thing, while two scales in a published matrix usually measure different things.
+With Pearson on both sides, item pairs run only a little hotter than scale pairs: medians of `r f2(q_core_pear[2])` and `r f2(q_pub_tab[2])`. Two forces pull in opposite directions. Averaging items into a scale score raises reliability, and higher reliability raises the observed correlation between two scales. But items within one instrument are written to measure the same thing, while two scales in a published matrix usually measure different things.
 
-A simple case shows which force wins. Take a `r k_toy`-item scale whose items correlate at the core median, `r f2(rbar)`. By the Spearman-Brown formula its reliability is `r k_toy` × `r f2(rbar)` / (1 + `r k_toy - 1` × `r f2(rbar)`) = `r f2(rel_toy)`. Two such scales that correlate at the published median, `r f2(q_pub_tab[2])`, would have true scores correlating at about `r f2(q_pub_tab[2])` / `r f2(rel_toy)` = `r f2(true_r)`. Aggregation therefore works in favour of the scale pairs, not against them. Even with perfect reliability, two typical published scales would correlate at about `r f2(true_r)`, still below the `r f2(rbar)` that items within one instrument manage. The gap is about content: the scales in a published matrix mostly measure different constructs, while the items within an instrument measure one.
+A simple case shows how these balance. Take a `r k_toy`-item scale whose items correlate at the core Pearson median, `r f2(rbar)`. By the Spearman-Brown formula its reliability is `r k_toy` × `r f2(rbar)` / (1 + `r k_toy - 1` × `r f2(rbar)`) = `r f2(rel_toy)`. Two such scales that correlate at the published median, `r f2(q_pub_tab[2])`, would have true scores correlating at about `r f2(q_pub_tab[2])` / `r f2(rel_toy)` = `r f2(true_r)`, `r if (abs(true_r - rbar) < .03) "about the same as" else if (true_r < rbar) "below" else "above"` the `r f2(rbar)` between items within one instrument. So the forces roughly cancel. Correcting for reliability, a typical pair of published scales is about as strongly related as a typical pair of items within one instrument, even though the scales usually measure different constructs and the items measure one. The toy example is rough: real scales vary in length and reliability, and published matrices mix within- and between-construct pairs.
+
+One more thing tilts the observed comparison slightly toward the published side. Pearson correlations between items with few response categories are pulled down by the coarse coding, while scale scores are close to continuous. The modest observed gap is therefore, if anything, a slight understatement.
 
 ### One instrument on both sides: the Rosenberg Self-Esteem Scale
 
@@ -440,7 +445,7 @@ So far the two sides differ in both what is correlated and who was sampled. What
 - **Published:** the median item-pair r across the `r n_distinct(pm$group)` matrices is `r f2(m_pub_all)`. Leaving out the `r length(ov_groups)` matrices whose `overlaps` field says they share data with `rosenberg_selfesteem`, it is `r f2(m_pub_ind)`. The published matrices are recoded so that all items point the same way: only `r pct(mean(pm$value < 0))` of cells are negative.
 - **Core:** `r pct(mean(mt$core$value < 0))` of item pairs are negative, which reflects the scale's five reverse-keyed items stored raw. The median |r| is `r f2(m_core_pear)` with Pearson and `r f2(m_core_poly)` with polychoric correlations.
 
-Even with the instrument held fixed, the core sample correlates more strongly than the published samples. The estimator accounts for part of the gap; the rest is a difference between samples. Some of the meta-analysis's matrices were reconstructed from published loadings, which the table's notes record.
+Even with the instrument held fixed, and comparing Pearson with Pearson (`r f2(m_core_pear)` against `r f2(m_pub_ind)`), the core sample correlates more strongly than the published samples. Here the estimator plays no part: the difference is between samples. Some of the meta-analysis's matrices were reconstructed from published loadings, which the table's notes record.
 
 ## A reliability ceiling check
 
@@ -463,7 +468,7 @@ A pair above the ceiling is not necessarily an error. Coefficient alpha understa
 - **Published matrices are curated.** Authors print the variables they modelled, and IRW's holdings lean on CC BY articles and open deposits. The published side answers "typical in openly licensed published matrices", not "typical in psychology".
 - **Core has its own selection.** It holds whatever data people chose to share, and the pilot excludes longitudinal, sparse (density below .5) and very large tables.
 - **|r| is biased upward near zero.** Taking absolute values folds noise around zero into positive values, which inflates small correlations. This matters little for inter-item pairs, which mostly sit well above zero, but it is why both sides are summarised with |r| for the comparison.
-- **The estimators differ.** Published matrices are mostly Pearson on scale scores, while the core side uses polychoric and tetrachoric correlations, which run higher than Pearson on the same items (see the Pearson figures above).
+- **The estimators differ.** Published matrices are mostly Pearson on scale scores, so the comparisons between the two sides use Pearson on core items too. Even then, Pearson on coarse item codes is attenuated in a way that Pearson on scale scores largely is not. Polychoric and tetrachoric correlations remove that attenuation but describe latent variables rather than observed scores, and run higher (see the figures above).
 - **Within- and between-construct pairs are mixed** on the published side. Separating them needs construct labels on variables, which IRW does not have yet.
 
 ## What the full run would add
