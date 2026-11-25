@@ -143,6 +143,34 @@ Every slope is clearly positive. Pooled across the eight tables, response time r
 
 Several things could pull the slope below the classic value. Shepard and Metzler's eight participants each did 1,600 trials, many more than in any of these studies. Several of these studies use simpler shapes or picture stimuli. And our model averages same and mirror trials, where the original slope was for "same" pairs only. Whatever the reason, a figure near 8–9 ms per degree looks like a better default expectation for a modern study than 17.
 
+### LEVANTE by site
+
+The LEVANTE pilot release has four samples: Leipzig, Germany; Bogotá and a rural region of Colombia; and London, Ontario, Canada. Each gave the same task, so fitting the model within each site shows how stable the slope is when the task is held fixed.
+
+```{r}
+#| label: fig-levante-sites
+#| fig-cap: "LEVANTE mental rotation slopes by pilot site, for 2D animal silhouettes and 3D shapes, with 95% intervals. The sites differ in how children were sampled and how the task was given, so these are not estimates of differences between countries."
+
+site_names <- c(pilot_mpieva_de_main = "Leipzig (DE)", pilot_uniandes_co_bogota = "Bogotá (CO)",
+                pilot_uniandes_co_rural = "Rural Colombia (CO)", pilot_western_ca_main = "London, Ontario (CA)")
+ls <- ext$levante_sites |>
+  mutate(site_label = site_names[site], lo = slope_ms_deg - 1.96 * slope_se, hi = slope_ms_deg + 1.96 * slope_se)
+p <- ggplot(ls, aes(slope_ms_deg, site_label, colour = items, xmin = lo, xmax = hi,
+                    text = paste0(site_label, ", ", items, ": ", f1(slope_ms_deg), " ms/° (", n_people, " children)"))) +
+  geom_vline(xintercept = 1000 / 60, linetype = "dashed", colour = "grey50") +
+  geom_pointrange(position = position_dodge(width = 0.5)) +
+  scale_colour_manual(values = c(`2D` = irw_blue, `3D` = irw_red), name = NULL) +
+  labs(x = "Slope (ms per degree)", y = NULL)
+show_plot(p)
+```
+
+```{r}
+#| echo: false
+LS <- function(g, col) range(ls[[col]][ls$items == g])
+```
+
+For 2D silhouettes the four sites agree closely, with slopes between `r f1(LS("2D", "slope_ms_deg")[1])` and `r f1(LS("2D", "slope_ms_deg")[2])` ms per degree. For 3D shapes they range more widely, from `r f1(LS("3D", "slope_ms_deg")[1])` to `r f1(LS("3D", "slope_ms_deg")[2])`, but the intervals are wide and overlap, and every site is steeper on 3D than on 2D. Accuracy also differs across sites (`r scales::percent(LS("2D", "accuracy")[1], 1)` to `r scales::percent(LS("2D", "accuracy")[2], 1)` on 2D items), which, as the next sections show, interacts with the slope. Following the LEVANTE data use agreement, we do not interpret these differences as differences between countries: the samples were recruited and tested in different ways.
+
 ## People differ more than studies do
 
 The studies do differ in their slopes: the random-effects model puts the standard deviation of true study slopes at **`r f1(tau)` ms per degree**, far more than sampling error would produce. But within a typical study, people's own slopes vary with a standard deviation of about **`r f1(sd_people)` ms per degree**. The difference between two people in the same study is usually larger than the difference between two studies.

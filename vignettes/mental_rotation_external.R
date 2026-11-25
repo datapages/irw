@@ -26,6 +26,7 @@ fetch <- function(url, name) {
 
 sources <- list()
 age_bands <- list()
+levante_sites <- list()
 
 # Slope by age band: the same RT model fitted separately within each band
 # (bands with fewer than 30 people are skipped). Only the band estimates are
@@ -100,7 +101,7 @@ rm(h)
 lev_ok <- nzchar(Sys.getenv("REDIVIS_API_TOKEN")) && requireNamespace("redivis", quietly = TRUE)
 if (lev_ok) {
   lv <- tryCatch(redivis::redivis$query(paste(
-    "SELECT t.user_id, t.item, t.item_original, t.item_group, t.correct, t.rt_numeric,",
+    "SELECT t.dataset, t.user_id, t.item, t.item_original, t.item_group, t.correct, t.rt_numeric,",
     "t.timestamp, p.birth_year, p.birth_month",
     "FROM `levante.levante_data_pilots:68kn:v4_0.trials:ztnm` t",
     "LEFT JOIN `levante.levante_data_pilots:68kn:v4_0.participants:19x0` p USING (user_id)",
@@ -126,6 +127,15 @@ if (lev_ok) {
         rt = s$rt_numeric / 1000, angle = s$angle, age = s$age),
         paste0("LEVANTE ", toupper(g), " (", ifelse(g == "2d", "animal silhouettes", "shapes"), ")"),
         c(4, 7, 9, 11, 14))
+      # by pilot site (LEVANTE's own caveat: sites differ in sampling and
+      # administration, so these are not estimates of country differences)
+      for (site in sort(unique(s$dataset))) {
+        ss <- s[s$dataset == site, ]
+        r <- fit_df(data.frame(id = ss$user_id, item = ss$item_original,
+                               resp = as.integer(ss$correct), rt = ss$rt_numeric / 1000,
+                               angle = ss$angle), paste0("levante_", g, "_", site))
+        levante_sites[[paste(g, site)]] <- cbind(r$summary, site = site, items = toupper(g))
+      }
     }
     rm(lv, s)
   }
@@ -157,6 +167,7 @@ meta_all <- metafor::rma(yi = slope_ms_deg, sei = slope_se, data = all_s, method
 
 saveRDS(list(
   summary = ext_summary, meta_all = meta_all, age_bands = bind_rows(age_bands),
+  levante_sites = bind_rows(levante_sites),
   person = bind_rows(lapply(sources, `[[`, "person")),
   by_angle = bind_rows(lapply(sources, `[[`, "by_angle")),
   computed_at = Sys.time()),
