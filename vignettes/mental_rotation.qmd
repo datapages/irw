@@ -1,9 +1,9 @@
 ---
-title: "How Much Longer Does a Bigger Turn Take? Mental Rotation Across Eight Datasets"
+title: "How Much Longer Does a Bigger Turn Take? Mental Rotation Across Nine Datasets"
 description: |
   Shepard and Metzler's 1971 finding that response time grows linearly with
   rotation angle is one of the best-known results in cognitive psychology. Using
-  the eight chronometric tables in the IRW's mental rotation collection, we
+  the nine chronometric tables in the IRW's mental rotation collection, we
   estimate the slope in each and ask how much it varies across studies and
   across people.
 date: today
@@ -46,7 +46,8 @@ labels <- c(
   jost_2023_mr_visualization = "Jost & Siebertz (cubes)",
   jost_2022_mcmr_e1          = "Jost Exp 1 (cubes)",
   jost_2022_mcmr_e2          = "Jost Exp 2 (cubes)",
-  dd_rotation                = "Borst et al. (3D shapes)")
+  dd_rotation                = "Borst et al. (3D shapes)",
+  ebert_2024_letter_mr       = "Ebert et al. (letters)")
 s$label <- labels[s$table]
 s$sample <- ifelse(grepl("Children", s$sample), "Children 4-6", "Adults")
 m <- res$meta_rt
@@ -65,13 +66,13 @@ ES <- function(t, col) eo[[col]][eo$table == t]
 
 In 1971, Shepard and Metzler showed people pairs of drawings of 3D block figures and asked whether the two were the same object or mirror images [@shepard1971]. The time it took to answer "same" grew in a straight line with the angle between the two figures, at roughly one second for every 60 degrees, or about 17 ms per degree. It looked as though people were turning a mental image at a steady speed. The result became a textbook staple, and the task has since been run in hundreds of studies.
 
-The IRW's `mental_rotation` collection now holds eight tables where each trial records both the response time and the rotation angle. They differ in almost every way a study can differ: 3D cube figures, new 3D shapes and animal pictures; preschoolers and adults; same/mirror judgements and "which of these two matches?" choices; ordinary lab sessions and sessions with eye tracking. That makes them a natural test of how general the linear angle effect is and how big it is.
+The IRW's `mental_rotation` collection now holds nine tables where each trial records both the response time and the rotation angle. They differ in almost every way a study can differ: 3D cube figures, new 3D shapes, letters and animal pictures; preschoolers and adults; same/mirror judgements and "which of these two matches?" choices; ordinary lab sessions and sessions with eye tracking. That makes them a natural test of how general the linear angle effect is and how big it is.
 
 ## The data
 
 ```{r}
 #| label: tbl-data
-#| tbl-cap: "The eight chronometric mental rotation tables. Slope and intercept come from the mixed model described below; accuracy is over all answered trials."
+#| tbl-cap: "The nine chronometric mental rotation tables. Slope and intercept come from the mixed model described below; accuracy is over all answered trials."
 
 s |>
   transmute(Table = paste0("`", table, "`"), Study = label, Stimuli = stimuli,
@@ -82,7 +83,7 @@ s |>
 
 We also fit the same model to chronometric datasets that the IRW does not host (@tbl-external), to see whether they tell the same story: the cross-cultural MRTX study [@ruginski2019], a small study of athletes and non-athletes, and the LEVANTE mental rotation task for children aged 5 to 12 [@levante2026], in its 2D (animal) and 3D (shape) forms. Their results are kept apart from the IRW tables in every figure below.
 
-Sources: @bauer2021, @ebert2024, @ganis2015, @liu2026, @jost2023, @jost2022 (two experiments), and @borst2011 as distributed with @vandermaas2011. Angles are angular disparity, folded to 0–180 degrees, so a 270° turn counts as 90°.
+Sources: @bauer2021, @ebert2024, @ebert2025, @ganis2015, @liu2026, @jost2023, @jost2022 (two experiments), and @borst2011 as distributed with @vandermaas2011. Angles are angular disparity, folded to 0–180 degrees, so a 270° turn counts as 90°.
 
 ```{r}
 #| label: tbl-external
@@ -140,9 +141,16 @@ p <- ggplot(fd, aes(slope_ms_deg, label, xmin = lo, xmax = hi,
 show_plot(p)
 ```
 
-Every slope is clearly positive. Pooled across the eight tables, response time rises by **`r f1(pooled)` ms per degree** (95% CI `r f1(pooled_lo)` to `r f1(pooled_hi)`), about half of Shepard and Metzler's figure. Adding the data the IRW does not host, with each LEVANTE pilot sample entered as its own study (separately for 2D and 3D items, in a multilevel model that allows for the same children contributing both), gives `r f1(pooled_all)` ms per degree (`r f1(pooled_all_lo)` to `r f1(pooled_all_hi)`). The large cross-cultural MRTX study, with `r f0(ES("external_mrtx", "n_people"))` people aged 5 to 84 at six field sites, comes in at `r f1(ES("external_mrtx", "slope_ms_deg"))` ms per degree. The one dataset near Shepard and Metzler's value is LEVANTE's 3D task: `r f0(ES("external_levante_3d", "n_people"))` children rotating 3D shapes slow down by `r f1(ES("external_levante_3d", "slope_ms_deg"))` ms per degree, about twice as steeply as the same children rotating 2D animal silhouettes (`r f1(ES("external_levante_2d", "slope_ms_deg"))` ms per degree). Stimulus complexity seems to matter more for the slope than age does: the preschoolers judging animal pictures in the IRW's Ebert et al. table have one of the shallowest slopes. A turn of 90° adds a bit under a second, not a second and a half. The slowest rotators are the preschoolers in @ebert2024 at `r f1(s$slope_ms_deg[s$table == "ebert_2024_animal_mr"])` ms per degree; the steepest slopes, around 11 ms per degree, come from adults rotating cube figures.
+```{r}
+#| echo: false
+lo_t <- s[which.min(s$slope_ms_deg), ]; hi_t <- s[which.max(s$slope_ms_deg), ]
+```
 
-Several things could pull the slope below the classic value. Shepard and Metzler's eight participants each did 1,600 trials, many more than in any of these studies. Several of these studies use simpler shapes or picture stimuli. And our model averages same and mirror trials, where the original slope was for "same" pairs only. Whatever the reason, a figure near 8–9 ms per degree looks like a better default expectation for a modern study than 17.
+Every slope is clearly positive. Pooled across the nine tables, response time rises by **`r f1(pooled)` ms per degree** (95% CI `r f1(pooled_lo)` to `r f1(pooled_hi)`), about half of Shepard and Metzler's figure: a turn of 90° adds a bit under a second, not a second and a half. The shallowest slope is `r lo_t$label` at `r f1(lo_t$slope_ms_deg)` ms per degree, and the steepest is `r hi_t$label` at `r f1(hi_t$slope_ms_deg)`.
+
+Adding the data the IRW does not host, with each LEVANTE pilot sample entered as its own study (separately for 2D and 3D items, in a multilevel model that allows for the same children contributing both), gives `r f1(pooled_all)` ms per degree (`r f1(pooled_all_lo)` to `r f1(pooled_all_hi)`). The large cross-cultural MRTX study, with `r f0(ES("external_mrtx", "n_people"))` people aged 5 to 84 at six field sites, comes in at `r f1(ES("external_mrtx", "slope_ms_deg"))` ms per degree. The one dataset near Shepard and Metzler's value is LEVANTE's 3D task: `r f0(ES("external_levante_3d", "n_people"))` children rotating 3D shapes slow down by `r f1(ES("external_levante_3d", "slope_ms_deg"))` ms per degree, about twice as steeply as the same children rotating 2D animal silhouettes (`r f1(ES("external_levante_2d", "slope_ms_deg"))` ms per degree). The stimulus seems to matter a great deal: simple, familiar shapes such as letters and animal pictures give the shallowest slopes, and 3D figures the steepest.
+
+Several things could pull the slope below the classic value. Shepard and Metzler's eight participants each did 1,600 trials, many more than in any of these studies. Several of these studies use simpler shapes or picture stimuli. And our model averages same and mirror trials, where the original slope was for "same" pairs only. Whatever the reason, something between about 7 and 10 ms per degree looks like a better default expectation for a modern study than 17.
 
 ### LEVANTE by site
 
@@ -248,7 +256,7 @@ Larger rotations are not just slower; they are also more often answered wrongly.
 
 **Same and mirror trials are pooled**, and so are tasks with different response formats (same/mirror judgements versus choosing which of two figures matches). The "pick the match" tasks in the Jost tables involve comparing two candidates, which may add a constant rather than change the slope, but we have not separated these.
 
-**The tables are not a random sample of studies.** They are the chronometric mental rotation datasets we could find with an open licence and trial-level data, and five of the eight come from one research group (Petra Jansen's and Leonardo Jost's). More tables would sharpen the between-study estimate in particular.
+**The tables are not a random sample of studies.** They are the chronometric mental rotation datasets we could find with an open licence and trial-level data, and six of the nine come from one research group (Petra Jansen's and Leonardo Jost's). More tables would sharpen the between-study estimate in particular.
 
 **Data the IRW does not host.** `mental_rotation_external.R` downloads the MRTX and athletes/non-athletes files from OSF each time it runs and deletes them afterwards, and reads the LEVANTE trials from Redivis; only the estimates shown here are stored with the page, and for LEVANTE not even person-level slopes are kept. The MRTX file is openly licensed but identifies participants by name, the athletes study sets no licence, and LEVANTE's Data Use Agreement forbids redistribution, so none of them can be added to the IRW. Their results are shown for comparison and are not part of the IRW pooled estimate.
 
@@ -264,7 +272,7 @@ Larger rotations are not just slower; they are also more often answered wrongly.
 
 {{< include ../components/_data-version.qmd >}}
 
-Results computed `r format(date_run, "%B %d, %Y")`. All eight IRW tables are fetched with `irw::irw_fetch()`. The two external datasets are downloaded from OSF by a separate script and are not stored here. To regenerate (a few minutes):
+Results computed `r format(date_run, "%B %d, %Y")`. All nine IRW tables are fetched with `irw::irw_fetch()`. The external data are read by a separate script (the MRTX and athletes files from OSF, LEVANTE from Redivis under its Data Use Agreement) and are not stored here. To regenerate (a few minutes):
 
 ```r
 Rscript vignettes/mental_rotation_compute.R    # IRW tables

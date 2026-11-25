@@ -33,7 +33,8 @@ tables <- tribble(
   "jost_2023_mr_visualization",  "itemcov_angle",  "3D cube figures",  "Adults", "Pick the match (2)",
   "jost_2022_mcmr_e1",           "trial_angle",    "3D cube figures",  "Adults", "Pick the match (2)",
   "jost_2022_mcmr_e2",           "trial_angle",    "3D cube figures",  "Adults", "Pick the match (2)",
-  "dd_rotation",                 "diffIRT_doc",    "3D shapes",        "Adults", "Same/different"
+  "dd_rotation",                 "diffIRT_doc",    "3D shapes",        "Adults", "Same/different",
+  "ebert_2024_letter_mr",        "itemcov_angle",  "Letters",          "Adults", "Normal/mirror"
 )
 # dd_rotation (diffIRT's `rotation` data; Borst, Kievit, Thompson & Kosslyn,
 # 2011) carries no angle column; the diffIRT documentation (?rotation) gives
