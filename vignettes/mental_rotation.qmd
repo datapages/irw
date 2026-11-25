@@ -1,0 +1,186 @@
+---
+title: "How Much Longer Does a Bigger Turn Take? Mental Rotation Across Eight Datasets"
+description: |
+  Shepard and Metzler's 1971 finding that response time grows linearly with
+  rotation angle is one of the best-known results in cognitive psychology. Using
+  the eight chronometric tables in the IRW's mental rotation collection, we
+  estimate the slope in each and ask how much it varies across studies and
+  across people.
+date: today
+bibliography: mental_rotation_data/references.bib
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-depth: 2
+execute:
+  echo: true
+  message: false
+  warning: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+
+library(dplyr)
+library(ggplot2)
+library(plotly)
+
+theme_set(theme_minimal(base_size = 13))
+irw_blue <- "#2166ac"
+irw_red  <- "#d73027"
+show_plot <- function(p) if (Sys.getenv("STATIC_FIGS") == "1") p else ggplotly(p, tooltip = "text")
+
+res <- readRDS("mental_rotation_data/mental_rotation_results.rds")
+date_run <- as.Date(res$computed_at)
+s <- res$summary
+f0 <- function(x) formatC(x, format = "f", digits = 0)
+f1 <- function(x) formatC(x, format = "f", digits = 1)
+f2 <- function(x) formatC(x, format = "f", digits = 2)
+labels <- c(
+  bauer_2021_mr_pupil        = "Bauer et al. (cubes)",
+  ebert_2024_animal_mr       = "Ebert et al. (animals, ages 4-6)",
+  ganis_kievit_2015_mr       = "Ganis & Kievit (new 3D shapes)",
+  liu_lourenco_2026_mr       = "Liu & Lourenco (3D shapes)",
+  jost_2023_mr_visualization = "Jost & Siebertz (cubes)",
+  jost_2022_mcmr_e1          = "Jost Exp 1 (cubes)",
+  jost_2022_mcmr_e2          = "Jost Exp 2 (cubes)",
+  dd_rotation                = "Borst et al. (3D shapes)")
+s$label <- labels[s$table]
+s$sample <- ifelse(grepl("Children", s$sample), "Children 4-6", "Adults")
+m <- res$meta_rt
+pooled <- as.numeric(m$b); pooled_lo <- m$ci.lb; pooled_hi <- m$ci.ub
+tau <- sqrt(m$tau2)
+sd_people <- res$spread$median_sd_between_people_ms_deg
+```
+
+In 1971, Shepard and Metzler showed people pairs of drawings of 3D block figures and asked whether the two were the same object or mirror images [@shepard1971]. The time it took to answer "same" grew in a straight line with the angle between the two figures, at roughly one second for every 60 degrees, or about 17 ms per degree. It looked as though people were turning a mental image at a steady speed. The result became a textbook staple, and the task has since been run in hundreds of studies.
+
+The IRW's `mental_rotation` collection now holds eight tables where each trial records both the response time and the rotation angle. They differ in almost every way a study can differ: 3D cube figures, new 3D shapes and animal pictures; preschoolers and adults; same/mirror judgements and "which of these two matches?" choices; ordinary lab sessions and sessions with eye tracking. That makes them a natural test of how general the linear angle effect is and how big it is.
+
+## The data
+
+```{r}
+#| label: tbl-data
+#| tbl-cap: "The eight chronometric mental rotation tables. Slope and intercept come from the mixed model described below; accuracy is over all answered trials."
+
+s |>
+  transmute(Table = paste0("`", table, "`"), Study = label, Stimuli = stimuli,
+            Sample = sample, Task = format, People = n_people, Angles = angles,
+            Accuracy = scales::percent(accuracy, 1)) |>
+  knitr::kable()
+```
+
+Sources: @bauer2021, @ebert2024, @ganis2015, @liu2026, @jost2023, @jost2022 (two experiments), and @borst2011 as distributed with @vandermaas2011. Angles are angular disparity, folded to 0–180 degrees, so a 270° turn counts as 90°.
+
+## Response time rises with angle in every dataset
+
+```{r}
+#| label: fig-curves
+#| fig-cap: "Median response time on correct trials at each rotation angle. Each line is one table."
+
+ba <- res$by_angle |> left_join(s |> select(table, label), by = "table")
+p <- ggplot(ba, aes(angle, median_rt, colour = label, group = label,
+                    text = paste0(label, "<br>", angle, "°: ", f2(median_rt), " s (", n, " trials)"))) +
+  geom_line() + geom_point() +
+  labs(x = "Rotation angle (degrees)", y = "Median correct RT (s)", colour = NULL)
+show_plot(p)
+```
+
+The lines sit at different heights; the two Jost multiple-choice experiments in particular are slower overall (about 5 s at their easiest angle), since each screen is part of a longer test with a time limit per block. What matters for the classic finding is the shape, and every line rises. Most rise roughly steadily; the Borst et al. data flatten between 100° and 150°, and the two Jost multiple-choice experiments between 135° and 180°.
+
+To put a number on the rise, we fit the same model to every table: response time on correct trials (between 0.2 and 15 s) regressed on angle, with a random intercept and a random angle slope for each person and a random intercept for each item:
+
+$$\text{RT}_{pi} = (\beta_0 + u_{0p} + v_i) + (\beta_1 + u_{1p})\,\text{angle}_i + \varepsilon_{pi}$$
+
+$\beta_1$ is the typical slope in the study, and the spread of $u_{1p}$ says how much people within the study differ from it.
+
+```{r}
+#| label: fig-forest
+#| fig-cap: "Slope of response time on rotation angle (ms per degree) in each table, with 95% intervals, and the random-effects pooled estimate. The dashed line marks Shepard and Metzler's roughly 17 ms per degree."
+
+fd <- s |> mutate(lo = slope_ms_deg - 1.96 * slope_se, hi = slope_ms_deg + 1.96 * slope_se) |>
+  arrange(slope_ms_deg)
+fd <- bind_rows(fd, tibble(label = "Pooled (random effects)", slope_ms_deg = pooled,
+                           lo = pooled_lo, hi = pooled_hi, n_people = NA))
+fd$label <- factor(fd$label, levels = fd$label)
+p <- ggplot(fd, aes(slope_ms_deg, label, xmin = lo, xmax = hi,
+                    text = paste0(label, ": ", f1(slope_ms_deg), " ms/°  [", f1(lo), ", ", f1(hi), "]"))) +
+  geom_vline(xintercept = 1000 / 60, linetype = "dashed", colour = "grey50") +
+  geom_errorbarh(height = 0.2, colour = irw_blue) +
+  geom_point(aes(colour = label == "Pooled (random effects)"), size = 2.5, show.legend = FALSE) +
+  scale_colour_manual(values = c(`FALSE` = irw_blue, `TRUE` = irw_red)) +
+  labs(x = "Slope (ms per degree)", y = NULL)
+show_plot(p)
+```
+
+Every slope is clearly positive. Pooled across the eight tables, response time rises by **`r f1(pooled)` ms per degree** (95% CI `r f1(pooled_lo)` to `r f1(pooled_hi)`), about half of Shepard and Metzler's figure. A turn of 90° adds a bit under a second, not a second and a half. The slowest rotators are the preschoolers in @ebert2024 at `r f1(s$slope_ms_deg[s$table == "ebert_2024_animal_mr"])` ms per degree; the steepest slopes, around 11 ms per degree, come from adults rotating cube figures.
+
+Several things could pull the slope below the classic value. Shepard and Metzler's eight participants each did 1,600 trials, many more than in any of these studies. Several of these studies use simpler shapes or picture stimuli. And our model averages same and mirror trials, where the original slope was for "same" pairs only. Whatever the reason, a figure near 8–9 ms per degree looks like a better default expectation for a modern study than 17.
+
+## People differ more than studies do
+
+The studies do differ in their slopes: the random-effects model puts the standard deviation of true study slopes at **`r f1(tau)` ms per degree**, far more than sampling error would produce. But within a typical study, people's own slopes vary with a standard deviation of about **`r f1(sd_people)` ms per degree**. The difference between two people in the same study is usually larger than the difference between two studies.
+
+```{r}
+#| label: fig-people
+#| fig-cap: "Each person's estimated slope (fixed slope plus their random effect), by table. Points are people; the black bar is the table's fixed slope."
+
+pp <- res$person |> left_join(s |> select(table, label, slope_ms_deg), by = "table")
+pp$label <- factor(pp$label, levels = s$label[order(s$slope_ms_deg)])
+p <- ggplot(pp, aes(slope_ms_deg.x, label, text = paste0(label, "<br>person slope ", f1(slope_ms_deg.x), " ms/°"))) +
+  geom_jitter(height = 0.2, alpha = 0.25, size = 0.8, colour = irw_blue) +
+  geom_point(aes(slope_ms_deg.y, label), shape = 124, size = 6, colour = "black") +
+  labs(x = "Person slope (ms per degree)", y = NULL)
+show_plot(p)
+```
+
+These person slopes are shrunken estimates, so the true spread is, if anything, larger than the picture shows. The Borst et al. table is the exception: with only three angles, ten items and a flat stretch between 100° and 150°, the model cannot separate people's slopes at all (the person-slope variance is estimated at essentially zero), and its own slope comes with a wide interval.
+
+In every table, people who are slower overall also tend to have steeper slopes: the correlation between person intercepts and person slopes is positive throughout, from `r f2(min(s$r_intercept_slope[s$table != "dd_rotation"]))` to `r f2(max(s$r_intercept_slope[s$table != "dd_rotation"]))` (leaving out the Borst et al. table, where the slope variance collapses). Being slow at mental rotation is partly being slow at the rotation itself, not only at encoding the figures or pressing the key.
+
+## Accuracy falls too
+
+```{r}
+#| label: fig-accuracy
+#| fig-cap: "Proportion correct at each rotation angle, by table."
+
+p <- ggplot(ba, aes(angle, accuracy, colour = label, group = label,
+                    text = paste0(label, "<br>", angle, "°: ", scales::percent(accuracy, 1)))) +
+  geom_line() + geom_point() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Rotation angle (degrees)", y = "Proportion correct", colour = NULL)
+show_plot(p)
+```
+
+Larger rotations are not just slower; they are also more often answered wrongly. A logistic mixed model of accuracy on angle (random intercepts for people and items) gives a negative angle effect in every table (the curves are not all monotone; the Jost multiple-choice experiments wobble at 180°), pooling to `r f2(as.numeric(res$meta_acc$b))` on the logit scale per 100 degrees. So the time cost of rotation does not buy back full accuracy: people do not simply rotate until they are sure.
+
+## Caveats
+
+**One trimming rule and one model for all tables.** We keep correct trials between 0.2 and 15 s and fit RT in seconds on a linear scale. The depositors used their own outlier rules, and some analyses use log RT. These choices change individual slopes somewhat but not the picture that every slope is positive and the pooled value is near 8–9 ms per degree.
+
+**Same and mirror trials are pooled**, and so are tasks with different response formats (same/mirror judgements versus choosing which of two figures matches). The "pick the match" tasks in the Jost tables involve comparing two candidates, which may add a constant rather than change the slope, but we have not separated these.
+
+**The tables are not a random sample of studies.** They are the chronometric mental rotation datasets we could find with an open licence and trial-level data, and five of the eight come from one research group (Petra Jansen's and Leonardo Jost's). More tables would sharpen the between-study estimate in particular.
+
+**The Borst et al. angles come from documentation.** The `dd_rotation` table now carries an `itemcov_angle` column, taken from the diffIRT package documentation that accompanies the data.
+
+---
+
+## Reproducibility
+
+{{< include ../components/_source-links.qmd >}}
+
+{{< include ../components/_data-version.qmd >}}
+
+Results computed `r format(date_run, "%B %d, %Y")`. All eight tables are fetched with `irw::irw_fetch()`. To regenerate (a few minutes):
+
+```r
+Rscript vignettes/mental_rotation_compute.R
+quarto::quarto_render("vignettes/mental_rotation.qmd")
+```
+
+---
+
+## References
