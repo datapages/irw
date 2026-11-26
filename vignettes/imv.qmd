@@ -21,6 +21,9 @@ df   <- irw::irw_fetch("gilbert_meta_2")
 # Convert from long format (one row per person-item) to wide response matrix
 resp <- irw::irw_long2resp(df)
 resp$id <- NULL
+# Item columns are named by item id; these ids are numbers, which imv cannot
+# look up by name, so give them a non-numeric prefix
+colnames(resp) <- paste0("item_", colnames(resp))
 # Rasch / 1PL model
 m0 <- mirt::mirt(resp, 1, 'Rasch', verbose = FALSE)
 
