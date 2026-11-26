@@ -140,13 +140,13 @@ jobs:
             echo "Site is current -- skipping the render."
           fi
 
-  build-deploy:
+  # Render and deploy are separate jobs so a failed deploy can be re-run on its
+  # own ("Re-run failed jobs") without another ~40-minute render: the uploaded
+  # github-pages artifact belongs to the run and survives the re-run.
+  build:
     needs: decide
     if: needs.decide.outputs.render == 'true'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -221,6 +221,28 @@ jobs:
         with:
           path: _site
 
+  # deploy-pages can look up the artifact before GitHub lists it and fail with
+  # 'No artifacts named "github-pages" were found' although the upload
+  # finished (run 45732588869, 2026-11-26: the lookup came 0.3 s after the
+  # upload was finalized). So the first attempt may fail, and a second runs
+  # after a pause. A real failure fails the second attempt too.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.retry.outputs.page_url || steps.deployment.outputs.page_url }}
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
+
+      - name: Wait before retrying the deploy
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 60
+
+      - name: Deploy to GitHub Pages (retry)
+        id: retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4
