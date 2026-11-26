@@ -24,6 +24,11 @@
 #   a name reused in another shard keeps its page. A table rebuilt and re-released
 #   after its withdrawal is listed in landing/reinstated.tsv until the ledger can
 #   record that itself.
+# - A retired table (metadata/table_changes.csv: split, superseded or rebuilt
+#   under another name) that has no page gets the same tombstone. One the ledger
+#   lacks says "Retired" rather than "Withdrawn", and either kind links the
+#   tables that replaced it, where they have pages: a pointer, not a reason
+#   (2026-11-26).
 
 # Shard name -> Redivis scoped reference. Mirrors the map in _load-data-explore.qmd;
 # authoritative source is IRW_CORE_DATASETS in ben-domingue/irw metadata/redivis_config.R.
@@ -174,6 +179,63 @@ withdrawn_tbl <- function() {
   w <- rbind(ledger, local)
   w <- w[!duplicated(paste(tolower(w$table), w$dataset)), , drop = FALSE]
   w[order(tolower(w$table)), , drop = FALSE]
+}
+
+# Retired tables, from the data repo's metadata/table_changes.csv: a table whose
+# latest row there begins "Retired" (a later "Restored" row undoes it). Many are
+# also in the withdrawal ledger; ~30 (mostly conj, rank and sports tables split or
+# superseded) were not, so their URLs 404ed once the table left Redivis (Search
+# Console, 2026-11-26). One row per table: the date of that retirement and its
+# successors from `replaced_by` (one per row, or "; "-separated), as
+# "a; b; c", sorted. Read, not forked, for the same reason as the ledger.
+TABLE_CHANGES_URL <- paste0("https://raw.githubusercontent.com/ben-domingue/irw/main/",
+                            "metadata/table_changes.csv")
+.retired_cache <- NULL
+retired_tbl <- function() {
+  if (!is.null(.retired_cache)) return(.retired_cache)
+  out <- data.frame(table = character(0), date = character(0), successors = character(0),
+                    stringsAsFactors = FALSE)
+  tc <- tryCatch({
+    con <- url(TABLE_CHANGES_URL)
+    on.exit(try(close(con), silent = TRUE), add = TRUE)
+    utils::read.csv(con, colClasses = "character", na.strings = character(0),
+                    encoding = "UTF-8", check.names = FALSE)
+  }, error = function(e) {
+    # As with the ledger: in CI a missing file would 404 every retired table's URL.
+    if (nzchar(Sys.getenv("CI")))
+      stop("[landing] table_changes.csv unreadable (", conditionMessage(e), "); ",
+           "refusing to publish without the retired-table pages it gives.", call. = FALSE)
+    message("[landing] table_changes.csv unreadable (", conditionMessage(e),
+            "); no retired-table pages (local preview only)")
+    NULL
+  })
+  if (!is.null(tc) && nrow(tc)) {
+    names(tc) <- sub("^﻿", "", names(tc))
+    tc[] <- lapply(tc, trimws)
+    tc <- tc[nzchar(tc$table), , drop = FALSE]
+    key <- tolower(tc$table)
+    ver <- suppressWarnings(as.numeric(tc$irw_version))
+    ver[is.na(ver)] <- -Inf
+    # Latest row per table: highest irw_version, file order breaking ties.
+    o <- order(key, ver, seq_along(key))
+    last <- tc[o, , drop = FALSE][!duplicated(key[o], fromLast = TRUE), , drop = FALSE]
+    last <- last[grepl("^Retired", last$change), , drop = FALSE]
+    if (nrow(last)) {
+      succ <- vapply(seq_len(nrow(last)), function(i) {
+        k <- tolower(last$table[i])
+        same <- tc[key == k & grepl("^Retired", tc$change) &
+                   tc$irw_version == last$irw_version[i], , drop = FALSE]
+        s <- trimws(unlist(strsplit(same$replaced_by, ";", fixed = TRUE)))
+        s <- unique(s[nzchar(s)])
+        paste(s[order(tolower(s))], collapse = "; ")
+      }, character(1))
+      out <- data.frame(table = last$table, date = substr(last$date, 1, 10),
+                        successors = succ, stringsAsFactors = FALSE)
+      out <- out[order(tolower(out$table)), , drop = FALSE]
+    }
+  }
+  assign(".retired_cache", out, envir = globalenv())
+  out
 }
 
 # TRUE where table `tb` in dataset `ds` is withdrawn. A ledger dataset ending in
