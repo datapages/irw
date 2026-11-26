@@ -15,10 +15,12 @@ suppressPackageStartupMessages({
   library(dplyr)
 })
 
+source("vignettes/gender_dif_mantel.R")
+
 set.seed(20260527)
 
 N_DATASETS        <- 250
-N_CORES           <- 5L
+N_CORES           <- as.integer(Sys.getenv("DIF_CORES", "5"))
 MIN_GROUP         <- 50
 MIN_ITEMS         <- 6
 MAX_PERSONS       <- 5000
@@ -33,7 +35,10 @@ EXCLUDE <- c(
 )
 
 # ── 1. Candidate datasets (randomised) ───────────────────────────────────────
-candidates <- setdiff(
+# DIF_ONLY=<file of table names>: rerun exactly those tables (their cached
+# results are replaced), e.g. the polytomous tables after the MH fix (#430).
+only_file <- Sys.getenv("DIF_ONLY", "")
+candidates <- if (nzchar(only_file)) character(0) else setdiff(
   union(irw_filter(var = "cov_gender"), irw_filter(var = "cov_sex")),
   EXCLUDE
 )
@@ -45,6 +50,10 @@ already_done <- function() {
 
 done_before <- already_done()
 to_run      <- head(setdiff(candidates, done_before), (N_DATASETS - length(done_before)) * 3L)
+if (nzchar(only_file)) {
+  to_run <- readLines(only_file)
+  unlink(file.path(out_dir, paste0(to_run, ".rds")))
+}
 message(length(done_before), " cached; running up to ", length(to_run),
         " candidates on ", N_CORES, " cores")
 
@@ -54,9 +63,11 @@ run_dif <- function(resp_mat, group_vec, is_poly) {
   ni      <- ncol(resp_mat)
   items   <- colnames(resp_mat)
 
-  # MH family with purification
+  # MH family with purification. Polytomous items get Mantel's (1963) ordinal
+  # test (gender_dif_mantel.R); difGMH is for several focal groups on
+  # dichotomous items and gives meaningless results on 1-5 items (#430).
   mh <- tryCatch(
-    if (is_poly) difGMH(resp_df, group = group_vec, focal.names = 1, purify = TRUE)
+    if (is_poly) mantel_dif(resp_mat, group = group_vec, purify = TRUE)
     else         difMH(resp_mat, group = group_vec, focal.name  = 1, purify = TRUE),
     error = function(e) { message("  MH failed: ", e$message); NULL }
   )
@@ -88,7 +99,8 @@ run_dif <- function(resp_mat, group_vec, is_poly) {
   }
 
   p_mh     <- safe_vec(mh$p.value)
-  alpha_mh <- safe_vec(mh$alphaMH)
+  alpha_mh <- if (is_poly) rep(NA_real_, ni) else safe_vec(mh$alphaMH)
+  smd_mh   <- if (is_poly) safe_vec(mh$smd) else rep(NA_real_, ni)
   delta_mh <- if (!is_poly && !is.null(mh)) -2.35 * log(alpha_mh)
               else rep(NA_real_, ni)
 
@@ -97,6 +109,7 @@ run_dif <- function(resp_mat, group_vec, is_poly) {
     p_mh          = p_mh,
     alpha_mh      = alpha_mh,
     delta_mh      = delta_mh,
+    smd_mh        = smd_mh,
     p_unif        = safe_vec(log_u$p.value),
     p_nonunif     = safe_vec(log_nu$p.value),
     delta_r2_unif = safe_vec(log_u$deltaR2),
@@ -202,6 +215,7 @@ process_one <- function(tab) {
     n_items    = ni,
     n_persons  = N,
     is_poly    = is_poly,
+    mh_method  = if (is_poly) "mantel1963" else "difMH",
     items      = item_res
   ), result_cache)
 
@@ -226,12 +240,32 @@ message("\nDone. ", length(already_done()), " datasets in ", out_dir)
 
 bib_file <- file.path(out_dir, "references.bib")
 
-tryCatch(
+if (!nzchar(Sys.getenv("DIF_NO_BIB"))) tryCatch(
   irw_save_bibtex(already_done(), output_file = bib_file),
   error = function(e) message("  bibtex generation failed: ", conditionMessage(e))
 )
 
 manual_entries <- c(
+  "@article{mantel1963chisquare,
+  title   = {Chi-Square Tests with One Degree of Freedom; Extensions of the {Mantel-Haenszel} Procedure},
+  author  = {Mantel, Nathan},
+  journal = {Journal of the American Statistical Association},
+  volume  = {58},
+  number  = {303},
+  pages   = {690--700},
+  year    = {1963},
+  doi     = {10.1080/01621459.1963.10500879}
+}",
+  "@article{zwick1993performance,
+  title   = {Assessment of Differential Item Functioning for Performance Tasks},
+  author  = {Zwick, Rebecca and Donoghue, John R. and Grima, Angela},
+  journal = {Journal of Educational Measurement},
+  volume  = {30},
+  number  = {3},
+  pages   = {233--251},
+  year    = {1993},
+  doi     = {10.1111/j.1745-3984.1993.tb00425.x}
+}",
   "@techreport{hollandthayer1985delta,
   title       = {An alternate definition of the {ETS} delta scale of item difficulty},
   author      = {Holland, Paul W. and Thayer, Dorothy T.},
