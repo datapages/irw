@@ -61,6 +61,13 @@ pages) source it, so the two cannot drift. The rules were settled by Ben on
   field for it yet), which gives it its page back. In CI an unreadable ledger stops the build. The
   build log warns about any table on the live sitemap that is about to lose its
   page with no tombstone.
+- **Retired tables get one too.** A table whose latest row in the data repo's
+  `metadata/table_changes.csv` begins "Retired" (split, superseded, rebuilt under
+  another name) and that has no page gets the same `noindex` tombstone, labelled
+  "Retired" when the ledger has no row for it. Every tombstone links the tables
+  in `replaced_by` (and a ledger rename) that have pages: a pointer, not a
+  reason. Recording the retirement with its `replaced_by` is all it takes; in CI
+  an unreadable `table_changes.csv` stops the build.
 
 ## Non-core sources
 

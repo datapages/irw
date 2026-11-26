@@ -1598,22 +1598,30 @@ SORT_JS,
 
 # A withdrawn table keeps its URL: an indexed or cited address must not become a
 # 404. Deliberately vague (Ben, 2026-09-19): "Withdrawn" and the date, no reason.
-# A renamed table also links its new name, when that has a page: a pointer, not a
-# reason. noindex, no JSON-LD, no Croissant file, no sitemap entry.
-build_tombstone <- function(table, date, renamed_to = "") {
+# A retired table the ledger lacks (page_rules.R, retired_tbl) says "Retired"
+# instead. Either kind links the tables that replaced it -- a rename from the
+# ledger, successors from table_changes.csv -- when they have pages: a pointer,
+# not a reason. noindex, no JSON-LD, no Croissant file, no sitemap entry.
+# `successors` is a character vector of true table names, already filtered to
+# those with a page.
+build_tombstone <- function(table, date, successors = character(0), label = "Withdrawn") {
+  links <- paste0("<a href=\"", SITE_URL, "/tables/", slug_of(successors), "/\">",
+                  vapply(successors, esc, character(1), USE.NAMES = FALSE), "</a>")
+  said <- if (length(links) <= 2) paste(links, collapse = " and ")
+          else paste0(paste(links[-length(links)], collapse = ", "), " and ", links[length(links)])
   paste0(
 "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n",
 "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n",
-"<title>", esc(table), " (withdrawn) &mdash; Item Response Warehouse</title>\n",
+"<title>", esc(table), " (", tolower(label), ") &mdash; Item Response Warehouse</title>\n",
 "<meta name=\"robots\" content=\"noindex\">\n",
 "<style>", PAGE_CSS, "</style>\n</head>\n<body>\n",
 "<nav class=\"crumb\"><a href=\"", SITE_URL, "/\">Item Response Warehouse</a> / ",
 "<a href=\"", SITE_URL, "/tables/\">Tables</a> / ", esc(table), "</nav>\n",
 "<h1>", esc(table), "</h1>\n",
-"<div class=\"issue\"><p><strong>Withdrawn</strong>",
+"<div class=\"issue\"><p><strong>", label, "</strong>",
 if (!blank(date)) paste0(" on ", esc(date)) else "", ".",
-if (nzchar(renamed_to)) paste0(" It continues as <a href=\"", SITE_URL, "/tables/",
-  slug_of(renamed_to), "/\">", esc(renamed_to), "</a>.") else "",
+if (length(successors) == 1) paste0(" It continues as ", said, ".")
+else if (length(successors) > 1) paste0(" Its data continue in ", said, ".") else "",
 "</p></div>\n",
 "<footer><a href=\"", SITE_URL, "/tables/\">All IRW table pages</a></footer>\n",
 "</body>\n</html>\n")
@@ -1787,17 +1795,33 @@ main <- function() {
   withdrawn <- withdrawn_tbl()
   withdrawn <- withdrawn[!(tolower(withdrawn$table) %in% tolower(tables)), , drop = FALSE]
   withdrawn <- withdrawn[!duplicated(tolower(withdrawn$table)), , drop = FALSE]
-  # A rename links on only when the new name has a page.
-  withdrawn$renamed_to[!(tolower(withdrawn$renamed_to) %in% tolower(tables))] <- ""
-  withdrawn$renamed_to <- tables[match(tolower(withdrawn$renamed_to), tolower(tables))]
-  withdrawn$renamed_to[is.na(withdrawn$renamed_to)] <- ""
+  withdrawn$label <- rep("Withdrawn", nrow(withdrawn))
+  # Retired tables (table_changes.csv) with neither a page nor a ledger row get
+  # the same tombstone, labelled "Retired"; ledger rows keep their wording.
+  retired <- retired_tbl()
+  ret_new <- retired[!(tolower(retired$table) %in% tolower(c(tables, withdrawn$table))), , drop = FALSE]
+  if (nrow(ret_new))
+    withdrawn <- rbind(withdrawn, data.frame(table = ret_new$table, dataset = "",
+      date = ret_new$date, renamed_to = "", label = "Retired", stringsAsFactors = FALSE))
+  withdrawn <- withdrawn[order(tolower(withdrawn$table)), , drop = FALSE]
+  # Successors: the ledger's rename plus table_changes' replaced_by, linked only
+  # where they have a page, under their true names, sorted.
+  succ_of <- setNames(retired$successors, tolower(retired$table))
+  withdrawn_succ <- lapply(seq_len(nrow(withdrawn)), function(i) {
+    s <- c(withdrawn$renamed_to[i],
+           trimws(strsplit(succ_of[tolower(withdrawn$table[i])] %||% "", ";", fixed = TRUE)[[1]]))
+    s <- tables[match(unique(tolower(s[!is.na(s) & nzchar(s)])), tolower(tables))]
+    s <- s[!is.na(s)]
+    s[order(tolower(s))]
+  })
   issues <- known_issues()
   issue_of <- setNames(issues$issue, tolower(issues$table))
   .assert_no_slug_collisions(c(tables, withdrawn$table))
   in_shard <- md$table[as.character(md$dataset) %in% names(PAGE_REF)]
   held <- sort(in_shard[!(tolower(in_shard) %in% tolower(c(tables, withdrawn$table)))])
   message("[landing] ", length(tables), " tables get a page; ", nrow(withdrawn),
-          " tombstones; ", length(held), " held (no licence, or not listed on Redivis)")
+          " tombstones (", sum(withdrawn$label == "Retired"), " of them retired, not in the ledger); ",
+          length(held), " held (no licence, or not listed on Redivis)")
 
   # The anonymous CSV URL for a table, pinned to the dataset version the page
   # reports: datapages.<shard>:v7_0.<table>. Addressed by name, never by
@@ -2019,7 +2043,8 @@ main <- function() {
   for (i in seq_len(nrow(withdrawn))) {
     page_dir <- file.path(OUT_DIR, slug_of(withdrawn$table[i]))
     dir.create(page_dir, recursive = TRUE, showWarnings = FALSE)
-    writeLines(build_tombstone(withdrawn$table[i], withdrawn$date[i], withdrawn$renamed_to[i]),
+    writeLines(build_tombstone(withdrawn$table[i], withdrawn$date[i], withdrawn_succ[[i]],
+                               withdrawn$label[i]),
                file.path(page_dir, "index.html"))
   }
 
